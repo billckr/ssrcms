@@ -32,6 +32,7 @@ pub struct TermOption {
 
 pub fn render_list(posts: &[PostRow], post_type: &str, flash: Option<&str>) -> String {
     let title = if post_type == "page" { "Pages" } else { "Posts" };
+    let new_label = if post_type == "page" { "New Page" } else { "New Post" };
     let new_href = if post_type == "page" { "/admin/pages/new" } else { "/admin/posts/new" };
     let edit_prefix = if post_type == "page" { "/admin/pages" } else { "/admin/posts" };
 
@@ -63,12 +64,12 @@ pub fn render_list(posts: &[PostRow], post_type: &str, flash: Option<&str>) -> S
     }).collect::<Vec<_>>().join("\n");
 
     let content = format!(
-        r#"<p><a href="{new_href}" class="btn btn-primary">New {title}</a></p>
+        r#"<p style="margin-bottom:1rem"><a href="{new_href}" class="btn btn-primary">{new_label}</a></p>
 <table class="data-table">
   <thead><tr><th>Title</th><th>Status</th><th>Author</th><th>Published</th><th>Actions</th></tr></thead>
   <tbody>{rows}</tbody>
 </table>"#,
-        new_href = new_href, title = title, rows = rows,
+        new_href = new_href, new_label = new_label, rows = rows,
     );
 
     let path = if post_type == "page" { "/admin/pages" } else { "/admin/posts" };

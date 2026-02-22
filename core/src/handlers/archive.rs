@@ -32,9 +32,10 @@ pub async fn category_archive(
     Query(query): Query<PageQuery>,
     axum::extract::OriginalUri(uri): axum::extract::OriginalUri,
 ) -> Response {
-    match render_taxonomy_archive(state, slug, TaxonomyType::Category, query.page, uri).await {
+    let path = uri.path().to_string();
+    match render_taxonomy_archive(state.clone(), slug, TaxonomyType::Category, query.page, uri).await {
         Ok(html) => Html(html).into_response(),
-        Err(e) => render_error_page(e).into_response(),
+        Err(e) => render_error_page(e, &state, &path).await,
     }
 }
 
@@ -45,9 +46,10 @@ pub async fn tag_archive(
     Query(query): Query<PageQuery>,
     axum::extract::OriginalUri(uri): axum::extract::OriginalUri,
 ) -> Response {
-    match render_taxonomy_archive(state, slug, TaxonomyType::Tag, query.page, uri).await {
+    let path = uri.path().to_string();
+    match render_taxonomy_archive(state.clone(), slug, TaxonomyType::Tag, query.page, uri).await {
         Ok(html) => Html(html).into_response(),
-        Err(e) => render_error_page(e).into_response(),
+        Err(e) => render_error_page(e, &state, &path).await,
     }
 }
 
@@ -58,9 +60,10 @@ pub async fn author_archive(
     Query(query): Query<PageQuery>,
     axum::extract::OriginalUri(uri): axum::extract::OriginalUri,
 ) -> Response {
-    match render_author_archive(state, username, query.page, uri).await {
+    let path = uri.path().to_string();
+    match render_author_archive(state.clone(), username, query.page, uri).await {
         Ok(html) => Html(html).into_response(),
-        Err(e) => render_error_page(e).into_response(),
+        Err(e) => render_error_page(e, &state, &path).await,
     }
 }
 

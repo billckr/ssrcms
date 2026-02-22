@@ -15,9 +15,10 @@ pub async fn single_post(
     Path(slug): Path<String>,
     axum::extract::OriginalUri(uri): axum::extract::OriginalUri,
 ) -> Response {
-    match render_post(state, slug, uri).await {
+    let path = uri.path().to_string();
+    match render_post(state.clone(), slug, uri).await {
         Ok(html) => Html(html).into_response(),
-        Err(e) => render_error_page(e).into_response(),
+        Err(e) => render_error_page(e, &state, &path).await,
     }
 }
 

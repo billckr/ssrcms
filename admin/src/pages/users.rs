@@ -40,7 +40,7 @@ pub fn render_list(users: &[UserRow], flash: Option<&str>) -> String {
     }).collect::<Vec<_>>().join("\n");
 
     let content = format!(
-        r#"<p><a href="/admin/users/new" class="btn btn-primary">New User</a></p>
+        r#"<p style="margin-bottom:1rem"><a href="/admin/users/new" class="btn btn-primary">New User</a></p>
 <table class="data-table">
   <thead><tr><th>Name</th><th>Username</th><th>Email</th><th>Role</th><th>Actions</th></tr></thead>
   <tbody>{rows}</tbody>

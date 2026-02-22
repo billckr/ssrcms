@@ -28,11 +28,12 @@ pub async fn home(
     Query(query): Query<PageQuery>,
     axum::extract::OriginalUri(uri): axum::extract::OriginalUri,
 ) -> Response {
-    match render_home(state, query, uri).await {
+    let path = uri.path().to_string();
+    match render_home(state.clone(), query, uri).await {
         Ok(html) => Html(html).into_response(),
         Err(e) => {
             tracing::error!("home handler error: {:?}", e);
-            render_error_page(e).into_response()
+            render_error_page(e, &state, &path).await
         }
     }
 }
@@ -94,19 +95,56 @@ async fn render_home(
     state.templates.render("index.html", &ctx)
 }
 
-pub fn render_error_page(err: AppError) -> axum::response::Response {
+/// Render an error response, using the active theme's 404.html for NotFound errors.
+/// Falls back to plain HTML if the template engine is unavailable.
+pub async fn render_error_page(err: AppError, state: &AppState, path: &str) -> Response {
     match err {
-        AppError::NotFound(_) => (
-            axum::http::StatusCode::NOT_FOUND,
-            Html("<h1>404 Not Found</h1>"),
-        )
-            .into_response(),
-        _ => (
-            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-            Html("<h1>500 Internal Server Error</h1>"),
-        )
-            .into_response(),
+        AppError::NotFound(_) => {
+            match render_404(state, path).await {
+                Ok(html) => (axum::http::StatusCode::NOT_FOUND, Html(html)).into_response(),
+                Err(e) => {
+                    tracing::warn!("could not render theme 404 page: {:?}", e);
+                    (
+                        axum::http::StatusCode::NOT_FOUND,
+                        Html(format!(
+                            r#"<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>404 Not Found</title></head><body><h1>404 — Not Found</h1><p>The page <code>{path}</code> could not be found.</p><p><a href="/">← Back to home</a></p></body></html>"#
+                        )),
+                    ).into_response()
+                }
+            }
+        }
+        _ => {
+            tracing::error!("unhandled error in handler: {:?}", err);
+            (
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                Html("<h1>500 Internal Server Error</h1>".to_string()),
+            ).into_response()
+        }
     }
+}
+
+async fn render_404(state: &AppState, path: &str) -> Result<String> {
+    let site_ctx = build_site_context(state).await?;
+
+    let mut ctx = ContextBuilder {
+        site: site_ctx,
+        request: RequestContext {
+            url: format!("{}{}", state.settings.base_url, path),
+            path: path.to_string(),
+            query: HashMap::new(),
+        },
+        session: SessionContext { is_logged_in: false, user: None },
+        nav: NavContext::default(),
+    }
+    .into_tera_context();
+
+    let hook_outputs = state.templates.render_hooks(
+        &["head_start", "head_end", "body_start", "body_end", "before_content", "after_content", "footer"],
+        &ctx,
+    );
+    ContextBuilder::add_hook_outputs(&mut ctx, &hook_outputs);
+
+    state.templates.render("404.html", &ctx)
 }
 
 // ── Shared helpers ──────────────────────────────────────────────────────────

@@ -52,12 +52,12 @@ pub fn render(data: &DashboardData, flash: Option<&str>) -> String {
     <div class="stat-label">Users</div>
   </div>
 </div>
-<h2>Recent Posts</h2>
+<h2 style="margin-bottom:.75rem">Recent Posts</h2>
+<p style="margin-bottom:1rem"><a href="/admin/posts/new" class="btn btn-primary">New Post</a></p>
 <table class="data-table">
   <thead><tr><th>Title</th><th>Status</th><th>Actions</th></tr></thead>
   <tbody>{}</tbody>
-</table>
-<p><a href="/admin/posts/new" class="btn btn-primary">New Post</a></p>"#,
+</table>"#,
         data.published_posts, data.draft_posts, data.total_pages, data.total_users,
         recent_rows,
     );

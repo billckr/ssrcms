@@ -23,9 +23,10 @@ pub async fn search(
     Query(params): Query<SearchQuery>,
     axum::extract::OriginalUri(uri): axum::extract::OriginalUri,
 ) -> Response {
-    match render_search(state, params.q, uri).await {
+    let path = uri.path().to_string();
+    match render_search(state.clone(), params.q, uri).await {
         Ok(html) => Html(html).into_response(),
-        Err(e) => render_error_page(e).into_response(),
+        Err(e) => render_error_page(e, &state, &path).await,
     }
 }
 
