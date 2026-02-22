@@ -106,7 +106,7 @@ impl PostContext {
 
         let excerpt = post.excerpt.clone().unwrap_or_else(|| {
             // Auto-generate: strip HTML, take first 55 words
-            let text = ammonia::clean_text(&post.content);
+            let text = strip_tags(&post.content);
             let words: Vec<&str> = text.split_whitespace().take(55).collect();
             if words.len() == 55 {
                 format!("{} ...", words.join(" "))
@@ -116,7 +116,7 @@ impl PostContext {
         });
 
         let reading_time = {
-            let text = ammonia::clean_text(&post.content);
+            let text = strip_tags(&post.content);
             let word_count = text.split_whitespace().count();
             ((word_count as f64 / 200.0).ceil() as u32).max(1)
         };
@@ -178,6 +178,15 @@ pub struct UpdatePost {
     pub published_at: Option<DateTime<Utc>>,
 }
 
+/// Strip all HTML tags, returning plain text content.
+/// Used internally for word counting and excerpt generation.
+fn strip_tags(html: &str) -> String {
+    ammonia::Builder::new()
+        .tags(Default::default())
+        .clean(html)
+        .to_string()
+}
+
 /// Sanitize HTML content before storage.
 /// Uses ammonia to strip disallowed tags/attributes while preserving safe HTML.
 /// This is the contract that allows theme templates to use `{{ post.content | safe }}`.
@@ -187,6 +196,200 @@ pub fn sanitize_content(html: &str) -> String {
     // The Phase 3 admin editor (rich text) should produce clean HTML;
     // sanitization here is the last line of defence.
     ammonia::clean(html)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::Utc;
+    use uuid::Uuid;
+    use crate::models::user::User;
+
+    fn make_user() -> User {
+        User {
+            id: Uuid::new_v4(),
+            username: "testuser".to_string(),
+            email: "test@example.com".to_string(),
+            display_name: "Test User".to_string(),
+            password_hash: "hash".to_string(),
+            bio: "".to_string(),
+            avatar_media_id: None,
+            role: "author".to_string(),
+            is_active: true,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        }
+    }
+
+    fn make_post(post_type: &str, slug: &str, content: &str, excerpt: Option<String>) -> Post {
+        Post {
+            id: Uuid::new_v4(),
+            title: "Test Post".to_string(),
+            slug: slug.to_string(),
+            content: content.to_string(),
+            content_format: "html".to_string(),
+            excerpt,
+            status: "published".to_string(),
+            post_type: post_type.to_string(),
+            author_id: Uuid::new_v4(),
+            featured_image_id: None,
+            published_at: Some(Utc::now()),
+            scheduled_at: None,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        }
+    }
+
+    // --- PostStatus ---
+
+    #[test]
+    fn post_status_as_str_all_variants() {
+        assert_eq!(PostStatus::Draft.as_str(), "draft");
+        assert_eq!(PostStatus::Published.as_str(), "published");
+        assert_eq!(PostStatus::Scheduled.as_str(), "scheduled");
+        assert_eq!(PostStatus::Trashed.as_str(), "trashed");
+    }
+
+    // --- PostType ---
+
+    #[test]
+    fn post_type_as_str_both_variants() {
+        assert_eq!(PostType::Post.as_str(), "post");
+        assert_eq!(PostType::Page.as_str(), "page");
+    }
+
+    // --- sanitize_content ---
+
+    #[test]
+    fn sanitize_content_strips_script_tag() {
+        let html = r#"<p>Hello</p><script>alert("xss")</script>"#;
+        let result = sanitize_content(html);
+        assert!(!result.contains("<script>"));
+        assert!(!result.contains("alert"));
+        assert!(result.contains("<p>Hello</p>"));
+    }
+
+    #[test]
+    fn sanitize_content_strips_iframe_tag() {
+        let html = r#"<p>Text</p><iframe src="evil.com"></iframe>"#;
+        let result = sanitize_content(html);
+        assert!(!result.contains("iframe"));
+        assert!(result.contains("Text"));
+    }
+
+    #[test]
+    fn sanitize_content_strips_onclick_attribute() {
+        let html = r#"<a href="/foo" onclick="evil()">Link</a>"#;
+        let result = sanitize_content(html);
+        assert!(!result.contains("onclick"));
+        assert!(result.contains("Link"));
+    }
+
+    #[test]
+    fn sanitize_content_preserves_safe_tags() {
+        let html = "<p>Hello <strong>world</strong> and <a href='/x'>link</a></p>";
+        let result = sanitize_content(html);
+        assert!(result.contains("<p>"));
+        assert!(result.contains("<strong>"));
+    }
+
+    #[test]
+    fn sanitize_content_empty_string() {
+        assert_eq!(sanitize_content(""), "");
+    }
+
+    #[test]
+    fn sanitize_content_plain_text_passthrough() {
+        let text = "Just plain text, no HTML.";
+        assert_eq!(sanitize_content(text), text);
+    }
+
+    // --- PostContext::build ---
+
+    #[test]
+    fn post_context_url_for_post_type() {
+        let user = make_user();
+        let post = make_post("post", "my-post", "content", None);
+        let ctx = PostContext::build(
+            &post, &user, vec![], vec![], None, HashMap::new(), 0, "https://example.com",
+        );
+        assert_eq!(ctx.url, "https://example.com/blog/my-post");
+    }
+
+    #[test]
+    fn post_context_url_for_page_type() {
+        let user = make_user();
+        let post = make_post("page", "about", "content", None);
+        let ctx = PostContext::build(
+            &post, &user, vec![], vec![], None, HashMap::new(), 0, "https://example.com",
+        );
+        assert_eq!(ctx.url, "https://example.com/about");
+    }
+
+    #[test]
+    fn post_context_excerpt_passthrough_when_provided() {
+        let user = make_user();
+        let post = make_post("post", "slug", "Some content.", Some("Custom excerpt.".to_string()));
+        let ctx = PostContext::build(
+            &post, &user, vec![], vec![], None, HashMap::new(), 0, "https://example.com",
+        );
+        assert_eq!(ctx.excerpt, "Custom excerpt.");
+    }
+
+    #[test]
+    fn post_context_excerpt_auto_truncates_at_55_words() {
+        let user = make_user();
+        let content = "word ".repeat(100);
+        let post = make_post("post", "slug", &content, None);
+        let ctx = PostContext::build(
+            &post, &user, vec![], vec![], None, HashMap::new(), 0, "https://example.com",
+        );
+        assert!(ctx.excerpt.ends_with(" ..."), "excerpt should end with ' ...'");
+        let word_count = ctx.excerpt.trim_end_matches(" ...").split_whitespace().count();
+        assert_eq!(word_count, 55);
+    }
+
+    #[test]
+    fn post_context_excerpt_short_content_no_ellipsis() {
+        let user = make_user();
+        let post = make_post("post", "slug", "short content here", None);
+        let ctx = PostContext::build(
+            &post, &user, vec![], vec![], None, HashMap::new(), 0, "https://example.com",
+        );
+        assert!(!ctx.excerpt.ends_with(" ..."));
+    }
+
+    #[test]
+    fn post_context_reading_time_200_words_is_1_min() {
+        let user = make_user();
+        let content = "word ".repeat(200);
+        let post = make_post("post", "slug", &content, None);
+        let ctx = PostContext::build(
+            &post, &user, vec![], vec![], None, HashMap::new(), 0, "https://example.com",
+        );
+        assert_eq!(ctx.reading_time, 1);
+    }
+
+    #[test]
+    fn post_context_reading_time_400_words_is_2_min() {
+        let user = make_user();
+        let content = "word ".repeat(400);
+        let post = make_post("post", "slug", &content, None);
+        let ctx = PostContext::build(
+            &post, &user, vec![], vec![], None, HashMap::new(), 0, "https://example.com",
+        );
+        assert_eq!(ctx.reading_time, 2);
+    }
+
+    #[test]
+    fn post_context_reading_time_empty_content_is_1_min() {
+        let user = make_user();
+        let post = make_post("post", "slug", "", None);
+        let ctx = PostContext::build(
+            &post, &user, vec![], vec![], None, HashMap::new(), 0, "https://example.com",
+        );
+        assert_eq!(ctx.reading_time, 1);
+    }
 }
 
 pub async fn create(pool: &PgPool, data: &CreatePost) -> Result<Post> {

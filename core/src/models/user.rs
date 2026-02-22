@@ -289,3 +289,99 @@ pub fn verify_password(password: &str, hash: &str) -> bool {
     };
     Argon2::default().verify_password(password.as_bytes(), &parsed).is_ok()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::Utc;
+    use uuid::Uuid;
+
+    #[test]
+    fn user_role_as_str_all_variants() {
+        assert_eq!(UserRole::Subscriber.as_str(), "subscriber");
+        assert_eq!(UserRole::Author.as_str(), "author");
+        assert_eq!(UserRole::Editor.as_str(), "editor");
+        assert_eq!(UserRole::Admin.as_str(), "admin");
+    }
+
+    #[test]
+    fn user_role_from_str_valid_values() {
+        assert_eq!(UserRole::from_str("subscriber"), Some(UserRole::Subscriber));
+        assert_eq!(UserRole::from_str("author"), Some(UserRole::Author));
+        assert_eq!(UserRole::from_str("editor"), Some(UserRole::Editor));
+        assert_eq!(UserRole::from_str("admin"), Some(UserRole::Admin));
+    }
+
+    #[test]
+    fn user_role_from_str_invalid_returns_none() {
+        assert_eq!(UserRole::from_str("superuser"), None);
+        assert_eq!(UserRole::from_str(""), None);
+        assert_eq!(UserRole::from_str("root"), None);
+    }
+
+    #[test]
+    fn user_role_from_str_case_sensitive() {
+        assert_eq!(UserRole::from_str("Admin"), None);
+        assert_eq!(UserRole::from_str("ADMIN"), None);
+        assert_eq!(UserRole::from_str("Author"), None);
+    }
+
+    #[test]
+    fn can_publish_for_author_editor_admin() {
+        assert!(UserRole::Author.can_publish());
+        assert!(UserRole::Editor.can_publish());
+        assert!(UserRole::Admin.can_publish());
+    }
+
+    #[test]
+    fn can_publish_false_for_subscriber() {
+        assert!(!UserRole::Subscriber.can_publish());
+    }
+
+    #[test]
+    fn can_manage_users_admin_only() {
+        assert!(UserRole::Admin.can_manage_users());
+        assert!(!UserRole::Editor.can_manage_users());
+        assert!(!UserRole::Author.can_manage_users());
+        assert!(!UserRole::Subscriber.can_manage_users());
+    }
+
+    #[test]
+    fn hash_and_verify_password_round_trip() {
+        let hash = hash_password("correct-horse-battery").unwrap();
+        assert!(verify_password("correct-horse-battery", &hash));
+        assert!(!verify_password("wrong-password", &hash));
+    }
+
+    #[test]
+    fn hash_password_produces_unique_salts() {
+        let hash1 = hash_password("samepassword").unwrap();
+        let hash2 = hash_password("samepassword").unwrap();
+        assert_ne!(hash1, hash2, "each hash should use a unique salt");
+    }
+
+    #[test]
+    fn user_context_url_format() {
+        let user = User {
+            id: Uuid::new_v4(),
+            username: "janedoe".to_string(),
+            email: "jane@example.com".to_string(),
+            display_name: "Jane Doe".to_string(),
+            password_hash: "hash".to_string(),
+            bio: "".to_string(),
+            avatar_media_id: None,
+            role: "author".to_string(),
+            is_active: true,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        };
+        let ctx = UserContext::from_user(&user, "https://example.com");
+        assert_eq!(ctx.url, "https://example.com/author/janedoe");
+        assert_eq!(ctx.username, "janedoe");
+        assert_eq!(ctx.role, "author");
+        // password_hash must NOT be present in UserContext
+        let json = serde_json::to_string(&ctx).unwrap();
+        assert!(!json.contains("password_hash"));
+        assert!(!json.contains("hash"));
+    }
+}

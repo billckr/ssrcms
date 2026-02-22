@@ -15,6 +15,8 @@
 #   migrate        Run pending database migrations
 #   clean-index    Delete the Tantivy search index (rebuilt on next start)
 #   clean-build    Delete the Cargo target/ directory to force a full rebuild
+#   test           Run unit tests (no database required)
+#   test-all       Run unit tests + integration tests (requires DATABASE_URL)
 
 set -euo pipefail
 
@@ -225,6 +227,25 @@ cmd_clean_build() {
     log "Done."
 }
 
+cmd_test() {
+    log "Running unit tests (no database required)..."
+    cd "$SCRIPT_DIR"
+    cargo test -p synaptic-core
+    log "Done."
+}
+
+cmd_test_all() {
+    if [[ -z "${DATABASE_URL:-}" ]]; then
+        log "ERROR: DATABASE_URL is not set. Integration tests require a live PostgreSQL instance."
+        log "Example: DATABASE_URL=postgres://user:pass@localhost/synaptic_test ./app.sh test-all"
+        exit 1
+    fi
+    log "Running all tests including integration tests (DATABASE_URL is set)..."
+    cd "$SCRIPT_DIR"
+    cargo test -p synaptic-core -- --include-ignored
+    log "Done."
+}
+
 # ── Dispatch ──────────────────────────────────────────────────────────────────
 
 COMMAND="${1:-help}"
@@ -242,6 +263,8 @@ case "$COMMAND" in
     migrate)       cmd_migrate ;;
     clean-index)   cmd_clean_index ;;
     clean-build)   cmd_clean_build ;;
+    test)          cmd_test ;;
+    test-all)      cmd_test_all ;;
     help|--help|-h)
         echo ""
         echo "Usage: ./app.sh <command>"
@@ -263,6 +286,10 @@ case "$COMMAND" in
         echo "  migrate        Run pending database migrations"
         echo "  clean-index    Delete Tantivy search index (rebuilt on next start)"
         echo "  clean-build    Delete target/ to force a full recompile"
+        echo ""
+        echo "Testing:"
+        echo "  test           Run unit tests (no database required)"
+        echo "  test-all       Run unit + integration tests (requires DATABASE_URL env var)"
         echo ""
         ;;
     *)

@@ -42,6 +42,8 @@ Day-to-day reference for running, building, checking, and restarting the CMS dur
 | Apply migrations | `./app.sh migrate` |
 | Clear search index | `./app.sh clean-index` |
 | Force full recompile | `./app.sh clean-build` |
+| Run unit tests | `./app.sh test` |
+| Run unit + integration tests | `DATABASE_URL=... ./app.sh test-all` |
 
 ### Direct cargo commands (useful during active development)
 
@@ -49,7 +51,8 @@ Day-to-day reference for running, building, checking, and restarting the CMS dur
 |---|---|
 | Check for errors | `cargo check` |
 | Check one crate | `cargo check -p synaptic-core` |
-| Run all tests | `cargo test` |
+| Run unit tests (no DB) | `cargo test -p synaptic-core` |
+| Run all tests incl. integration | `DATABASE_URL=... cargo test -p synaptic-core -- --include-ignored` |
 
 All commands must be run from the workspace root (`/home/ssrust26/synaptic-signals/`).
 
@@ -155,6 +158,57 @@ The build should produce **zero warnings**. Phase 4 scaffolding that isn't yet c
 with `#[allow(dead_code)]` at the call site so it doesn't pollute the output. If you see a new
 warning after your changes, treat it as an error — either fix it or, if it's intentional
 scaffolding, add a targeted `#[allow(dead_code)]` with a comment explaining why.
+
+---
+
+## Testing
+
+### Unit tests (no database required)
+
+Unit tests are inline `#[cfg(test)]` modules co-located with the source they test. They run entirely in-process with no network or database dependencies.
+
+```bash
+./app.sh test
+# or directly:
+cargo test -p synaptic-core
+```
+
+Expected output: **63 tests pass, integration stubs ignored**.
+
+Run a subset by name (substring match):
+
+```bash
+cargo test -p synaptic-core filters        # all filter tests
+cargo test -p synaptic-core reading_time   # a specific test
+cargo test -p synaptic-core -- --nocapture # show println! output
+```
+
+### Integration tests (require a live PostgreSQL instance)
+
+Integration test stubs live in `core/tests/`. They are marked `#[ignore]` and skipped by default. To run them you need:
+1. A running PostgreSQL instance
+2. `DATABASE_URL` set to a test database
+
+```bash
+DATABASE_URL=postgres://user:pass@localhost/synaptic_test ./app.sh test-all
+# or directly:
+DATABASE_URL=postgres://user:pass@localhost/synaptic_test \
+  cargo test -p synaptic-core -- --include-ignored
+```
+
+> **Note:** The integration stubs currently contain `todo!()` bodies — they are placeholders for when a `[lib]` target is added to `core/Cargo.toml`. The stubs document the intended test scenarios and the setup steps needed to implement them.
+
+### Where tests live
+
+| Location | What it tests |
+|---|---|
+| `core/src/templates/filters.rs` | All 7 Tera filters |
+| `core/src/errors.rs` | `AppError` variants → HTTP status codes |
+| `core/src/config.rs` | Config defaults and `bind_addr()` |
+| `core/src/models/user.rs` | `UserRole`, password hashing, `UserContext` |
+| `core/src/models/post.rs` | `PostStatus`/`PostType`, `sanitize_content`, `PostContext::build` |
+| `core/tests/model_crud.rs` | Post/user/taxonomy CRUD (integration, `#[ignore]`) |
+| `core/tests/routes.rs` | HTTP route responses (integration, `#[ignore]`) |
 
 ---
 

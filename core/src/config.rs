@@ -119,3 +119,75 @@ impl AppConfig {
         format!("{}:{}", self.host, self.port)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_default_host() {
+        assert_eq!(default_host(), "0.0.0.0");
+    }
+
+    #[test]
+    fn test_default_port() {
+        assert_eq!(default_port(), 3000u16);
+    }
+
+    #[test]
+    fn test_default_secret_key_nonempty() {
+        assert!(!default_secret_key().is_empty());
+    }
+
+    #[test]
+    fn test_default_themes_dir() {
+        assert_eq!(default_themes_dir(), "themes");
+    }
+
+    #[test]
+    fn test_default_plugins_dir() {
+        assert_eq!(default_plugins_dir(), "plugins");
+    }
+
+    #[test]
+    fn test_default_uploads_dir() {
+        assert_eq!(default_uploads_dir(), "uploads");
+    }
+
+    #[test]
+    fn test_default_log_level() {
+        assert_eq!(default_log_level(), "info");
+    }
+
+    #[test]
+    fn test_default_search_index_path() {
+        assert_eq!(default_search_index_path(), "search-index");
+    }
+
+    fn make_config(host: &str, port: u16) -> AppConfig {
+        AppConfig {
+            host: host.to_string(),
+            port,
+            database_url: "postgres://localhost/test".to_string(),
+            secret_key: default_secret_key(),
+            themes_dir: default_themes_dir(),
+            plugins_dir: default_plugins_dir(),
+            uploads_dir: default_uploads_dir(),
+            dev_mode: false,
+            log_level: default_log_level(),
+            search_index_path: default_search_index_path(),
+        }
+    }
+
+    #[test]
+    fn bind_addr_default_values() {
+        let cfg = make_config("0.0.0.0", 3000);
+        assert_eq!(cfg.bind_addr(), "0.0.0.0:3000");
+    }
+
+    #[test]
+    fn bind_addr_custom_host_and_port() {
+        let cfg = make_config("127.0.0.1", 8080);
+        assert_eq!(cfg.bind_addr(), "127.0.0.1:8080");
+    }
+}
