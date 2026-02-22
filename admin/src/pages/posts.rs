@@ -6,6 +6,7 @@ pub struct PostRow {
     pub status: String,
     pub slug: String,
     pub post_type: String,
+    pub author_name: String,
     pub published_at: Option<String>,
 }
 
@@ -39,6 +40,7 @@ pub fn render_list(posts: &[PostRow], post_type: &str, flash: Option<&str>) -> S
             r#"<tr>
               <td><a href="{prefix}/{id}/edit">{title}</a></td>
               <td><span class="badge badge-{status}">{status}</span></td>
+              <td>{author}</td>
               <td>{published}</td>
               <td>
                 <a href="{prefix}/{id}/edit">Edit</a>
@@ -51,6 +53,7 @@ pub fn render_list(posts: &[PostRow], post_type: &str, flash: Option<&str>) -> S
             id = crate::html_escape(&p.id),
             title = crate::html_escape(&p.title),
             status = crate::html_escape(&p.status),
+            author = crate::html_escape(&p.author_name),
             published = p.published_at.as_deref().map(|d| crate::html_escape(d)).unwrap_or_default(),
         )
     }).collect::<Vec<_>>().join("\n");
@@ -58,7 +61,7 @@ pub fn render_list(posts: &[PostRow], post_type: &str, flash: Option<&str>) -> S
     let content = format!(
         r#"<p><a href="{new_href}" class="btn btn-primary">New {title}</a></p>
 <table class="data-table">
-  <thead><tr><th>Title</th><th>Status</th><th>Published</th><th>Actions</th></tr></thead>
+  <thead><tr><th>Title</th><th>Status</th><th>Author</th><th>Published</th><th>Actions</th></tr></thead>
   <tbody>{rows}</tbody>
 </table>"#,
         new_href = new_href, title = title, rows = rows,

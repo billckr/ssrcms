@@ -47,14 +47,25 @@ async fn list_type(state: AppState, post_type: &str, page: Option<i64>) -> Html<
     };
 
     let raw = crate::models::post::list(&state.db, &filter).await.unwrap_or_default();
-    let rows: Vec<PostRow> = raw.iter().map(|p| PostRow {
-        id: p.id.to_string(),
-        title: p.title.clone(),
-        status: p.status.clone(),
-        slug: p.slug.clone(),
-        post_type: p.post_type.clone(),
-        published_at: p.published_at.map(|d| d.format("%Y-%m-%d").to_string()),
-    }).collect();
+    let mut rows: Vec<PostRow> = Vec::new();
+    
+    for p in raw.iter() {
+        // Fetch author for each post
+        let author_name = crate::models::user::get_by_id(&state.db, p.author_id)
+            .await
+            .map(|u| u.display_name)
+            .unwrap_or_else(|_| "Unknown".to_string());
+        
+        rows.push(PostRow {
+            id: p.id.to_string(),
+            title: p.title.clone(),
+            status: p.status.clone(),
+            slug: p.slug.clone(),
+            post_type: p.post_type.clone(),
+            author_name,
+            published_at: p.published_at.map(|d| d.format("%Y-%m-%d").to_string()),
+        });
+    }
 
     Html(admin::pages::posts::render_list(&rows, post_type, None))
 }
