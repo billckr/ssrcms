@@ -111,5 +111,8 @@ pub async fn activate(
         return Err(format!("Failed to load theme: {}", e));
     }
 
+    // Update the shared active_theme so the static file handler serves the new theme's assets
+    *state.active_theme.write().unwrap() = form.theme.clone();
+
     Ok(Redirect::to("/admin/appearance"))
 }

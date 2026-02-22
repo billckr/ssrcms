@@ -6,20 +6,16 @@ use tower_sessions::SessionManagerLayer;
 use tower_sessions_sqlx_store::PostgresStore;
 
 use crate::app_state::AppState;
-use crate::handlers::{archive, auth, home, page, plugin_route, post as post_handler, search};
+use crate::handlers::{archive, auth, home, page, plugin_route, post as post_handler, search, theme_static};
 use crate::handlers::admin::{appearance, dashboard, media, plugins, posts, profile, settings, taxonomy, upload, users};
 
 pub fn build(
     state: AppState,
     uploads_dir: &str,
-    themes_dir: &str,
-    active_theme: &str,
     session_layer: SessionManagerLayer<PostgresStore>,
 ) -> Router {
     // Static file services
     let uploads_service = ServeDir::new(uploads_dir);
-    let theme_static_service =
-        ServeDir::new(format!("{}/{}/static", themes_dir, active_theme));
 
     // Collect plugin route paths so we can register each one individually.
     // Axum requires routes to be registered at build time; we add a dedicated
@@ -78,7 +74,7 @@ pub fn build(
         .route("/admin/settings", get(settings::settings).post(settings::save_settings))
     // ── Static files ───────────────────────────────────────────────────
         .nest_service("/uploads", uploads_service)
-        .nest_service("/theme/static", theme_static_service)
+        .route("/theme/static/{*path}", get(theme_static::serve))
         .nest_service("/admin/static", ServeDir::new("admin/static"));
 
     // Register plugin routes (e.g. /sitemap.xml)

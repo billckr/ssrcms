@@ -2,7 +2,7 @@
 
 use sqlx::PgPool;
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 
 use crate::config::AppConfig;
 use crate::plugins::manifest::{PluginManifest, RouteRegistration};
@@ -79,4 +79,7 @@ pub struct AppState {
     pub search_index: Arc<SearchIndex>,
     /// Loaded plugin manifests — used by the admin plugins page.
     pub loaded_plugins: Arc<Vec<PluginManifest>>,
+    /// Currently active theme name — updated live when admin switches theme.
+    /// Shared across all clones so the static file handler always sees the current value.
+    pub active_theme: Arc<RwLock<String>>,
 }

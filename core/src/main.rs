@@ -98,7 +98,7 @@ async fn main() -> anyhow::Result<()> {
     info!("search index ready at '{}'", cfg.search_index_path);
 
     // ── Application state ─────────────────────────────────────────────────────
-    let active_theme = settings.active_theme.clone();
+    let active_theme = Arc::new(std::sync::RwLock::new(settings.active_theme.clone()));
     let state = AppState {
         db: pool.clone(),
         templates: engine,
@@ -107,10 +107,11 @@ async fn main() -> anyhow::Result<()> {
         plugin_routes: Arc::new(plugin_routes),
         search_index,
         loaded_plugins: Arc::new(loaded_plugins),
+        active_theme,
     };
 
     // ── Router ────────────────────────────────────────────────────────────────
-    let app = router::build(state, &cfg.uploads_dir, &cfg.themes_dir, &active_theme, session_layer);
+    let app = router::build(state, &cfg.uploads_dir, session_layer);
 
     // ── Server ────────────────────────────────────────────────────────────────
     let addr = cfg.bind_addr();

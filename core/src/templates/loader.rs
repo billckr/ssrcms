@@ -18,10 +18,14 @@ use crate::errors::Result;
 pub struct TemplateEngine {
     inner: Arc<RwLock<Tera>>,
     themes_dir: PathBuf,
-    active_theme: String,
+    /// Shared so switch_theme() and reload_theme() always agree on the current theme name.
+    active_theme: Arc<RwLock<String>>,
     base_url: String,
     hook_registry: Arc<HookRegistry>,
     db: PgPool,
+    /// Plugin templates registered via add_raw_template(), keyed by template name.
+    /// Stored so switch_theme() can re-add them to the fresh Tera instance.
+    plugin_templates: Arc<RwLock<HashMap<String, String>>>,
 }
 
 impl TemplateEngine {
@@ -47,10 +51,11 @@ impl TemplateEngine {
         let engine = TemplateEngine {
             inner: Arc::new(RwLock::new(tera)),
             themes_dir,
-            active_theme: active_theme.to_string(),
+            active_theme: Arc::new(RwLock::new(active_theme.to_string())),
             base_url: base_url.to_string(),
             hook_registry,
             db,
+            plugin_templates: Arc::new(RwLock::new(HashMap::new())),
         };
 
         engine.register_filters_and_functions()?;
@@ -101,9 +106,12 @@ impl TemplateEngine {
     }
 
     /// Add plugin templates to the engine (called by plugin loader).
+    /// Templates are persisted internally so switch_theme() can re-add them after a theme swap.
     pub fn add_raw_template(&self, name: &str, source: &str) -> anyhow::Result<()> {
         let mut tera = self.inner.write().unwrap();
         tera.add_raw_template(name, source)?;
+        drop(tera);
+        self.plugin_templates.write().unwrap().insert(name.to_string(), source.to_string());
         Ok(())
     }
 
@@ -184,7 +192,8 @@ impl TemplateEngine {
 
     /// Hot-reload theme templates (dev mode).
     pub fn reload_theme(&self) -> anyhow::Result<()> {
-        let theme_path = self.themes_dir.join(&self.active_theme).join("templates");
+        let active = self.active_theme.read().unwrap().clone();
+        let theme_path = self.themes_dir.join(&active).join("templates");
         let glob = format!("{}/**/*.html", theme_path.display());
 
         let mut tera = self.inner.write().unwrap();
@@ -192,11 +201,12 @@ impl TemplateEngine {
         drop(tera);
 
         self.register_filters_and_functions()?;
-        info!("theme '{}' reloaded", self.active_theme);
+        info!("theme '{}' reloaded", active);
         Ok(())
     }
 
     /// Dynamically switch to a different theme and reload templates.
+    /// Re-adds all plugin templates so hooks continue to work after the switch.
     pub fn switch_theme(&self, new_theme: &str) -> anyhow::Result<()> {
         let theme_path = self.themes_dir.join(new_theme).join("templates");
         let glob = format!("{}/**/*.html", theme_path.display());
@@ -204,8 +214,18 @@ impl TemplateEngine {
         let mut tera = self.inner.write().unwrap();
         *tera = Tera::new(&glob)
             .map_err(|e| anyhow::anyhow!("Failed to load theme '{}': {}", new_theme, e))?;
+
+        // Re-add plugin templates — they are not part of the theme glob.
+        let plugin_templates = self.plugin_templates.read().unwrap();
+        for (name, source) in plugin_templates.iter() {
+            if let Err(e) = tera.add_raw_template(name, source) {
+                tracing::warn!("switch_theme: could not re-add plugin template '{}': {}", name, e);
+            }
+        }
+        drop(plugin_templates);
         drop(tera);
 
+        *self.active_theme.write().unwrap() = new_theme.to_string();
         self.register_filters_and_functions()?;
         info!("switched to theme '{}'", new_theme);
         Ok(())

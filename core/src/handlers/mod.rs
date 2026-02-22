@@ -6,6 +6,7 @@ pub mod page;
 pub mod plugin_route;
 pub mod post;
 pub mod search;
+pub mod theme_static;
 
 use axum::{
     http::StatusCode,
