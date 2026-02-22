@@ -226,6 +226,7 @@ pub async fn get_by_id(pool: &PgPool, id: Uuid) -> Result<Post> {
         .ok_or_else(|| AppError::NotFound(format!("post {id}")))
 }
 
+#[allow(dead_code)]
 pub async fn get_by_slug(pool: &PgPool, slug: &str) -> Result<Post> {
     sqlx::query_as::<_, Post>("SELECT * FROM posts WHERE slug = $1")
         .bind(slug)
@@ -456,6 +457,7 @@ pub async fn get_meta(pool: &PgPool, post_id: Uuid) -> Result<HashMap<String, St
 }
 
 /// Upsert a custom field value.
+#[allow(dead_code)]
 pub async fn set_meta(pool: &PgPool, post_id: Uuid, key: &str, value: &str) -> Result<()> {
     sqlx::query(
         r#"

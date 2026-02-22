@@ -51,6 +51,7 @@ impl SearchSchema {
 
 /// A single search result returned by `SearchIndex::search()`.
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct SearchResult {
     pub id: String,
     pub title: String,

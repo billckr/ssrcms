@@ -95,6 +95,7 @@ pub async fn get_by_id(pool: &PgPool, id: Uuid) -> Result<Media> {
         .ok_or_else(|| AppError::NotFound(format!("media {id}")))
 }
 
+#[allow(dead_code)]
 pub async fn update_alt_text(pool: &PgPool, id: Uuid, alt_text: &str) -> Result<()> {
     let affected = sqlx::query("UPDATE media SET alt_text = $1 WHERE id = $2")
         .bind(alt_text)

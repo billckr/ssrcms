@@ -18,12 +18,15 @@ pub enum AppError {
     NotFound(String),
 
     #[error("Unauthorized")]
+    #[allow(dead_code)]
     Unauthorized,
 
     #[error("Forbidden")]
+    #[allow(dead_code)]
     Forbidden,
 
     #[error("Bad request: {0}")]
+    #[allow(dead_code)]
     BadRequest(String),
 
     #[error("Configuration error: {0}")]

@@ -151,7 +151,10 @@ Expected output when clean:
 Finished `dev` profile [unoptimized + debuginfo] target(s) in Xs
 ```
 
-Dead code warnings are normal — many model helpers and scaffold functions are not yet called.
+The build should produce **zero warnings**. Phase 4 scaffolding that isn't yet called is annotated
+with `#[allow(dead_code)]` at the call site so it doesn't pollute the output. If you see a new
+warning after your changes, treat it as an error — either fix it or, if it's intentional
+scaffolding, add a targeted `#[allow(dead_code)]` with a comment explaining why.
 
 ---
 

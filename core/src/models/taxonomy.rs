@@ -85,6 +85,7 @@ pub async fn create(pool: &PgPool, data: &CreateTaxonomy) -> Result<Taxonomy> {
     Ok(tax)
 }
 
+#[allow(dead_code)]
 pub async fn get_by_id(pool: &PgPool, id: Uuid) -> Result<Taxonomy> {
     sqlx::query_as::<_, Taxonomy>("SELECT * FROM taxonomies WHERE id = $1")
         .bind(id)

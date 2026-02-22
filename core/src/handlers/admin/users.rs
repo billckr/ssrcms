@@ -15,7 +15,10 @@ pub async fn list(
     State(state): State<AppState>,
     _admin: AdminUser,
 ) -> Html<String> {
-    let raw = crate::models::user::list(&state.db).await.unwrap_or_default();
+    let raw = crate::models::user::list(&state.db).await.unwrap_or_else(|e| {
+        tracing::warn!("failed to list users: {:?}", e);
+        vec![]
+    });
     let rows: Vec<UserRow> = raw.iter().map(|u| UserRow {
         id: u.id.to_string(),
         username: u.username.clone(),
@@ -48,7 +51,10 @@ pub async fn edit_user(
 ) -> impl IntoResponse {
     let user = match crate::models::user::get_by_id(&state.db, id).await {
         Ok(u) => u,
-        Err(_) => return Redirect::to("/admin/users").into_response(),
+        Err(e) => {
+            tracing::warn!("user {} not found for editing: {:?}", id, e);
+            return Redirect::to("/admin/users").into_response();
+        }
     };
     let edit = UserEdit {
         id: Some(user.id.to_string()),
@@ -76,23 +82,48 @@ pub async fn save_new(
     _admin: AdminUser,
     Form(form): Form<UserForm>,
 ) -> impl IntoResponse {
-    let password = match form.password.filter(|p| !p.is_empty()) {
-        Some(p) => p,
-        None => return Html("<p>Password is required for new users.</p>".to_string()).into_response(),
+    let password = match form.password.as_deref().filter(|p| !p.is_empty()) {
+        Some(p) => p.to_string(),
+        None => {
+            let edit = UserEdit {
+                id: None,
+                username: form.username,
+                email: form.email,
+                display_name: form.display_name.unwrap_or_default(),
+                role: form.role,
+                bio: form.bio.unwrap_or_default(),
+            };
+            return Html(admin::pages::users::render_editor(
+                &edit,
+                Some("Password is required for new users."),
+            )).into_response();
+        }
     };
 
     let role = parse_role(&form.role);
     let create = CreateUser {
-        username: form.username,
-        email: form.email,
-        display_name: form.display_name.filter(|s| !s.is_empty()).unwrap_or_default(),
+        username: form.username.clone(),
+        email: form.email.clone(),
+        display_name: form.display_name.clone().filter(|s| !s.is_empty()).unwrap_or_default(),
         password,
         role,
     };
 
     match crate::models::user::create(&state.db, &create).await {
         Ok(_) => Redirect::to("/admin/users").into_response(),
-        Err(e) => Html(format!("<p>Error: {}</p>", e)).into_response(),
+        Err(e) => {
+            tracing::error!("create user error: {:?}", e);
+            let edit = UserEdit {
+                id: None,
+                username: form.username,
+                email: form.email,
+                display_name: form.display_name.unwrap_or_default(),
+                role: form.role,
+                bio: form.bio.unwrap_or_default(),
+            };
+            let msg = friendly_user_error(&e);
+            Html(admin::pages::users::render_editor(&edit, Some(&msg))).into_response()
+        }
     }
 }
 
@@ -102,27 +133,62 @@ pub async fn save_edit(
     Path(id): Path<Uuid>,
     Form(form): Form<UserForm>,
 ) -> impl IntoResponse {
-    let new_password_hash = if let Some(pw) = form.password.filter(|p| !p.is_empty()) {
-        match crate::models::user::hash_password(&pw) {
+    let new_password_hash = if let Some(pw) = form.password.as_deref().filter(|p| !p.is_empty()) {
+        match crate::models::user::hash_password(pw) {
             Ok(h) => Some(h),
-            Err(_) => return Html("<p>Password hashing error.</p>".to_string()).into_response(),
+            Err(e) => {
+                tracing::error!("password hashing error for user {}: {:?}", id, e);
+                let edit = UserEdit {
+                    id: Some(id.to_string()),
+                    username: form.username,
+                    email: form.email,
+                    display_name: form.display_name.unwrap_or_default(),
+                    role: form.role,
+                    bio: form.bio.unwrap_or_default(),
+                };
+                return Html(admin::pages::users::render_editor(
+                    &edit,
+                    Some("Failed to process password. Please try again."),
+                )).into_response();
+            }
         }
     } else {
         None
     };
 
     let update = UpdateUser {
-        username: Some(form.username),
-        email: Some(form.email),
-        display_name: form.display_name,
+        username: Some(form.username.clone()),
+        email: Some(form.email.clone()),
+        display_name: form.display_name.clone(),
         password_hash: new_password_hash,
         role: Some(parse_role(&form.role)),
-        bio: form.bio,
+        bio: form.bio.clone(),
     };
 
     match crate::models::user::update(&state.db, id, &update).await {
         Ok(_) => Redirect::to("/admin/users").into_response(),
-        Err(e) => Html(format!("<p>Error: {}</p>", e)).into_response(),
+        Err(e) => {
+            tracing::error!("update user {} error: {:?}", id, e);
+            let edit = UserEdit {
+                id: Some(id.to_string()),
+                username: form.username,
+                email: form.email,
+                display_name: form.display_name.unwrap_or_default(),
+                role: form.role,
+                bio: form.bio.unwrap_or_default(),
+            };
+            let msg = friendly_user_error(&e);
+            Html(admin::pages::users::render_editor(&edit, Some(&msg))).into_response()
+        }
+    }
+}
+
+fn friendly_user_error(e: &crate::errors::AppError) -> String {
+    let s = e.to_string();
+    if s.contains("duplicate key") || s.contains("unique") {
+        "A user with that username or email already exists.".to_string()
+    } else {
+        "Failed to save user. Please try again.".to_string()
     }
 }
 

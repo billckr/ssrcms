@@ -8,7 +8,7 @@ pub struct ThemeInfo {
     pub active: bool,
 }
 
-pub fn render(themes: &[ThemeInfo]) -> String {
+pub fn render_with_flash(themes: &[ThemeInfo], flash: Option<&str>) -> String {
     let content = if themes.is_empty() {
         r#"<div class="empty-state">
             <p>No themes found. Add a theme directory to <code>themes/</code> and restart the server.</p>
@@ -18,7 +18,11 @@ pub fn render(themes: &[ThemeInfo]) -> String {
         format!(r#"<div class="theme-list">{}</div>"#, cards)
     };
 
-    admin_page("Appearance", "/admin/appearance", None, &content)
+    admin_page("Appearance", "/admin/appearance", flash, &content)
+}
+
+pub fn render(themes: &[ThemeInfo]) -> String {
+    render_with_flash(themes, None)
 }
 
 fn render_card(t: &ThemeInfo) -> String {

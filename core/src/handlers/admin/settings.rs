@@ -49,10 +49,14 @@ pub async fn save_settings(
     ];
 
     for (key, value) in &settings {
-        let _ = crate::app_state::set_site_setting(&state.db, key, value).await;
+        if let Err(e) = crate::app_state::set_site_setting(&state.db, key, value).await {
+            tracing::error!("failed to save setting '{}': {:?}", key, e);
+        }
     }
     let ppp = form.posts_per_page.to_string();
-    let _ = crate::app_state::set_site_setting(&state.db, "posts_per_page", &ppp).await;
+    if let Err(e) = crate::app_state::set_site_setting(&state.db, "posts_per_page", &ppp).await {
+        tracing::error!("failed to save setting 'posts_per_page': {:?}", e);
+    }
 
     Redirect::to("/admin/settings")
 }

@@ -124,6 +124,7 @@ impl TemplateEngine {
     }
 
     /// Render a template by raw source string (used for plugin-registered routes).
+    #[allow(dead_code)]
     pub fn render_str(&self, source: &str, context: &tera::Context) -> Result<String> {
         let mut tera = self.inner.read().unwrap().clone();
         tera.add_raw_template("__inline__", source)?;
@@ -191,6 +192,7 @@ impl TemplateEngine {
     }
 
     /// Hot-reload theme templates (dev mode).
+    #[allow(dead_code)]
     pub fn reload_theme(&self) -> anyhow::Result<()> {
         let active = self.active_theme.read().unwrap().clone();
         let theme_path = self.themes_dir.join(&active).join("templates");

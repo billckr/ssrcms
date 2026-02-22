@@ -10,7 +10,10 @@ pub async fn list(
     State(state): State<AppState>,
     _admin: AdminUser,
 ) -> Html<String> {
-    let raw = crate::models::media::list(&state.db, 200, 0).await.unwrap_or_default();
+    let raw = crate::models::media::list(&state.db, 200, 0).await.unwrap_or_else(|e| {
+        tracing::warn!("failed to list media: {:?}", e);
+        vec![]
+    });
     let items: Vec<MediaItem> = raw.iter().map(|m| MediaItem {
         id: m.id.to_string(),
         filename: m.filename.clone(),
@@ -26,11 +29,19 @@ pub async fn delete(
     _admin: AdminUser,
     Path(id): Path<Uuid>,
 ) -> impl IntoResponse {
-    if let Ok(media) = crate::models::media::get_by_id(&state.db, id).await {
-        // Delete file from disk.
-        let path = std::path::Path::new(&state.config.uploads_dir).join(&media.path);
-        let _ = std::fs::remove_file(path);
-        let _ = crate::models::media::delete(&state.db, id).await;
+    match crate::models::media::get_by_id(&state.db, id).await {
+        Ok(media) => {
+            let path = std::path::Path::new(&state.config.uploads_dir).join(&media.path);
+            if let Err(e) = std::fs::remove_file(&path) {
+                tracing::warn!("failed to delete media file {:?}: {:?}", path, e);
+            }
+            if let Err(e) = crate::models::media::delete(&state.db, id).await {
+                tracing::error!("failed to delete media record {}: {:?}", id, e);
+            }
+        }
+        Err(e) => {
+            tracing::warn!("media {} not found for deletion: {:?}", id, e);
+        }
     }
     Redirect::to("/admin/media")
 }

@@ -20,6 +20,7 @@ pub enum UserRole {
     Admin,
 }
 
+#[allow(dead_code)]
 impl UserRole {
     pub fn as_str(&self) -> &'static str {
         match self {
@@ -67,6 +68,7 @@ pub struct User {
     pub updated_at: DateTime<Utc>,
 }
 
+#[allow(dead_code)]
 impl User {
     pub fn role(&self) -> UserRole {
         UserRole::from_str(&self.role).unwrap_or(UserRole::Subscriber)
@@ -186,6 +188,7 @@ pub async fn get_by_email(pool: &PgPool, email: &str) -> Result<User> {
     .ok_or_else(|| AppError::NotFound(format!("user with email '{email}'")))
 }
 
+#[allow(dead_code)]
 pub async fn update_role(pool: &PgPool, id: Uuid, role: &UserRole) -> Result<()> {
     let affected = sqlx::query(
         "UPDATE users SET role = $1, updated_at = NOW() WHERE id = $2",
@@ -202,6 +205,7 @@ pub async fn update_role(pool: &PgPool, id: Uuid, role: &UserRole) -> Result<()>
     Ok(())
 }
 
+#[allow(dead_code)]
 pub async fn deactivate(pool: &PgPool, id: Uuid) -> Result<()> {
     sqlx::query(
         "UPDATE users SET is_active = FALSE, updated_at = NOW() WHERE id = $1",
@@ -276,6 +280,7 @@ pub fn hash_password(password: &str) -> Result<String> {
 }
 
 /// Verify a plaintext password against a stored Argon2 hash.
+#[allow(dead_code)]
 pub fn verify_password(password: &str, hash: &str) -> bool {
     use argon2::{Argon2, PasswordHash, PasswordVerifier};
     let parsed = match PasswordHash::new(hash) {

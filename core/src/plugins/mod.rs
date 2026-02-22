@@ -5,4 +5,3 @@ pub mod loader;
 pub mod manifest;
 
 pub use hook_registry::HookRegistry;
-pub use loader::PluginLoader;

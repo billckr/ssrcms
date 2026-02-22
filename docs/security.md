@@ -183,6 +183,7 @@ Use `| json_encode | safe` for string values in JSON-LD:
 - [ ] Plugin templates reviewed for `| safe` misuse on user-supplied values
 - [ ] `docs/plugin-api-v1.md` accurately reflects what is exposed in the context
 - [ ] No SQL constructed by string interpolation from user input (all queries use `.bind()`)
+- [ ] No raw internal error strings (sqlx messages, table names, stack traces) in HTTP responses — all server-side errors return generic messages to the client
 
 ---
 

@@ -17,6 +17,7 @@ pub struct AppConfig {
 
     /// Cookie signing secret — must be set in production
     #[serde(default = "default_secret_key")]
+    #[allow(dead_code)]
     pub secret_key: String,
 
     /// Path to the themes directory
@@ -33,6 +34,7 @@ pub struct AppConfig {
 
     /// Enable hot-reload of templates and plugins (dev mode)
     #[serde(default)]
+    #[allow(dead_code)]
     pub dev_mode: bool,
 
     /// Log level filter string (e.g. "info", "debug", "synaptic_core=debug,info")

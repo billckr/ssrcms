@@ -41,6 +41,7 @@ impl HookRegistry {
     }
 
     /// Remove all handlers registered by a given plugin.
+    #[allow(dead_code)]
     pub fn unregister_plugin(&self, plugin_name: &str) {
         let mut map = self.inner.write().unwrap();
         for handlers in map.values_mut() {
@@ -49,6 +50,7 @@ impl HookRegistry {
     }
 
     /// List all hook names that have at least one handler.
+    #[allow(dead_code)]
     pub fn active_hooks(&self) -> Vec<String> {
         let map = self.inner.read().unwrap();
         map.keys().cloned().collect()
@@ -56,6 +58,7 @@ impl HookRegistry {
 }
 
 /// Well-known hook names. The list is open — plugins may define their own.
+#[allow(dead_code)]
 pub mod hooks {
     pub const HEAD_START: &str = "head_start";
     pub const HEAD_END: &str = "head_end";

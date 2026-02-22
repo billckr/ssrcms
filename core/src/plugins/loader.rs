@@ -1,5 +1,7 @@
 //! Plugin loader: scans the plugins directory, parses manifests, registers hooks,
 //! and adds plugin templates to the Tera engine.
+//! Phase 4 scaffolding — not yet wired into the runtime (plugin hot-reload, reload API).
+#![allow(dead_code)]
 
 use std::path::{Path, PathBuf};
 

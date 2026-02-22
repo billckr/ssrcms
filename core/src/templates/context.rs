@@ -130,6 +130,7 @@ pub struct ArchiveContext {
 
 /// Search results context.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(dead_code)]
 pub struct SearchContext {
     pub query: String,
     pub results: Vec<PostContext>,

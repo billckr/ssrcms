@@ -27,10 +27,16 @@ pub async fn tags(
 
 async fn list_terms(state: AppState, taxonomy: &str) -> Html<String> {
     let tax_type = if taxonomy == "category" { TaxonomyType::Category } else { TaxonomyType::Tag };
-    let raw = crate::models::taxonomy::list(&state.db, tax_type).await.unwrap_or_default();
+    let raw = crate::models::taxonomy::list(&state.db, tax_type).await.unwrap_or_else(|e| {
+        tracing::warn!("failed to list {} terms: {:?}", taxonomy, e);
+        vec![]
+    });
     let mut items: Vec<TermItem> = Vec::new();
     for t in &raw {
-        let count = crate::models::taxonomy::post_count(&state.db, t.id).await.unwrap_or(0);
+        let count = crate::models::taxonomy::post_count(&state.db, t.id).await.unwrap_or_else(|e| {
+            tracing::warn!("failed to get post count for term {}: {:?}", t.id, e);
+            0
+        });
         items.push(TermItem {
             id: t.id.to_string(),
             name: t.name.clone(),
@@ -63,9 +69,25 @@ pub async fn create(
         taxonomy: tax_type,
         description: None,
     };
-    let _ = crate::models::taxonomy::create(&state.db, &create).await;
     let redirect = if form.taxonomy == "category" { "/admin/categories" } else { "/admin/tags" };
-    Redirect::to(redirect)
+    if let Err(e) = crate::models::taxonomy::create(&state.db, &create).await {
+        tracing::error!("failed to create {} '{}': {:?}", form.taxonomy, create.name, e);
+        // Re-render the list with a flash message rather than losing the user's input context
+        let tax_type2 = if form.taxonomy == "category" { TaxonomyType::Category } else { TaxonomyType::Tag };
+        let raw = crate::models::taxonomy::list(&state.db, tax_type2).await.unwrap_or_default();
+        let mut items: Vec<TermItem> = Vec::new();
+        for t in &raw {
+            let count = crate::models::taxonomy::post_count(&state.db, t.id).await.unwrap_or(0);
+            items.push(TermItem { id: t.id.to_string(), name: t.name.clone(), slug: t.slug.clone(), post_count: count });
+        }
+        let msg = if e.to_string().contains("duplicate key") || e.to_string().contains("unique") {
+            format!("A {} with that name or slug already exists.", form.taxonomy)
+        } else {
+            format!("Failed to create {}. Please try again.", form.taxonomy)
+        };
+        return Html(admin::pages::taxonomy::render(&items, &form.taxonomy, Some(&msg))).into_response();
+    }
+    Redirect::to(redirect).into_response()
 }
 
 pub async fn delete_category(
@@ -73,7 +95,9 @@ pub async fn delete_category(
     _admin: AdminUser,
     Path(id): Path<Uuid>,
 ) -> impl IntoResponse {
-    let _ = crate::models::taxonomy::delete(&state.db, id).await;
+    if let Err(e) = crate::models::taxonomy::delete(&state.db, id).await {
+        tracing::error!("failed to delete category {}: {:?}", id, e);
+    }
     Redirect::to("/admin/categories")
 }
 
@@ -82,6 +106,8 @@ pub async fn delete_tag(
     _admin: AdminUser,
     Path(id): Path<Uuid>,
 ) -> impl IntoResponse {
-    let _ = crate::models::taxonomy::delete(&state.db, id).await;
+    if let Err(e) = crate::models::taxonomy::delete(&state.db, id).await {
+        tracing::error!("failed to delete tag {}: {:?}", id, e);
+    }
     Redirect::to("/admin/tags")
 }

@@ -46,16 +46,21 @@ async fn list_type(state: AppState, post_type: &str, page: Option<i64>) -> Html<
         ..Default::default()
     };
 
-    let raw = crate::models::post::list(&state.db, &filter).await.unwrap_or_default();
+    let raw = crate::models::post::list(&state.db, &filter).await.unwrap_or_else(|e| {
+        tracing::warn!("failed to list {} items: {:?}", post_type, e);
+        vec![]
+    });
     let mut rows: Vec<PostRow> = Vec::new();
-    
+
     for p in raw.iter() {
-        // Fetch author for each post
         let author_name = crate::models::user::get_by_id(&state.db, p.author_id)
             .await
             .map(|u| u.display_name)
-            .unwrap_or_else(|_| "Unknown".to_string());
-        
+            .unwrap_or_else(|e| {
+                tracing::warn!("failed to fetch author {}: {:?}", p.author_id, e);
+                "Unknown".to_string()
+            });
+
         rows.push(PostRow {
             id: p.id.to_string(),
             title: p.title.clone(),
@@ -122,13 +127,18 @@ pub async fn edit_page(
 async fn edit_post_type(state: AppState, id: Uuid) -> impl IntoResponse {
     let post = match crate::models::post::get_by_id(&state.db, id).await {
         Ok(p) => p,
-        Err(_) => return Redirect::to("/admin/posts").into_response(),
+        Err(e) => {
+            tracing::warn!("post {} not found for editing: {:?}", id, e);
+            return Redirect::to("/admin/posts").into_response();
+        }
     };
 
     let (categories, tags) = fetch_term_options(&state).await;
 
-    // Fetch current taxonomies for this post.
-    let post_terms = crate::models::taxonomy::for_post(&state.db, id).await.unwrap_or_default();
+    let post_terms = crate::models::taxonomy::for_post(&state.db, id).await.unwrap_or_else(|e| {
+        tracing::warn!("failed to fetch terms for post {}: {:?}", id, e);
+        vec![]
+    });
     let selected_categories: Vec<String> = post_terms.iter()
         .filter(|t| t.taxonomy == "category")
         .map(|t| t.id.to_string())
@@ -215,11 +225,11 @@ pub async fn save_new(
     let published_at = parse_datetime(form.published_at.as_deref());
 
     let create = CreatePost {
-        title: form.title,
-        slug: form.slug.filter(|s| !s.is_empty()),
-        content: form.content,
+        title: form.title.clone(),
+        slug: form.slug.clone().filter(|s| !s.is_empty()),
+        content: form.content.clone(),
         content_format: Some("html".into()),
-        excerpt: form.excerpt.filter(|s| !s.is_empty()),
+        excerpt: form.excerpt.clone().filter(|s| !s.is_empty()),
         status,
         post_type,
         author_id: admin.user.id,
@@ -229,9 +239,7 @@ pub async fn save_new(
 
     match crate::models::post::create(&state.db, &create).await {
         Ok(post) => {
-            // Save taxonomies.
             save_post_terms(&state, post.id, &form.categories, &form.tags).await;
-            // Index in Tantivy if published.
             if post.status == "published" {
                 crate::search::indexer::index_post(&state.search_index, &post);
             }
@@ -239,8 +247,24 @@ pub async fn save_new(
             Redirect::to(redirect).into_response()
         }
         Err(e) => {
-            tracing::error!("create post error: {}", e);
-            Html(format!("<p>Error: {}</p>", e)).into_response()
+            tracing::error!("create post error: {:?}", e);
+            let (categories, tags) = fetch_term_options(&state).await;
+            let edit = PostEdit {
+                id: None,
+                title: form.title,
+                slug: form.slug.unwrap_or_default(),
+                content: form.content,
+                excerpt: form.excerpt.unwrap_or_default(),
+                status: form.status,
+                published_at: form.published_at,
+                post_type: form.post_type,
+                categories,
+                tags,
+                selected_categories: form.categories,
+                selected_tags: form.tags,
+            };
+            let msg = friendly_save_error(&e);
+            Html(admin::pages::posts::render_editor(&edit, Some(&msg))).into_response()
         }
     }
 }
@@ -255,11 +279,11 @@ pub async fn save_edit(
     let published_at = parse_datetime(form.published_at.as_deref());
 
     let update = UpdatePost {
-        title: Some(form.title),
-        slug: form.slug.filter(|s| !s.is_empty()),
-        content: Some(form.content),
+        title: Some(form.title.clone()),
+        slug: form.slug.clone().filter(|s| !s.is_empty()),
+        content: Some(form.content.clone()),
         content_format: None,
-        excerpt: form.excerpt,
+        excerpt: form.excerpt.clone(),
         status: Some(status),
         featured_image_id: None,
         published_at,
@@ -267,9 +291,7 @@ pub async fn save_edit(
 
     match crate::models::post::update(&state.db, id, &update).await {
         Ok(post) => {
-            // Update taxonomies: clear then re-attach.
             save_post_terms(&state, post.id, &form.categories, &form.tags).await;
-            // Re-index if published, remove from index otherwise.
             if post.status == "published" {
                 crate::search::indexer::index_post(&state.search_index, &post);
             } else {
@@ -279,8 +301,33 @@ pub async fn save_edit(
             Redirect::to(redirect).into_response()
         }
         Err(e) => {
-            tracing::error!("update post error: {}", e);
-            Html(format!("<p>Error: {}</p>", e)).into_response()
+            tracing::error!("update post {} error: {:?}", id, e);
+            let (categories, tags) = fetch_term_options(&state).await;
+            let post_terms = crate::models::taxonomy::for_post(&state.db, id).await.unwrap_or_else(|_| vec![]);
+            let selected_categories: Vec<String> = post_terms.iter()
+                .filter(|t| t.taxonomy == "category")
+                .map(|t| t.id.to_string())
+                .collect();
+            let selected_tags: Vec<String> = post_terms.iter()
+                .filter(|t| t.taxonomy == "tag")
+                .map(|t| t.id.to_string())
+                .collect();
+            let edit = PostEdit {
+                id: Some(id.to_string()),
+                title: form.title,
+                slug: form.slug.unwrap_or_default(),
+                content: form.content,
+                excerpt: form.excerpt.unwrap_or_default(),
+                status: form.status,
+                published_at: form.published_at,
+                post_type: form.post_type,
+                categories,
+                tags,
+                selected_categories,
+                selected_tags,
+            };
+            let msg = friendly_save_error(&e);
+            Html(admin::pages::posts::render_editor(&edit, Some(&msg))).into_response()
         }
     }
 }
@@ -290,7 +337,9 @@ pub async fn delete_post(
     _admin: AdminUser,
     Path(id): Path<Uuid>,
 ) -> impl IntoResponse {
-    let _ = crate::models::post::delete(&state.db, id).await;
+    if let Err(e) = crate::models::post::delete(&state.db, id).await {
+        tracing::error!("failed to delete post {}: {:?}", id, e);
+    }
     crate::search::indexer::delete_post(&state.search_index, &id.to_string());
     Redirect::to("/admin/posts")
 }
@@ -300,7 +349,9 @@ pub async fn delete_page(
     _admin: AdminUser,
     Path(id): Path<Uuid>,
 ) -> impl IntoResponse {
-    let _ = crate::models::post::delete(&state.db, id).await;
+    if let Err(e) = crate::models::post::delete(&state.db, id).await {
+        tracing::error!("failed to delete page {}: {:?}", id, e);
+    }
     crate::search::indexer::delete_post(&state.search_index, &id.to_string());
     Redirect::to("/admin/pages")
 }
@@ -308,29 +359,51 @@ pub async fn delete_page(
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 async fn fetch_term_options(state: &AppState) -> (Vec<TermOption>, Vec<TermOption>) {
-    let cats = crate::models::taxonomy::list(&state.db, TaxonomyType::Category).await.unwrap_or_default();
-    let tags = crate::models::taxonomy::list(&state.db, TaxonomyType::Tag).await.unwrap_or_default();
+    let cats = crate::models::taxonomy::list(&state.db, TaxonomyType::Category).await.unwrap_or_else(|e| {
+        tracing::warn!("failed to fetch category options: {:?}", e);
+        vec![]
+    });
+    let tags = crate::models::taxonomy::list(&state.db, TaxonomyType::Tag).await.unwrap_or_else(|e| {
+        tracing::warn!("failed to fetch tag options: {:?}", e);
+        vec![]
+    });
     let cat_opts = cats.iter().map(|t| TermOption { id: t.id.to_string(), name: t.name.clone() }).collect();
     let tag_opts = tags.iter().map(|t| TermOption { id: t.id.to_string(), name: t.name.clone() }).collect();
     (cat_opts, tag_opts)
 }
 
 async fn save_post_terms(state: &AppState, post_id: Uuid, category_ids: &[String], tag_ids: &[String]) {
-    // Detach all current terms first.
-    let current = crate::models::taxonomy::for_post(&state.db, post_id).await.unwrap_or_default();
+    let current = crate::models::taxonomy::for_post(&state.db, post_id).await.unwrap_or_else(|e| {
+        tracing::warn!("failed to fetch terms for post {}: {:?}", post_id, e);
+        vec![]
+    });
     for term in &current {
-        let _ = crate::models::taxonomy::detach_from_post(&state.db, post_id, term.id).await;
+        if let Err(e) = crate::models::taxonomy::detach_from_post(&state.db, post_id, term.id).await {
+            tracing::warn!("failed to detach term {} from post {}: {:?}", term.id, post_id, e);
+        }
     }
-    // Attach selected.
     for id_str in category_ids {
         if let Ok(id) = id_str.parse::<Uuid>() {
-            let _ = crate::models::taxonomy::attach_to_post(&state.db, post_id, id).await;
+            if let Err(e) = crate::models::taxonomy::attach_to_post(&state.db, post_id, id).await {
+                tracing::warn!("failed to attach category {} to post {}: {:?}", id, post_id, e);
+            }
         }
     }
     for id_str in tag_ids {
         if let Ok(id) = id_str.parse::<Uuid>() {
-            let _ = crate::models::taxonomy::attach_to_post(&state.db, post_id, id).await;
+            if let Err(e) = crate::models::taxonomy::attach_to_post(&state.db, post_id, id).await {
+                tracing::warn!("failed to attach tag {} to post {}: {:?}", id, post_id, e);
+            }
         }
+    }
+}
+
+fn friendly_save_error(e: &crate::errors::AppError) -> String {
+    let s = e.to_string();
+    if s.contains("duplicate key") || s.contains("unique") {
+        "A post with that slug already exists. Please choose a different slug.".to_string()
+    } else {
+        "Failed to save post. Please try again.".to_string()
     }
 }
 
