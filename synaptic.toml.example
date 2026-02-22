@@ -1,0 +1,43 @@
+# Synaptic Signals — TOML configuration file
+#
+# Copy to synaptic.toml and edit before running.
+# Environment variables override any value set here.
+# The file is optional — all values can be set via env vars alone.
+#
+# To use a file at a custom path, set: CONFIG_FILE=/path/to/config.toml
+
+# ── Database ──────────────────────────────────────────────────────────────────
+
+# Required: PostgreSQL connection URL
+database_url = "postgres://synaptic:password@localhost:5432/synaptic_signals"
+
+# ── Server ────────────────────────────────────────────────────────────────────
+
+# Bind address and port (defaults shown)
+host = "0.0.0.0"
+port = 3000
+
+# ── Security ──────────────────────────────────────────────────────────────────
+
+# Required in production: 64+ byte random secret for cookie signing
+# Generate with: openssl rand -hex 32
+secret_key = "change-me-in-production-this-is-not-secure"
+
+# ── Paths ─────────────────────────────────────────────────────────────────────
+
+# All paths are relative to the working directory, or absolute
+themes_dir        = "themes"
+plugins_dir       = "plugins"
+uploads_dir       = "uploads"
+search_index_path = "search-index"
+
+# ── Logging ───────────────────────────────────────────────────────────────────
+
+# Log level filter (tracing-subscriber EnvFilter syntax)
+# Examples: "info", "debug", "synaptic_core=debug,info"
+log_level = "info"
+
+# ── Development ───────────────────────────────────────────────────────────────
+
+# Enable hot reload of templates and plugins (do not use in production)
+dev_mode = false

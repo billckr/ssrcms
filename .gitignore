@@ -1,0 +1,37 @@
+# Rust build artifacts
+/target/
+**/*.rs.bk
+
+# Environment and secrets
+.env
+.env.local
+.env.*.local
+
+# Database
+*.db
+*.db-shm
+*.db-wal
+
+# SQLx offline query cache (commit sqlx-data.json for offline mode)
+# .sqlx/
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*.swn
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Uploads directory (populated at runtime)
+uploads/
+
+# Tantivy search index (regenerated on startup)
+search_index/
+
+# Compiled WASM (Phase 4)
+pkg/

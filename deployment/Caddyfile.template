@@ -1,0 +1,32 @@
+{DOMAIN} {
+    # Serve uploads and theme static files directly — bypass Axum
+    handle /uploads/* {
+        root * {UPLOADS_DIR}
+        file_server
+    }
+
+    handle /theme/* {
+        root * {THEME_DIR}
+        file_server
+    }
+
+    # Everything else goes to Axum
+    reverse_proxy localhost:{PORT}
+
+    # Compression
+    encode zstd gzip
+
+    # Security headers
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "SAMEORIGIN"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        -Server
+    }
+
+    log {
+        output file /var/log/caddy/{DOMAIN}.log
+        format json
+    }
+}

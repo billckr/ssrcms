@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+
+{% block title %}{{ site.name }} — {{ site.description }}{% endblock title %}
+
+{% block content %}
+<div class="archive-header">
+  <h1>{{ site.name }}</h1>
+  <p class="site-description">{{ site.description }}</p>
+</div>
+
+{% if posts | length == 0 %}
+  <p class="no-posts">No posts yet.</p>
+{% else %}
+  <ol class="post-list" reversed>
+    {% for post in posts %}
+      <li class="post-item">
+        <article>
+          <header>
+            {% if post.featured_image %}
+              <a href="{{ post.url }}">
+                <img src="{{ post.featured_image.url }}" alt="{{ post.featured_image.alt_text }}" class="featured-image">
+              </a>
+            {% endif %}
+            <h2 class="post-title">
+              <a href="{{ post.url }}">{{ post.title }}</a>
+            </h2>
+            <div class="post-meta">
+              <time datetime="{{ post.published_at }}">
+                {% if post.published_at %}{{ post.published_at | date_format }}{% endif %}
+              </time>
+              <span class="post-author">by <a href="{{ post.author.url }}">{{ post.author.display_name }}</a></span>
+              {% if post.categories | length > 0 %}
+                <span class="post-categories">
+                  in {% for cat in post.categories %}<a href="{{ cat.url }}">{{ cat.name }}</a>{% if not loop.last %}, {% endif %}{% endfor %}
+                </span>
+              {% endif %}
+              <span class="reading-time">{{ post.reading_time }} min read</span>
+            </div>
+          </header>
+          <div class="post-excerpt">
+            <p>{{ post.excerpt }}</p>
+          </div>
+          <footer>
+            <a href="{{ post.url }}" class="read-more">Read more →</a>
+          </footer>
+        </article>
+      </li>
+    {% endfor %}
+  </ol>
+
+  {% if pagination %}
+    <nav class="pagination" aria-label="Page navigation">
+      {% if pagination.prev_url %}
+        <a href="{{ pagination.prev_url }}" class="pagination-prev">← Newer</a>
+      {% endif %}
+      <span class="pagination-info">Page {{ pagination.current_page }} of {{ pagination.total_pages }}</span>
+      {% if pagination.next_url %}
+        <a href="{{ pagination.next_url }}" class="pagination-next">Older →</a>
+      {% endif %}
+    </nav>
+  {% endif %}
+{% endif %}
+{% endblock content %}

@@ -1,0 +1,20 @@
+[package]
+name = "synaptic-cli"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "synaptic-cli"
+path = "src/main.rs"
+
+[dependencies]
+clap = { workspace = true, features = ["derive"] }
+anyhow.workspace = true
+tokio.workspace = true
+sqlx.workspace = true
+argon2.workspace = true
+uuid.workspace = true
+dotenvy.workspace = true
+dialoguer = "0.11"
+toml.workspace = true
+chrono.workspace = true

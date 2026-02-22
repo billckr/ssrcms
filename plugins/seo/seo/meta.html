@@ -1,0 +1,118 @@
+{#
+  SEO Plugin — meta.html
+  Hooks into: head_end
+  Context available: all global context + page-type-specific variables (post, page, etc.)
+
+  SECURITY NOTE: All user-supplied values (post.title, post.excerpt, post.meta.*) are passed
+  as context variables and auto-escaped by Tera. They are NEVER rendered as template source.
+#}
+
+{# ── Determine the effective SEO title ─────────────────────────────────────── #}
+{% if post is defined %}
+  {% set _seo_title = post.meta.seo_title | default(value=post.title) %}
+  {% set _seo_desc  = post.meta.seo_description | default(value=post.excerpt) %}
+  {% set _canonical = post.url %}
+  {% set _og_type   = "article" %}
+  {% if post.featured_image %}
+    {% set _og_image = post.featured_image.url %}
+    {% set _og_image_alt = post.featured_image.alt_text %}
+  {% else %}
+    {% set _og_image = "" %}
+    {% set _og_image_alt = "" %}
+  {% endif %}
+  {% set _noindex   = post.meta.seo_noindex | default(value=false) %}
+{% elif page is defined %}
+  {% set _seo_title = page.meta.seo_title | default(value=page.title) %}
+  {% set _seo_desc  = page.meta.seo_description | default(value=page.excerpt) %}
+  {% set _canonical = page.url %}
+  {% set _og_type   = "website" %}
+  {% set _og_image  = "" %}
+  {% set _og_image_alt = "" %}
+  {% set _noindex   = page.meta.seo_noindex | default(value=false) %}
+{% else %}
+  {% set _seo_title = site.name %}
+  {% set _seo_desc  = site.description %}
+  {% set _canonical = request.url %}
+  {% set _og_type   = "website" %}
+  {% set _og_image  = "" %}
+  {% set _og_image_alt = "" %}
+  {% set _noindex   = false %}
+{% endif %}
+
+{% set _full_title = _seo_title ~ " | " ~ site.name %}
+
+{# ── Canonical URL ──────────────────────────────────────────────────────────── #}
+<link rel="canonical" href="{{ _canonical }}">
+
+{# ── Basic meta ─────────────────────────────────────────────────────────────── #}
+{% if _seo_desc %}
+<meta name="description" content="{{ _seo_desc }}">
+{% endif %}
+
+{% if _noindex %}
+<meta name="robots" content="noindex, nofollow">
+{% else %}
+<meta name="robots" content="index, follow">
+{% endif %}
+
+{# ── Open Graph ─────────────────────────────────────────────────────────────── #}
+<meta property="og:type"        content="{{ _og_type }}">
+<meta property="og:title"       content="{{ _full_title }}">
+<meta property="og:url"         content="{{ _canonical }}">
+<meta property="og:site_name"   content="{{ site.name }}">
+{% if _seo_desc %}
+<meta property="og:description" content="{{ _seo_desc }}">
+{% endif %}
+{% if _og_image %}
+<meta property="og:image"       content="{{ _og_image }}">
+<meta property="og:image:alt"   content="{{ _og_image_alt }}">
+{% endif %}
+
+{# ── Twitter Card ───────────────────────────────────────────────────────────── #}
+<meta name="twitter:card"        content="{% if _og_image %}summary_large_image{% else %}summary{% endif %}">
+<meta name="twitter:title"       content="{{ _full_title }}">
+{% if _seo_desc %}
+<meta name="twitter:description" content="{{ _seo_desc }}">
+{% endif %}
+{% if _og_image %}
+<meta name="twitter:image"       content="{{ _og_image }}">
+<meta name="twitter:image:alt"   content="{{ _og_image_alt }}">
+{% endif %}
+
+{# ── JSON-LD Structured Data ────────────────────────────────────────────────── #}
+{% if post is defined %}
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": {{ post.title | json_encode | safe }},
+  "description": {{ _seo_desc | json_encode | safe }},
+  "url": "{{ _canonical | safe }}",
+  {% if post.published_at %}"datePublished": "{{ post.published_at | safe }}",{% endif %}
+  "dateModified": "{{ post.updated_at | safe }}",
+  "author": {
+    "@type": "Person",
+    "name": {{ post.author.display_name | json_encode | safe }},
+    "url": "{{ post.author.url | safe }}"
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": {{ site.name | json_encode | safe }},
+    "url": "{{ site.url | safe }}"
+  }
+  {% if _og_image %}
+  ,"image": "{{ _og_image | safe }}"
+  {% endif %}
+}
+</script>
+{% else %}
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebSite",
+  "name": {{ site.name | json_encode | safe }},
+  "description": {{ site.description | json_encode | safe }},
+  "url": "{{ site.url | safe }}"
+}
+</script>
+{% endif %}

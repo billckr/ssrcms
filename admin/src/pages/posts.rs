@@ -1,0 +1,188 @@
+//! Admin post list and editor pages.
+
+pub struct PostRow {
+    pub id: String,
+    pub title: String,
+    pub status: String,
+    pub slug: String,
+    pub post_type: String,
+    pub published_at: Option<String>,
+}
+
+pub struct PostEdit {
+    pub id: Option<String>,
+    pub title: String,
+    pub slug: String,
+    pub content: String,
+    pub excerpt: String,
+    pub status: String,
+    pub published_at: Option<String>,
+    pub post_type: String,
+    pub categories: Vec<TermOption>,
+    pub tags: Vec<TermOption>,
+    pub selected_categories: Vec<String>,
+    pub selected_tags: Vec<String>,
+}
+
+pub struct TermOption {
+    pub id: String,
+    pub name: String,
+}
+
+pub fn render_list(posts: &[PostRow], post_type: &str, flash: Option<&str>) -> String {
+    let title = if post_type == "page" { "Pages" } else { "Posts" };
+    let new_href = if post_type == "page" { "/admin/pages/new" } else { "/admin/posts/new" };
+    let edit_prefix = if post_type == "page" { "/admin/pages" } else { "/admin/posts" };
+
+    let rows = posts.iter().map(|p| {
+        format!(
+            r#"<tr>
+              <td><a href="{prefix}/{id}/edit">{title}</a></td>
+              <td><span class="badge badge-{status}">{status}</span></td>
+              <td>{published}</td>
+              <td>
+                <a href="{prefix}/{id}/edit">Edit</a>
+                <form method="POST" action="{prefix}/{id}/delete" style="display:inline" onsubmit="return confirm('Delete this?')">
+                  <button class="btn-link btn-danger">Delete</button>
+                </form>
+              </td>
+            </tr>"#,
+            prefix = edit_prefix,
+            id = crate::html_escape(&p.id),
+            title = crate::html_escape(&p.title),
+            status = crate::html_escape(&p.status),
+            published = p.published_at.as_deref().map(|d| crate::html_escape(d)).unwrap_or_default(),
+        )
+    }).collect::<Vec<_>>().join("\n");
+
+    let content = format!(
+        r#"<p><a href="{new_href}" class="btn btn-primary">New {title}</a></p>
+<table class="data-table">
+  <thead><tr><th>Title</th><th>Status</th><th>Published</th><th>Actions</th></tr></thead>
+  <tbody>{rows}</tbody>
+</table>"#,
+        new_href = new_href, title = title, rows = rows,
+    );
+
+    let path = if post_type == "page" { "/admin/pages" } else { "/admin/posts" };
+    crate::admin_page(title, path, flash, &content)
+}
+
+pub fn render_editor(post: &PostEdit, flash: Option<&str>) -> String {
+    let is_new = post.id.is_none();
+    let title = if is_new {
+        if post.post_type == "page" { "New Page".to_string() } else { "New Post".to_string() }
+    } else {
+        if post.post_type == "page" { "Edit Page".to_string() } else { "Edit Post".to_string() }
+    };
+
+    let action = match &post.id {
+        Some(id) => {
+            if post.post_type == "page" {
+                format!("/admin/pages/{}/edit", id)
+            } else {
+                format!("/admin/posts/{}/edit", id)
+            }
+        },
+        None => {
+            if post.post_type == "page" {
+                "/admin/pages/new".to_string()
+            } else {
+                "/admin/posts/new".to_string()
+            }
+        },
+    };
+
+    let cat_options = post.categories.iter().map(|t| {
+        let checked = if post.selected_categories.contains(&t.id) { " checked" } else { "" };
+        format!(
+            r#"<label><input type="checkbox" name="categories" value="{id}"{checked}> {name}</label>"#,
+            id = crate::html_escape(&t.id),
+            name = crate::html_escape(&t.name),
+            checked = checked,
+        )
+    }).collect::<Vec<_>>().join("\n");
+
+    let tag_options = post.tags.iter().map(|t| {
+        let checked = if post.selected_tags.contains(&t.id) { " checked" } else { "" };
+        format!(
+            r#"<label><input type="checkbox" name="tags" value="{id}"{checked}> {name}</label>"#,
+            id = crate::html_escape(&t.id),
+            name = crate::html_escape(&t.name),
+            checked = checked,
+        )
+    }).collect::<Vec<_>>().join("\n");
+
+    let status_options = ["draft", "published", "scheduled", "trashed"].iter().map(|s| {
+        let selected = if *s == post.status { " selected" } else { "" };
+        format!(r#"<option value="{s}"{selected}>{s}</option>"#, s = s, selected = selected)
+    }).collect::<Vec<_>>().join("");
+
+    let published_at = post.published_at.as_deref().unwrap_or("");
+
+    let categories_section = if post.post_type != "page" {
+        format!(r#"<div class="form-section">
+          <h3>Categories</h3>
+          <div class="checkbox-group">{cat_options}</div>
+        </div>
+        <div class="form-section">
+          <h3>Tags</h3>
+          <div class="checkbox-group">{tag_options}</div>
+        </div>"#, cat_options = cat_options, tag_options = tag_options)
+    } else {
+        String::new()
+    };
+
+    let content = format!(
+        r#"<form method="POST" action="{action}">
+  <div class="editor-layout">
+    <div class="editor-main">
+      <div class="form-group">
+        <label for="title">Title</label>
+        <input type="text" id="title" name="title" value="{title_val}" required class="title-input">
+      </div>
+      <div class="form-group">
+        <label for="slug">Slug</label>
+        <input type="text" id="slug" name="slug" value="{slug}">
+      </div>
+      <div class="form-group">
+        <label for="content">Content (HTML)</label>
+        <textarea id="content" name="content" rows="20" class="content-editor">{content_val}</textarea>
+      </div>
+      <div class="form-group">
+        <label for="excerpt">Excerpt</label>
+        <textarea id="excerpt" name="excerpt" rows="3">{excerpt}</textarea>
+      </div>
+    </div>
+    <div class="editor-sidebar">
+      <div class="form-section">
+        <h3>Publish</h3>
+        <div class="form-group">
+          <label for="status">Status</label>
+          <select id="status" name="status">{status_options}</select>
+        </div>
+        <div class="form-group">
+          <label for="published_at">Published At</label>
+          <input type="datetime-local" id="published_at" name="published_at" value="{published_at}">
+        </div>
+        <input type="hidden" name="post_type" value="{post_type}">
+        <button type="submit" class="btn btn-primary">Save</button>
+      </div>
+      {categories_section}
+    </div>
+  </div>
+</form>"#,
+        action = action,
+        title_val = crate::html_escape(&post.title),
+        slug = crate::html_escape(&post.slug),
+        content_val = crate::html_escape(&post.content),
+        excerpt = crate::html_escape(&post.excerpt),
+        status_options = status_options,
+        published_at = crate::html_escape(published_at),
+        post_type = crate::html_escape(&post.post_type),
+        categories_section = categories_section,
+    );
+
+    let path = if post.post_type == "page" { "/admin/pages" } else { "/admin/posts" };
+    crate::admin_page(&title, path, flash, &content)
+}

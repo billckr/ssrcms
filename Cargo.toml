@@ -1,0 +1,67 @@
+[workspace]
+members = ["core", "admin", "cli"]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["Synaptic Signals Contributors"]
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/synaptic-signals/synaptic-signals"
+
+[workspace.dependencies]
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+
+# Web framework
+axum = { version = "0.8", features = ["macros", "multipart"] }
+axum-extra = { version = "0.10", features = ["cookie", "cookie-signed"] }
+tower = { version = "0.5" }
+tower-http = { version = "0.6", features = ["fs", "trace", "cors"] }
+tower-sessions = { version = "0.14" }
+tower-sessions-sqlx-store = { version = "0.15", features = ["postgres"] }
+
+# Database
+sqlx = { version = "0.8", features = ["runtime-tokio", "tls-rustls", "postgres", "sqlite", "chrono", "uuid", "json", "migrate"] }
+
+# Templating
+tera = { version = "1" }
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1" }
+toml = { version = "0.8" }
+
+# Crypto / auth
+argon2 = { version = "0.5" }
+rand = { version = "0.8" }
+uuid = { version = "1", features = ["v4", "serde"] }
+
+# Time
+chrono = { version = "0.4", features = ["serde"] }
+
+# Error handling
+thiserror = { version = "2" }
+anyhow = { version = "1" }
+
+# Logging / tracing
+tracing = { version = "0.1" }
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+
+# Configuration
+config = { version = "0.14" }
+dotenvy = { version = "0.15" }
+
+# Utilities
+once_cell = { version = "1" }
+notify = { version = "7" }
+slug = { version = "0.1" }
+ammonia = { version = "4" }
+glob = { version = "0.3" }
+regex-lite = { version = "0.1" }
+
+# Admin UI
+leptos = { version = "0.7", default-features = false }
+
+# CLI (Phase 3)
+clap = { version = "4", features = ["derive", "env"] }

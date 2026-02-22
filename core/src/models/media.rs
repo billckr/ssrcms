@@ -1,0 +1,129 @@
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
+use sqlx::PgPool;
+use uuid::Uuid;
+
+use crate::errors::{AppError, Result};
+
+#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+pub struct Media {
+    pub id: Uuid,
+    pub filename: String,
+    pub mime_type: String,
+    pub path: String,
+    pub alt_text: String,
+    pub width: Option<i32>,
+    pub height: Option<i32>,
+    pub file_size: i64,
+    pub uploaded_by: Uuid,
+    pub created_at: DateTime<Utc>,
+}
+
+impl Media {
+    /// Build the public URL for this media item.
+    pub fn url(&self, base_url: &str) -> String {
+        format!("{}/uploads/{}", base_url, self.path)
+    }
+}
+
+/// Serializable view of Media for template context.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MediaContext {
+    pub id: String,
+    pub url: String,
+    pub filename: String,
+    pub mime_type: String,
+    pub alt_text: String,
+    pub width: Option<i32>,
+    pub height: Option<i32>,
+}
+
+impl MediaContext {
+    pub fn from_media(media: &Media, base_url: &str) -> Self {
+        MediaContext {
+            id: media.id.to_string(),
+            url: media.url(base_url),
+            filename: media.filename.clone(),
+            mime_type: media.mime_type.clone(),
+            alt_text: media.alt_text.clone(),
+            width: media.width,
+            height: media.height,
+        }
+    }
+}
+
+/// Data required to register a new media record after upload.
+#[derive(Debug)]
+pub struct CreateMedia {
+    pub filename: String,
+    pub mime_type: String,
+    pub path: String,
+    pub alt_text: String,
+    pub width: Option<i32>,
+    pub height: Option<i32>,
+    pub file_size: i64,
+    pub uploaded_by: Uuid,
+}
+
+pub async fn create(pool: &PgPool, data: &CreateMedia) -> Result<Media> {
+    let media = sqlx::query_as::<_, Media>(
+        r#"
+        INSERT INTO media (filename, mime_type, path, alt_text, width, height, file_size, uploaded_by)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        RETURNING *
+        "#,
+    )
+    .bind(&data.filename)
+    .bind(&data.mime_type)
+    .bind(&data.path)
+    .bind(&data.alt_text)
+    .bind(data.width)
+    .bind(data.height)
+    .bind(data.file_size)
+    .bind(data.uploaded_by)
+    .fetch_one(pool)
+    .await?;
+
+    Ok(media)
+}
+
+pub async fn get_by_id(pool: &PgPool, id: Uuid) -> Result<Media> {
+    sqlx::query_as::<_, Media>("SELECT * FROM media WHERE id = $1")
+        .bind(id)
+        .fetch_optional(pool)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("media {id}")))
+}
+
+pub async fn update_alt_text(pool: &PgPool, id: Uuid, alt_text: &str) -> Result<()> {
+    let affected = sqlx::query("UPDATE media SET alt_text = $1 WHERE id = $2")
+        .bind(alt_text)
+        .bind(id)
+        .execute(pool)
+        .await?
+        .rows_affected();
+
+    if affected == 0 {
+        return Err(AppError::NotFound(format!("media {id}")));
+    }
+    Ok(())
+}
+
+pub async fn delete(pool: &PgPool, id: Uuid) -> Result<()> {
+    sqlx::query("DELETE FROM media WHERE id = $1")
+        .bind(id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+pub async fn list(pool: &PgPool, limit: i64, offset: i64) -> Result<Vec<Media>> {
+    let items = sqlx::query_as::<_, Media>(
+        "SELECT * FROM media ORDER BY created_at DESC LIMIT $1 OFFSET $2",
+    )
+    .bind(limit)
+    .bind(offset)
+    .fetch_all(pool)
+    .await?;
+    Ok(items)
+}

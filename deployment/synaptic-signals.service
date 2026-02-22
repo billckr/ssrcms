@@ -1,0 +1,26 @@
+[Unit]
+Description=Synaptic Signals CMS
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory={INSTALL_DIR}
+EnvironmentFile={INSTALL_DIR}/.env
+ExecStart={INSTALL_DIR}/synaptic
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=synaptic-signals
+
+# Hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths={INSTALL_DIR}/uploads {INSTALL_DIR}/search-index
+
+[Install]
+WantedBy=multi-user.target

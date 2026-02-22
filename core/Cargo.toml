@@ -1,0 +1,40 @@
+[package]
+name = "synaptic-core"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "synaptic"
+path = "src/main.rs"
+
+[dependencies]
+tokio.workspace = true
+axum.workspace = true
+axum-extra.workspace = true
+tower.workspace = true
+tower-http.workspace = true
+tower-sessions.workspace = true
+tower-sessions-sqlx-store.workspace = true
+sqlx.workspace = true
+tera.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+toml.workspace = true
+argon2.workspace = true
+rand.workspace = true
+uuid.workspace = true
+chrono.workspace = true
+thiserror.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+config.workspace = true
+dotenvy.workspace = true
+once_cell.workspace = true
+notify.workspace = true
+slug.workspace = true
+ammonia.workspace = true
+glob.workspace = true
+regex-lite.workspace = true
+admin = { path = "../admin" }
+tantivy = "0.22"
