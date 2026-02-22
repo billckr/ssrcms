@@ -503,3 +503,140 @@
 [2m2026-02-22T02:42:50.761722Z[0m [32m INFO[0m [2mtantivy::directory::file_watcher[0m[2m:[0m Meta file "/home/ssrust26/synaptic-signals/search-index/meta.json" was modified
 [2m2026-02-22T02:42:56.729011Z[0m [33m WARN[0m [1mcall[0m[2m:[0m [2msynaptic::templates::loader[0m[2m:[0m hook 'head_end' template 'seo/meta.html' render error: Template 'seo/meta.html' not found
 [2m2026-02-22T02:42:57.925300Z[0m [33m WARN[0m [1mcall[0m[2m:[0m [2msynaptic::templates::loader[0m[2m:[0m hook 'head_end' template 'seo/meta.html' render error: Template 'seo/meta.html' not found
+[2m2026-02-22T03:08:08.409025Z[0m [32m INFO[0m [2msynaptic[0m[2m:[0m Synaptic Signals CMS starting...
+[2m2026-02-22T03:08:08.423687Z[0m [32m INFO[0m [2msqlx::postgres::notice[0m[2m:[0m relation "_sqlx_migrations" already exists, skipping
+[2m2026-02-22T03:08:08.427235Z[0m [32m INFO[0m [2msynaptic[0m[2m:[0m database connected and migrations applied
+[2m2026-02-22T03:08:08.431414Z[0m [32m INFO[0m [2msqlx::postgres::notice[0m[2m:[0m schema "tower_sessions" already exists, skipping
+[2m2026-02-22T03:08:08.431952Z[0m [32m INFO[0m [2msqlx::postgres::notice[0m[2m:[0m relation "session" already exists, skipping
+[2m2026-02-22T03:08:08.432263Z[0m [32m INFO[0m [2msynaptic[0m[2m:[0m session store ready
+[2m2026-02-22T03:08:08.433350Z[0m [32m INFO[0m [2msynaptic[0m[2m:[0m site: Synaptic Signals — http://localhost:3000
+[2m2026-02-22T03:08:08.453772Z[0m [32m INFO[0m [2msynaptic::templates::loader[0m[2m:[0m template engine initialized with theme 'default'
+[2m2026-02-22T03:08:08.454777Z[0m [32m INFO[0m [2msynaptic[0m[2m:[0m loaded plugin 'seo' v1.0.0
+[2m2026-02-22T03:08:08.454824Z[0m [32m INFO[0m [2msynaptic[0m[2m:[0m plugins loaded — 1 plugin(s), 1 route(s) registered
+[2m2026-02-22T03:08:08.457401Z[0m [32m INFO[0m [2mtantivy::directory::file_watcher[0m[2m:[0m Meta file "/home/ssrust26/synaptic-signals/search-index/meta.json" was modified
+[2m2026-02-22T03:08:08.460154Z[0m [32m INFO[0m [2msynaptic[0m[2m:[0m search index ready at 'search-index'
+[2m2026-02-22T03:08:08.460231Z[0m [32m INFO[0m [2msynaptic::search::indexer[0m[2m:[0m rebuilding search index from database...
+[2m2026-02-22T03:08:08.461122Z[0m [32m INFO[0m [2msynaptic[0m[2m:[0m listening on http://0.0.0.0:3000
+[2m2026-02-22T03:08:08.462912Z[0m [32m INFO[0m [2mtantivy::indexer::index_writer[0m[2m:[0m Preparing commit
+[2m2026-02-22T03:08:08.513587Z[0m [32m INFO[0m [2mtantivy::indexer::index_writer[0m[2m:[0m Prepared commit 116
+[2m2026-02-22T03:08:08.513640Z[0m [32m INFO[0m [2mtantivy::indexer::prepared_commit[0m[2m:[0m committing 116
+[2m2026-02-22T03:08:08.513785Z[0m [32m INFO[0m [2mtantivy::indexer::segment_updater[0m[2m:[0m save metas
+[2m2026-02-22T03:08:08.517697Z[0m [32m INFO[0m [2mtantivy::indexer::segment_updater[0m[2m:[0m Running garbage collection
+[2m2026-02-22T03:08:08.517735Z[0m [32m INFO[0m [2mtantivy::directory::managed_directory[0m[2m:[0m Garbage collect
+[2m2026-02-22T03:08:08.518166Z[0m [32m INFO[0m [2mtantivy::indexer::index_writer[0m[2m:[0m Preparing commit
+[2m2026-02-22T03:08:08.560018Z[0m [32m INFO[0m [2mtantivy::indexer::index_writer[0m[2m:[0m Prepared commit 121
+[2m2026-02-22T03:08:08.560079Z[0m [32m INFO[0m [2mtantivy::indexer::prepared_commit[0m[2m:[0m committing 121
+[2m2026-02-22T03:08:08.560199Z[0m [32m INFO[0m [2mtantivy::indexer::segment_updater[0m[2m:[0m save metas
+[2m2026-02-22T03:08:08.563836Z[0m [32m INFO[0m [2mtantivy::indexer::segment_updater[0m[2m:[0m Running garbage collection
+[2m2026-02-22T03:08:08.563869Z[0m [32m INFO[0m [2mtantivy::directory::managed_directory[0m[2m:[0m Garbage collect
+[2m2026-02-22T03:08:08.564208Z[0m [32m INFO[0m [2mtantivy::indexer::segment_updater[0m[2m:[0m Starting merge  - [Seg("b31764cb"), Seg("b6b533c4"), Seg("3e32f065"), Seg("b53bad21"), Seg("a248fda6"), Seg("7c95032a"), Seg("50320f07"), Seg("39ae8f6d")]
+[2m2026-02-22T03:08:08.564297Z[0m [32m INFO[0m [2msynaptic::search::indexer[0m[2m:[0m search index built: 2 documents indexed
+[2m2026-02-22T03:08:08.605658Z[0m [32m INFO[0m [2mtantivy::indexer::segment_updater[0m[2m:[0m End merge Some(Tracked(InnerSegmentMeta { segment_id: Seg("4a0df37c"), max_doc: 29, deletes: None, include_temp_doc_store: true }))
+[2m2026-02-22T03:08:08.605771Z[0m [32m INFO[0m [2mtantivy::indexer::segment_updater[0m[2m:[0m save metas
+[2m2026-02-22T03:08:08.609385Z[0m [32m INFO[0m [2mtantivy::indexer::segment_updater[0m[2m:[0m Running garbage collection
+[2m2026-02-22T03:08:08.609417Z[0m [32m INFO[0m [2mtantivy::directory::managed_directory[0m[2m:[0m Garbage collect
+[2m2026-02-22T03:08:08.609618Z[0m [32m INFO[0m [2mtantivy::directory::managed_directory[0m[2m:[0m Deleted "39ae8f6d96ba4cd085cb5282632f31f1.store"
+[2m2026-02-22T03:08:08.609647Z[0m [32m INFO[0m [2mtantivy::directory::managed_directory[0m[2m:[0m Deleted "39ae8f6d96ba4cd085cb5282632f31f1.term"
+[2m2026-02-22T03:08:08.609666Z[0m [32m INFO[0m [2mtantivy::directory::managed_directory[0m[2m:[0m Deleted "b53bad217f994f45b560281dcb12891c.term"
+[2m2026-02-22T03:08:08.609684Z[0m [32m INFO[0m [2mtantivy::directory::managed_directory[0m[2m:[0m Deleted "b6b533c4d43744be9006b68cf195b57f.fieldnorm"
+[2m2026-02-22T03:08:08.609720Z[0m [32m INFO[0m [2mtantivy::directory::managed_directory[0m[2m:[0m Deleted "7c95032a0a63460daf3fa51f0edd59ec.store"
+[2m2026-02-22T03:08:08.609738Z[0m [32m INFO[0m [2mtantivy::directory::managed_directory[0m[2m:[0m Deleted "b53bad217f994f45b560281dcb12891c.idx"
+[2m2026-02-22T03:08:08.609765Z[0m [32m INFO[0m [2mtantivy::directory::managed_directory[0m[2m:[0m Deleted "a248fda65739453ab421310e3dfbac16.store"
+[2m2026-02-22T03:08:08.609780Z[0m [32m INFO[0m [2mtantivy::directory::managed_directory[0m[2m:[0m Deleted "3e32f0658f0e449687c3280a18ba74de.pos"
+[2m2026-02-22T03:08:08.609795Z[0m [32m INFO[0m [2mtantivy::directory::managed_directory[0m[2m:[0m Deleted "b53bad217f994f45b560281dcb12891c.store"
+[2m2026-02-22T03:08:08.609823Z[0m [32m INFO[0m [2mtantivy::directory::managed_directory[0m[2m:[0m Deleted "a248fda65739453ab421310e3dfbac16.fast"
+[2m2026-02-22T03:08:08.609839Z[0m [32m INFO[0m [2mtantivy::directory::managed_directory[0m[2m:[0m Deleted "b31764cb284c43a2bf8b3dd5faf7d5bf.fast"
+[2m2026-02-22T03:08:08.609865Z[0m [32m INFO[0m [2mtantivy::directory::managed_directory[0m[2m:[0m Deleted "a248fda65739453ab421310e3dfbac16.term"
+[2m2026-02-22T03:08:08.609882Z[0m [32m INFO[0m [2mtantivy::directory::managed_directory[0m[2m:[0m Deleted "3e32f0658f0e449687c3280a18ba74de.fast"
+[2m2026-02-22T03:08:08.609897Z[0m [32m INFO[0m [2mtantivy::directory::managed_directory[0m[2m:[0m Deleted "b31764cb284c43a2bf8b3dd5faf7d5bf.term"
+[2m2026-02-22T03:08:08.609913Z[0m [32m INFO[0m [2mtantivy::directory::managed_directory[0m[2m:[0m Deleted "50320f0728b748aab54a44bd5f284cdb.term"
+[2m2026-02-22T03:08:08.609927Z[0m [32m INFO[0m [2mtantivy::directory::managed_directory[0m[2m:[0m Deleted "b6b533c4d43744be9006b68cf195b57f.idx"
+[2m2026-02-22T03:08:08.609947Z[0m [32m INFO[0m [2mtantivy::directory::managed_directory[0m[2m:[0m Deleted "b31764cb284c43a2bf8b3dd5faf7d5bf.fieldnorm"
+[2m2026-02-22T03:08:08.609975Z[0m [32m INFO[0m [2mtantivy::directory::managed_directory[0m[2m:[0m Deleted "a248fda65739453ab421310e3dfbac16.pos"
+[2m2026-02-22T03:08:08.610005Z[0m [32m INFO[0m [2mtantivy::directory::managed_directory[0m[2m:[0m Deleted "7c95032a0a63460daf3fa51f0edd59ec.fast"
+[2m2026-02-22T03:08:08.610031Z[0m [32m INFO[0m [2mtantivy::directory::managed_directory[0m[2m:[0m Deleted "7c95032a0a63460daf3fa51f0edd59ec.fieldnorm"
+[2m2026-02-22T03:08:08.610047Z[0m [32m INFO[0m [2mtantivy::directory::managed_directory[0m[2m:[0m Deleted "b6b533c4d43744be9006b68cf195b57f.fast"
+[2m2026-02-22T03:08:08.610062Z[0m [32m INFO[0m [2mtantivy::directory::managed_directory[0m[2m:[0m Deleted "b6b533c4d43744be9006b68cf195b57f.store"
+[2m2026-02-22T03:08:08.610077Z[0m [32m INFO[0m [2mtantivy::directory::managed_directory[0m[2m:[0m Deleted "b31764cb284c43a2bf8b3dd5faf7d5bf.pos"
+[2m2026-02-22T03:08:08.610096Z[0m [32m INFO[0m [2mtantivy::directory::managed_directory[0m[2m:[0m Deleted "b31764cb284c43a2bf8b3dd5faf7d5bf.store"
+[2m2026-02-22T03:08:08.610111Z[0m [32m INFO[0m [2mtantivy::directory::managed_directory[0m[2m:[0m Deleted "50320f0728b748aab54a44bd5f284cdb.store"
+[2m2026-02-22T03:08:08.610125Z[0m [32m INFO[0m [2mtantivy::directory::managed_directory[0m[2m:[0m Deleted "50320f0728b748aab54a44bd5f284cdb.fieldnorm"
+[2m2026-02-22T03:08:08.610139Z[0m [32m INFO[0m [2mtantivy::directory::managed_directory[0m[2m:[0m Deleted "b6b533c4d43744be9006b68cf195b57f.pos"
+[2m2026-02-22T03:08:08.610153Z[0m [32m INFO[0m [2mtantivy::directory::managed_directory[0m[2m:[0m Deleted "50320f0728b748aab54a44bd5f284cdb.fast"
+[2m2026-02-22T03:08:08.610167Z[0m [32m INFO[0m [2mtantivy::directory::managed_directory[0m[2m:[0m Deleted "3e32f0658f0e449687c3280a18ba74de.fieldnorm"
+[2m2026-02-22T03:08:08.610182Z[0m [32m INFO[0m [2mtantivy::directory::managed_directory[0m[2m:[0m Deleted "b53bad217f994f45b560281dcb12891c.pos"
+[2m2026-02-22T03:08:08.610208Z[0m [32m INFO[0m [2mtantivy::directory::managed_directory[0m[2m:[0m Deleted "a248fda65739453ab421310e3dfbac16.fieldnorm"
+[2m2026-02-22T03:08:08.610233Z[0m [32m INFO[0m [2mtantivy::directory::managed_directory[0m[2m:[0m Deleted "a248fda65739453ab421310e3dfbac16.idx"
+[2m2026-02-22T03:08:08.610259Z[0m [32m INFO[0m [2mtantivy::directory::managed_directory[0m[2m:[0m Deleted "7c95032a0a63460daf3fa51f0edd59ec.term"
+[2m2026-02-22T03:08:08.610285Z[0m [32m INFO[0m [2mtantivy::directory::managed_directory[0m[2m:[0m Deleted "7c95032a0a63460daf3fa51f0edd59ec.idx"
+[2m2026-02-22T03:08:08.610300Z[0m [32m INFO[0m [2mtantivy::directory::managed_directory[0m[2m:[0m Deleted "39ae8f6d96ba4cd085cb5282632f31f1.idx"
+[2m2026-02-22T03:08:08.610325Z[0m [32m INFO[0m [2mtantivy::directory::managed_directory[0m[2m:[0m Deleted "7c95032a0a63460daf3fa51f0edd59ec.pos"
+[2m2026-02-22T03:08:08.610339Z[0m [32m INFO[0m [2mtantivy::directory::managed_directory[0m[2m:[0m Deleted "b31764cb284c43a2bf8b3dd5faf7d5bf.idx"
+[2m2026-02-22T03:08:08.610353Z[0m [32m INFO[0m [2mtantivy::directory::managed_directory[0m[2m:[0m Deleted "3e32f0658f0e449687c3280a18ba74de.idx"
+[2m2026-02-22T03:08:08.610368Z[0m [32m INFO[0m [2mtantivy::directory::managed_directory[0m[2m:[0m Deleted "b53bad217f994f45b560281dcb12891c.fieldnorm"
+[2m2026-02-22T03:08:08.610384Z[0m [32m INFO[0m [2mtantivy::directory::managed_directory[0m[2m:[0m Deleted "39ae8f6d96ba4cd085cb5282632f31f1.fast"
+[2m2026-02-22T03:08:08.610398Z[0m [32m INFO[0m [2mtantivy::directory::managed_directory[0m[2m:[0m Deleted "39ae8f6d96ba4cd085cb5282632f31f1.fieldnorm"
+[2m2026-02-22T03:08:08.610412Z[0m [32m INFO[0m [2mtantivy::directory::managed_directory[0m[2m:[0m Deleted "b6b533c4d43744be9006b68cf195b57f.term"
+[2m2026-02-22T03:08:08.610426Z[0m [32m INFO[0m [2mtantivy::directory::managed_directory[0m[2m:[0m Deleted "50320f0728b748aab54a44bd5f284cdb.pos"
+[2m2026-02-22T03:08:08.610440Z[0m [32m INFO[0m [2mtantivy::directory::managed_directory[0m[2m:[0m Deleted "39ae8f6d96ba4cd085cb5282632f31f1.pos"
+[2m2026-02-22T03:08:08.610454Z[0m [32m INFO[0m [2mtantivy::directory::managed_directory[0m[2m:[0m Deleted "b53bad217f994f45b560281dcb12891c.fast"
+[2m2026-02-22T03:08:08.610467Z[0m [32m INFO[0m [2mtantivy::directory::managed_directory[0m[2m:[0m Deleted "3e32f0658f0e449687c3280a18ba74de.term"
+[2m2026-02-22T03:08:08.610481Z[0m [32m INFO[0m [2mtantivy::directory::managed_directory[0m[2m:[0m Deleted "3e32f0658f0e449687c3280a18ba74de.store"
+[2m2026-02-22T03:08:08.610495Z[0m [32m INFO[0m [2mtantivy::directory::managed_directory[0m[2m:[0m Deleted "50320f0728b748aab54a44bd5f284cdb.idx"
+[2m2026-02-22T03:08:08.958849Z[0m [32m INFO[0m [2mtantivy::directory::file_watcher[0m[2m:[0m Meta file "/home/ssrust26/synaptic-signals/search-index/meta.json" was modified
+[2m2026-02-22T03:11:34.381474Z[0m [32m INFO[0m [2msynaptic[0m[2m:[0m Synaptic Signals CMS starting...
+[2m2026-02-22T03:11:34.388532Z[0m [32m INFO[0m [2msqlx::postgres::notice[0m[2m:[0m relation "_sqlx_migrations" already exists, skipping
+[2m2026-02-22T03:11:34.391018Z[0m [32m INFO[0m [2msynaptic[0m[2m:[0m database connected and migrations applied
+[2m2026-02-22T03:11:34.394834Z[0m [32m INFO[0m [2msqlx::postgres::notice[0m[2m:[0m schema "tower_sessions" already exists, skipping
+[2m2026-02-22T03:11:34.395359Z[0m [32m INFO[0m [2msqlx::postgres::notice[0m[2m:[0m relation "session" already exists, skipping
+[2m2026-02-22T03:11:34.395618Z[0m [32m INFO[0m [2msynaptic[0m[2m:[0m session store ready
+[2m2026-02-22T03:11:34.396630Z[0m [32m INFO[0m [2msynaptic[0m[2m:[0m site: Synaptic Signals — http://localhost:3000
+[2m2026-02-22T03:11:34.415932Z[0m [32m INFO[0m [2msynaptic::templates::loader[0m[2m:[0m template engine initialized with theme 'default'
+[2m2026-02-22T03:11:34.416879Z[0m [32m INFO[0m [2msynaptic[0m[2m:[0m loaded plugin 'seo' v1.0.0
+[2m2026-02-22T03:11:34.416928Z[0m [32m INFO[0m [2msynaptic[0m[2m:[0m plugins loaded — 1 plugin(s), 1 route(s) registered
+[2m2026-02-22T03:11:34.418432Z[0m [32m INFO[0m [2mtantivy::directory::file_watcher[0m[2m:[0m Meta file "/home/ssrust26/synaptic-signals/search-index/meta.json" was modified
+[2m2026-02-22T03:11:34.421001Z[0m [32m INFO[0m [2msynaptic[0m[2m:[0m search index ready at 'search-index'
+[2m2026-02-22T03:11:34.421085Z[0m [32m INFO[0m [2msynaptic::search::indexer[0m[2m:[0m rebuilding search index from database...
+[2m2026-02-22T03:11:34.422350Z[0m [32m INFO[0m [2msynaptic[0m[2m:[0m listening on http://0.0.0.0:3000
+[2m2026-02-22T03:11:34.423538Z[0m [32m INFO[0m [2mtantivy::indexer::index_writer[0m[2m:[0m Preparing commit
+[2m2026-02-22T03:11:34.474364Z[0m [32m INFO[0m [2mtantivy::indexer::index_writer[0m[2m:[0m Prepared commit 124
+[2m2026-02-22T03:11:34.474417Z[0m [32m INFO[0m [2mtantivy::indexer::prepared_commit[0m[2m:[0m committing 124
+[2m2026-02-22T03:11:34.474535Z[0m [32m INFO[0m [2mtantivy::indexer::segment_updater[0m[2m:[0m save metas
+[2m2026-02-22T03:11:34.478419Z[0m [32m INFO[0m [2mtantivy::indexer::segment_updater[0m[2m:[0m Running garbage collection
+[2m2026-02-22T03:11:34.478450Z[0m [32m INFO[0m [2mtantivy::directory::managed_directory[0m[2m:[0m Garbage collect
+[2m2026-02-22T03:11:34.478751Z[0m [32m INFO[0m [2mtantivy::indexer::index_writer[0m[2m:[0m Preparing commit
+[2m2026-02-22T03:11:34.524720Z[0m [32m INFO[0m [2mtantivy::indexer::index_writer[0m[2m:[0m Prepared commit 129
+[2m2026-02-22T03:11:34.524771Z[0m [32m INFO[0m [2mtantivy::indexer::prepared_commit[0m[2m:[0m committing 129
+[2m2026-02-22T03:11:34.524867Z[0m [32m INFO[0m [2mtantivy::indexer::segment_updater[0m[2m:[0m save metas
+[2m2026-02-22T03:11:34.528688Z[0m [32m INFO[0m [2mtantivy::indexer::segment_updater[0m[2m:[0m Running garbage collection
+[2m2026-02-22T03:11:34.528720Z[0m [32m INFO[0m [2mtantivy::directory::managed_directory[0m[2m:[0m Garbage collect
+[2m2026-02-22T03:11:34.528976Z[0m [32m INFO[0m [2msynaptic::search::indexer[0m[2m:[0m search index built: 2 documents indexed
+[2m2026-02-22T03:11:34.919322Z[0m [32m INFO[0m [2mtantivy::directory::file_watcher[0m[2m:[0m Meta file "/home/ssrust26/synaptic-signals/search-index/meta.json" was modified
+[2m2026-02-22T03:14:56.651398Z[0m [32m INFO[0m [2msynaptic[0m[2m:[0m Synaptic Signals CMS starting...
+[2m2026-02-22T03:14:56.658785Z[0m [32m INFO[0m [2msqlx::postgres::notice[0m[2m:[0m relation "_sqlx_migrations" already exists, skipping
+[2m2026-02-22T03:14:56.661151Z[0m [32m INFO[0m [2msynaptic[0m[2m:[0m database connected and migrations applied
+[2m2026-02-22T03:14:56.664905Z[0m [32m INFO[0m [2msqlx::postgres::notice[0m[2m:[0m schema "tower_sessions" already exists, skipping
+[2m2026-02-22T03:14:56.665378Z[0m [32m INFO[0m [2msqlx::postgres::notice[0m[2m:[0m relation "session" already exists, skipping
+[2m2026-02-22T03:14:56.665711Z[0m [32m INFO[0m [2msynaptic[0m[2m:[0m session store ready
+[2m2026-02-22T03:14:56.666903Z[0m [32m INFO[0m [2msynaptic[0m[2m:[0m site: Synaptic Signals — http://localhost:3000
+[2m2026-02-22T03:14:56.688480Z[0m [32m INFO[0m [2msynaptic::templates::loader[0m[2m:[0m template engine initialized with theme 'default'
+[2m2026-02-22T03:14:56.689427Z[0m [32m INFO[0m [2msynaptic[0m[2m:[0m loaded plugin 'seo' v1.0.0
+[2m2026-02-22T03:14:56.689467Z[0m [32m INFO[0m [2msynaptic[0m[2m:[0m plugins loaded — 1 plugin(s), 1 route(s) registered
+[2m2026-02-22T03:14:56.691443Z[0m [32m INFO[0m [2mtantivy::directory::file_watcher[0m[2m:[0m Meta file "/home/ssrust26/synaptic-signals/search-index/meta.json" was modified
+[2m2026-02-22T03:14:56.693556Z[0m [32m INFO[0m [2msynaptic[0m[2m:[0m search index ready at 'search-index'
+[2m2026-02-22T03:14:56.693642Z[0m [32m INFO[0m [2msynaptic::search::indexer[0m[2m:[0m rebuilding search index from database...
+[2m2026-02-22T03:14:56.694524Z[0m [32m INFO[0m [2msynaptic[0m[2m:[0m listening on http://0.0.0.0:3000
+[2m2026-02-22T03:14:56.695978Z[0m [32m INFO[0m [2mtantivy::indexer::index_writer[0m[2m:[0m Preparing commit
+[2m2026-02-22T03:14:56.748230Z[0m [32m INFO[0m [2mtantivy::indexer::index_writer[0m[2m:[0m Prepared commit 132
+[2m2026-02-22T03:14:56.748281Z[0m [32m INFO[0m [2mtantivy::indexer::prepared_commit[0m[2m:[0m committing 132
+[2m2026-02-22T03:14:56.748419Z[0m [32m INFO[0m [2mtantivy::indexer::segment_updater[0m[2m:[0m save metas
+[2m2026-02-22T03:14:56.752053Z[0m [32m INFO[0m [2mtantivy::indexer::segment_updater[0m[2m:[0m Running garbage collection
+[2m2026-02-22T03:14:56.752086Z[0m [32m INFO[0m [2mtantivy::directory::managed_directory[0m[2m:[0m Garbage collect
+[2m2026-02-22T03:14:56.752458Z[0m [32m INFO[0m [2mtantivy::indexer::index_writer[0m[2m:[0m Preparing commit
+[2m2026-02-22T03:14:56.795165Z[0m [32m INFO[0m [2mtantivy::indexer::index_writer[0m[2m:[0m Prepared commit 137
+[2m2026-02-22T03:14:56.795230Z[0m [32m INFO[0m [2mtantivy::indexer::prepared_commit[0m[2m:[0m committing 137
+[2m2026-02-22T03:14:56.795364Z[0m [32m INFO[0m [2mtantivy::indexer::segment_updater[0m[2m:[0m save metas
+[2m2026-02-22T03:14:56.800544Z[0m [32m INFO[0m [2mtantivy::indexer::segment_updater[0m[2m:[0m Running garbage collection
+[2m2026-02-22T03:14:56.800581Z[0m [32m INFO[0m [2mtantivy::directory::managed_directory[0m[2m:[0m Garbage collect
+[2m2026-02-22T03:14:56.800913Z[0m [32m INFO[0m [2msynaptic::search::indexer[0m[2m:[0m search index built: 2 documents indexed
+[2m2026-02-22T03:14:57.192497Z[0m [32m INFO[0m [2mtantivy::directory::file_watcher[0m[2m:[0m Meta file "/home/ssrust26/synaptic-signals/search-index/meta.json" was modified

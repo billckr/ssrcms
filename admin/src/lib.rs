@@ -8,7 +8,20 @@ const ADMIN_CSS: &str = include_str!("../style/admin.css");
 /// The sidebar nav, head, and body wrapper are all here.
 pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content: &str) -> String {
     let flash_html = match flash {
-        Some(msg) => format!(r#"<div class="flash success">{}</div>"#, html_escape(msg)),
+        Some(msg) => {
+            // Detect error messages by looking for error indicators
+            let is_error = msg.starts_with("Error") 
+                || msg.contains("error") 
+                || msg.contains("does not") 
+                || msg.contains("incorrect")
+                || msg.contains("must")
+                || msg.contains("cannot")
+                || msg.contains("invalid")
+                || msg.contains("failed")
+                || msg.contains("Failed");
+            let class = if is_error { "error" } else { "success" };
+            format!(r#"<div class="flash {}">{}</div>"#, class, html_escape(msg))
+        }
         None => String::new(),
     };
 
@@ -49,6 +62,7 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
         {settings}
       </ul>
       <div class="sidebar-footer">
+        <a href="/admin/profile">My Profile</a>
         <a href="/admin/logout">Log out</a>
       </div>
     </nav>

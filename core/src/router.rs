@@ -7,7 +7,7 @@ use tower_sessions_sqlx_store::PostgresStore;
 
 use crate::app_state::AppState;
 use crate::handlers::{archive, auth, home, page, plugin_route, post as post_handler, search};
-use crate::handlers::admin::{dashboard, media, plugins, posts, settings, taxonomy, upload, users};
+use crate::handlers::admin::{dashboard, media, plugins, posts, profile, settings, taxonomy, upload, users};
 
 pub fn build(
     state: AppState,
@@ -37,6 +37,10 @@ pub fn build(
         // ── Admin auth ─────────────────────────────────────────────────────
         .route("/admin/login", get(auth::login_form).post(auth::login_post))
         .route("/admin/logout", get(auth::logout))
+        // ── Admin profile ──────────────────────────────────────────────────
+        .route("/admin/profile", get(profile::view))
+        .route("/admin/profile/update", post(profile::update_profile))
+        .route("/admin/profile/change-password", post(profile::change_password))
         // ── Admin dashboard ────────────────────────────────────────────────
         .route("/admin", get(dashboard::dashboard))
         // ── Admin posts ────────────────────────────────────────────────────
