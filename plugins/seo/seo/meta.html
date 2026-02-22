@@ -87,21 +87,21 @@
   "@type": "Article",
   "headline": {{ post.title | json_encode | safe }},
   "description": {{ _seo_desc | json_encode | safe }},
-  "url": "{{ _canonical | safe }}",
-  {% if post.published_at %}"datePublished": "{{ post.published_at | safe }}",{% endif %}
-  "dateModified": "{{ post.updated_at | safe }}",
+  "url": {{ _canonical | json_encode | safe }},
+  {% if post.published_at %}"datePublished": {{ post.published_at | json_encode | safe }},{% endif %}
+  "dateModified": {{ post.updated_at | json_encode | safe }},
   "author": {
     "@type": "Person",
     "name": {{ post.author.display_name | json_encode | safe }},
-    "url": "{{ post.author.url | safe }}"
+    "url": {{ post.author.url | json_encode | safe }}
   },
   "publisher": {
     "@type": "Organization",
     "name": {{ site.name | json_encode | safe }},
-    "url": "{{ site.url | safe }}"
+    "url": {{ site.url | json_encode | safe }}
   }
   {% if _og_image %}
-  ,"image": "{{ _og_image | safe }}"
+  ,"image": {{ _og_image | json_encode | safe }}
   {% endif %}
 }
 </script>
@@ -112,7 +112,7 @@
   "@type": "WebSite",
   "name": {{ site.name | json_encode | safe }},
   "description": {{ site.description | json_encode | safe }},
-  "url": "{{ site.url | safe }}"
+  "url": {{ site.url | json_encode | safe }}
 }
 </script>
 {% endif %}

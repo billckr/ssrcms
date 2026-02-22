@@ -176,15 +176,31 @@ Use `| json_encode | safe` for string values in JSON-LD:
 ## Security Checklist (run before each release)
 
 - [ ] No `tera.render_str()` calls on user-supplied content anywhere in the codebase
+  - A `render_str()` helper exists in `core/src/templates/loader.rs` but is `#[allow(dead_code)]` — confirm it remains unused before each release
 - [ ] All post content writes go through `sanitize_content()`
+  - Covers both `post::create()` and `post::update()` — both sanitize before binding
 - [ ] No sensitive fields (password_hash, secrets) in any `*Context` struct
+  - `UserContext` is the only user-facing struct; it has no `password_hash`
+  - `user.rs` unit test explicitly asserts `password_hash` is absent from serialized `UserContext`
 - [ ] All admin routes have session guard middleware
+  - All admin handlers take `_admin: AdminUser` extractor; missing it causes a compile error
 - [ ] `SECRET_KEY` is documented as required in production; development default is clearly labelled
-- [ ] Plugin templates reviewed for `| safe` misuse on user-supplied values
+- [ ] Plugin templates use `| json_encode | safe` (not bare `| safe`) for all values inside JSON-LD `<script>` blocks
+  - Bare `| safe` on a string inside a JSON string literal produces invalid JSON if the value contains `"` or `\`
+  - Correct pattern: `{{ value | json_encode | safe }}` — `json_encode` adds quotes and escapes special chars
 - [ ] `docs/plugin-api-v1.md` accurately reflects what is exposed in the context
 - [ ] No SQL constructed by string interpolation from user input (all queries use `.bind()`)
 - [ ] No raw internal error strings (sqlx messages, table names, stack traces) in HTTP responses — all server-side errors return generic messages to the client
 
 ---
 
-*Synaptic Signals security rules — last updated 2026-02-21*
+## Audit Log
+
+| Date | Auditor | Finding | Resolution |
+|---|---|---|---|
+| 2026-02-22 | Claude Code | `post::update()` did not call `sanitize_content()` on new content | Fixed — `update()` now sanitizes via `match &data.content` block |
+| 2026-02-22 | Claude Code | SEO plugin JSON-LD used bare `\| safe` on URL and date values | Fixed — all JSON-LD string values now use `\| json_encode \| safe` |
+
+---
+
+*Synaptic Signals security rules — last updated 2026-02-22*

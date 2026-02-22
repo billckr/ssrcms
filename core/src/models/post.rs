@@ -600,7 +600,10 @@ pub async fn update(pool: &PgPool, id: Uuid, data: &UpdatePost) -> Result<Post> 
 
     let new_slug = data.slug.clone().unwrap_or(current.slug.clone());
     let new_title = data.title.clone().unwrap_or(current.title.clone());
-    let new_content = data.content.clone().unwrap_or(current.content.clone());
+    let new_content = match &data.content {
+        Some(html) => sanitize_content(html),
+        None => current.content.clone(),
+    };
     let new_format = data.content_format.clone().unwrap_or(current.content_format.clone());
     let new_excerpt = data.excerpt.clone().or(current.excerpt.clone());
     let new_status = data.status.as_ref().map(|s| s.as_str().to_string()).unwrap_or(current.status.clone());
