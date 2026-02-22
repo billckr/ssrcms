@@ -908,7 +908,7 @@ Synaptic Signals does not include a CSS preprocessor, bundler, or minifier. If y
 
 ### Verify the theme loads
 
-Activate your theme in the admin (Settings > Appearance > Active Theme). If the theme is missing required files or has a malformed `theme.toml`, the admin will display an error and fall back to the default theme.
+Activate your theme in the admin at **Appearance** (`/admin/appearance`). Select your theme and click **Activate**. The switch is immediate — templates and static assets update for all visitors without a server restart. If the theme is missing required files or has a malformed `theme.toml`, the admin will display an error and the active theme will not change.
 
 ### Test all seven template types
 

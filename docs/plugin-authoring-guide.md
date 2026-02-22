@@ -218,10 +218,22 @@ Key points about this template:
 Start the development server if it is not already running:
 
 ```
-cargo leptos watch
+./app.sh start
 ```
 
-The core watches the `plugins/` directory. When you create or modify a `plugin.toml` or any template file inside a plugin directory, the server reloads affected templates automatically. You do not need to restart the process for template changes. You do need to restart for `plugin.toml` manifest changes that add or remove hooks, routes, or meta fields, because those are registered at startup.
+To view live logs while testing:
+
+```
+./app.sh logs
+```
+
+Plugin template file changes (`.html`, `.xml`) require a server restart to take effect because templates are loaded at startup:
+
+```
+./app.sh restart
+```
+
+You do **not** need to recompile the binary for template changes — only `./app.sh restart`. You do need to restart for `plugin.toml` manifest changes that add or remove hooks, routes, or meta fields, because those are registered at startup.
 
 Navigate to any single post URL in your browser. The related posts widget should appear below the post content. If it does not appear, check:
 

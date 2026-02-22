@@ -207,12 +207,13 @@ Run `update-cli` whenever you change anything under `cli/src/`. Examples of chan
 
 ### What does NOT need update-cli
 
-| Changed | Action needed instead |
+| Changed | Action needed |
 |---|---|
 | `cli/src/**` | `./app.sh update-cli` |
-| `core/src/**` or `admin/src/**` | `./app.sh restart` |
-| `themes/**` | Reload the page — no recompile needed |
-| `plugins/**` | Reload the page — no recompile needed |
+| `core/src/**` or `admin/src/**` | `./app.sh restart` (recompile + restart) |
+| `themes/**` template or CSS files | `./app.sh restart` (no recompile — just restart) |
+| `plugins/**` template files | `./app.sh restart` (no recompile — just restart) |
+| Active theme (via admin Appearance page) | Nothing — updates live immediately for all visitors |
 
 ---
 
