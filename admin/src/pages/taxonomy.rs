@@ -17,9 +17,11 @@ pub fn render(terms: &[TermItem], taxonomy: &str, flash: Option<&str>) -> String
               <td>{name}</td>
               <td>{slug}</td>
               <td>{count}</td>
-              <td>
+              <td class="actions">
                 <form method="POST" action="{path}/{id}/delete" style="display:inline" onsubmit="return confirm('Delete?')">
-                  <button class="btn-link btn-danger">Delete</button>
+                  <button class="icon-btn icon-danger" title="Delete" type="submit">
+                    <img src="/admin/static/icons/trash-2.svg" alt="Delete">
+                  </button>
                 </form>
               </td>
             </tr>"#,

@@ -25,8 +25,10 @@ pub fn render_list(users: &[UserRow], flash: Option<&str>) -> String {
               <td>{username}</td>
               <td>{email}</td>
               <td><span class="badge">{role}</span></td>
-              <td>
-                <a href="/admin/users/{id}/edit">Edit</a>
+              <td class="actions">
+                <a href="/admin/users/{id}/edit" class="icon-btn" title="Edit">
+                  <img src="/admin/static/icons/edit.svg" alt="Edit">
+                </a>
               </td>
             </tr>"#,
             id = crate::html_escape(&u.id),

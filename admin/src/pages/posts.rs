@@ -125,7 +125,15 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>) -> String {
         format!(r#"<option value="{s}"{selected}>{s}</option>"#, s = s, selected = selected)
     }).collect::<Vec<_>>().join("");
 
-    let published_at = post.published_at.as_deref().unwrap_or("");
+    // Default published_at to now if empty (for new posts)
+    let published_at = if let Some(val) = &post.published_at {
+        val.clone()
+    } else if post.id.is_none() {
+        // Set to current date/time for new posts
+        chrono::Utc::now().format("%Y-%m-%dT%H:%M").to_string()
+    } else {
+        String::new()
+    };
 
     let categories_section = if post.post_type != "page" {
         format!(r#"<div class="form-section">
@@ -185,7 +193,7 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>) -> String {
         content_val = crate::html_escape(&post.content),
         excerpt = crate::html_escape(&post.excerpt),
         status_options = status_options,
-        published_at = crate::html_escape(published_at),
+        published_at = crate::html_escape(&published_at),
         post_type = crate::html_escape(&post.post_type),
         categories_section = categories_section,
     );

@@ -23,8 +23,10 @@ pub fn render_list(items: &[MediaItem], flash: Option<&str>) -> String {
             r#"<div class="media-card">
               {preview}
               <div class="media-name">{filename}</div>
-              <form method="POST" action="/admin/media/{id}/delete" onsubmit="return confirm('Delete?')">
-                <button class="btn-link btn-danger">Delete</button>
+              <form method="POST" action="/admin/media/{id}/delete" onsubmit="return confirm('Delete?')" style="display:inline">
+                <button class="icon-btn icon-danger" title="Delete" type="submit">
+                  <img src="/admin/static/icons/trash-2.svg" alt="Delete">
+                </button>
               </form>
             </div>"#,
             preview = preview,
