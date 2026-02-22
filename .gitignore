@@ -27,11 +27,15 @@
 .DS_Store
 Thumbs.db
 
+# Application runtime
+.synaptic.pid
+logs/
+
 # Uploads directory (populated at runtime)
 uploads/
 
 # Tantivy search index (regenerated on startup)
-search_index/
+search-index/
 
 # Compiled WASM (Phase 4)
 pkg/
