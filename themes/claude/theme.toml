@@ -1,0 +1,6 @@
+[theme]
+name        = "claude"
+version     = "1.0.0"
+api_version = "1"
+description = "Claude theme with warm Anthropic orange color scheme."
+author      = "Synaptic Signals"
