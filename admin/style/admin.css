@@ -61,6 +61,7 @@ a:hover { text-decoration: underline; }
 .data-table th { background: #f8fafc; text-align: left; padding: .6rem 1rem; font-size: 12px; text-transform: uppercase; color: var(--muted); border-bottom: 1px solid var(--border); }
 .data-table td { padding: .6rem 1rem; border-bottom: 1px solid var(--border); }
 .data-table tr:last-child td { border-bottom: none; }
+.data-table .actions { display: flex; gap: .5rem; align-items: center; }
 
 /* Badges */
 .badge { display: inline-block; padding: .1rem .4rem; border-radius: 3px; font-size: 11px; font-weight: 600; background: #e2e8f0; color: var(--muted); }
@@ -76,6 +77,13 @@ a:hover { text-decoration: underline; }
 .btn-primary:hover { background: var(--primary-dark); }
 .btn-link { background: none; border: none; cursor: pointer; color: var(--primary); font-size: 13px; padding: 0; }
 .btn-danger { color: var(--danger); }
+
+/* Icon buttons */
+.icon-btn { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0; background: none; border: 1px solid var(--border); border-radius: var(--radius); cursor: pointer; color: var(--primary); transition: background .2s, border-color .2s; }
+.icon-btn:hover { background: #f8fafc; border-color: var(--primary); }
+.icon-btn img { width: 18px; height: 18px; display: block; }
+.icon-btn.icon-danger { color: var(--danger); }
+.icon-btn.icon-danger:hover { background: #fee2e2; border-color: var(--danger); }
 
 /* Forms */
 .form-group { margin-bottom: 1rem; }

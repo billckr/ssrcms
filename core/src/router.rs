@@ -73,9 +73,10 @@ pub fn build(
         .route("/admin/plugins", get(plugins::list))
         // ── Admin settings ─────────────────────────────────────────────────
         .route("/admin/settings", get(settings::settings).post(settings::save_settings))
-        // ── Static files ───────────────────────────────────────────────────
+    // ── Static files ───────────────────────────────────────────────────
         .nest_service("/uploads", uploads_service)
-        .nest_service("/theme/static", theme_static_service);
+        .nest_service("/theme/static", theme_static_service)
+        .nest_service("/admin/static", ServeDir::new("admin/static"));
 
     // Register plugin routes (e.g. /sitemap.xml)
     for path in plugin_route_paths {

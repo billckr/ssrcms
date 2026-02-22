@@ -21,8 +21,10 @@ pub fn render(data: &DashboardData, flash: Option<&str>) -> String {
             r#"<tr>
               <td><a href="/admin/posts/{id}/edit">{title}</a></td>
               <td><span class="badge badge-{status}">{status}</span></td>
-              <td>
-                <a href="/admin/posts/{id}/edit">Edit</a>
+              <td class="actions">
+                <a href="/admin/posts/{id}/edit" class="icon-btn" title="Edit">
+                  <img src="/admin/static/icons/edit.svg" alt="Edit">
+                </a>
               </td>
             </tr>"#,
             id = crate::html_escape(&p.id),

@@ -42,10 +42,14 @@ pub fn render_list(posts: &[PostRow], post_type: &str, flash: Option<&str>) -> S
               <td><span class="badge badge-{status}">{status}</span></td>
               <td>{author}</td>
               <td>{published}</td>
-              <td>
-                <a href="{prefix}/{id}/edit">Edit</a>
+              <td class="actions">
+                <a href="{prefix}/{id}/edit" class="icon-btn" title="Edit">
+                  <img src="/admin/static/icons/edit.svg" alt="Edit">
+                </a>
                 <form method="POST" action="{prefix}/{id}/delete" style="display:inline" onsubmit="return confirm('Delete this?')">
-                  <button class="btn-link btn-danger">Delete</button>
+                  <button class="icon-btn icon-danger" title="Delete" type="submit">
+                    <img src="/admin/static/icons/delete.svg" alt="Delete">
+                  </button>
                 </form>
               </td>
             </tr>"#,
