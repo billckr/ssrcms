@@ -6,17 +6,32 @@ pub struct ThemeInfo {
     pub description: String,
     pub author: String,
     pub active: bool,
+    pub has_screenshot: bool,
 }
 
 pub fn render_with_flash(themes: &[ThemeInfo], flash: Option<&str>) -> String {
-    let content = if themes.is_empty() {
+    let cards: String = if themes.is_empty() {
         r#"<div class="empty-state">
             <p>No themes found. Add a theme directory to <code>themes/</code> and restart the server.</p>
         </div>"#.to_string()
     } else {
-        let cards: String = themes.iter().map(|t| render_card(t)).collect();
-        format!(r#"<div class="theme-list">{}</div>"#, cards)
+        themes.iter().map(render_card).collect()
     };
+
+    let content = format!(
+        r#"<div class="theme-list">{cards}</div>
+<div class="theme-upload-section">
+  <h2>Upload Theme</h2>
+  <p class="muted">Upload a <code>.zip</code> file containing a valid theme. The zip must include <code>theme.toml</code> and all required templates.</p>
+  <form method="post" action="/admin/appearance/upload" enctype="multipart/form-data" class="upload-form">
+    <div class="form-group">
+      <label for="theme_zip">Theme zip file</label>
+      <input type="file" id="theme_zip" name="file" accept=".zip" required>
+    </div>
+    <button type="submit" class="btn btn-primary">Upload &amp; Install</button>
+  </form>
+</div>"#
+    );
 
     admin_page("Appearance", "/admin/appearance", flash, &content)
 }
@@ -27,6 +42,20 @@ pub fn render(themes: &[ThemeInfo]) -> String {
 
 fn render_card(t: &ThemeInfo) -> String {
     let active_class = if t.active { " active" } else { "" };
+
+    let screenshot_html = if t.has_screenshot {
+        format!(
+            r#"<div class="theme-screenshot"><img src="/admin/theme-screenshot/{}" alt="{} preview"></div>"#,
+            crate::html_escape(&t.name),
+            crate::html_escape(&t.name),
+        )
+    } else {
+        format!(
+            r#"<div class="theme-screenshot theme-screenshot-placeholder"><span>{}</span></div>"#,
+            crate::html_escape(&t.name),
+        )
+    };
+
     let button_html = if t.active {
         r#"<button class="btn btn-secondary" disabled>Active</button>"#.to_string()
     } else {
@@ -41,6 +70,7 @@ fn render_card(t: &ThemeInfo) -> String {
 
     format!(
         r#"<div class="theme-card{active}">
+  {screenshot}
   <div class="theme-card-header">
     <span class="theme-name">{name}</span>
     <span class="badge">{version}</span>
@@ -52,6 +82,7 @@ fn render_card(t: &ThemeInfo) -> String {
   </div>
 </div>"#,
         active = active_class,
+        screenshot = screenshot_html,
         name = crate::html_escape(&t.name),
         version = crate::html_escape(&t.version),
         desc = crate::html_escape(&t.description),

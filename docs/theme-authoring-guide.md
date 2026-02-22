@@ -1,7 +1,7 @@
 # Synaptic Signals — Theme Authoring Guide
 
 > **API version:** 1
-> **Last updated:** 2026-02-21
+> **Last updated:** 2026-02-22
 
 ---
 
@@ -69,6 +69,7 @@ A theme lives in a subdirectory of the `themes/` folder. The directory name beco
 themes/
   your-theme-name/
     theme.toml                   ← required: manifest
+    screenshot.png               ← optional: preview image (1200×900 recommended)
     templates/
       base.html                  ← required
       index.html                 ← required
@@ -126,6 +127,15 @@ author      = "Your Name <you@example.com>"
 | `api_version` | yes | The Plugin API version this theme targets. Use `"1"` for the current API. |
 | `description` | yes | One-line description shown in the admin theme browser. |
 | `author` | yes | Author name and optional email in `Name <email>` format. |
+
+**Screenshot**
+
+You may optionally include a `screenshot.png` at the theme root (alongside `theme.toml`). This image is displayed in the admin Appearance page so users can preview the theme before activating it. Themes without a screenshot show a labelled placeholder instead.
+
+- Recommended size: **1200×900 px** (4:3 aspect ratio)
+- Format: PNG
+- Content: a representative browser-window screenshot of the theme rendering a typical post or home page
+- The screenshot is included in the theme zip when distributing your theme
 
 The `api_version` field tells the CMS which context variables, filters, and functions your theme expects. If a future CMS release introduces a breaking change (which requires a major API version bump), the core will continue to serve themes that declare an older `api_version` using a compatibility layer. Always set this to the version you developed against.
 
@@ -906,6 +916,14 @@ Synaptic Signals does not include a CSS preprocessor, bundler, or minifier. If y
 
 ## 13. Testing Your Theme
 
+### Installing a theme
+
+There are two ways to install a theme:
+
+**Zip upload (recommended)** — Go to **Appearance** (`/admin/appearance`), scroll to the Upload Theme section, and upload a `.zip` file containing your theme. The zip may place theme files at the root or inside a single top-level folder — both layouts are accepted. The CMS will validate the structure and reject the upload with an error message if anything is missing. On success the theme appears in the theme list immediately. Uploading a zip whose `theme.toml` names an already-installed theme replaces it in place.
+
+**Manual installation** — Copy your theme directory into the `themes/` folder on the server and restart the server process. The theme will appear in the Appearance list on next load.
+
 ### Verify the theme loads
 
 Activate your theme in the admin at **Appearance** (`/admin/appearance`). Select your theme and click **Activate**. The switch is immediate — templates and static assets update for all visitors without a server restart. If the theme is missing required files or has a malformed `theme.toml`, the admin will display an error and the active theme will not change.
@@ -979,6 +997,11 @@ Use this checklist before publishing or deploying a theme.
 - [ ] `api_version = "1"` is set.
 - [ ] `version`, `description`, and `author` fields are filled in.
 
+### Screenshot
+
+- [ ] `screenshot.png` is present at the theme root (optional but recommended).
+- [ ] Screenshot is 1200×900 px and shows the theme rendering a real page.
+
 ### Required files
 
 - [ ] `templates/base.html` exists.
@@ -1050,4 +1073,4 @@ Use this checklist before publishing or deploying a theme.
 
 ---
 
-*Synaptic Signals Theme Authoring Guide — API v1 — last updated 2026-02-21*
+*Synaptic Signals Theme Authoring Guide — API v1 — last updated 2026-02-22*

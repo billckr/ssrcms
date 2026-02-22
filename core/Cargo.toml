@@ -38,3 +38,4 @@ glob.workspace = true
 regex-lite.workspace = true
 admin = { path = "../admin" }
 tantivy = "0.22"
+zip.workspace = true
