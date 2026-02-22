@@ -37,6 +37,11 @@ pub fn render_list(posts: &[PostRow], post_type: &str, flash: Option<&str>) -> S
     let edit_prefix = if post_type == "page" { "/admin/pages" } else { "/admin/posts" };
 
     let rows = posts.iter().map(|p| {
+        let view_href = if p.post_type == "page" {
+            format!("/{}", p.slug)
+        } else {
+            format!("/blog/{}", p.slug)
+        };
         format!(
             r#"<tr>
               <td><a href="{prefix}/{id}/edit">{title}</a></td>
@@ -44,6 +49,9 @@ pub fn render_list(posts: &[PostRow], post_type: &str, flash: Option<&str>) -> S
               <td>{author}</td>
               <td>{published}</td>
               <td class="actions">
+                <a href="{view_href}" class="icon-btn" title="View" target="_blank" rel="noopener noreferrer">
+                  <img src="/admin/static/icons/eye.svg" alt="View">
+                </a>
                 <a href="{prefix}/{id}/edit" class="icon-btn" title="Edit">
                   <img src="/admin/static/icons/edit.svg" alt="Edit">
                 </a>
@@ -60,6 +68,7 @@ pub fn render_list(posts: &[PostRow], post_type: &str, flash: Option<&str>) -> S
             status = crate::html_escape(&p.status),
             author = crate::html_escape(&p.author_name),
             published = p.published_at.as_deref().map(|d| crate::html_escape(d)).unwrap_or_default(),
+            view_href = crate::html_escape(&view_href),
         )
     }).collect::<Vec<_>>().join("\n");
 
@@ -201,4 +210,43 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>) -> String {
 
     let path = if post.post_type == "page" { "/admin/pages" } else { "/admin/posts" };
     crate::admin_page(&title, path, flash, &content)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_row(post_type: &str, slug: &str) -> PostRow {
+        PostRow {
+            id: "abc123".to_string(),
+            title: "Test".to_string(),
+            status: "published".to_string(),
+            slug: slug.to_string(),
+            post_type: post_type.to_string(),
+            author_name: "Author".to_string(),
+            published_at: None,
+        }
+    }
+
+    #[test]
+    fn post_view_link_uses_blog_prefix() {
+        let html = render_list(&[make_row("post", "my-post")], "post", None);
+        assert!(html.contains("href=\"/blog/my-post\""), "post view href should be /blog/{{slug}}");
+        assert!(html.contains("target=\"_blank\""), "view link should open in new tab");
+    }
+
+    #[test]
+    fn page_view_link_uses_root_prefix() {
+        let html = render_list(&[make_row("page", "about")], "page", None);
+        assert!(html.contains("href=\"/about\""), "page view href should be /{{slug}}");
+        assert!(html.contains("target=\"_blank\""), "view link should open in new tab");
+    }
+
+    #[test]
+    fn view_icon_present_in_both_post_and_page_lists() {
+        let post_html = render_list(&[make_row("post", "hello")], "post", None);
+        let page_html = render_list(&[make_row("page", "hello")], "page", None);
+        assert!(post_html.contains("eye.svg"), "post list should include eye icon");
+        assert!(page_html.contains("eye.svg"), "page list should include eye icon");
+    }
 }

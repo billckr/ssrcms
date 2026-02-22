@@ -216,6 +216,19 @@ pub async fn deactivate(pool: &PgPool, id: Uuid) -> Result<()> {
     Ok(())
 }
 
+/// Permanently delete a user and all their posts/pages (cascades post_meta and post_taxonomies).
+pub async fn delete(pool: &PgPool, id: Uuid) -> Result<()> {
+    sqlx::query("DELETE FROM posts WHERE author_id = $1")
+        .bind(id)
+        .execute(pool)
+        .await?;
+    sqlx::query("DELETE FROM users WHERE id = $1")
+        .bind(id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
 pub async fn list(pool: &PgPool) -> Result<Vec<User>> {
     sqlx::query_as::<_, User>(
         "SELECT * FROM users WHERE is_active = TRUE ORDER BY username",

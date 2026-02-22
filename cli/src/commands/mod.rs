@@ -1,6 +1,7 @@
 pub mod install;
 pub mod migrate;
 pub mod plugin;
+pub mod theme;
 pub mod user;
 
 use sqlx::postgres::PgPoolOptions;

@@ -183,6 +183,17 @@ pub async fn save_edit(
     }
 }
 
+pub async fn delete_user(
+    State(state): State<AppState>,
+    _admin: AdminUser,
+    Path(id): Path<Uuid>,
+) -> impl IntoResponse {
+    if let Err(e) = crate::models::user::delete(&state.db, id).await {
+        tracing::error!("delete user {} error: {:?}", id, e);
+    }
+    Redirect::to("/admin/users")
+}
+
 fn friendly_user_error(e: &crate::errors::AppError) -> String {
     let s = e.to_string();
     if s.contains("duplicate key") || s.contains("unique") {

@@ -81,3 +81,16 @@ async fn test_post_meta_set_get() {
     //   3. post::get_meta(pool, post_id) returns map with "seo_title" => "Custom SEO Title"
     todo!("implement after lib target is added to core/Cargo.toml")
 }
+
+#[tokio::test]
+#[ignore = "requires live PostgreSQL: set DATABASE_URL and run cargo test -- --include-ignored"]
+async fn test_user_delete_cascades_posts() {
+    // Steps:
+    //   1. Connect to DATABASE_URL
+    //   2. Create a user via user::create()
+    //   3. Create two posts (one post, one page) with that user as author_id
+    //   4. Call user::delete(pool, user_id)
+    //   5. Assert user::get_by_id() returns Err (user is gone)
+    //   6. Assert post::get_by_id() returns Err for both posts (cascade worked)
+    todo!("implement after lib target is added to core/Cargo.toml")
+}

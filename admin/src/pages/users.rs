@@ -19,6 +19,10 @@ pub struct UserEdit {
 
 pub fn render_list(users: &[UserRow], flash: Option<&str>) -> String {
     let rows = users.iter().map(|u| {
+        let warn_msg = format!(
+            "Delete user \\u2018{}\\u2019? This will permanently delete all their posts and pages. This cannot be undone.",
+            u.display_name.replace('\'', "\\'"),
+        );
         format!(
             r#"<tr>
               <td><a href="/admin/users/{id}/edit">{display_name}</a></td>
@@ -29,6 +33,11 @@ pub fn render_list(users: &[UserRow], flash: Option<&str>) -> String {
                 <a href="/admin/users/{id}/edit" class="icon-btn" title="Edit">
                   <img src="/admin/static/icons/edit.svg" alt="Edit">
                 </a>
+                <form method="POST" action="/admin/users/{id}/delete" style="display:inline" onsubmit="return confirm('{warn_msg}')">
+                  <button class="icon-btn icon-danger" title="Delete user" type="submit">
+                    <img src="/admin/static/icons/delete.svg" alt="Delete">
+                  </button>
+                </form>
               </td>
             </tr>"#,
             id = crate::html_escape(&u.id),
@@ -36,6 +45,7 @@ pub fn render_list(users: &[UserRow], flash: Option<&str>) -> String {
             username = crate::html_escape(&u.username),
             email = crate::html_escape(&u.email),
             role = crate::html_escape(&u.role),
+            warn_msg = warn_msg,
         )
     }).collect::<Vec<_>>().join("\n");
 

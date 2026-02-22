@@ -43,6 +43,7 @@ Day-to-day reference for running, building, checking, and restarting the CMS dur
 | Clear search index | `./app.sh clean-index` |
 | Force full recompile | `./app.sh clean-build` |
 | Run unit tests | `./app.sh test` |
+| Run unit tests (formatted table) | `./unittest.sh` |
 | Run unit + integration tests | `DATABASE_URL=... ./app.sh test-all` |
 
 ### Direct cargo commands (useful during active development)
@@ -51,7 +52,7 @@ Day-to-day reference for running, building, checking, and restarting the CMS dur
 |---|---|
 | Check for errors | `cargo check` |
 | Check one crate | `cargo check -p synaptic-core` |
-| Run unit tests (no DB) | `cargo test -p synaptic-core` |
+| Run unit tests (no DB) | `cargo test -p synaptic-core -p admin` |
 | Run all tests incl. integration | `DATABASE_URL=... cargo test -p synaptic-core -- --include-ignored` |
 
 All commands must be run from the workspace root (`/home/ssrust26/synaptic-signals/`).
@@ -169,11 +170,13 @@ Unit tests are inline `#[cfg(test)]` modules co-located with the source they tes
 
 ```bash
 ./app.sh test
+# formatted summary table:
+./unittest.sh
 # or directly:
-cargo test -p synaptic-core
+cargo test -p synaptic-core -p admin
 ```
 
-Expected output: **63 tests pass, integration stubs ignored**.
+Expected output: **66 tests pass, integration stubs ignored**.
 
 Run a subset by name (substring match):
 
@@ -207,6 +210,7 @@ DATABASE_URL=postgres://user:pass@localhost/synaptic_test \
 | `core/src/config.rs` | Config defaults and `bind_addr()` |
 | `core/src/models/user.rs` | `UserRole`, password hashing, `UserContext` |
 | `core/src/models/post.rs` | `PostStatus`/`PostType`, `sanitize_content`, `PostContext::build` |
+| `admin/src/pages/posts.rs` | View link URL generation (post → `/blog/{slug}`, page → `/{slug}`) |
 | `core/tests/model_crud.rs` | Post/user/taxonomy CRUD (integration, `#[ignore]`) |
 | `core/tests/routes.rs` | HTTP route responses (integration, `#[ignore]`) |
 

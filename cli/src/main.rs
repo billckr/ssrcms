@@ -29,6 +29,11 @@ enum Commands {
         #[command(subcommand)]
         action: commands::plugin::PluginAction,
     },
+    /// Theme management
+    Theme {
+        #[command(subcommand)]
+        action: commands::theme::ThemeAction,
+    },
 }
 
 #[tokio::main]
@@ -43,6 +48,7 @@ async fn main() -> anyhow::Result<()> {
         Commands::Migrate(args) => commands::migrate::run(args).await?,
         Commands::User { action } => commands::user::run(action).await?,
         Commands::Plugin { action } => commands::plugin::run(action).await?,
+        Commands::Theme { action } => commands::theme::run(action).await?,
     }
 
     Ok(())

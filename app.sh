@@ -230,7 +230,7 @@ cmd_clean_build() {
 cmd_test() {
     log "Running unit tests (no database required)..."
     cd "$SCRIPT_DIR"
-    cargo test -p synaptic-core
+    cargo test -p synaptic-core -p admin
     log "Done."
 }
 

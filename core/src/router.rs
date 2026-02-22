@@ -65,6 +65,7 @@ pub fn build(
         .route("/admin/users", get(users::list))
         .route("/admin/users/new", get(users::new_user).post(users::save_new))
         .route("/admin/users/{id}/edit", get(users::edit_user).post(users::save_edit))
+        .route("/admin/users/{id}/delete", post(users::delete_user))
         // ── Admin plugins ──────────────────────────────────────────────────
         .route("/admin/plugins", get(plugins::list))
         // ── Admin appearance ───────────────────────────────────────────────
