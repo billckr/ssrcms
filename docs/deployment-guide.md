@@ -216,6 +216,35 @@ Lists installed plugins by reading `plugin.toml` manifests from `./plugins/`.
 ./synaptic-cli plugin list
 ```
 
+### `synaptic-cli theme list`
+
+Lists installed themes by reading `theme.toml` manifests from `./themes/`.
+
+```bash
+./synaptic-cli theme list
+```
+
+### `synaptic-cli theme activate`
+
+Activates a theme by updating `active_theme` in the database, then sends `SIGUSR1` to the running server so the change takes effect immediately — no restart required.
+
+```bash
+./synaptic-cli theme activate <name> [OPTIONS]
+
+Options:
+  --database-url <URL>    Database URL (overrides DATABASE_URL env var)
+  --pid-file <PATH>       Path to the server PID file [default: synaptic.pid]
+```
+
+```bash
+# Example
+./synaptic-cli theme activate claude
+```
+
+The CLI reads the server's PID from `synaptic.pid` (written to the working directory on startup) and sends `SIGUSR1`. The server reacts by re-reading `active_theme` from the database and hot-reloading the templates. If the server is not running the change is still persisted in the database and will take effect on next start.
+
+**`--pid-file`** is only needed if the server was started from a different directory or if `PID_FILE` was set to a custom path in the server config.
+
 ---
 
 ## Updating
@@ -247,7 +276,8 @@ sudo /opt/synaptic-signals/synaptic-cli migrate
 ├── plugins/
 │   └── seo/              # SEO plugin (and any others)
 ├── uploads/              # User-uploaded media files
-└── search-index/         # Tantivy full-text search index (auto-created)
+├── search-index/         # Tantivy full-text search index (auto-created)
+└── synaptic.pid          # Server PID (written on startup, removed on exit)
 ```
 
 ---
@@ -266,3 +296,4 @@ sudo /opt/synaptic-signals/synaptic-cli migrate
 | `UPLOADS_DIR` | No | `./uploads` | Path to store uploaded files |
 | `SEARCH_INDEX_PATH` | No | `./search-index` | Path for Tantivy index files |
 | `LOG_LEVEL` | No | `info` | Tracing log level (`trace`, `debug`, `info`, `warn`, `error`) |
+| `PID_FILE` | No | `./synaptic.pid` | Path to write the server PID file on startup |

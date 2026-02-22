@@ -111,7 +111,51 @@ async fn main() -> anyhow::Result<()> {
     };
 
     // ── Router ────────────────────────────────────────────────────────────────
-    let app = router::build(state, &cfg.uploads_dir, session_layer);
+    let app = router::build(state.clone(), &cfg.uploads_dir, session_layer);
+
+    // ── PID file ──────────────────────────────────────────────────────────────
+    let pid = std::process::id();
+    if let Err(e) = std::fs::write(&cfg.pid_file, pid.to_string()) {
+        tracing::warn!("could not write PID file '{}': {}", cfg.pid_file, e);
+    } else {
+        info!("PID {} written to '{}'", pid, cfg.pid_file);
+    }
+
+    // ── SIGUSR1 handler — live theme reload ───────────────────────────────────
+    {
+        use tokio::signal::unix::{signal, SignalKind};
+
+        let templates   = state.templates.clone();
+        let active_theme = state.active_theme.clone();
+        let db          = pool.clone();
+
+        tokio::spawn(async move {
+            let mut stream = match signal(SignalKind::user_defined1()) {
+                Ok(s)  => s,
+                Err(e) => { tracing::error!("failed to register SIGUSR1 handler: {}", e); return; }
+            };
+            loop {
+                stream.recv().await;
+                tracing::info!("SIGUSR1 received — reloading active theme");
+
+                let theme_name: String = sqlx::query_scalar(
+                    "SELECT value FROM site_settings WHERE key = 'active_theme'"
+                )
+                .fetch_optional(&db)
+                .await
+                .unwrap_or(None)
+                .unwrap_or_else(|| "default".to_string());
+
+                match templates.switch_theme(&theme_name) {
+                    Ok(_) => {
+                        *active_theme.write().unwrap() = theme_name.clone();
+                        tracing::info!("theme '{}' reloaded via SIGUSR1", theme_name);
+                    }
+                    Err(e) => tracing::error!("SIGUSR1 theme reload failed: {}", e),
+                }
+            }
+        });
+    }
 
     // ── Server ────────────────────────────────────────────────────────────────
     let addr = cfg.bind_addr();
@@ -119,6 +163,9 @@ async fn main() -> anyhow::Result<()> {
     info!("listening on http://{}", addr);
 
     axum::serve(listener, app).await?;
+
+    // ── Cleanup ───────────────────────────────────────────────────────────────
+    let _ = std::fs::remove_file(&cfg.pid_file);
     Ok(())
 }
 

@@ -44,6 +44,10 @@ pub struct AppConfig {
     /// Path to the Tantivy search index directory
     #[serde(default = "default_search_index_path")]
     pub search_index_path: String,
+
+    /// Path to the PID file written on startup (used by synaptic-cli for live reload)
+    #[serde(default = "default_pid_file")]
+    pub pid_file: String,
 }
 
 fn default_host() -> String {
@@ -77,6 +81,10 @@ fn default_log_level() -> String {
 
 fn default_search_index_path() -> String {
     "search-index".to_string()
+}
+
+fn default_pid_file() -> String {
+    "synaptic.pid".to_string()
 }
 
 impl AppConfig {
@@ -176,6 +184,7 @@ mod tests {
             dev_mode: false,
             log_level: default_log_level(),
             search_index_path: default_search_index_path(),
+            pid_file: default_pid_file(),
         }
     }
 
