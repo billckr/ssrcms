@@ -247,15 +247,72 @@ The CLI reads the server's PID from `synaptic.pid` (written to the working direc
 
 ---
 
+## Live Theme Reload
+
+Synaptic Signals supports switching the active theme without restarting the server. This works through a Unix signal (`SIGUSR1`) mechanism.
+
+### How it works
+
+1. **On startup** the server writes its process ID to `synaptic.pid` in the working directory.
+2. **`synaptic-cli theme activate <name>`** updates `active_theme` in the database, then reads `synaptic.pid` and sends `SIGUSR1` to the server process.
+3. **The running server** receives `SIGUSR1`, re-reads `active_theme` from the database, and calls `switch_theme()` — reloading all templates from disk into the Tera engine immediately.
+4. The next incoming HTTP request is served by the new theme. No downtime, no restart.
+
+The same hot-reload is triggered when you switch themes through the admin UI at **Appearance**.
+
+### Using the CLI
+
+```bash
+# From the directory where the server is running
+./synaptic-cli theme activate claude
+# Server (PID 12345) signalled — theme 'claude' is now live.
+```
+
+If the server is not currently running, the database is still updated and the new theme will be active on next start:
+
+```bash
+./synaptic-cli theme activate claude
+# Theme 'claude' activated in database.
+# No PID file found at 'synaptic.pid' — start the server and it will use the new theme.
+```
+
+### Custom PID file location
+
+If the server was started from a different directory, or `PID_FILE` is set to a custom path in the config, pass `--pid-file`:
+
+```bash
+./synaptic-cli theme activate claude --pid-file /var/run/synaptic.pid
+```
+
+### What does NOT require a restart
+
+| Change | Method | Restart needed? |
+|--------|--------|----------------|
+| Switch active theme | Admin UI or `synaptic-cli theme activate` | No |
+| Edit theme template files | Upload zip via admin UI | No |
+| Install a new theme | Upload zip via admin UI | No |
+| Change site settings | Admin UI | No |
+
+### What DOES require a restart
+
+| Change | Reason |
+|--------|--------|
+| Update the `synaptic` binary | New compiled code |
+| Add/remove a plugin | Plugins are loaded at startup |
+| Change `.env` or `synaptic.toml` | Config loaded at startup |
+
+---
+
 ## Updating
 
 ```bash
-# 1. Build new binary
+# 1. Build new binaries
 cargo build --release
 
-# 2. Copy binary (the service will be briefly down)
+# 2. Replace binaries (the service will be briefly down)
 sudo systemctl stop synaptic-signals
-sudo cp target/release/synaptic /opt/synaptic-signals/synaptic
+sudo cp target/release/synaptic     /opt/synaptic-signals/synaptic
+sudo cp target/release/synaptic-cli /opt/synaptic-signals/synaptic-cli
 sudo systemctl start synaptic-signals
 
 # 3. Apply any new migrations
