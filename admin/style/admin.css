@@ -77,6 +77,8 @@ a:hover { text-decoration: underline; }
 .btn-primary:hover { background: var(--primary-dark); }
 .btn-link { background: none; border: none; cursor: pointer; color: var(--primary); font-size: 13px; padding: 0; }
 .btn-danger { color: var(--danger); }
+.btn-secondary { background: #e2e8f0; color: var(--text); border-color: var(--border); cursor: not-allowed; opacity: 0.6; }
+.btn-secondary:hover { text-decoration: none; }
 
 /* Icon buttons */
 .icon-btn { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0; background: none; border: 1px solid var(--border); border-radius: var(--radius); cursor: pointer; color: var(--primary); transition: background .2s, border-color .2s; }
@@ -315,4 +317,14 @@ legend {
   padding: 0.5rem 0;
   text-decoration: none;
 }
+
+/* Theme list */
+.theme-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 1.5rem; margin-top: 1rem; }
+.theme-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.25rem 1.5rem; box-shadow: var(--shadow); transition: box-shadow .2s; }
+.theme-card.active { border: 2px solid var(--primary); box-shadow: 0 0 0 3px rgba(79,70,229,.1); }
+.theme-card-header { display: flex; align-items: center; gap: .6rem; margin-bottom: .4rem; }
+.theme-name { font-size: 1.05rem; font-weight: 600; color: var(--text); }
+.theme-description { color: var(--text); margin: .25rem 0 .1rem; }
+.theme-author { color: var(--muted); font-size: .8rem; margin-bottom: 1rem; }
+.theme-actions { display: flex; gap: .5rem; }
 

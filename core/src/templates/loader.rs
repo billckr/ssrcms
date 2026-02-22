@@ -195,4 +195,19 @@ impl TemplateEngine {
         info!("theme '{}' reloaded", self.active_theme);
         Ok(())
     }
+
+    /// Dynamically switch to a different theme and reload templates.
+    pub fn switch_theme(&self, new_theme: &str) -> anyhow::Result<()> {
+        let theme_path = self.themes_dir.join(new_theme).join("templates");
+        let glob = format!("{}/**/*.html", theme_path.display());
+
+        let mut tera = self.inner.write().unwrap();
+        *tera = Tera::new(&glob)
+            .map_err(|e| anyhow::anyhow!("Failed to load theme '{}': {}", new_theme, e))?;
+        drop(tera);
+
+        self.register_filters_and_functions()?;
+        info!("switched to theme '{}'", new_theme);
+        Ok(())
+    }
 }

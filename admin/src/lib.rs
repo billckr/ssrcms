@@ -59,6 +59,7 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
         {tags}
         {users}
         {plugins}
+        {appearance}
         {settings}
       </ul>
       <div class="sidebar-footer">
@@ -102,6 +103,7 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
         tags = nav_link("/admin/tags", "Tags"),
         users = nav_link("/admin/users", "Users"),
         plugins = nav_link("/admin/plugins", "Plugins"),
+        appearance = nav_link("/admin/appearance", "Appearance"),
         settings = nav_link("/admin/settings", "Settings"),
         flash_html = flash_html,
         content = content,
