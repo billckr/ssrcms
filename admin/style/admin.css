@@ -26,8 +26,10 @@ a:hover { text-decoration: underline; }
 .login-box h2 { font-size: 1.1rem; color: var(--muted); margin-bottom: 1.5rem; }
 .login-box label { display: block; font-weight: 500; margin-bottom: .25rem; }
 .login-box input { width: 100%; padding: .5rem .75rem; border: 1px solid var(--border); border-radius: var(--radius); font-size: 14px; margin-bottom: 1rem; }
-.login-box button { width: 100%; padding: .6rem; background: var(--primary); color: #fff; border: none; border-radius: var(--radius); font-size: 14px; cursor: pointer; }
-.login-box button:hover { background: var(--primary-dark); }
+.login-box button { width: 100%; padding: .6rem; background-image: radial-gradient(100% 100% at 100% 0, #818cf8 0, var(--primary) 100%); color: #fff; border: none; border-radius: var(--radius); font-size: 14px; cursor: pointer; box-shadow: rgba(45,35,66,.4) 0 2px 4px, rgba(45,35,66,.3) 0 7px 13px -3px, rgba(67,56,202,.5) 0 -3px 0 inset; transition: box-shadow .15s, transform .15s; will-change: box-shadow, transform; }
+.login-box button:hover { box-shadow: rgba(45,35,66,.3) 0 3px 6px, rgba(45,35,66,.2) 0 5px 10px -3px, var(--primary-dark) 0 -2px 0 inset; transform: translateY(-1px); }
+.login-box button:active { box-shadow: var(--primary-dark) 0 2px 5px inset; transform: translateY(1px); }
+.login-box button:focus { outline: none; box-shadow: var(--primary-dark) 0 0 0 1.5px inset, rgba(45,35,66,.4) 0 2px 4px, rgba(45,35,66,.3) 0 7px 13px -3px, var(--primary-dark) 0 -3px 0 inset; }
 
 /* Layout */
 .admin-wrap { display: flex; min-height: 100vh; }
@@ -71,14 +73,17 @@ a:hover { text-decoration: underline; }
 .badge-scheduled { background: #dbeafe; color: #1e40af; }
 
 /* Buttons */
-.btn { display: inline-block; padding: .4rem .9rem; border-radius: var(--radius); border: 1px solid var(--border); cursor: pointer; font-size: 13px; background: var(--surface); color: var(--text); }
+.btn { display: inline-flex; align-items: center; justify-content: center; padding: .4rem .9rem; border-radius: var(--radius); border: 1px solid var(--border); cursor: pointer; font-size: 13px; background: var(--surface); color: var(--text); text-decoration: none; transition: box-shadow .15s, transform .15s; touch-action: manipulation; white-space: nowrap; user-select: none; -webkit-user-select: none; will-change: box-shadow, transform; }
 .btn:hover { background: #f8fafc; text-decoration: none; }
-.btn-primary { background: var(--primary); color: #fff; border-color: var(--primary); }
-.btn-primary:hover { background: var(--primary-dark); }
-.btn-link { background: none; border: none; cursor: pointer; color: var(--primary); font-size: 13px; padding: 0; }
-.btn-danger { color: var(--danger); }
+.btn-primary { background-image: radial-gradient(100% 100% at 100% 0, #818cf8 0, var(--primary) 100%); border: 0; box-shadow: rgba(45,35,66,.4) 0 2px 4px, rgba(45,35,66,.3) 0 7px 13px -3px, rgba(67,56,202,.5) 0 -3px 0 inset; color: #fff; }
+.btn-primary:hover { background-image: radial-gradient(100% 100% at 100% 0, #818cf8 0, var(--primary) 100%); box-shadow: rgba(45,35,66,.3) 0 3px 6px, rgba(45,35,66,.2) 0 5px 10px -3px, var(--primary-dark) 0 -2px 0 inset; transform: translateY(-1px); color: #fff; text-decoration: none; }
+.btn-primary:focus { box-shadow: var(--primary-dark) 0 0 0 1.5px inset, rgba(45,35,66,.3) 0 2px 4px, rgba(45,35,66,.2) 0 5px 10px -3px, var(--primary-dark) 0 -2px 0 inset; }
+.btn-primary:active { box-shadow: var(--primary-dark) 0 2px 5px inset; transform: translateY(1px); }
+.btn-link { background: none; border: none; cursor: pointer; color: var(--primary); font-size: 13px; padding: 0; transition: none; will-change: auto; }
+.btn-danger { color: var(--danger); border-color: var(--border); }
+.btn-danger:hover { background: #fee2e2; border-color: var(--danger); text-decoration: none; }
 .btn-secondary { background: #e2e8f0; color: var(--text); border-color: var(--border); cursor: not-allowed; opacity: 0.6; }
-.btn-secondary:hover { text-decoration: none; }
+.btn-secondary:hover { background: #e2e8f0; text-decoration: none; transform: none; box-shadow: none; }
 
 /* Icon buttons */
 .icon-btn { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0; background: none; border: 1px solid var(--border); border-radius: var(--radius); cursor: pointer; color: var(--primary); transition: background .2s, border-color .2s; }
