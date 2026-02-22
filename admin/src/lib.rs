@@ -62,12 +62,8 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
         {settings}
       </ul>
       <div class="sidebar-footer">
-        <a href="/admin/profile" class="icon-btn" title="My Profile">
-          <img src="/admin/static/icons/user.svg" alt="Profile">
-        </a>
-        <a href="/admin/logout" class="icon-btn" title="Log out">
-          <img src="/admin/static/icons/log-out.svg" alt="Log out">
-        </a>
+        <a href="/admin/profile">My Profile</a>
+        <a href="/admin/logout">Log out</a>
       </div>
     </nav>
     <main class="admin-main">

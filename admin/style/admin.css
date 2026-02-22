@@ -36,7 +36,7 @@ a:hover { text-decoration: underline; }
 .admin-sidebar ul { list-style: none; padding: .5rem 0; flex: 1; }
 .admin-sidebar ul li a { display: block; padding: .5rem 1.25rem; color: #94a3b8; font-size: 13px; }
 .admin-sidebar ul li a:hover, .admin-sidebar ul li a.active { color: #f8fafc; background: #334155; text-decoration: none; }
-.sidebar-footer { padding: 1rem 1.25rem; border-top: 1px solid #334155; display: flex; gap: 0.5rem; align-items: center; justify-content: flex-start; }
+.sidebar-footer { padding: 1rem 1.25rem; border-top: 1px solid #334155; }
 .sidebar-footer a { color: #94a3b8; font-size: 13px; }
 
 .admin-main { margin-left: var(--sidebar-w); flex: 1; display: flex; flex-direction: column; min-width: 0; height: 100vh; overflow-y: auto; }
