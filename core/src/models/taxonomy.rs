@@ -24,6 +24,7 @@ impl TaxonomyType {
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Taxonomy {
     pub id: Uuid,
+    pub site_id: Option<Uuid>,
     pub name: String,
     pub slug: String,
     pub taxonomy: String,
@@ -62,6 +63,7 @@ impl TermContext {
 
 #[derive(Debug, Deserialize)]
 pub struct CreateTaxonomy {
+    pub site_id: Option<Uuid>,
     pub name: String,
     pub slug: String,
     pub taxonomy: TaxonomyType,
@@ -71,11 +73,12 @@ pub struct CreateTaxonomy {
 pub async fn create(pool: &PgPool, data: &CreateTaxonomy) -> Result<Taxonomy> {
     let tax = sqlx::query_as::<_, Taxonomy>(
         r#"
-        INSERT INTO taxonomies (name, slug, taxonomy, description)
-        VALUES ($1, $2, $3, $4)
+        INSERT INTO taxonomies (site_id, name, slug, taxonomy, description)
+        VALUES ($1, $2, $3, $4, $5)
         RETURNING *
         "#,
     )
+    .bind(data.site_id)
     .bind(&data.name)
     .bind(&data.slug)
     .bind(data.taxonomy.as_str())
@@ -94,22 +97,30 @@ pub async fn get_by_id(pool: &PgPool, id: Uuid) -> Result<Taxonomy> {
         .ok_or_else(|| AppError::NotFound(format!("taxonomy {id}")))
 }
 
-pub async fn get_by_slug(pool: &PgPool, slug: &str, taxonomy: TaxonomyType) -> Result<Taxonomy> {
+pub async fn get_by_slug(
+    pool: &PgPool,
+    site_id: Option<Uuid>,
+    slug: &str,
+    taxonomy: TaxonomyType,
+) -> Result<Taxonomy> {
     sqlx::query_as::<_, Taxonomy>(
-        "SELECT * FROM taxonomies WHERE slug = $1 AND taxonomy = $2",
+        "SELECT * FROM taxonomies WHERE slug = $1 AND taxonomy = $2 \
+         AND ($3::uuid IS NULL OR site_id = $3)",
     )
     .bind(slug)
     .bind(taxonomy.as_str())
+    .bind(site_id)
     .fetch_optional(pool)
     .await?
     .ok_or_else(|| AppError::NotFound(format!("{} '{slug}'", taxonomy.as_str())))
 }
 
-pub async fn list(pool: &PgPool, taxonomy: TaxonomyType) -> Result<Vec<Taxonomy>> {
+pub async fn list(pool: &PgPool, site_id: Option<Uuid>, taxonomy: TaxonomyType) -> Result<Vec<Taxonomy>> {
     sqlx::query_as::<_, Taxonomy>(
-        "SELECT * FROM taxonomies WHERE taxonomy = $1 ORDER BY name",
+        "SELECT * FROM taxonomies WHERE taxonomy = $1 AND ($2::uuid IS NULL OR site_id = $2) ORDER BY name",
     )
     .bind(taxonomy.as_str())
+    .bind(site_id)
     .fetch_all(pool)
     .await
     .map_err(Into::into)

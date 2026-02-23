@@ -8,6 +8,7 @@ use crate::errors::{AppError, Result};
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Media {
     pub id: Uuid,
+    pub site_id: Option<Uuid>,
     pub filename: String,
     pub mime_type: String,
     pub path: String,
@@ -55,6 +56,7 @@ impl MediaContext {
 /// Data required to register a new media record after upload.
 #[derive(Debug)]
 pub struct CreateMedia {
+    pub site_id: Option<Uuid>,
     pub filename: String,
     pub mime_type: String,
     pub path: String,
@@ -68,11 +70,12 @@ pub struct CreateMedia {
 pub async fn create(pool: &PgPool, data: &CreateMedia) -> Result<Media> {
     let media = sqlx::query_as::<_, Media>(
         r#"
-        INSERT INTO media (filename, mime_type, path, alt_text, width, height, file_size, uploaded_by)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        INSERT INTO media (site_id, filename, mime_type, path, alt_text, width, height, file_size, uploaded_by)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
         RETURNING *
         "#,
     )
+    .bind(data.site_id)
     .bind(&data.filename)
     .bind(&data.mime_type)
     .bind(&data.path)
@@ -118,10 +121,12 @@ pub async fn delete(pool: &PgPool, id: Uuid) -> Result<()> {
     Ok(())
 }
 
-pub async fn list(pool: &PgPool, limit: i64, offset: i64) -> Result<Vec<Media>> {
+pub async fn list(pool: &PgPool, site_id: Option<Uuid>, limit: i64, offset: i64) -> Result<Vec<Media>> {
     let items = sqlx::query_as::<_, Media>(
-        "SELECT * FROM media ORDER BY created_at DESC LIMIT $1 OFFSET $2",
+        "SELECT * FROM media WHERE ($1::uuid IS NULL OR site_id = $1) \
+         ORDER BY created_at DESC LIMIT $2 OFFSET $3",
     )
+    .bind(site_id)
     .bind(limit)
     .bind(offset)
     .fetch_all(pool)

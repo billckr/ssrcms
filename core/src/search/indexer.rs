@@ -9,8 +9,10 @@ use super::SearchIndex;
 pub fn index_post(index: &SearchIndex, post: &Post) {
     // Strip HTML tags from content before indexing so queries match plain text.
     let plain_content = ammonia::clean_text(&post.content);
+    let site_id_str = post.site_id.map(|id| id.to_string()).unwrap_or_default();
     if let Err(e) = index.upsert(
         &post.id.to_string(),
+        &site_id_str,
         &post.title,
         &plain_content,
         &post.slug,

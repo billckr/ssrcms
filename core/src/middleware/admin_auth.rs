@@ -17,10 +17,18 @@ use crate::models::user::User;
 /// Session key where the logged-in user's UUID is stored.
 pub const SESSION_USER_ID_KEY: &str = "admin_user_id";
 
+/// Session key where the currently selected site UUID is stored.
+pub const SESSION_CURRENT_SITE_KEY: &str = "current_site_id";
+
 /// An authenticated admin user extracted from the session.
 /// Add this as a parameter to any admin handler to require authentication.
 pub struct AdminUser {
     pub user: User,
+    /// UUID of the currently selected site.  `None` when no sites are configured
+    /// (single-site backward-compatibility mode).
+    pub site_id: Option<Uuid>,
+    /// The user's role on the current site, or their global role as fallback.
+    pub site_role: String,
 }
 
 pub enum AdminAuthError {
@@ -76,8 +84,42 @@ impl FromRequestParts<AppState> for AdminUser {
 
         // Only Admin and Editor roles can access the admin.
         match user.role.as_str() {
-            "admin" | "editor" => Ok(AdminUser { user }),
-            _ => Err(AdminAuthError::Forbidden),
+            "admin" | "editor" => {}
+            _ => return Err(AdminAuthError::Forbidden),
         }
+
+        // ── Site resolution ────────────────────────────────────────────────────
+
+        // 1. Try to get the current site from the session.
+        let site_id_opt: Option<String> = session.get(SESSION_CURRENT_SITE_KEY).await.unwrap_or(None);
+
+        let site_id = if let Some(sid_str) = site_id_opt {
+            sid_str.parse::<Uuid>().ok()
+        } else {
+            // 2. No site in session — look up user's first accessible site.
+            match crate::models::site_user::list_for_user(&state.db, user_id).await {
+                Ok(sites) if !sites.is_empty() => {
+                    let first_id = sites[0].0.id;
+                    // Cache in session for subsequent requests.
+                    let _ = session
+                        .insert(SESSION_CURRENT_SITE_KEY, first_id.to_string())
+                        .await;
+                    Some(first_id)
+                }
+                _ => None, // No sites configured yet — single-site compat mode.
+            }
+        };
+
+        // 3. Determine the role for the current site.
+        let site_role = if let Some(sid) = site_id {
+            match crate::models::site_user::get_role(&state.db, sid, user_id).await {
+                Ok(Some(r)) => r,
+                _ => user.role.clone(), // Fall back to global role.
+            }
+        } else {
+            user.role.clone() // No sites — use global role.
+        };
+
+        Ok(AdminUser { user, site_id, site_role })
     }
 }

@@ -28,7 +28,7 @@ async fn render_page(
     uri: axum::http::Uri,
 ) -> crate::errors::Result<String> {
     // Look up a published page (post_type = 'page') by slug
-    let post_record = post::get_published_by_slug(&state.db, &slug).await?;
+    let post_record = post::get_published_by_slug(&state.db, None, &slug).await?;
 
     // Verify it is actually a page
     if post_record.post_type != PostType::Page.as_str() {

@@ -13,21 +13,21 @@ use admin::pages::taxonomy::TermItem;
 
 pub async fn categories(
     State(state): State<AppState>,
-    _admin: AdminUser,
+    admin: AdminUser,
 ) -> Html<String> {
-    list_terms(state, "category").await
+    list_terms(state, "category", admin.site_id).await
 }
 
 pub async fn tags(
     State(state): State<AppState>,
-    _admin: AdminUser,
+    admin: AdminUser,
 ) -> Html<String> {
-    list_terms(state, "tag").await
+    list_terms(state, "tag", admin.site_id).await
 }
 
-async fn list_terms(state: AppState, taxonomy: &str) -> Html<String> {
+async fn list_terms(state: AppState, taxonomy: &str, site_id: Option<Uuid>) -> Html<String> {
     let tax_type = if taxonomy == "category" { TaxonomyType::Category } else { TaxonomyType::Tag };
-    let raw = crate::models::taxonomy::list(&state.db, tax_type).await.unwrap_or_else(|e| {
+    let raw = crate::models::taxonomy::list(&state.db, site_id, tax_type).await.unwrap_or_else(|e| {
         tracing::warn!("failed to list {} terms: {:?}", taxonomy, e);
         vec![]
     });
@@ -56,7 +56,7 @@ pub struct TermForm {
 
 pub async fn create(
     State(state): State<AppState>,
-    _admin: AdminUser,
+    admin: AdminUser,
     Form(form): Form<TermForm>,
 ) -> impl IntoResponse {
     let tax_type = if form.taxonomy == "category" { TaxonomyType::Category } else { TaxonomyType::Tag };
@@ -64,6 +64,7 @@ pub async fn create(
         .filter(|s| !s.is_empty())
         .unwrap_or_else(|| slug::slugify(&form.name));
     let create = CreateTaxonomy {
+        site_id: admin.site_id,
         name: form.name,
         slug,
         taxonomy: tax_type,
@@ -74,7 +75,7 @@ pub async fn create(
         tracing::error!("failed to create {} '{}': {:?}", form.taxonomy, create.name, e);
         // Re-render the list with a flash message rather than losing the user's input context
         let tax_type2 = if form.taxonomy == "category" { TaxonomyType::Category } else { TaxonomyType::Tag };
-        let raw = crate::models::taxonomy::list(&state.db, tax_type2).await.unwrap_or_default();
+        let raw = crate::models::taxonomy::list(&state.db, admin.site_id, tax_type2).await.unwrap_or_default();
         let mut items: Vec<TermItem> = Vec::new();
         for t in &raw {
             let count = crate::models::taxonomy::post_count(&state.db, t.id).await.unwrap_or(0);

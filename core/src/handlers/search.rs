@@ -40,7 +40,7 @@ async fn render_search(
         Vec::new()
     } else {
         metrics::counter!("synaptic_search_queries_total").increment(1);
-        state.search_index.search(&query, 20)?
+        state.search_index.search(&query, None, 20)?
     };
 
     // Fetch full Post records from DB by ID so we can build PostContext.

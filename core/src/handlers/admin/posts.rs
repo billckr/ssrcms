@@ -19,26 +19,27 @@ pub struct PostsQuery {
 
 pub async fn list(
     State(state): State<AppState>,
-    _admin: AdminUser,
+    admin: AdminUser,
     Query(q): Query<PostsQuery>,
 ) -> Html<String> {
-    list_type(state, "post", q.page).await
+    list_type(state, "post", q.page, admin.site_id).await
 }
 
 pub async fn list_pages(
     State(state): State<AppState>,
-    _admin: AdminUser,
+    admin: AdminUser,
     Query(q): Query<PostsQuery>,
 ) -> Html<String> {
-    list_type(state, "page", q.page).await
+    list_type(state, "page", q.page, admin.site_id).await
 }
 
-async fn list_type(state: AppState, post_type: &str, page: Option<i64>) -> Html<String> {
+async fn list_type(state: AppState, post_type: &str, page: Option<i64>, site_id: Option<Uuid>) -> Html<String> {
     let per_page = 20i64;
     let page = page.unwrap_or(1).max(1);
     let offset = (page - 1) * per_page;
 
     let filter = ListFilter {
+        site_id,
         status: None,
         post_type: Some(if post_type == "page" { PostType::Page } else { PostType::Post }),
         limit: per_page,
@@ -77,20 +78,20 @@ async fn list_type(state: AppState, post_type: &str, page: Option<i64>) -> Html<
 
 pub async fn new_post(
     State(state): State<AppState>,
-    _admin: AdminUser,
+    admin: AdminUser,
 ) -> Html<String> {
-    new_post_type(state, "post").await
+    new_post_type(state, "post", admin.site_id).await
 }
 
 pub async fn new_page(
     State(state): State<AppState>,
-    _admin: AdminUser,
+    admin: AdminUser,
 ) -> Html<String> {
-    new_post_type(state, "page").await
+    new_post_type(state, "page", admin.site_id).await
 }
 
-async fn new_post_type(state: AppState, post_type: &str) -> Html<String> {
-    let (categories, tags) = fetch_term_options(&state).await;
+async fn new_post_type(state: AppState, post_type: &str, site_id: Option<Uuid>) -> Html<String> {
+    let (categories, tags) = fetch_term_options(&state, site_id).await;
     let edit = PostEdit {
         id: None,
         title: String::new(),
@@ -110,21 +111,21 @@ async fn new_post_type(state: AppState, post_type: &str) -> Html<String> {
 
 pub async fn edit_post(
     State(state): State<AppState>,
-    _admin: AdminUser,
+    admin: AdminUser,
     Path(id): Path<Uuid>,
 ) -> impl IntoResponse {
-    edit_post_type(state, id).await
+    edit_post_type(state, id, admin.site_id).await
 }
 
 pub async fn edit_page(
     State(state): State<AppState>,
-    _admin: AdminUser,
+    admin: AdminUser,
     Path(id): Path<Uuid>,
 ) -> impl IntoResponse {
-    edit_post_type(state, id).await
+    edit_post_type(state, id, admin.site_id).await
 }
 
-async fn edit_post_type(state: AppState, id: Uuid) -> impl IntoResponse {
+async fn edit_post_type(state: AppState, id: Uuid, site_id: Option<Uuid>) -> impl IntoResponse {
     let post = match crate::models::post::get_by_id(&state.db, id).await {
         Ok(p) => p,
         Err(e) => {
@@ -133,7 +134,7 @@ async fn edit_post_type(state: AppState, id: Uuid) -> impl IntoResponse {
         }
     };
 
-    let (categories, tags) = fetch_term_options(&state).await;
+    let (categories, tags) = fetch_term_options(&state, site_id).await;
 
     let post_terms = crate::models::taxonomy::for_post(&state.db, id).await.unwrap_or_else(|e| {
         tracing::warn!("failed to fetch terms for post {}: {:?}", id, e);
@@ -225,6 +226,7 @@ pub async fn save_new(
     let published_at = parse_datetime(form.published_at.as_deref());
 
     let create = CreatePost {
+        site_id: admin.site_id,
         title: form.title.clone(),
         slug: form.slug.clone().filter(|s| !s.is_empty()),
         content: form.content.clone(),
@@ -248,7 +250,7 @@ pub async fn save_new(
         }
         Err(e) => {
             tracing::error!("create post error: {:?}", e);
-            let (categories, tags) = fetch_term_options(&state).await;
+            let (categories, tags) = fetch_term_options(&state, admin.site_id).await;
             let edit = PostEdit {
                 id: None,
                 title: form.title,
@@ -271,7 +273,7 @@ pub async fn save_new(
 
 pub async fn save_edit(
     State(state): State<AppState>,
-    _admin: AdminUser,
+    admin: AdminUser,
     Path(id): Path<Uuid>,
     Form(form): Form<PostForm>,
 ) -> impl IntoResponse {
@@ -302,7 +304,7 @@ pub async fn save_edit(
         }
         Err(e) => {
             tracing::error!("update post {} error: {:?}", id, e);
-            let (categories, tags) = fetch_term_options(&state).await;
+            let (categories, tags) = fetch_term_options(&state, admin.site_id).await;
             let post_terms = crate::models::taxonomy::for_post(&state.db, id).await.unwrap_or_else(|_| vec![]);
             let selected_categories: Vec<String> = post_terms.iter()
                 .filter(|t| t.taxonomy == "category")
@@ -358,12 +360,12 @@ pub async fn delete_page(
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-async fn fetch_term_options(state: &AppState) -> (Vec<TermOption>, Vec<TermOption>) {
-    let cats = crate::models::taxonomy::list(&state.db, TaxonomyType::Category).await.unwrap_or_else(|e| {
+async fn fetch_term_options(state: &AppState, site_id: Option<Uuid>) -> (Vec<TermOption>, Vec<TermOption>) {
+    let cats = crate::models::taxonomy::list(&state.db, site_id, TaxonomyType::Category).await.unwrap_or_else(|e| {
         tracing::warn!("failed to fetch category options: {:?}", e);
         vec![]
     });
-    let tags = crate::models::taxonomy::list(&state.db, TaxonomyType::Tag).await.unwrap_or_else(|e| {
+    let tags = crate::models::taxonomy::list(&state.db, site_id, TaxonomyType::Tag).await.unwrap_or_else(|e| {
         tracing::warn!("failed to fetch tag options: {:?}", e);
         vec![]
     });

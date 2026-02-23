@@ -48,6 +48,7 @@ impl PostType {
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Post {
     pub id: Uuid,
+    pub site_id: Option<Uuid>,
     pub title: String,
     pub slug: String,
     pub content: String,
@@ -153,6 +154,7 @@ const _: () = {
 /// Data required to create a new post.
 #[derive(Debug, Deserialize)]
 pub struct CreatePost {
+    pub site_id: Option<Uuid>,
     pub title: String,
     pub slug: Option<String>,
     pub content: String,
@@ -224,6 +226,7 @@ mod tests {
     fn make_post(post_type: &str, slug: &str, content: &str, excerpt: Option<String>) -> Post {
         Post {
             id: Uuid::new_v4(),
+            site_id: None,
             title: "Test Post".to_string(),
             slug: slug.to_string(),
             content: content.to_string(),
@@ -399,12 +402,13 @@ pub async fn create(pool: &PgPool, data: &CreatePost) -> Result<Post> {
 
     let post = sqlx::query_as::<_, Post>(
         r#"
-        INSERT INTO posts (title, slug, content, content_format, excerpt, status, post_type,
-                           author_id, featured_image_id, published_at)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        INSERT INTO posts (site_id, title, slug, content, content_format, excerpt, status,
+                           post_type, author_id, featured_image_id, published_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
         RETURNING *
         "#,
     )
+    .bind(data.site_id)
     .bind(&data.title)
     .bind(&slug)
     .bind(&sanitized_content)
@@ -430,25 +434,31 @@ pub async fn get_by_id(pool: &PgPool, id: Uuid) -> Result<Post> {
 }
 
 #[allow(dead_code)]
-pub async fn get_by_slug(pool: &PgPool, slug: &str) -> Result<Post> {
-    sqlx::query_as::<_, Post>("SELECT * FROM posts WHERE slug = $1")
-        .bind(slug)
-        .fetch_optional(pool)
-        .await?
-        .ok_or_else(|| AppError::NotFound(format!("post '{slug}'")))
-}
-
-pub async fn get_published_by_slug(pool: &PgPool, slug: &str) -> Result<Post> {
+pub async fn get_by_slug(pool: &PgPool, site_id: Option<Uuid>, slug: &str) -> Result<Post> {
     sqlx::query_as::<_, Post>(
-        "SELECT * FROM posts WHERE slug = $1 AND status = 'published'",
+        "SELECT * FROM posts WHERE slug = $1 AND ($2::uuid IS NULL OR site_id = $2)",
     )
     .bind(slug)
+    .bind(site_id)
+    .fetch_optional(pool)
+    .await?
+    .ok_or_else(|| AppError::NotFound(format!("post '{slug}'")))
+}
+
+pub async fn get_published_by_slug(pool: &PgPool, site_id: Option<Uuid>, slug: &str) -> Result<Post> {
+    sqlx::query_as::<_, Post>(
+        "SELECT * FROM posts WHERE slug = $1 AND status = 'published' \
+         AND ($2::uuid IS NULL OR site_id = $2)",
+    )
+    .bind(slug)
+    .bind(site_id)
     .fetch_optional(pool)
     .await?
     .ok_or_else(|| AppError::NotFound(format!("post '{slug}'")))
 }
 
 pub struct ListFilter {
+    pub site_id: Option<Uuid>,
     pub status: Option<PostStatus>,
     pub post_type: Option<PostType>,
     pub author_id: Option<Uuid>,
@@ -461,6 +471,7 @@ pub struct ListFilter {
 impl Default for ListFilter {
     fn default() -> Self {
         ListFilter {
+            site_id: None,
             status: Some(PostStatus::Published),
             post_type: Some(PostType::Post),
             author_id: None,
@@ -473,9 +484,6 @@ impl Default for ListFilter {
 }
 
 pub async fn list(pool: &PgPool, filter: &ListFilter) -> Result<Vec<Post>> {
-    // Build query dynamically based on filters. We use a simple approach since
-    // SQLx compile-time checking doesn't handle fully dynamic queries.
-    // For taxonomy filtering, we join through post_taxonomies.
     let posts = if let Some(cat_slug) = &filter.category_slug {
         sqlx::query_as::<_, Post>(
             r#"
@@ -487,13 +495,15 @@ pub async fn list(pool: &PgPool, filter: &ListFilter) -> Result<Vec<Post>> {
               AND t.taxonomy = 'category'
               AND ($2::text IS NULL OR p.status = $2)
               AND ($3::text IS NULL OR p.post_type = $3)
+              AND ($4::uuid IS NULL OR p.site_id = $4)
             ORDER BY p.published_at DESC NULLS LAST
-            LIMIT $4 OFFSET $5
+            LIMIT $5 OFFSET $6
             "#,
         )
         .bind(cat_slug.as_str())
         .bind(filter.status.as_ref().map(|s| s.as_str()))
         .bind(filter.post_type.as_ref().map(|t| t.as_str()))
+        .bind(filter.site_id)
         .bind(filter.limit)
         .bind(filter.offset)
         .fetch_all(pool)
@@ -509,13 +519,15 @@ pub async fn list(pool: &PgPool, filter: &ListFilter) -> Result<Vec<Post>> {
               AND t.taxonomy = 'tag'
               AND ($2::text IS NULL OR p.status = $2)
               AND ($3::text IS NULL OR p.post_type = $3)
+              AND ($4::uuid IS NULL OR p.site_id = $4)
             ORDER BY p.published_at DESC NULLS LAST
-            LIMIT $4 OFFSET $5
+            LIMIT $5 OFFSET $6
             "#,
         )
         .bind(tag_slug.as_str())
         .bind(filter.status.as_ref().map(|s| s.as_str()))
         .bind(filter.post_type.as_ref().map(|t| t.as_str()))
+        .bind(filter.site_id)
         .bind(filter.limit)
         .bind(filter.offset)
         .fetch_all(pool)
@@ -528,13 +540,15 @@ pub async fn list(pool: &PgPool, filter: &ListFilter) -> Result<Vec<Post>> {
             WHERE ($1::text IS NULL OR status = $1)
               AND ($2::text IS NULL OR post_type = $2)
               AND ($3::uuid IS NULL OR author_id = $3)
+              AND ($4::uuid IS NULL OR site_id = $4)
             ORDER BY published_at DESC NULLS LAST
-            LIMIT $4 OFFSET $5
+            LIMIT $5 OFFSET $6
             "#,
         )
         .bind(filter.status.as_ref().map(|s| s.as_str()))
         .bind(filter.post_type.as_ref().map(|t| t.as_str()))
         .bind(filter.author_id)
+        .bind(filter.site_id)
         .bind(filter.limit)
         .bind(filter.offset)
         .fetch_all(pool)
@@ -544,15 +558,22 @@ pub async fn list(pool: &PgPool, filter: &ListFilter) -> Result<Vec<Post>> {
     Ok(posts)
 }
 
-pub async fn count(pool: &PgPool, status: Option<PostStatus>, post_type: Option<PostType>) -> Result<i64> {
+pub async fn count(
+    pool: &PgPool,
+    site_id: Option<Uuid>,
+    status: Option<PostStatus>,
+    post_type: Option<PostType>,
+) -> Result<i64> {
     let count: i64 = sqlx::query_scalar(
         r#"
         SELECT COUNT(*)
         FROM posts
-        WHERE ($1::text IS NULL OR status = $1)
-          AND ($2::text IS NULL OR post_type = $2)
+        WHERE ($1::uuid IS NULL OR site_id = $1)
+          AND ($2::text IS NULL OR status = $2)
+          AND ($3::text IS NULL OR post_type = $3)
         "#,
     )
+    .bind(site_id)
     .bind(status.as_ref().map(|s| s.as_str()))
     .bind(post_type.as_ref().map(|t| t.as_str()))
     .fetch_one(pool)
@@ -560,36 +581,48 @@ pub async fn count(pool: &PgPool, status: Option<PostStatus>, post_type: Option<
     Ok(count)
 }
 
-/// Get the post published immediately before this one.
-pub async fn get_prev(pool: &PgPool, published_at: DateTime<Utc>) -> Result<Option<Post>> {
+/// Get the post published immediately before this one (within the same site).
+pub async fn get_prev(
+    pool: &PgPool,
+    site_id: Option<Uuid>,
+    published_at: DateTime<Utc>,
+) -> Result<Option<Post>> {
     Ok(sqlx::query_as::<_, Post>(
         r#"
         SELECT * FROM posts
         WHERE status = 'published'
           AND post_type = 'post'
           AND published_at < $1
+          AND ($2::uuid IS NULL OR site_id = $2)
         ORDER BY published_at DESC
         LIMIT 1
         "#,
     )
     .bind(published_at)
+    .bind(site_id)
     .fetch_optional(pool)
     .await?)
 }
 
-/// Get the post published immediately after this one.
-pub async fn get_next(pool: &PgPool, published_at: DateTime<Utc>) -> Result<Option<Post>> {
+/// Get the post published immediately after this one (within the same site).
+pub async fn get_next(
+    pool: &PgPool,
+    site_id: Option<Uuid>,
+    published_at: DateTime<Utc>,
+) -> Result<Option<Post>> {
     Ok(sqlx::query_as::<_, Post>(
         r#"
         SELECT * FROM posts
         WHERE status = 'published'
           AND post_type = 'post'
           AND published_at > $1
+          AND ($2::uuid IS NULL OR site_id = $2)
         ORDER BY published_at ASC
         LIMIT 1
         "#,
     )
     .bind(published_at)
+    .bind(site_id)
     .fetch_optional(pool)
     .await?)
 }
@@ -681,8 +714,13 @@ pub async fn set_meta(pool: &PgPool, post_id: Uuid, key: &str, value: &str) -> R
     Ok(())
 }
 
-/// Fetch posts related by shared taxonomy terms (exclude the source post).
-pub async fn get_related(pool: &PgPool, post_id: Uuid, limit: i64) -> Result<Vec<Post>> {
+/// Fetch posts related by shared taxonomy terms (exclude the source post, same site).
+pub async fn get_related(
+    pool: &PgPool,
+    site_id: Option<Uuid>,
+    post_id: Uuid,
+    limit: i64,
+) -> Result<Vec<Post>> {
     let posts = sqlx::query_as::<_, Post>(
         r#"
         SELECT DISTINCT p.*
@@ -693,12 +731,14 @@ pub async fn get_related(pool: &PgPool, post_id: Uuid, limit: i64) -> Result<Vec
         )
         AND p.id != $1
         AND p.status = 'published'
+        AND ($3::uuid IS NULL OR p.site_id = $3)
         ORDER BY p.published_at DESC NULLS LAST
         LIMIT $2
         "#,
     )
     .bind(post_id)
     .bind(limit)
+    .bind(site_id)
     .fetch_all(pool)
     .await?;
     Ok(posts)

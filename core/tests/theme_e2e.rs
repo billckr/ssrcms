@@ -49,6 +49,7 @@ async fn test_single_post_renders_html() {
     .expect("failed to create test user");
 
     let p = post::create(&pool, &CreatePost {
+        site_id: None,
         title: format!("E2E Test Post {id}"),
         slug: Some(format!("e2e-test-post-{id}")),
         content: format!("<p>E2E content for post {id}.</p>"),

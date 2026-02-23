@@ -5,7 +5,7 @@ use metrics_exporter_prometheus::PrometheusBuilder;
 use tracing::info;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
-use synaptic_core::app_state::{AppState, SiteSettings};
+use synaptic_core::app_state::{AppState, SiteCache, SiteSettings};
 use synaptic_core::config::AppConfig;
 use synaptic_core::db;
 use synaptic_core::plugins::manifest::{PluginManifest, RouteRegistration};
@@ -50,7 +50,9 @@ async fn main() -> anyhow::Result<()> {
     info!("session store ready");
 
     // ── Site settings (from DB) ───────────────────────────────────────────────
-    let settings = SiteSettings::load(&pool).await?;
+    // Try to load global (legacy single-site) settings for backward compat.
+    // Multi-site settings are loaded per-site into site_cache below.
+    let settings = SiteSettings::load_global(&pool).await.unwrap_or_default();
     info!("site: {} — {}", settings.site_name, settings.base_url);
 
     // ── Plugin & hook registry ────────────────────────────────────────────────
@@ -97,6 +99,20 @@ async fn main() -> anyhow::Result<()> {
     }
     info!("search index ready at '{}'", cfg.search_index_path);
 
+    // ── Multi-site cache ──────────────────────────────────────────────────────
+    let site_cache: SiteCache = {
+        use std::collections::HashMap;
+        use std::sync::RwLock;
+        let sites = synaptic_core::models::site::list(&pool).await.unwrap_or_default();
+        let mut cache = HashMap::new();
+        for site in sites {
+            let s = SiteSettings::load(&pool, site.id).await.unwrap_or_default();
+            info!("loaded site '{}' ({})", site.hostname, site.id);
+            cache.insert(site.hostname.clone(), (site, s));
+        }
+        Arc::new(RwLock::new(cache))
+    };
+
     // ── Application state ─────────────────────────────────────────────────────
     let active_theme = Arc::new(std::sync::RwLock::new(settings.active_theme.clone()));
     let state = AppState {
@@ -108,6 +124,7 @@ async fn main() -> anyhow::Result<()> {
         search_index,
         loaded_plugins: Arc::new(loaded_plugins),
         active_theme,
+        site_cache,
         metrics_handle,
         metrics_token: cfg.metrics_token.clone(),
     };

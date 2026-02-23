@@ -13,7 +13,7 @@ use tower_sessions_sqlx_store::PostgresStore;
 
 use crate::app_state::AppState;
 use crate::handlers::{archive, auth, home, metrics as metrics_handler, page, plugin_route, post as post_handler, search, theme_static};
-use crate::handlers::admin::{appearance, dashboard, media, plugins, posts, profile, settings, taxonomy, upload, users};
+use crate::handlers::admin::{appearance, dashboard, media, plugins, posts, profile, settings, sites as admin_sites, taxonomy, upload, users};
 
 /// Tower middleware that records per-request HTTP metrics.
 async fn track_http_metrics(req: Request, next: Next) -> Response {
@@ -104,6 +104,12 @@ pub fn build(
         .route("/admin/theme-screenshot/{theme_name}", get(appearance::screenshot))
         // ── Admin settings ─────────────────────────────────────────────────
         .route("/admin/settings", get(settings::settings).post(settings::save_settings))
+        // ── Admin sites ────────────────────────────────────────────────────
+        .route("/admin/sites", get(admin_sites::list).post(admin_sites::create))
+        .route("/admin/sites/new", get(admin_sites::new_site))
+        .route("/admin/sites/switch", post(admin_sites::switch))
+        .route("/admin/sites/{id}/settings", get(admin_sites::site_settings).post(admin_sites::save_site_settings))
+        .route("/admin/sites/{id}/delete", post(admin_sites::delete))
     // ── Static files ───────────────────────────────────────────────────
         .nest_service("/uploads", uploads_service)
         .route("/theme/static/{*path}", get(theme_static::serve))

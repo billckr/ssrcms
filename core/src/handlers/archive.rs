@@ -74,7 +74,7 @@ async fn render_taxonomy_archive(
     page: i64,
     uri: axum::http::Uri,
 ) -> crate::errors::Result<String> {
-    let term = taxonomy::get_by_slug(&state.db, &slug, tax_type.clone()).await?;
+    let term = taxonomy::get_by_slug(&state.db, None, &slug, tax_type.clone()).await?;
     let count = taxonomy::post_count(&state.db, term.id).await?;
     let term_ctx = TermContext::from_taxonomy(&term, &state.settings.base_url, count);
 
@@ -170,7 +170,7 @@ async fn render_author_archive(
     )
     .await?;
 
-    let total_posts = post::count(&state.db, Some(PostStatus::Published), Some(PostType::Post)).await?;
+    let total_posts = post::count(&state.db, None, Some(PostStatus::Published), Some(PostType::Post)).await?;
 
     let mut posts = Vec::with_capacity(posts_raw.len());
     for p in &posts_raw {

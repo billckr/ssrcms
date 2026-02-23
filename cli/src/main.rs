@@ -34,6 +34,11 @@ enum Commands {
         #[command(subcommand)]
         action: commands::theme::ThemeAction,
     },
+    /// Site management (multi-site support)
+    Site {
+        #[command(subcommand)]
+        action: commands::site::SiteAction,
+    },
 }
 
 #[tokio::main]
@@ -49,6 +54,7 @@ async fn main() -> anyhow::Result<()> {
         Commands::User { action } => commands::user::run(action).await?,
         Commands::Plugin { action } => commands::plugin::run(action).await?,
         Commands::Theme { action } => commands::theme::run(action).await?,
+        Commands::Site { action } => commands::site::run(action).await?,
     }
 
     Ok(())

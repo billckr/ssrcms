@@ -43,7 +43,7 @@ pub struct ActivateForm {
 
 pub async fn activate(
     State(state): State<AppState>,
-    _admin: AdminUser,
+    admin: AdminUser,
     Form(form): Form<ActivateForm>,
 ) -> impl IntoResponse {
     let themes_dir = &state.config.themes_dir;
@@ -54,7 +54,15 @@ pub async fn activate(
         return render_appearance_list(&state, Some("Theme not found.")).await.into_response();
     }
 
-    if let Err(e) = set_site_setting(&state.db, "active_theme", &form.theme).await {
+    let site_id = match admin.site_id {
+        Some(id) => id,
+        None => {
+            tracing::warn!("theme activate: no site selected, cannot save per-site setting");
+            return render_appearance_list(&state, Some("No site selected. Run 'synaptic-cli site init' first.")).await.into_response();
+        }
+    };
+
+    if let Err(e) = set_site_setting(&state.db, site_id, "active_theme", &form.theme).await {
         tracing::error!("failed to save active_theme to DB: {:?}", e);
         return render_appearance_list(&state, Some("Failed to activate theme. Please try again.")).await.into_response();
     }

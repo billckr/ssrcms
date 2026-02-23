@@ -27,12 +27,12 @@ async fn render_post(
     slug: String,
     uri: axum::http::Uri,
 ) -> crate::errors::Result<String> {
-    let post_record = post::get_published_by_slug(&state.db, &slug).await?;
+    let post_record = post::get_published_by_slug(&state.db, None, &slug).await?;
 
     let post_ctx = build_post_context(&state, &post_record).await?;
 
     let prev = if let Some(pub_at) = post_record.published_at {
-        match post::get_prev(&state.db, pub_at).await? {
+        match post::get_prev(&state.db, post_record.site_id, pub_at).await? {
             Some(p) => Some(build_post_context(&state, &p).await?),
             None => None,
         }
@@ -41,7 +41,7 @@ async fn render_post(
     };
 
     let next = if let Some(pub_at) = post_record.published_at {
-        match post::get_next(&state.db, pub_at).await? {
+        match post::get_next(&state.db, post_record.site_id, pub_at).await? {
             Some(p) => Some(build_post_context(&state, &p).await?),
             None => None,
         }
@@ -49,7 +49,7 @@ async fn render_post(
         None
     };
 
-    let related_raw = post::get_related(&state.db, post_record.id, 5).await?;
+    let related_raw = post::get_related(&state.db, post_record.site_id, post_record.id, 5).await?;
     let mut related = Vec::with_capacity(related_raw.len());
     for p in &related_raw {
         related.push(build_post_context(&state, p).await?);

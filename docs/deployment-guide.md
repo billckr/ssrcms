@@ -154,6 +154,42 @@ curl -I https://example.com/admin
 
 ---
 
+## Multi-Site Setup
+
+Synaptic Signals can serve multiple client sites from a single binary and database. See the full [Multi-Site Guide](multi-site-guide.md) for the complete walkthrough.
+
+### Migrating an existing single-site install
+
+After the server runs migrations (0008–0011) for the first time, initialize multi-site support:
+
+```bash
+./synaptic-cli site init --hostname your-domain.com
+```
+
+Then restart the server.
+
+### Adding a second site
+
+```bash
+./synaptic-cli site create --hostname client.example.com
+```
+
+Then add the new domain to Caddy — all domains proxy to the same port:
+
+```
+your-domain.com {
+    reverse_proxy localhost:3000
+}
+
+client.example.com {
+    reverse_proxy localhost:3000
+}
+```
+
+The server identifies each request's site from the `Host` header and serves the correct content automatically.
+
+---
+
 ## CLI Reference
 
 ### `synaptic-cli install`
@@ -223,6 +259,40 @@ Lists installed themes by reading `theme.toml` manifests from `./themes/`.
 ```bash
 ./synaptic-cli theme list
 ```
+
+### `synaptic-cli site init`
+
+Initialize multi-site support on an existing single-site install. Run **once** after applying migrations 0008–0011. Backfills all content with the primary site_id and upgrades the site_settings primary key.
+
+```bash
+./synaptic-cli site init --hostname example.com
+```
+
+### `synaptic-cli site create`
+
+Create a new empty site.
+
+```bash
+./synaptic-cli site create --hostname client.example.com
+```
+
+### `synaptic-cli site list`
+
+List all sites with post counts.
+
+```bash
+./synaptic-cli site list
+```
+
+### `synaptic-cli site delete`
+
+Delete a site and all its content (prompts for confirmation).
+
+```bash
+./synaptic-cli site delete --id <uuid>
+```
+
+---
 
 ### `synaptic-cli theme activate`
 

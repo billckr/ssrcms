@@ -46,7 +46,7 @@ async fn render_home(
     let per_page = state.settings.posts_per_page;
     let offset = (query.page - 1) * per_page;
 
-    let total = post::count(&state.db, Some(PostStatus::Published), Some(PostType::Post)).await?;
+    let total = post::count(&state.db, None, Some(PostStatus::Published), Some(PostType::Post)).await?;
     let posts_raw = post::list(
         &state.db,
         &ListFilter {
@@ -212,9 +212,9 @@ pub(crate) async fn build_post_context(
 
 pub(crate) async fn build_site_context(state: &AppState) -> Result<SiteContext> {
     let post_count =
-        post::count(&state.db, Some(PostStatus::Published), Some(PostType::Post)).await?;
+        post::count(&state.db, None, Some(PostStatus::Published), Some(PostType::Post)).await?;
     let page_count =
-        post::count(&state.db, Some(PostStatus::Published), Some(PostType::Page)).await?;
+        post::count(&state.db, None, Some(PostStatus::Published), Some(PostType::Page)).await?;
 
     Ok(SiteContext {
         name: state.settings.site_name.clone(),

@@ -56,6 +56,7 @@ pub async fn upload(
 
     // Insert into DB.
     let create = CreateMedia {
+        site_id: admin.site_id,
         filename,
         mime_type: mime,
         path: stored_name,

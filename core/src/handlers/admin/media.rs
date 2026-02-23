@@ -8,9 +8,9 @@ use admin::pages::media::MediaItem;
 
 pub async fn list(
     State(state): State<AppState>,
-    _admin: AdminUser,
+    admin: AdminUser,
 ) -> Html<String> {
-    let raw = crate::models::media::list(&state.db, 200, 0).await.unwrap_or_else(|e| {
+    let raw = crate::models::media::list(&state.db, admin.site_id, 200, 0).await.unwrap_or_else(|e| {
         tracing::warn!("failed to list media: {:?}", e);
         vec![]
     });

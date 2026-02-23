@@ -2,6 +2,7 @@
 //!
 //! Schema:
 //!   id          — TEXT STORED          (UUID string, used to fetch full post from DB)
+//!   site_id     — TEXT STORED          (UUID string, used to filter results by site)
 //!   title       — TEXT indexed+stored  (searched, returned for scoring boost)
 //!   content     — TEXT indexed only    (searched, not stored — saves space)
 //!   slug        — TEXT STORED          (for URL building without a DB round-trip)
@@ -22,6 +23,7 @@ use crate::errors::{AppError, Result};
 pub struct SearchSchema {
     pub schema: Schema,
     pub id: Field,
+    pub site_id: Field,
     pub title: Field,
     pub content: Field,
     pub slug: Field,
@@ -33,6 +35,7 @@ impl SearchSchema {
         let mut builder = Schema::builder();
 
         let id = builder.add_text_field("id", STORED);
+        let site_id = builder.add_text_field("site_id", STORED);
         let title = builder.add_text_field("title", TEXT | STORED);
         let content = builder.add_text_field("content", TEXT);
         let slug = builder.add_text_field("slug", STORED);
@@ -41,6 +44,7 @@ impl SearchSchema {
         SearchSchema {
             schema: builder.build(),
             id,
+            site_id,
             title,
             content,
             slug,
@@ -107,7 +111,8 @@ impl SearchIndex {
     }
 
     /// Execute a full-text search and return up to `limit` results.
-    pub fn search(&self, query_str: &str, limit: usize) -> Result<Vec<SearchResult>> {
+    /// If `site_id` is Some, only results belonging to that site are returned.
+    pub fn search(&self, query_str: &str, site_id: Option<&str>, limit: usize) -> Result<Vec<SearchResult>> {
         if query_str.trim().is_empty() {
             return Ok(Vec::new());
         }
@@ -120,8 +125,11 @@ impl SearchIndex {
             .parse_query(query_str)
             .map_err(|e| AppError::Internal(format!("search query parse error: {e}")))?;
 
+        // Fetch more than `limit` to allow for site_id post-filtering.
+        let fetch_limit = if site_id.is_some() { limit * 4 + 20 } else { limit };
+
         let top_docs = searcher
-            .search(&query, &TopDocs::with_limit(limit))
+            .search(&query, &TopDocs::with_limit(fetch_limit))
             .map_err(|e| AppError::Internal(format!("search error: {e}")))?;
 
         let mut results = Vec::with_capacity(top_docs.len());
@@ -132,6 +140,11 @@ impl SearchIndex {
 
             let id = doc
                 .get_first(self.fields.id)
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let doc_site_id = doc
+                .get_first(self.fields.site_id)
                 .and_then(|v| v.as_str())
                 .unwrap_or("")
                 .to_string();
@@ -151,7 +164,17 @@ impl SearchIndex {
                 .unwrap_or("post")
                 .to_string();
 
+            // Post-filter by site_id if provided.
+            if let Some(sid) = site_id {
+                if doc_site_id != sid {
+                    continue;
+                }
+            }
+
             results.push(SearchResult { id, title, slug, post_type, score });
+            if results.len() >= limit {
+                break;
+            }
         }
 
         Ok(results)
@@ -159,7 +182,7 @@ impl SearchIndex {
 
     /// Add or update a document. Tantivy doesn't have native upsert — we delete
     /// by id term then add the new document, then commit.
-    pub fn upsert(&self, id: &str, title: &str, content: &str, slug: &str, post_type: &str) -> anyhow::Result<()> {
+    pub fn upsert(&self, id: &str, site_id: &str, title: &str, content: &str, slug: &str, post_type: &str) -> anyhow::Result<()> {
         let mut writer = self.writer.write().unwrap();
 
         // Delete any existing document with this id.
@@ -169,6 +192,7 @@ impl SearchIndex {
         // Add the new document.
         let mut doc = TantivyDocument::default();
         doc.add_text(self.fields.id, id);
+        doc.add_text(self.fields.site_id, site_id);
         doc.add_text(self.fields.title, title);
         doc.add_text(self.fields.content, content);
         doc.add_text(self.fields.slug, slug);

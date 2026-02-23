@@ -5,6 +5,7 @@ pub mod plugins;
 pub mod posts;
 pub mod profile;
 pub mod settings;
+pub mod sites;
 pub mod taxonomy;
 pub mod upload;
 pub mod users;

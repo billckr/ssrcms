@@ -313,7 +313,7 @@ async fn fetch_terms_for_function(
         taxonomy::TaxonomyType::Category
     };
 
-    let terms = taxonomy::list(pool, tax_type).await?;
+    let terms = taxonomy::list(pool, None, tax_type).await?;
     let mut result = Vec::with_capacity(terms.len());
     for t in &terms {
         let count = taxonomy::post_count(pool, t.id).await.unwrap_or(0);

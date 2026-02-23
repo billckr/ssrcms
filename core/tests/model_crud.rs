@@ -41,6 +41,7 @@ async fn make_test_user(pool: &sqlx::PgPool) -> user::User {
 async fn make_test_post(pool: &sqlx::PgPool, author_id: uuid::Uuid, status: PostStatus) -> post::Post {
     let id = uid();
     post::create(pool, &CreatePost {
+        site_id: None,
         title: format!("Test Post {id}"),
         slug: Some(format!("test-post-{id}")),
         content: "<p>Integration test content.</p>".to_string(),
@@ -195,6 +196,7 @@ async fn test_taxonomy_attach_detach() {
 
     let id = uid();
     let term = taxonomy::create(&pool, &CreateTaxonomy {
+        site_id: None,
         name: format!("Test Category {id}"),
         slug: format!("test-cat-{id}"),
         taxonomy: TaxonomyType::Category,
@@ -270,6 +272,7 @@ async fn test_user_delete_cascades_posts() {
     // Create a post and a page under this user
     let id = uid();
     let p = post::create(&pool, &CreatePost {
+        site_id: None,
         title: format!("Cascade Post {id}"),
         slug: Some(format!("cascade-post-{id}")),
         content: "<p>Will be cascaded.</p>".to_string(),
@@ -286,6 +289,7 @@ async fn test_user_delete_cascades_posts() {
 
     let id2 = uid();
     let pg = post::create(&pool, &CreatePost {
+        site_id: None,
         title: format!("Cascade Page {id2}"),
         slug: Some(format!("cascade-page-{id2}")),
         content: "<p>Will be cascaded.</p>".to_string(),

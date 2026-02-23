@@ -11,9 +11,13 @@ use admin::pages::settings::SettingsData;
 
 pub async fn settings(
     State(state): State<AppState>,
-    _admin: AdminUser,
+    admin: AdminUser,
 ) -> Html<String> {
-    let s = state.settings.as_ref();
+    // If the admin is scoped to a site, show that site's settings; otherwise use global fallback.
+    let s = admin.site_id
+        .and_then(|sid| state.get_site_by_id(sid))
+        .map(|(_, settings)| settings)
+        .unwrap_or_else(|| (*state.settings).clone());
     let data = SettingsData {
         site_name: s.site_name.clone(),
         site_description: s.site_description.clone(),
@@ -37,9 +41,17 @@ pub struct SettingsForm {
 
 pub async fn save_settings(
     State(state): State<AppState>,
-    _admin: AdminUser,
+    admin: AdminUser,
     Form(form): Form<SettingsForm>,
 ) -> impl IntoResponse {
+    let site_id = match admin.site_id {
+        Some(id) => id,
+        None => {
+            tracing::warn!("save_settings: no site selected, cannot save per-site settings");
+            return Redirect::to("/admin/settings").into_response();
+        }
+    };
+
     let settings = [
         ("site_name", form.site_name.as_str()),
         ("site_description", form.site_description.as_str()),
@@ -49,14 +61,14 @@ pub async fn save_settings(
     ];
 
     for (key, value) in &settings {
-        if let Err(e) = crate::app_state::set_site_setting(&state.db, key, value).await {
+        if let Err(e) = crate::app_state::set_site_setting(&state.db, site_id, key, value).await {
             tracing::error!("failed to save setting '{}': {:?}", key, e);
         }
     }
     let ppp = form.posts_per_page.to_string();
-    if let Err(e) = crate::app_state::set_site_setting(&state.db, "posts_per_page", &ppp).await {
+    if let Err(e) = crate::app_state::set_site_setting(&state.db, site_id, "posts_per_page", &ppp).await {
         tracing::error!("failed to save setting 'posts_per_page': {:?}", e);
     }
 
-    Redirect::to("/admin/settings")
+    Redirect::to("/admin/settings").into_response()
 }
