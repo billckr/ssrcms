@@ -4,23 +4,14 @@ use std::sync::Arc;
 use tracing::info;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
-mod app_state;
-mod config;
-mod db;
-mod errors;
-mod handlers;
-mod middleware;
-mod models;
-mod plugins;
-mod router;
-mod search;
-mod templates;
-
-use app_state::{AppState, SiteSettings};
-use config::AppConfig;
-use plugins::manifest::{PluginManifest, RouteRegistration};
-use plugins::HookRegistry;
-use templates::TemplateEngine;
+use synaptic_core::app_state::{AppState, SiteSettings};
+use synaptic_core::config::AppConfig;
+use synaptic_core::db;
+use synaptic_core::plugins::manifest::{PluginManifest, RouteRegistration};
+use synaptic_core::plugins::HookRegistry;
+use synaptic_core::router;
+use synaptic_core::search;
+use synaptic_core::templates::TemplateEngine;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -176,8 +167,8 @@ fn load_plugins_into_engine(
     plugins_dir: &str,
     hook_registry: &Arc<HookRegistry>,
     engine: &TemplateEngine,
-) -> (HashMap<String, RouteRegistration>, Vec<plugins::manifest::PluginManifest>) {
-    use plugins::hook_registry::HookHandler;
+) -> (HashMap<String, RouteRegistration>, Vec<synaptic_core::plugins::manifest::PluginManifest>) {
+    use synaptic_core::plugins::hook_registry::HookHandler;
     use std::path::Path;
 
     let mut plugin_routes: HashMap<String, RouteRegistration> = HashMap::new();

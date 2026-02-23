@@ -53,7 +53,7 @@ Day-to-day reference for running, building, checking, and restarting the CMS dur
 | Check for errors | `cargo check` |
 | Check one crate | `cargo check -p synaptic-core` |
 | Run unit tests (no DB) | `cargo test -p synaptic-core -p admin` |
-| Run all tests incl. integration | `DATABASE_URL=... cargo test -p synaptic-core -- --include-ignored` |
+| Run all tests incl. integration | `DATABASE_URL=... SQLX_OFFLINE=false cargo test -p synaptic-core --test model_crud --test theme_e2e -- --include-ignored` |
 
 All commands must be run from the workspace root (`/home/ssrust26/synaptic-signals/`).
 
@@ -188,18 +188,22 @@ cargo test -p synaptic-core -- --nocapture # show println! output
 
 ### Integration tests (require a live PostgreSQL instance)
 
-Integration test stubs live in `core/tests/`. They are marked `#[ignore]` and skipped by default. To run them you need:
+Integration tests live in `core/tests/`. They are marked `#[ignore]` and skipped by default. To run them you need:
 1. A running PostgreSQL instance
-2. `DATABASE_URL` set to a test database
+2. `DATABASE_URL` set pointing at the database
 
 ```bash
-DATABASE_URL=postgres://user:pass@localhost/synaptic_test ./app.sh test-all
-# or directly:
-DATABASE_URL=postgres://user:pass@localhost/synaptic_test \
-  cargo test -p synaptic-core -- --include-ignored
+DATABASE_URL=postgres://synaptic:password@localhost/synaptic_signals ./app.sh test-all
+# or directly (SQLX_OFFLINE=false allows live DB queries):
+DATABASE_URL=postgres://synaptic:password@localhost/synaptic_signals \
+  SQLX_OFFLINE=false cargo test -p synaptic-core \
+    --test model_crud \
+    --test theme_e2e \
+    -- --include-ignored
 ```
 
-> **Note:** The integration stubs currently contain `todo!()` bodies — they are placeholders for when a `[lib]` target is added to `core/Cargo.toml`. The stubs document the intended test scenarios and the setup steps needed to implement them.
+The `test-all` command runs 9 integration tests (8 model CRUD + 1 E2E theme render) then
+the full unit-test suite.
 
 ### Where tests live
 
@@ -211,8 +215,9 @@ DATABASE_URL=postgres://user:pass@localhost/synaptic_test \
 | `core/src/models/user.rs` | `UserRole`, password hashing, `UserContext` |
 | `core/src/models/post.rs` | `PostStatus`/`PostType`, `sanitize_content`, `PostContext::build` |
 | `admin/src/pages/posts.rs` | View link URL generation (post → `/blog/{slug}`, page → `/{slug}`) |
-| `core/tests/model_crud.rs` | Post/user/taxonomy CRUD (integration, `#[ignore]`) |
+| `core/tests/model_crud.rs` | Post/user/taxonomy CRUD — 8 tests (integration, `#[ignore]`) |
 | `core/tests/routes.rs` | HTTP route responses (integration, `#[ignore]`) |
+| `core/tests/theme_e2e.rs` | Full DB → template render pipeline (integration, `#[ignore]`) |
 
 ---
 

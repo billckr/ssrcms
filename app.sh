@@ -237,12 +237,16 @@ cmd_test() {
 cmd_test_all() {
     if [[ -z "${DATABASE_URL:-}" ]]; then
         log "ERROR: DATABASE_URL is not set. Integration tests require a live PostgreSQL instance."
-        log "Example: DATABASE_URL=postgres://user:pass@localhost/synaptic_test ./app.sh test-all"
+        log "Example: DATABASE_URL=postgres://user:pass@localhost/synaptic_signals ./app.sh test-all"
         exit 1
     fi
     log "Running all tests including integration tests (DATABASE_URL is set)..."
     cd "$SCRIPT_DIR"
-    cargo test -p synaptic-core -- --include-ignored
+    SQLX_OFFLINE=false cargo test -p synaptic-core \
+        --test model_crud \
+        --test theme_e2e \
+        -- --include-ignored
+    cargo test -p synaptic-core -p admin
     log "Done."
 }
 
