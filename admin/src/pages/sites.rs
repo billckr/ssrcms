@@ -8,7 +8,7 @@ pub struct SiteRow {
     pub is_default: bool,
 }
 
-pub fn render_list(sites: &[SiteRow], flash: Option<&str>, current_site: &str, is_global_admin: bool) -> String {
+pub fn render_list(sites: &[SiteRow], flash: Option<&str>, current_site: &str, is_global_admin: bool, user_email: &str) -> String {
     let rows = sites.iter().map(|s| {
         let delete_html = if s.is_default {
             String::new()
@@ -63,7 +63,7 @@ pub fn render_list(sites: &[SiteRow], flash: Option<&str>, current_site: &str, i
         rows = rows,
     );
 
-    crate::admin_page("Sites", "/admin/sites", flash, &content, current_site, is_global_admin)
+    crate::admin_page("Sites", "/admin/sites", flash, &content, current_site, is_global_admin, user_email)
 }
 
 pub struct SiteSettingsData {
@@ -71,7 +71,7 @@ pub struct SiteSettingsData {
     pub hostname: String,
 }
 
-pub fn render_settings(data: &SiteSettingsData, flash: Option<&str>, current_site: &str, is_global_admin: bool) -> String {
+pub fn render_settings(data: &SiteSettingsData, flash: Option<&str>, current_site: &str, is_global_admin: bool, user_email: &str) -> String {
     let confirm_msg = format!(
         "Delete site '{}'? This will permanently delete all its content, media records, settings, and user assignments. This cannot be undone.",
         data.hostname
@@ -97,10 +97,10 @@ pub fn render_settings(data: &SiteSettingsData, flash: Option<&str>, current_sit
         confirm_msg = crate::html_escape(&confirm_msg),
     );
 
-    crate::admin_page("Site Settings", "/admin/sites", flash, &content, current_site, is_global_admin)
+    crate::admin_page("Site Settings", "/admin/sites", flash, &content, current_site, is_global_admin, user_email)
 }
 
-pub fn render_new(flash: Option<&str>, current_site: &str, is_global_admin: bool) -> String {
+pub fn render_new(flash: Option<&str>, current_site: &str, is_global_admin: bool, user_email: &str) -> String {
     let content = r#"<form method="post" action="/admin/sites" class="edit-form">
   <div class="form-group">
     <label for="hostname">Hostname</label>
@@ -113,5 +113,5 @@ pub fn render_new(flash: Option<&str>, current_site: &str, is_global_admin: bool
   </div>
 </form>"#;
 
-    crate::admin_page("New Site", "/admin/sites", flash, content, current_site, is_global_admin)
+    crate::admin_page("New Site", "/admin/sites", flash, content, current_site, is_global_admin, user_email)
 }

@@ -34,5 +34,5 @@ pub async fn list(
         }
     }).collect();
 
-    Html(render(&rows, &cs, admin.is_global_admin))
+    Html(render(&rows, &cs, admin.is_global_admin, &admin.user.email))
 }

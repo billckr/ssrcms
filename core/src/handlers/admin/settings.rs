@@ -27,7 +27,7 @@ pub async fn settings(
         date_format: s.date_format.clone(),
     };
     let cs = state.site_hostname(admin.site_id);
-    Html(admin::pages::settings::render(&data, None, &cs, admin.is_global_admin))
+    Html(admin::pages::settings::render(&data, None, &cs, admin.is_global_admin, &admin.user.email))
 }
 
 #[derive(Deserialize)]

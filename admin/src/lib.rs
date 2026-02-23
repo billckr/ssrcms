@@ -6,7 +6,7 @@ const ADMIN_CSS: &str = include_str!("../style/admin.css");
 
 /// Wrap a rendered content HTML string in the full admin page shell.
 /// The sidebar nav, head, and body wrapper are all here.
-pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content: &str, current_site: &str, is_global_admin: bool) -> String {
+pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content: &str, current_site: &str, is_global_admin: bool, user_email: &str) -> String {
     let site_indicator = if current_site.is_empty() {
         String::new()
     } else {
@@ -72,7 +72,7 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
         {sites}
       </ul>
       <div class="sidebar-footer">
-        <a href="/admin/profile">My Profile</a>
+        <a href="/admin/profile">{user_email}</a>
         <a href="/admin/logout">Log out</a>
       </div>
     </nav>
@@ -119,6 +119,7 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
         flash_html = flash_html,
         content = content,
         site_indicator = site_indicator,
+        user_email = html_escape(user_email),
     )
 }
 

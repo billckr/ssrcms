@@ -20,7 +20,7 @@ pub async fn view(
         display_name: admin.user.display_name.clone(),
         bio: admin.user.bio.clone(),
     };
-    Html(admin::pages::profile::render_profile(&profile, None, &cs, admin.is_global_admin))
+    Html(admin::pages::profile::render_profile(&profile, None, &cs, admin.is_global_admin, &admin.user.email))
 }
 
 #[derive(Deserialize)]
@@ -64,12 +64,14 @@ pub async fn update_profile(
             Some("Profile updated successfully!"),
             &cs,
             admin.is_global_admin,
+            &email,
         )),
         Err(e) => Html(admin::pages::profile::render_profile(
             &profile,
             Some(&format!("Error updating profile: {}", e)),
             &cs,
             admin.is_global_admin,
+            &email,
         )),
     }
 }
@@ -116,6 +118,7 @@ pub async fn change_password(
             Some("New passwords do not match."),
             &cs,
             admin.is_global_admin,
+            &admin.user.email,
         ));
     }
 
@@ -125,11 +128,12 @@ pub async fn change_password(
             Some("Current password is incorrect."),
             &cs,
             admin.is_global_admin,
+            &admin.user.email,
         ));
     }
 
     if let Err(e) = validate_password_requirements(&form.new_password) {
-        return Html(admin::pages::profile::render_profile(&profile, Some(e), &cs, admin.is_global_admin));
+        return Html(admin::pages::profile::render_profile(&profile, Some(e), &cs, admin.is_global_admin, &admin.user.email));
     }
 
     let new_password_hash = match crate::models::user::hash_password(&form.new_password) {
@@ -140,6 +144,7 @@ pub async fn change_password(
                 Some("Password hashing error. Please try again."),
                 &cs,
                 admin.is_global_admin,
+                &admin.user.email,
             ));
         }
     };
@@ -160,12 +165,14 @@ pub async fn change_password(
             Some("Password changed successfully!"),
             &cs,
             admin.is_global_admin,
+            &admin.user.email,
         )),
         Err(e) => Html(admin::pages::profile::render_profile(
             &profile,
             Some(&format!("Error changing password: {}", e)),
             &cs,
             admin.is_global_admin,
+            &admin.user.email,
         )),
     }
 }

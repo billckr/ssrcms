@@ -47,7 +47,7 @@ pub async fn list(
         vec![]
     };
     let current_user_id = admin.user.id.to_string();
-    Html(admin::pages::users::render_list(&rows, None, &cs, &current_user_id, admin.is_global_admin)).into_response()
+    Html(admin::pages::users::render_list(&rows, None, &cs, &current_user_id, admin.is_global_admin, &admin.user.email)).into_response()
 }
 
 pub async fn new_user(
@@ -73,7 +73,7 @@ pub async fn new_user(
         sites,
         is_super_admin_target: false,
     };
-    Html(admin::pages::users::render_editor(&edit, None, &cs, admin.is_global_admin)).into_response()
+    Html(admin::pages::users::render_editor(&edit, None, &cs, admin.is_global_admin, &admin.user.email)).into_response()
 }
 
 pub async fn edit_user(
@@ -125,7 +125,7 @@ pub async fn edit_user(
         sites: vec![],
         is_super_admin_target,
     };
-    Html(admin::pages::users::render_editor(&edit, None, &cs, admin.is_global_admin)).into_response()
+    Html(admin::pages::users::render_editor(&edit, None, &cs, admin.is_global_admin, &admin.user.email)).into_response()
 }
 
 #[derive(Deserialize)]
@@ -170,6 +170,7 @@ pub async fn save_new(
                 Some("Password is required for new users."),
                 &cs,
                 admin.is_global_admin,
+                &admin.user.email,
             )).into_response();
         }
     };
@@ -257,7 +258,7 @@ pub async fn save_new(
                 is_super_admin_target: false,
             };
             let msg = friendly_user_error(&e);
-            Html(admin::pages::users::render_editor(&edit, Some(&msg), &cs, admin.is_global_admin)).into_response()
+            Html(admin::pages::users::render_editor(&edit, Some(&msg), &cs, admin.is_global_admin, &admin.user.email)).into_response()
         }
     }
 }
@@ -310,6 +311,7 @@ pub async fn save_edit(
                     Some("Failed to process password. Please try again."),
                     &cs,
                     admin.is_global_admin,
+                    &admin.user.email,
                 )).into_response();
             }
         }
@@ -362,7 +364,7 @@ pub async fn save_edit(
                 is_super_admin_target,
             };
             let msg = friendly_user_error(&e);
-            Html(admin::pages::users::render_editor(&edit, Some(&msg), &cs, admin.is_global_admin)).into_response()
+            Html(admin::pages::users::render_editor(&edit, Some(&msg), &cs, admin.is_global_admin, &admin.user.email)).into_response()
         }
     }
 }
@@ -407,6 +409,7 @@ pub async fn delete_user(
                 &cs,
                 &current_user_id,
                 admin.is_global_admin,
+                &admin.user.email,
             )).into_response();
         }};
     }
