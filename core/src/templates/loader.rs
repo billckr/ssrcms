@@ -17,7 +17,8 @@ use crate::errors::Result;
 #[derive(Clone)]
 pub struct TemplateEngine {
     inner: Arc<RwLock<Tera>>,
-    themes_dir: PathBuf,
+    /// Root of the themes directory tree (parent of `global/` and `sites/`).
+    themes_root: PathBuf,
     /// Shared so switch_theme() and reload_theme() always agree on the current theme name.
     active_theme: Arc<RwLock<String>>,
     base_url: String,
@@ -30,15 +31,18 @@ pub struct TemplateEngine {
 
 impl TemplateEngine {
     /// Create and initialize a template engine for the given theme and base URL.
+    ///
+    /// `themes_root` is the parent of the `global/` and `sites/` subdirectories.
+    /// The initial `active_theme` is always loaded from `themes_root/global/<active_theme>`.
     pub fn new(
-        themes_dir: impl Into<PathBuf>,
+        themes_root: impl Into<PathBuf>,
         active_theme: &str,
         base_url: &str,
         hook_registry: Arc<HookRegistry>,
         db: PgPool,
     ) -> anyhow::Result<Self> {
-        let themes_dir = themes_dir.into();
-        let theme_path = themes_dir.join(active_theme).join("templates");
+        let themes_root = themes_root.into();
+        let theme_path = themes_root.join("global").join(active_theme).join("templates");
 
         let glob = format!("{}/**/*.html", theme_path.display());
         let mut tera = Tera::new(&glob)
@@ -50,7 +54,7 @@ impl TemplateEngine {
 
         let engine = TemplateEngine {
             inner: Arc::new(RwLock::new(tera)),
-            themes_dir,
+            themes_root,
             active_theme: Arc::new(RwLock::new(active_theme.to_string())),
             base_url: base_url.to_string(),
             hook_registry,
@@ -62,6 +66,25 @@ impl TemplateEngine {
 
         info!("template engine initialized with theme '{}'", active_theme);
         Ok(engine)
+    }
+
+    /// Resolve the filesystem directory for a named theme.
+    /// Searches `themes_root/global/<name>` first, then `themes_root/sites/*/<name>`.
+    pub fn resolve_theme_dir(&self, name: &str) -> Option<PathBuf> {
+        let global_candidate = self.themes_root.join("global").join(name);
+        if global_candidate.is_dir() {
+            return Some(global_candidate);
+        }
+        let sites_dir = self.themes_root.join("sites");
+        if let Ok(entries) = std::fs::read_dir(&sites_dir) {
+            for entry in entries.flatten() {
+                let candidate = entry.path().join(name);
+                if candidate.is_dir() {
+                    return Some(candidate);
+                }
+            }
+        }
+        None
     }
 
     fn register_filters_and_functions(&self) -> anyhow::Result<()> {
@@ -195,7 +218,9 @@ impl TemplateEngine {
     #[allow(dead_code)]
     pub fn reload_theme(&self) -> anyhow::Result<()> {
         let active = self.active_theme.read().unwrap().clone();
-        let theme_path = self.themes_dir.join(&active).join("templates");
+        let theme_dir = self.resolve_theme_dir(&active)
+            .ok_or_else(|| anyhow::anyhow!("Theme '{}' not found", active))?;
+        let theme_path = theme_dir.join("templates");
         let glob = format!("{}/**/*.html", theme_path.display());
 
         let mut tera = self.inner.write().unwrap();
@@ -208,9 +233,13 @@ impl TemplateEngine {
     }
 
     /// Dynamically switch to a different theme and reload templates.
+    /// Searches `themes_root/global/<name>` first, then `themes_root/sites/*/<name>`,
+    /// so both global and site-specific themes can be activated.
     /// Re-adds all plugin templates so hooks continue to work after the switch.
     pub fn switch_theme(&self, new_theme: &str) -> anyhow::Result<()> {
-        let theme_path = self.themes_dir.join(new_theme).join("templates");
+        let theme_dir = self.resolve_theme_dir(new_theme)
+            .ok_or_else(|| anyhow::anyhow!("Theme '{}' not found in global or site directories", new_theme))?;
+        let theme_path = theme_dir.join("templates");
         let glob = format!("{}/**/*.html", theme_path.display());
 
         let mut tera = self.inner.write().unwrap();

@@ -88,7 +88,7 @@ async fn main() -> anyhow::Result<()> {
     // ── Template engine ───────────────────────────────────────────────────────
     // Point the engine at themes/global/ — the canonical home for global themes.
     let engine = TemplateEngine::new(
-        &global_themes_dir,
+        &cfg.themes_dir,
         &settings.active_theme,
         &settings.base_url,
         hook_registry.clone(),

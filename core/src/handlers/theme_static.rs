@@ -18,11 +18,15 @@ pub async fn serve(
 ) -> Response {
     let active_theme = state.active_theme.read().unwrap().clone();
 
-    // Themes live in themes/global/<name>/; fall back to flat layout for compat.
-    let themes_root = std::path::Path::new(&state.config.themes_dir);
-    let global_base = themes_root.join("global").join(&active_theme).join("static");
-    let flat_base   = themes_root.join(&active_theme).join("static");
-    let static_base = if global_base.exists() { global_base } else { flat_base };
+    // Resolve theme directory: global/, then sites/*/, then legacy flat layout.
+    let static_base = if let Some(theme_dir) = state.templates.resolve_theme_dir(&active_theme) {
+        theme_dir.join("static")
+    } else {
+        // Fallback for legacy flat layout (themes/<name>/static/).
+        std::path::Path::new(&state.config.themes_dir)
+            .join(&active_theme)
+            .join("static")
+    };
 
     tracing::debug!("theme_static: serving '{}' from theme '{}'", path, active_theme);
 
