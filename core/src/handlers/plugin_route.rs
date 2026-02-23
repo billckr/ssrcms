@@ -19,8 +19,11 @@ use axum::{
     response::{IntoResponse, Response},
 };
 
+use uuid::Uuid;
+
 use crate::app_state::AppState;
 use crate::handlers::home::{build_post_context, build_site_context};
+use crate::middleware::site::CurrentSite;
 use crate::models::post::{self, ListFilter, PostStatus, PostType};
 use crate::templates::context::{ContextBuilder, NavContext, RequestContext, SessionContext};
 
@@ -28,9 +31,11 @@ use crate::templates::context::{ContextBuilder, NavContext, RequestContext, Sess
 /// The path is resolved against the plugin route registry in AppState.
 pub async fn dispatch(
     State(state): State<AppState>,
+    current_site: CurrentSite,
     axum::extract::OriginalUri(uri): axum::extract::OriginalUri,
 ) -> Response {
     let path = uri.path().to_string();
+    let site_id = current_site.site.id;
 
     let registration = match state.plugin_routes.get(&path) {
         Some(r) => r.clone(),
@@ -39,7 +44,7 @@ pub async fn dispatch(
         }
     };
 
-    match render_plugin_route(state, &path, &registration.template, &registration.content_type).await
+    match render_plugin_route(state, &path, &registration.template, &registration.content_type, site_id).await
     {
         Ok(body) => {
             let content_type = HeaderValue::from_str(&registration.content_type)
@@ -62,8 +67,9 @@ async fn render_plugin_route(
     path: &str,
     template_name: &str,
     _content_type: &str,
+    site_id: Uuid,
 ) -> crate::errors::Result<String> {
-    let site_ctx = build_site_context(&state).await?;
+    let site_ctx = build_site_context(&state, Some(site_id)).await?;
 
     let mut ctx = ContextBuilder {
         site: site_ctx,
@@ -80,11 +86,12 @@ async fn render_plugin_route(
     }
     .into_tera_context();
 
-    // For sitemap-style routes: inject all published posts and pages.
+    // For sitemap-style routes: inject all published posts and pages for this site.
     // This is the standard context for any route that needs the full content list.
     let all_posts_raw = post::list(
         &state.db,
         &ListFilter {
+            site_id: Some(site_id),
             status: Some(PostStatus::Published),
             post_type: Some(PostType::Post),
             limit: 50_000,
@@ -97,6 +104,7 @@ async fn render_plugin_route(
     let all_pages_raw = post::list(
         &state.db,
         &ListFilter {
+            site_id: Some(site_id),
             status: Some(PostStatus::Published),
             post_type: Some(PostType::Page),
             limit: 10_000,

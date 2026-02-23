@@ -3,7 +3,10 @@ use axum::{
     response::{Html, IntoResponse, Response},
 };
 
+use uuid::Uuid;
+
 use crate::app_state::AppState;
+use crate::middleware::site::CurrentSite;
 use crate::models::post;
 use crate::templates::context::{ContextBuilder, NavContext, RequestContext, SessionContext};
 
@@ -12,11 +15,13 @@ use super::home::{build_post_context, build_site_context, render_error_page};
 /// `GET /blog/:slug` — render a single post.
 pub async fn single_post(
     State(state): State<AppState>,
+    current_site: CurrentSite,
     Path(slug): Path<String>,
     axum::extract::OriginalUri(uri): axum::extract::OriginalUri,
 ) -> Response {
     let path = uri.path().to_string();
-    match render_post(state.clone(), slug, uri).await {
+    let site_id = current_site.site.id;
+    match render_post(state.clone(), slug, uri, site_id).await {
         Ok(html) => Html(html).into_response(),
         Err(e) => render_error_page(e, &state, &path).await,
     }
@@ -26,8 +31,9 @@ async fn render_post(
     state: AppState,
     slug: String,
     uri: axum::http::Uri,
+    site_id: Uuid,
 ) -> crate::errors::Result<String> {
-    let post_record = post::get_published_by_slug(&state.db, None, &slug).await?;
+    let post_record = post::get_published_by_slug(&state.db, Some(site_id), &slug).await?;
 
     let post_ctx = build_post_context(&state, &post_record).await?;
 
@@ -55,7 +61,7 @@ async fn render_post(
         related.push(build_post_context(&state, p).await?);
     }
 
-    let site_ctx = build_site_context(&state).await?;
+    let site_ctx = build_site_context(&state, Some(site_id)).await?;
 
     let mut ctx = ContextBuilder {
         site: site_ctx,

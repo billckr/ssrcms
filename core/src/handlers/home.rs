@@ -5,8 +5,11 @@ use axum::{
 use serde::Deserialize;
 use std::collections::HashMap;
 
+use uuid::Uuid;
+
 use crate::app_state::AppState;
 use crate::errors::{AppError, Result};
+use crate::middleware::site::CurrentSite;
 use crate::models::post::{self, ListFilter, PostContext, PostStatus, PostType};
 use crate::templates::context::{
     ContextBuilder, NavContext, PaginationContext, RequestContext, SessionContext, SiteContext,
@@ -25,11 +28,13 @@ fn default_page() -> i64 {
 /// `GET /` — render the home page (paginated post list).
 pub async fn home(
     State(state): State<AppState>,
+    current_site: CurrentSite,
     Query(query): Query<PageQuery>,
     axum::extract::OriginalUri(uri): axum::extract::OriginalUri,
 ) -> Response {
     let path = uri.path().to_string();
-    match render_home(state.clone(), query, uri).await {
+    let site_id = current_site.site.id;
+    match render_home(state.clone(), query, uri, site_id).await {
         Ok(html) => Html(html).into_response(),
         Err(e) => {
             tracing::error!("home handler error: {:?}", e);
@@ -42,14 +47,16 @@ async fn render_home(
     state: AppState,
     query: PageQuery,
     uri: axum::http::Uri,
+    site_id: Uuid,
 ) -> Result<String> {
     let per_page = state.settings.posts_per_page;
     let offset = (query.page - 1) * per_page;
 
-    let total = post::count(&state.db, None, Some(PostStatus::Published), Some(PostType::Post)).await?;
+    let total = post::count(&state.db, Some(site_id), Some(PostStatus::Published), Some(PostType::Post)).await?;
     let posts_raw = post::list(
         &state.db,
         &ListFilter {
+            site_id: Some(site_id),
             status: Some(PostStatus::Published),
             post_type: Some(PostType::Post),
             limit: per_page,
@@ -66,7 +73,7 @@ async fn render_home(
         posts.push(ctx);
     }
 
-    let site_ctx = build_site_context(&state).await?;
+    let site_ctx = build_site_context(&state, Some(site_id)).await?;
     let pagination = PaginationContext::new(query.page, per_page, total, &state.settings.base_url, "");
 
     let mut ctx = ContextBuilder {
@@ -124,7 +131,7 @@ pub async fn render_error_page(err: AppError, state: &AppState, path: &str) -> R
 }
 
 async fn render_404(state: &AppState, path: &str) -> Result<String> {
-    let site_ctx = build_site_context(state).await?;
+    let site_ctx = build_site_context(state, None).await?;
 
     let mut ctx = ContextBuilder {
         site: site_ctx,
@@ -210,11 +217,11 @@ pub(crate) async fn build_post_context(
     ))
 }
 
-pub(crate) async fn build_site_context(state: &AppState) -> Result<SiteContext> {
+pub(crate) async fn build_site_context(state: &AppState, site_id: Option<Uuid>) -> Result<SiteContext> {
     let post_count =
-        post::count(&state.db, None, Some(PostStatus::Published), Some(PostType::Post)).await?;
+        post::count(&state.db, site_id, Some(PostStatus::Published), Some(PostType::Post)).await?;
     let page_count =
-        post::count(&state.db, None, Some(PostStatus::Published), Some(PostType::Page)).await?;
+        post::count(&state.db, site_id, Some(PostStatus::Published), Some(PostType::Page)).await?;
 
     Ok(SiteContext {
         name: state.settings.site_name.clone(),

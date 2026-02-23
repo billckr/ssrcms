@@ -7,6 +7,7 @@ use std::collections::HashMap;
 use uuid::Uuid;
 
 use crate::app_state::AppState;
+use crate::middleware::site::CurrentSite;
 use crate::templates::context::{ContextBuilder, NavContext, RequestContext, SessionContext};
 
 use super::home::{build_post_context, build_site_context, render_error_page};
@@ -20,11 +21,13 @@ pub struct SearchQuery {
 /// `GET /search?q=...`
 pub async fn search(
     State(state): State<AppState>,
+    current_site: CurrentSite,
     Query(params): Query<SearchQuery>,
     axum::extract::OriginalUri(uri): axum::extract::OriginalUri,
 ) -> Response {
     let path = uri.path().to_string();
-    match render_search(state.clone(), params.q, uri).await {
+    let site_id = current_site.site.id;
+    match render_search(state.clone(), params.q, uri, site_id).await {
         Ok(html) => Html(html).into_response(),
         Err(e) => render_error_page(e, &state, &path).await,
     }
@@ -34,13 +37,15 @@ async fn render_search(
     state: AppState,
     query: String,
     uri: axum::http::Uri,
+    site_id: Uuid,
 ) -> crate::errors::Result<String> {
+    let site_id_str = site_id.to_string();
     // Query Tantivy for matching post IDs, then fetch full records from DB.
     let search_results = if query.is_empty() {
         Vec::new()
     } else {
         metrics::counter!("synaptic_search_queries_total").increment(1);
-        state.search_index.search(&query, None, 20)?
+        state.search_index.search(&query, Some(&site_id_str), 20)?
     };
 
     // Fetch full Post records from DB by ID so we can build PostContext.
@@ -58,7 +63,7 @@ async fn render_search(
     }
 
     let result_count = results.len() as i64;
-    let site_ctx = build_site_context(&state).await?;
+    let site_ctx = build_site_context(&state, Some(site_id)).await?;
 
     let query_params: HashMap<String, String> = uri
         .query()

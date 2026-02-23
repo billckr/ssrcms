@@ -3,7 +3,10 @@ use axum::{
     response::{Html, IntoResponse, Response},
 };
 
+use uuid::Uuid;
+
 use crate::app_state::AppState;
+use crate::middleware::site::CurrentSite;
 use crate::models::post::{self, PostType};
 use crate::templates::context::{ContextBuilder, NavContext, RequestContext, SessionContext};
 
@@ -12,11 +15,13 @@ use super::home::{build_post_context, build_site_context, render_error_page};
 /// `GET /:slug` — render a static page.
 pub async fn single_page(
     State(state): State<AppState>,
+    current_site: CurrentSite,
     Path(slug): Path<String>,
     axum::extract::OriginalUri(uri): axum::extract::OriginalUri,
 ) -> Response {
     let path = uri.path().to_string();
-    match render_page(state.clone(), slug, uri).await {
+    let site_id = current_site.site.id;
+    match render_page(state.clone(), slug, uri, site_id).await {
         Ok(html) => Html(html).into_response(),
         Err(e) => render_error_page(e, &state, &path).await,
     }
@@ -26,9 +31,10 @@ async fn render_page(
     state: AppState,
     slug: String,
     uri: axum::http::Uri,
+    site_id: Uuid,
 ) -> crate::errors::Result<String> {
     // Look up a published page (post_type = 'page') by slug
-    let post_record = post::get_published_by_slug(&state.db, None, &slug).await?;
+    let post_record = post::get_published_by_slug(&state.db, Some(site_id), &slug).await?;
 
     // Verify it is actually a page
     if post_record.post_type != PostType::Page.as_str() {
@@ -36,7 +42,7 @@ async fn render_page(
     }
 
     let page_ctx = build_post_context(&state, &post_record).await?;
-    let site_ctx = build_site_context(&state).await?;
+    let site_ctx = build_site_context(&state, Some(site_id)).await?;
 
     let mut ctx = ContextBuilder {
         site: site_ctx,
