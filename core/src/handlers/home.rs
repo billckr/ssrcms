@@ -34,7 +34,8 @@ pub async fn home(
 ) -> Response {
     let path = uri.path().to_string();
     let site_id = current_site.site.id;
-    match render_home(state.clone(), query, uri, site_id).await {
+    let base_url = current_site.base_url.clone();
+    match render_home(state.clone(), query, uri, site_id, &base_url).await {
         Ok(html) => Html(html).into_response(),
         Err(e) => {
             tracing::error!("home handler error: {:?}", e);
@@ -48,6 +49,7 @@ async fn render_home(
     query: PageQuery,
     uri: axum::http::Uri,
     site_id: Uuid,
+    base_url: &str,
 ) -> Result<String> {
     let per_page = state.settings.posts_per_page;
     let offset = (query.page - 1) * per_page;
@@ -69,17 +71,17 @@ async fn render_home(
     // Build PostContext for each post
     let mut posts = Vec::with_capacity(posts_raw.len());
     for p in &posts_raw {
-        let ctx = build_post_context(&state, p).await?;
+        let ctx = build_post_context(&state, p, base_url).await?;
         posts.push(ctx);
     }
 
-    let site_ctx = build_site_context(&state, Some(site_id)).await?;
-    let pagination = PaginationContext::new(query.page, per_page, total, &state.settings.base_url, "");
+    let site_ctx = build_site_context(&state, Some(site_id), base_url).await?;
+    let pagination = PaginationContext::new(query.page, per_page, total, base_url, "");
 
     let mut ctx = ContextBuilder {
         site: site_ctx,
         request: RequestContext {
-            url: format!("{}{}", state.settings.base_url, uri.path()),
+            url: format!("{}{}", base_url, uri.path()),
             path: uri.path().to_string(),
             query: HashMap::new(),
         },
@@ -131,12 +133,13 @@ pub async fn render_error_page(err: AppError, state: &AppState, path: &str) -> R
 }
 
 async fn render_404(state: &AppState, path: &str) -> Result<String> {
-    let site_ctx = build_site_context(state, None).await?;
+    let base_url = &state.settings.base_url;
+    let site_ctx = build_site_context(state, None, base_url).await?;
 
     let mut ctx = ContextBuilder {
         site: site_ctx,
         request: RequestContext {
-            url: format!("{}{}", state.settings.base_url, path),
+            url: format!("{}{}", base_url, path),
             path: path.to_string(),
             query: HashMap::new(),
         },
@@ -159,6 +162,7 @@ async fn render_404(state: &AppState, path: &str) -> Result<String> {
 pub(crate) async fn build_post_context(
     state: &AppState,
     p: &crate::models::post::Post,
+    base_url: &str,
 ) -> Result<PostContext> {
     use crate::models::{media, taxonomy, user};
 
@@ -176,7 +180,7 @@ pub(crate) async fn build_post_context(
         let count = taxonomy::post_count(&state.db, c.id).await.unwrap_or(0);
         category_ctxs.push(crate::models::taxonomy::TermContext::from_taxonomy(
             c,
-            &state.settings.base_url,
+            base_url,
             count,
         ));
     }
@@ -186,7 +190,7 @@ pub(crate) async fn build_post_context(
         let count = taxonomy::post_count(&state.db, t.id).await.unwrap_or(0);
         tag_ctxs.push(crate::models::taxonomy::TermContext::from_taxonomy(
             t,
-            &state.settings.base_url,
+            base_url,
             count,
         ));
     }
@@ -195,7 +199,7 @@ pub(crate) async fn build_post_context(
         match media::get_by_id(&state.db, img_id).await {
             Ok(m) => Some(crate::models::media::MediaContext::from_media(
                 &m,
-                &state.settings.base_url,
+                base_url,
             )),
             Err(_) => None,
         }
@@ -213,11 +217,11 @@ pub(crate) async fn build_post_context(
         featured_image,
         meta,
         0, // comment_count — Phase 3
-        &state.settings.base_url,
+        base_url,
     ))
 }
 
-pub(crate) async fn build_site_context(state: &AppState, site_id: Option<Uuid>) -> Result<SiteContext> {
+pub(crate) async fn build_site_context(state: &AppState, site_id: Option<Uuid>, base_url: &str) -> Result<SiteContext> {
     let post_count =
         post::count(&state.db, site_id, Some(PostStatus::Published), Some(PostType::Post)).await?;
     let page_count =
@@ -226,7 +230,7 @@ pub(crate) async fn build_site_context(state: &AppState, site_id: Option<Uuid>) 
     Ok(SiteContext {
         name: state.settings.site_name.clone(),
         description: state.settings.site_description.clone(),
-        url: state.settings.base_url.clone(),
+        url: base_url.to_string(),
         language: state.settings.language.clone(),
         theme: state.settings.active_theme.clone(),
         post_count,

@@ -21,6 +21,9 @@ use crate::models::site::Site;
 pub struct CurrentSite {
     pub site: Site,
     pub settings: SiteSettings,
+    /// Base URL for this request: uses configured `site_url` if set in DB,
+    /// otherwise derived from the Host header (e.g. "http://beth.com:3000").
+    pub base_url: String,
 }
 
 pub enum SiteResolutionError {
@@ -49,27 +52,42 @@ impl FromRequestParts<AppState> for CurrentSite {
         parts: &mut Parts,
         state: &AppState,
     ) -> Result<Self, Self::Rejection> {
-        // Extract the Host header value (strip port if present).
-        let hostname = parts
+        // Extract the Host header value, keeping the raw value (with port) for URL building.
+        let raw_host = parts
             .headers
             .get(axum::http::header::HOST)
             .and_then(|v| v.to_str().ok())
-            .map(|h| {
-                // Strip port: "example.com:3000" → "example.com"
-                if let Some(pos) = h.rfind(':') {
-                    // Only strip if what follows looks like a port (all digits)
-                    if h[pos + 1..].chars().all(|c| c.is_ascii_digit()) {
-                        return &h[..pos];
-                    }
-                }
-                h
-            })
             .unwrap_or("localhost")
             .to_string();
 
+        // Strip port for site lookup: "example.com:3000" → "example.com"
+        let hostname = {
+            if let Some(pos) = raw_host.rfind(':') {
+                if raw_host[pos + 1..].chars().all(|c| c.is_ascii_digit()) {
+                    raw_host[..pos].to_string()
+                } else {
+                    raw_host.clone()
+                }
+            } else {
+                raw_host.clone()
+            }
+        };
+
+        // Derive a base URL from the Host header. Use the configured site_url from
+        // settings if it has been explicitly set (i.e. not the localhost default),
+        // otherwise build from the raw host so dev just works without any DB config.
+        let make_base_url = |settings: &SiteSettings| -> String {
+            if settings.base_url != "http://localhost:3000" {
+                settings.base_url.clone()
+            } else {
+                format!("http://{}", raw_host)
+            }
+        };
+
         // Fast path: look up in the site_cache.
         if let Some((site, settings)) = state.resolve_site(&hostname) {
-            return Ok(CurrentSite { site, settings });
+            let base_url = make_base_url(&settings);
+            return Ok(CurrentSite { site, settings, base_url });
         }
 
         // If site_cache is empty (no sites configured yet), fall back to
@@ -83,9 +101,12 @@ impl FromRequestParts<AppState> for CurrentSite {
                 created_at: Utc::now(),
                 updated_at: Utc::now(),
             };
+            let settings = (*state.settings).clone();
+            let base_url = make_base_url(&settings);
             return Ok(CurrentSite {
                 site: fallback_site,
-                settings: (*state.settings).clone(),
+                settings,
+                base_url,
             });
         }
 

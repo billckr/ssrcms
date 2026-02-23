@@ -27,7 +27,8 @@ pub async fn search(
 ) -> Response {
     let path = uri.path().to_string();
     let site_id = current_site.site.id;
-    match render_search(state.clone(), params.q, uri, site_id).await {
+    let base_url = current_site.base_url.clone();
+    match render_search(state.clone(), params.q, uri, site_id, &base_url).await {
         Ok(html) => Html(html).into_response(),
         Err(e) => render_error_page(e, &state, &path).await,
     }
@@ -38,6 +39,7 @@ async fn render_search(
     query: String,
     uri: axum::http::Uri,
     site_id: Uuid,
+    base_url: &str,
 ) -> crate::errors::Result<String> {
     let site_id_str = site_id.to_string();
     // Query Tantivy for matching post IDs, then fetch full records from DB.
@@ -54,7 +56,7 @@ async fn render_search(
         if let Ok(id) = hit.id.parse::<Uuid>() {
             if let Ok(post) = crate::models::post::get_by_id(&state.db, id).await {
                 if post.status == "published" {
-                    if let Ok(ctx) = build_post_context(&state, &post).await {
+                    if let Ok(ctx) = build_post_context(&state, &post, base_url).await {
                         results.push(ctx);
                     }
                 }
@@ -63,7 +65,7 @@ async fn render_search(
     }
 
     let result_count = results.len() as i64;
-    let site_ctx = build_site_context(&state, Some(site_id)).await?;
+    let site_ctx = build_site_context(&state, Some(site_id), base_url).await?;
 
     let query_params: HashMap<String, String> = uri
         .query()
@@ -80,7 +82,7 @@ async fn render_search(
     let mut ctx = ContextBuilder {
         site: site_ctx,
         request: RequestContext {
-            url: format!("{}{}", state.settings.base_url, uri.path()),
+            url: format!("{}{}", base_url, uri.path()),
             path: uri.path().to_string(),
             query: query_params,
         },

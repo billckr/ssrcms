@@ -21,7 +21,8 @@ pub async fn single_post(
 ) -> Response {
     let path = uri.path().to_string();
     let site_id = current_site.site.id;
-    match render_post(state.clone(), slug, uri, site_id).await {
+    let base_url = current_site.base_url.clone();
+    match render_post(state.clone(), slug, uri, site_id, &base_url).await {
         Ok(html) => Html(html).into_response(),
         Err(e) => render_error_page(e, &state, &path).await,
     }
@@ -32,14 +33,15 @@ async fn render_post(
     slug: String,
     uri: axum::http::Uri,
     site_id: Uuid,
+    base_url: &str,
 ) -> crate::errors::Result<String> {
     let post_record = post::get_published_by_slug(&state.db, Some(site_id), &slug).await?;
 
-    let post_ctx = build_post_context(&state, &post_record).await?;
+    let post_ctx = build_post_context(&state, &post_record, base_url).await?;
 
     let prev = if let Some(pub_at) = post_record.published_at {
         match post::get_prev(&state.db, post_record.site_id, pub_at).await? {
-            Some(p) => Some(build_post_context(&state, &p).await?),
+            Some(p) => Some(build_post_context(&state, &p, base_url).await?),
             None => None,
         }
     } else {
@@ -48,7 +50,7 @@ async fn render_post(
 
     let next = if let Some(pub_at) = post_record.published_at {
         match post::get_next(&state.db, post_record.site_id, pub_at).await? {
-            Some(p) => Some(build_post_context(&state, &p).await?),
+            Some(p) => Some(build_post_context(&state, &p, base_url).await?),
             None => None,
         }
     } else {
@@ -58,15 +60,15 @@ async fn render_post(
     let related_raw = post::get_related(&state.db, post_record.site_id, post_record.id, 5).await?;
     let mut related = Vec::with_capacity(related_raw.len());
     for p in &related_raw {
-        related.push(build_post_context(&state, p).await?);
+        related.push(build_post_context(&state, p, base_url).await?);
     }
 
-    let site_ctx = build_site_context(&state, Some(site_id)).await?;
+    let site_ctx = build_site_context(&state, Some(site_id), base_url).await?;
 
     let mut ctx = ContextBuilder {
         site: site_ctx,
         request: RequestContext {
-            url: format!("{}{}", state.settings.base_url, uri.path()),
+            url: format!("{}{}", base_url, uri.path()),
             path: uri.path().to_string(),
             query: std::collections::HashMap::new(),
         },

@@ -38,7 +38,8 @@ pub async fn category_archive(
 ) -> Response {
     let path = uri.path().to_string();
     let site_id = current_site.site.id;
-    match render_taxonomy_archive(state.clone(), slug, TaxonomyType::Category, query.page, uri, site_id).await {
+    let base_url = current_site.base_url.clone();
+    match render_taxonomy_archive(state.clone(), slug, TaxonomyType::Category, query.page, uri, site_id, &base_url).await {
         Ok(html) => Html(html).into_response(),
         Err(e) => render_error_page(e, &state, &path).await,
     }
@@ -54,7 +55,8 @@ pub async fn tag_archive(
 ) -> Response {
     let path = uri.path().to_string();
     let site_id = current_site.site.id;
-    match render_taxonomy_archive(state.clone(), slug, TaxonomyType::Tag, query.page, uri, site_id).await {
+    let base_url = current_site.base_url.clone();
+    match render_taxonomy_archive(state.clone(), slug, TaxonomyType::Tag, query.page, uri, site_id, &base_url).await {
         Ok(html) => Html(html).into_response(),
         Err(e) => render_error_page(e, &state, &path).await,
     }
@@ -70,7 +72,8 @@ pub async fn author_archive(
 ) -> Response {
     let path = uri.path().to_string();
     let site_id = current_site.site.id;
-    match render_author_archive(state.clone(), username, query.page, uri, site_id).await {
+    let base_url = current_site.base_url.clone();
+    match render_author_archive(state.clone(), username, query.page, uri, site_id, &base_url).await {
         Ok(html) => Html(html).into_response(),
         Err(e) => render_error_page(e, &state, &path).await,
     }
@@ -83,10 +86,11 @@ async fn render_taxonomy_archive(
     page: i64,
     uri: axum::http::Uri,
     site_id: Uuid,
+    base_url: &str,
 ) -> crate::errors::Result<String> {
     let term = taxonomy::get_by_slug(&state.db, Some(site_id), &slug, tax_type.clone()).await?;
     let count = taxonomy::post_count(&state.db, term.id).await?;
-    let term_ctx = TermContext::from_taxonomy(&term, &state.settings.base_url, count);
+    let term_ctx = TermContext::from_taxonomy(&term, base_url, count);
 
     let per_page = state.settings.posts_per_page;
     let offset = (page - 1) * per_page;
@@ -115,11 +119,11 @@ async fn render_taxonomy_archive(
     let posts_raw = post::list(&state.db, &filter).await?;
     let mut posts = Vec::with_capacity(posts_raw.len());
     for p in &posts_raw {
-        posts.push(build_post_context(&state, p).await?);
+        posts.push(build_post_context(&state, p, base_url).await?);
     }
 
     let pagination =
-        PaginationContext::new(page, per_page, count, &format!("{}{}", state.settings.base_url, uri.path()), "");
+        PaginationContext::new(page, per_page, count, &format!("{}{}", base_url, uri.path()), "");
 
     let archive = ArchiveContext {
         archive_type: term.taxonomy.clone(),
@@ -128,12 +132,12 @@ async fn render_taxonomy_archive(
         pagination: Some(pagination),
     };
 
-    let site_ctx = build_site_context(&state, Some(site_id)).await?;
+    let site_ctx = build_site_context(&state, Some(site_id), base_url).await?;
 
     let mut ctx = ContextBuilder {
         site: site_ctx,
         request: RequestContext {
-            url: format!("{}{}", state.settings.base_url, uri.path()),
+            url: format!("{}{}", base_url, uri.path()),
             path: uri.path().to_string(),
             query: HashMap::new(),
         },
@@ -162,6 +166,7 @@ async fn render_author_archive(
     page: i64,
     uri: axum::http::Uri,
     site_id: Uuid,
+    base_url: &str,
 ) -> crate::errors::Result<String> {
     use crate::models::user;
 
@@ -188,19 +193,19 @@ async fn render_author_archive(
 
     let mut posts = Vec::with_capacity(posts_raw.len());
     for p in &posts_raw {
-        posts.push(build_post_context(&state, p).await?);
+        posts.push(build_post_context(&state, p, base_url).await?);
     }
 
     let pagination =
-        PaginationContext::new(page, per_page, total_posts, &format!("{}{}", state.settings.base_url, uri.path()), "");
+        PaginationContext::new(page, per_page, total_posts, &format!("{}{}", base_url, uri.path()), "");
 
-    let author_ctx = crate::models::user::UserContext::from_user(&author, &state.settings.base_url);
-    let site_ctx = build_site_context(&state, Some(site_id)).await?;
+    let author_ctx = crate::models::user::UserContext::from_user(&author, base_url);
+    let site_ctx = build_site_context(&state, Some(site_id), base_url).await?;
 
     let mut ctx = ContextBuilder {
         site: site_ctx,
         request: RequestContext {
-            url: format!("{}{}", state.settings.base_url, uri.path()),
+            url: format!("{}{}", base_url, uri.path()),
             path: uri.path().to_string(),
             query: HashMap::new(),
         },

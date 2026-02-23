@@ -36,6 +36,7 @@ pub async fn dispatch(
 ) -> Response {
     let path = uri.path().to_string();
     let site_id = current_site.site.id;
+    let base_url = current_site.base_url.clone();
 
     let registration = match state.plugin_routes.get(&path) {
         Some(r) => r.clone(),
@@ -44,7 +45,7 @@ pub async fn dispatch(
         }
     };
 
-    match render_plugin_route(state, &path, &registration.template, &registration.content_type, site_id).await
+    match render_plugin_route(state, &path, &registration.template, &registration.content_type, site_id, &base_url).await
     {
         Ok(body) => {
             let content_type = HeaderValue::from_str(&registration.content_type)
@@ -68,13 +69,14 @@ async fn render_plugin_route(
     template_name: &str,
     _content_type: &str,
     site_id: Uuid,
+    base_url: &str,
 ) -> crate::errors::Result<String> {
-    let site_ctx = build_site_context(&state, Some(site_id)).await?;
+    let site_ctx = build_site_context(&state, Some(site_id), base_url).await?;
 
     let mut ctx = ContextBuilder {
         site: site_ctx,
         request: RequestContext {
-            url: format!("{}{}", state.settings.base_url, path),
+            url: format!("{}{}", base_url, path),
             path: path.to_string(),
             query: std::collections::HashMap::new(),
         },
@@ -116,12 +118,12 @@ async fn render_plugin_route(
 
     let mut all_posts = Vec::with_capacity(all_posts_raw.len());
     for p in &all_posts_raw {
-        all_posts.push(build_post_context(&state, p).await?);
+        all_posts.push(build_post_context(&state, p, base_url).await?);
     }
 
     let mut all_pages = Vec::with_capacity(all_pages_raw.len());
     for p in &all_pages_raw {
-        all_pages.push(build_post_context(&state, p).await?);
+        all_pages.push(build_post_context(&state, p, base_url).await?);
     }
 
     ctx.insert("all_posts", &all_posts);
