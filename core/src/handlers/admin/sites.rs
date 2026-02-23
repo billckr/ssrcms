@@ -28,12 +28,13 @@ pub async fn list(
     });
 
     let mut rows = Vec::with_capacity(sites.len());
-    for s in &sites {
+    for (i, s) in sites.iter().enumerate() {
         let post_count = crate::models::site::post_count(&state.db, s.id).await.unwrap_or(0);
         rows.push(SiteRow {
             id: s.id.to_string(),
             hostname: s.hostname.clone(),
             post_count,
+            is_default: i == 0, // first by created_at is the CLI install site
         });
     }
 

@@ -4,34 +4,53 @@ pub struct SiteRow {
     pub id: String,
     pub hostname: String,
     pub post_count: i64,
+    /// True for the first site created during CLI install — cannot be deleted.
+    pub is_default: bool,
 }
 
 pub fn render_list(sites: &[SiteRow], flash: Option<&str>, current_site: &str, is_global_admin: bool) -> String {
     let rows = sites.iter().map(|s| {
-        let confirm_msg = format!(
-            "Delete site '{}'? This will permanently delete all its content, media records, settings, and user assignments. This cannot be undone.",
-            s.hostname
-        );
+        let delete_html = if s.is_default {
+            String::new()
+        } else {
+            let confirm_msg = format!(
+                "Delete site '{}'? This will permanently delete all its content, media records, settings, and user assignments. This cannot be undone.",
+                s.hostname.replace('\'', "\\'")
+            );
+            format!(
+                r#"<form method="post" action="/admin/sites/{id}/delete" style="display:inline"
+                      onsubmit="return confirm('{confirm_msg}')">
+                  <button type="submit" class="icon-btn icon-danger" title="Delete site">
+                    <img src="/admin/static/icons/trash-2.svg" alt="Delete">
+                  </button>
+                </form>"#,
+                id = crate::html_escape(&s.id),
+                confirm_msg = confirm_msg,
+            )
+        };
+
         format!(
             r#"<tr>
-              <td>{hostname}</td>
+              <td>{hostname}{default_badge}</td>
               <td>{post_count}</td>
               <td class="actions">
                 <form method="post" action="/admin/sites/switch" style="display:inline">
                   <input type="hidden" name="site_id" value="{id}">
-                  <button type="submit" class="btn btn-secondary btn-sm">Switch</button>
+                  <button type="submit" class="icon-btn" title="Switch to this site">
+                    <img src="/admin/static/icons/play.svg" alt="Switch">
+                  </button>
                 </form>
-                <a href="/admin/sites/{id}/settings" class="btn btn-secondary btn-sm">Settings</a>
-                <form method="post" action="/admin/sites/{id}/delete" style="display:inline"
-                      data-confirm="{confirm_msg}" onsubmit="return confirm(this.dataset.confirm)">
-                  <button type="submit" class="btn btn-danger btn-sm">Delete</button>
-                </form>
+                <a href="/admin/sites/{id}/settings" class="icon-btn" title="Site settings">
+                  <img src="/admin/static/icons/edit.svg" alt="Settings">
+                </a>
+                {delete}
               </td>
             </tr>"#,
             id = crate::html_escape(&s.id),
             hostname = crate::html_escape(&s.hostname),
+            default_badge = if s.is_default { r#" <span class="badge" title="Install site — cannot be deleted">default</span>"# } else { "" },
             post_count = s.post_count,
-            confirm_msg = crate::html_escape(&confirm_msg),
+            delete = delete_html,
         )
     }).collect::<Vec<_>>().join("\n");
 
