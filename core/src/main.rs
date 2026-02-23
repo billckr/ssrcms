@@ -22,10 +22,12 @@ async fn main() -> anyhow::Result<()> {
     });
 
     // ── Logging ───────────────────────────────────────────────────────────────
-    tracing_subscriber::registry()
-        .with(EnvFilter::new(&cfg.log_level))
-        .with(tracing_subscriber::fmt::layer())
-        .init();
+    let filter = EnvFilter::new(&cfg.log_level);
+    let registry = tracing_subscriber::registry().with(filter);
+    match cfg.log_format.as_str() {
+        "json" => registry.with(tracing_subscriber::fmt::layer().json()).init(),
+        _ => registry.with(tracing_subscriber::fmt::layer()).init(),
+    }
 
     info!("Synaptic Signals CMS starting...");
 

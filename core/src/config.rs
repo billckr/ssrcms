@@ -41,6 +41,10 @@ pub struct AppConfig {
     #[serde(default = "default_log_level")]
     pub log_level: String,
 
+    /// Log output format: "text" (human-readable, default) or "json" (structured, for log aggregators)
+    #[serde(default = "default_log_format")]
+    pub log_format: String,
+
     /// Path to the Tantivy search index directory
     #[serde(default = "default_search_index_path")]
     pub search_index_path: String,
@@ -73,6 +77,10 @@ fn default_plugins_dir() -> String {
 
 fn default_uploads_dir() -> String {
     "uploads".to_string()
+}
+
+fn default_log_format() -> String {
+    "text".to_string()
 }
 
 fn default_log_level() -> String {
@@ -168,6 +176,11 @@ mod tests {
     }
 
     #[test]
+    fn test_default_log_format() {
+        assert_eq!(default_log_format(), "text");
+    }
+
+    #[test]
     fn test_default_search_index_path() {
         assert_eq!(default_search_index_path(), "search-index");
     }
@@ -183,6 +196,7 @@ mod tests {
             uploads_dir: default_uploads_dir(),
             dev_mode: false,
             log_level: default_log_level(),
+            log_format: default_log_format(),
             search_index_path: default_search_index_path(),
             pid_file: default_pid_file(),
         }
