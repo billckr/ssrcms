@@ -72,6 +72,40 @@ remove_pid() {
     rm -f "$PID_FILE"
 }
 
+check_postgres() {
+    local db_url="${DATABASE_URL:-}"
+    if [[ -z "$db_url" && -f "$SCRIPT_DIR/.env" ]]; then
+        db_url=$(grep -E '^DATABASE_URL=' "$SCRIPT_DIR/.env" 2>/dev/null | cut -d= -f2- | tr -d '[:space:]' || true)
+    fi
+
+    if [[ -z "$db_url" ]]; then
+        log "WARNING: DATABASE_URL not set — skipping PostgreSQL connectivity check."
+        return 0
+    fi
+
+    # Parse host and port from postgres://user:pass@host:port/dbname
+    local host port
+    host=$(echo "$db_url" | sed -E 's|.*@([^:/]+)[:/].*|\1|')
+    port=$(echo "$db_url" | sed -E 's|.*@[^:]+:([0-9]+)/.*|\1|')
+    [[ "$port" =~ ^[0-9]+$ ]] || port=5432
+
+    if command -v pg_isready &>/dev/null; then
+        if ! pg_isready -h "$host" -p "$port" -q 2>/dev/null; then
+            log "ERROR: PostgreSQL is not reachable at ${host}:${port}"
+            log "Start PostgreSQL before starting the server."
+            exit 1
+        fi
+    else
+        # Fallback: TCP check via bash /dev/tcp
+        if ! (echo > /dev/tcp/"$host"/"$port") 2>/dev/null; then
+            log "ERROR: PostgreSQL is not reachable at ${host}:${port}"
+            log "Start PostgreSQL before starting the server."
+            exit 1
+        fi
+    fi
+    log "PostgreSQL is reachable at ${host}:${port}"
+}
+
 # ── Commands ──────────────────────────────────────────────────────────────────
 
 cmd_start() {
@@ -79,6 +113,8 @@ cmd_start() {
         log "Already running (PID $(<"$PID_FILE")). Use 'restart' to restart."
         exit 0
     fi
+
+    check_postgres
 
     # Ensure binary exists; build if missing
     if [[ ! -f "$BINARY" ]]; then
