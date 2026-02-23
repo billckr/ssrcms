@@ -22,7 +22,7 @@ pub fn render_with_flash(themes: &[ThemeInfo], flash: Option<&str>, current_site
             <p>No themes found. Add a theme directory to <code>themes/</code> and restart the server.</p>
         </div>"#.to_string()
     } else {
-        themes.iter().map(render_card).collect()
+        themes.iter().map(|t| render_card(t, is_global_admin)).collect()
     };
 
     let content = format!(
@@ -47,7 +47,7 @@ pub fn render(themes: &[ThemeInfo], current_site: &str, is_global_admin: bool) -
     render_with_flash(themes, None, current_site, is_global_admin)
 }
 
-fn render_card(t: &ThemeInfo) -> String {
+fn render_card(t: &ThemeInfo, is_global_admin: bool) -> String {
     let active_class = if t.active { " active" } else { "" };
 
     let screenshot_html = if t.has_screenshot {
@@ -109,7 +109,7 @@ fn render_card(t: &ThemeInfo) -> String {
         version = crate::html_escape(&t.version),
         source_badge = {
             let source_label = if t.source == "global" { "global" } else { "site" };
-            let in_use_badge = if t.source == "global" && t.in_use_by > 0 {
+            let in_use_badge = if is_global_admin && t.source == "global" && t.in_use_by > 0 {
                 format!(
                     r#" <span class="badge badge-in-use" title="Active on {n} site(s) — cannot delete">used by {n} site{s}</span>"#,
                     n = t.in_use_by,
