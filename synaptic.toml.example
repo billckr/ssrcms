@@ -40,6 +40,12 @@ log_level = "info"
 # Log output format: "text" (human-readable, default) or "json" (structured, for Datadog/Loki/CloudWatch etc.)
 log_format = "text"
 
+# ── Observability ─────────────────────────────────────────────────────────────
+
+# Optional: bearer token to protect GET /metrics (leave unset to rely on network-level restriction)
+# Generate with: openssl rand -hex 32
+# metrics_token = "your-secret-token-here"
+
 # ── Development ───────────────────────────────────────────────────────────────
 
 # Enable hot reload of templates and plugins (do not use in production)

@@ -52,6 +52,10 @@ pub struct AppConfig {
     /// Path to the PID file written on startup (used by synaptic-cli for live reload)
     #[serde(default = "default_pid_file")]
     pub pid_file: String,
+
+    /// Optional bearer token to protect the /metrics endpoint.
+    /// If unset, the endpoint is open (restrict access at the network/Caddy level instead).
+    pub metrics_token: Option<String>,
 }
 
 fn default_host() -> String {
@@ -199,6 +203,7 @@ mod tests {
             log_format: default_log_format(),
             search_index_path: default_search_index_path(),
             pid_file: default_pid_file(),
+            metrics_token: None,
         }
     }
 

@@ -39,6 +39,7 @@ async fn render_search(
     let search_results = if query.is_empty() {
         Vec::new()
     } else {
+        metrics::counter!("synaptic_search_queries_total").increment(1);
         state.search_index.search(&query, 20)?
     };
 

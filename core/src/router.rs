@@ -1,13 +1,40 @@
 //! Axum router: wires all routes and middleware.
 
-use axum::{routing::{get, post}, Router};
+use axum::{
+    extract::Request,
+    middleware::{self, Next},
+    response::Response,
+    routing::{get, post},
+    Router,
+};
 use tower_http::{services::ServeDir, trace::TraceLayer};
 use tower_sessions::SessionManagerLayer;
 use tower_sessions_sqlx_store::PostgresStore;
 
 use crate::app_state::AppState;
-use crate::handlers::{archive, auth, home, page, plugin_route, post as post_handler, search, theme_static};
+use crate::handlers::{archive, auth, home, metrics as metrics_handler, page, plugin_route, post as post_handler, search, theme_static};
 use crate::handlers::admin::{appearance, dashboard, media, plugins, posts, profile, settings, taxonomy, upload, users};
+
+/// Tower middleware that records per-request HTTP metrics.
+async fn track_http_metrics(req: Request, next: Next) -> Response {
+    let method = req.method().to_string();
+    let start = std::time::Instant::now();
+
+    let response = next.run(req).await;
+
+    let duration = start.elapsed().as_secs_f64();
+    let status = response.status().as_u16().to_string();
+
+    metrics::counter!("synaptic_http_requests_total",
+        "method" => method.clone(),
+        "status" => status
+    ).increment(1);
+    metrics::histogram!("synaptic_http_request_duration_seconds",
+        "method" => method
+    ).record(duration);
+
+    response
+}
 
 pub fn build(
     state: AppState,
@@ -23,6 +50,8 @@ pub fn build(
     let plugin_route_paths: Vec<String> = state.plugin_routes.keys().cloned().collect();
 
     let mut router = Router::new()
+        // ── Observability ──────────────────────────────────────────────────
+        .route("/metrics", get(metrics_handler::metrics))
         // ── Public content routes ──────────────────────────────────────────
         .route("/", get(home::home))
         .route("/blog/{slug}", get(post_handler::single_post))
@@ -89,6 +118,7 @@ pub fn build(
     router = router.route("/{slug}", get(page::single_page));
 
     router
+        .layer(middleware::from_fn(track_http_metrics))
         .layer(session_layer)
         .layer(TraceLayer::new_for_http())
         .with_state(state)

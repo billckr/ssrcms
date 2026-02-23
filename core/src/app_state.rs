@@ -1,5 +1,6 @@
 //! Shared application state passed to every Axum handler via State extractor.
 
+use metrics_exporter_prometheus::PrometheusHandle;
 use sqlx::PgPool;
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
@@ -82,4 +83,8 @@ pub struct AppState {
     /// Currently active theme name — updated live when admin switches theme.
     /// Shared across all clones so the static file handler always sees the current value.
     pub active_theme: Arc<RwLock<String>>,
+    /// Handle for rendering Prometheus metrics text at GET /metrics.
+    pub metrics_handle: PrometheusHandle,
+    /// Optional bearer token required to access GET /metrics.
+    pub metrics_token: Option<String>,
 }

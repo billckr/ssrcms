@@ -2,6 +2,7 @@ pub mod admin;
 pub mod archive;
 pub mod auth;
 pub mod home;
+pub mod metrics;
 pub mod page;
 pub mod plugin_route;
 pub mod post;

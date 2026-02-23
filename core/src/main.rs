@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use metrics_exporter_prometheus::PrometheusBuilder;
 use tracing::info;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
@@ -74,6 +75,12 @@ async fn main() -> anyhow::Result<()> {
         plugin_routes.len()
     );
 
+    // ── Metrics recorder ──────────────────────────────────────────────────────
+    let metrics_handle = PrometheusBuilder::new()
+        .install_recorder()
+        .expect("failed to install Prometheus metrics recorder");
+    info!("metrics recorder installed — endpoint: GET /metrics");
+
     // ── Search index ──────────────────────────────────────────────────────────
     let search_index = search::SearchIndex::open_or_create(
         std::path::Path::new(&cfg.search_index_path),
@@ -101,6 +108,8 @@ async fn main() -> anyhow::Result<()> {
         search_index,
         loaded_plugins: Arc::new(loaded_plugins),
         active_theme,
+        metrics_handle,
+        metrics_token: cfg.metrics_token.clone(),
     };
 
     // ── Router ────────────────────────────────────────────────────────────────
