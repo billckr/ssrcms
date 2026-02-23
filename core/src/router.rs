@@ -100,6 +100,7 @@ pub fn build(
         // ── Admin appearance ───────────────────────────────────────────────
         .route("/admin/appearance", get(appearance::list))
         .route("/admin/appearance/activate", post(appearance::activate))
+        .route("/admin/appearance/delete", post(appearance::delete))
         .route("/admin/appearance/upload", post(appearance::upload_theme))
         .route("/admin/theme-screenshot/{theme_name}", get(appearance::screenshot))
         // ── Admin settings ─────────────────────────────────────────────────

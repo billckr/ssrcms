@@ -112,6 +112,124 @@ pub async fn activate(
     Redirect::to("/admin/appearance").into_response()
 }
 
+// ── Delete ─────────────────────────────────────────────────────────────────────
+
+#[derive(Deserialize)]
+pub struct DeleteForm {
+    pub theme: String,
+}
+
+pub async fn delete(
+    State(state): State<AppState>,
+    admin: AdminUser,
+    Form(form): Form<DeleteForm>,
+) -> impl IntoResponse {
+    let cs = state.site_hostname(admin.site_id);
+
+    macro_rules! err {
+        ($msg:expr) => {
+            return render_appearance_list(&state, Some($msg), &cs, admin.is_global_admin, admin.site_id)
+                .await
+                .into_response()
+        };
+    }
+
+    // Reject obviously invalid names.
+    if form.theme.contains("..") || form.theme.contains('/') || form.theme.contains('\\') || form.theme.is_empty() {
+        err!("Invalid theme name.");
+    }
+
+    let themes_dir = &state.config.themes_dir;
+    let global_path = FsPath::new(themes_dir).join("global").join(&form.theme);
+    let site_path = admin.site_id
+        .map(|id| FsPath::new(themes_dir).join("sites").join(id.to_string()).join(&form.theme));
+
+    // Determine whether this is a global or site theme.
+    let (theme_path, is_global) = if global_path.is_dir() {
+        (global_path, true)
+    } else if let Some(ref sp) = site_path {
+        if sp.is_dir() {
+            (sp.clone(), false)
+        } else {
+            err!("Theme not found.");
+        }
+    } else {
+        err!("Theme not found.");
+    };
+
+    // Authorization: only super admins may delete global themes.
+    if is_global && !admin.is_global_admin {
+        err!("Only super admins can delete global themes.");
+    }
+
+    // Active theme guard (server-side, even though UI hides the button).
+    let active_for_site: Option<String> = if let Some(sid) = admin.site_id {
+        sqlx::query_scalar(
+            "SELECT value FROM site_settings WHERE site_id = $1 AND key = 'active_theme'",
+        )
+        .bind(sid)
+        .fetch_optional(&state.db)
+        .await
+        .unwrap_or(None)
+    } else {
+        None
+    };
+
+    if active_for_site.as_deref() == Some(form.theme.as_str()) {
+        err!("Cannot delete the active theme. Activate a different theme first.");
+    }
+
+    // In-use guard for global themes: block if any site has it active.
+    if is_global {
+        let in_use: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM site_settings WHERE key = 'active_theme' AND value = $1",
+        )
+        .bind(&form.theme)
+        .fetch_one(&state.db)
+        .await
+        .unwrap_or(0);
+
+        if in_use > 0 {
+            err!("Cannot delete: this theme is currently active on one or more sites.");
+        }
+    }
+
+    // Path traversal guard: confirm the theme dir is a direct child of the expected parent.
+    let expected_parent = if is_global {
+        match FsPath::new(themes_dir).join("global").canonicalize() {
+            Ok(p) => p,
+            Err(_) => err!("Theme not found."),
+        }
+    } else {
+        let sid = admin.site_id.unwrap();
+        match FsPath::new(themes_dir).join("sites").join(sid.to_string()).canonicalize() {
+            Ok(p) => p,
+            Err(_) => err!("Theme not found."),
+        }
+    };
+
+    let canonical_theme = match theme_path.canonicalize() {
+        Ok(p) => p,
+        Err(_) => err!("Theme not found."),
+    };
+
+    if canonical_theme.parent() != Some(expected_parent.as_path()) {
+        tracing::warn!("delete path traversal attempt: theme={:?}", form.theme);
+        err!("Invalid theme path.");
+    }
+
+    // Remove the theme directory.
+    if let Err(e) = fs::remove_dir_all(&canonical_theme) {
+        tracing::error!("failed to delete theme '{}': {:?}", form.theme, e);
+        err!("Failed to delete theme. Please try again.");
+    }
+
+    tracing::info!("theme '{}' deleted by {}", form.theme, if admin.is_global_admin { "super_admin" } else { "site_admin" });
+    render_appearance_list(&state, Some(&format!("Theme '{}' deleted.", form.theme)), &cs, admin.is_global_admin, admin.site_id)
+        .await
+        .into_response()
+}
+
 // ── Screenshot ─────────────────────────────────────────────────────────────────
 
 pub async fn screenshot(
@@ -423,6 +541,27 @@ async fn render_appearance_list(
         scan_theme_dir(sd, &active_theme_from_db, "site", &mut themes);
     }
 
+    // Fetch the set of all theme names currently active on any site (for global in-use guard).
+    let globally_active: std::collections::HashSet<String> = sqlx::query_scalar(
+        "SELECT DISTINCT value FROM site_settings WHERE key = 'active_theme'",
+    )
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default()
+    .into_iter()
+    .collect();
+
+    // Compute can_delete for each theme.
+    for theme in &mut themes {
+        theme.can_delete = if theme.source == "global" {
+            // Super admin only; not active anywhere.
+            is_global_admin && !theme.active && !globally_active.contains(&theme.name)
+        } else {
+            // Site theme: either admin type can delete, as long as it's not active.
+            !theme.active
+        };
+    }
+
     themes.sort_by(|a, b| match (a.active, b.active) {
         (true, false) => std::cmp::Ordering::Less,
         (false, true) => std::cmp::Ordering::Greater,
@@ -465,6 +604,7 @@ fn scan_theme_dir(dir: &FsPath, active_theme: &str, source: &str, themes: &mut V
                         active: name == active_theme,
                         has_screenshot,
                         source: source.to_string(),
+                        can_delete: false, // computed after scanning in render_appearance_list
                     });
                 }
             }

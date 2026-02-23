@@ -9,6 +9,9 @@ pub struct ThemeInfo {
     pub has_screenshot: bool,
     /// Origin of this theme: `"global"` (available to all sites) or `"site"` (site-specific).
     pub source: String,
+    /// Whether the current user is permitted to delete this theme.
+    /// Computed server-side; never shown for active themes.
+    pub can_delete: bool,
 }
 
 pub fn render_with_flash(themes: &[ThemeInfo], flash: Option<&str>, current_site: &str, is_global_admin: bool) -> String {
@@ -58,7 +61,7 @@ fn render_card(t: &ThemeInfo) -> String {
         )
     };
 
-    let button_html = if t.active {
+    let activate_html = if t.active {
         r#"<button class="btn btn-secondary" disabled>Active</button>"#.to_string()
     } else {
         format!(
@@ -70,25 +73,46 @@ fn render_card(t: &ThemeInfo) -> String {
         )
     };
 
+    let delete_html = if t.can_delete {
+        format!(
+            r#"<form method="post" action="/admin/appearance/delete" style="display:inline;"
+    onsubmit="return confirm('Delete theme \'{name}\'? This cannot be undone.');">
+    <input type="hidden" name="theme" value="{name_escaped}">
+    <button type="submit" class="btn btn-danger">Delete</button>
+</form>"#,
+            name = t.name.replace('\'', "\\'"),
+            name_escaped = crate::html_escape(&t.name),
+        )
+    } else {
+        String::new()
+    };
+
     format!(
         r#"<div class="theme-card{active}">
   {screenshot}
   <div class="theme-card-header">
     <span class="theme-name">{name}</span>
     <span class="badge">{version}</span>
+    {source_badge}
   </div>
   <p class="theme-description">{desc}</p>
   <p class="theme-author">by {author}</p>
   <div class="theme-actions">
-    {button}
+    {activate}{delete}
   </div>
 </div>"#,
         active = active_class,
         screenshot = screenshot_html,
         name = crate::html_escape(&t.name),
         version = crate::html_escape(&t.version),
+        source_badge = if t.source == "global" {
+            r#"<span class="badge badge">global</span>"#
+        } else {
+            r#"<span class="badge badge">site</span>"#
+        },
         desc = crate::html_escape(&t.description),
         author = crate::html_escape(&t.author),
-        button = button_html,
+        activate = activate_html,
+        delete = delete_html,
     )
 }
