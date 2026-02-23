@@ -158,6 +158,14 @@ impl AppState {
         self.site_cache.read().ok()?.get(hostname).cloned()
     }
 
+    /// Return the hostname for a site_id — used to populate the header site indicator.
+    pub fn site_hostname(&self, site_id: Option<Uuid>) -> String {
+        site_id
+            .and_then(|sid| self.get_site_by_id(sid))
+            .map(|(s, _)| s.hostname)
+            .unwrap_or_default()
+    }
+
     /// Resolve a site by UUID (iterates the cache; used by admin handlers).
     pub fn get_site_by_id(&self, site_id: Uuid) -> Option<(Site, SiteSettings)> {
         self.site_cache

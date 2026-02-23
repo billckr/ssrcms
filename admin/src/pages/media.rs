@@ -8,7 +8,7 @@ pub struct MediaItem {
     pub alt_text: Option<String>,
 }
 
-pub fn render_list(items: &[MediaItem], flash: Option<&str>) -> String {
+pub fn render_list(items: &[MediaItem], flash: Option<&str>, current_site: &str) -> String {
     let grid = items.iter().map(|m| {
         let is_image = m.mime_type.starts_with("image/");
         let preview = if is_image {
@@ -48,5 +48,5 @@ pub fn render_list(items: &[MediaItem], flash: Option<&str>) -> String {
         grid = grid,
     );
 
-    crate::admin_page("Media Library", "/admin/media", flash, &content)
+    crate::admin_page("Media Library", "/admin/media", flash, &content, current_site)
 }

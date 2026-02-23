@@ -6,8 +6,9 @@ use admin::pages::plugins::{PluginRow, render};
 
 pub async fn list(
     State(state): State<AppState>,
-    _admin: AdminUser,
+    admin: AdminUser,
 ) -> Html<String> {
+    let cs = state.site_hostname(admin.site_id);
     let rows: Vec<PluginRow> = state.loaded_plugins.iter().map(|m| {
         let mut hooks: Vec<(String, String)> = m.hooks
             .iter()
@@ -33,5 +34,5 @@ pub async fn list(
         }
     }).collect();
 
-    Html(render(&rows))
+    Html(render(&rows, &cs))
 }

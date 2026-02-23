@@ -29,9 +29,10 @@ const MAX_ZIP_BYTES: usize = 50 * 1024 * 1024;
 
 pub async fn list(
     State(state): State<AppState>,
-    _admin: AdminUser,
+    admin: AdminUser,
 ) -> Html<String> {
-    render_appearance_list(&state, None).await
+    let cs = state.site_hostname(admin.site_id);
+    render_appearance_list(&state, None, &cs).await
 }
 
 // ── Activate ──────────────────────────────────────────────────────────────────
@@ -49,27 +50,29 @@ pub async fn activate(
     let themes_dir = &state.config.themes_dir;
     let theme_path = FsPath::new(themes_dir).join(&form.theme);
 
+    let cs = state.site_hostname(admin.site_id);
+
     if !theme_path.is_dir() {
         tracing::warn!("theme activation failed: theme '{}' not found", form.theme);
-        return render_appearance_list(&state, Some("Theme not found.")).await.into_response();
+        return render_appearance_list(&state, Some("Theme not found."), &cs).await.into_response();
     }
 
     let site_id = match admin.site_id {
         Some(id) => id,
         None => {
             tracing::warn!("theme activate: no site selected, cannot save per-site setting");
-            return render_appearance_list(&state, Some("No site selected. Run 'synaptic-cli site init' first.")).await.into_response();
+            return render_appearance_list(&state, Some("No site selected. Run 'synaptic-cli site init' first."), &cs).await.into_response();
         }
     };
 
     if let Err(e) = set_site_setting(&state.db, site_id, "active_theme", &form.theme).await {
         tracing::error!("failed to save active_theme to DB: {:?}", e);
-        return render_appearance_list(&state, Some("Failed to activate theme. Please try again.")).await.into_response();
+        return render_appearance_list(&state, Some("Failed to activate theme. Please try again."), &cs).await.into_response();
     }
 
     if let Err(e) = state.templates.switch_theme(&form.theme) {
         tracing::error!("failed to switch theme to '{}': {:?}", form.theme, e);
-        return render_appearance_list(&state, Some("Theme files could not be loaded. Please try again.")).await.into_response();
+        return render_appearance_list(&state, Some("Theme files could not be loaded. Please try again."), &cs).await.into_response();
     }
 
     *state.active_theme.write().unwrap() = form.theme.clone();
@@ -116,9 +119,10 @@ pub async fn screenshot(
 
 pub async fn upload_theme(
     State(state): State<AppState>,
-    _admin: AdminUser,
+    admin: AdminUser,
     mut multipart: Multipart,
 ) -> impl IntoResponse {
+    let cs = state.site_hostname(admin.site_id);
     // Collect the zip bytes from the multipart field named "file".
     let mut zip_bytes: Option<Vec<u8>> = None;
     while let Ok(Some(field)) = multipart.next_field().await {
@@ -126,13 +130,13 @@ pub async fn upload_theme(
             match field.bytes().await {
                 Ok(b) if b.len() <= MAX_ZIP_BYTES => zip_bytes = Some(b.to_vec()),
                 Ok(_) => {
-                    return render_appearance_list(&state, Some("Upload too large. Maximum size is 50 MB."))
+                    return render_appearance_list(&state, Some("Upload too large. Maximum size is 50 MB."), &cs)
                         .await
                         .into_response();
                 }
                 Err(e) => {
                     tracing::error!("failed to read theme zip field: {:?}", e);
-                    return render_appearance_list(&state, Some("Failed to read uploaded file. Please try again."))
+                    return render_appearance_list(&state, Some("Failed to read uploaded file. Please try again."), &cs)
                         .await
                         .into_response();
                 }
@@ -142,7 +146,7 @@ pub async fn upload_theme(
 
     let zip_bytes = match zip_bytes {
         Some(b) => b,
-        None => return render_appearance_list(&state, Some("No file received.")).await.into_response(),
+        None => return render_appearance_list(&state, Some("No file received."), &cs).await.into_response(),
     };
 
     let themes_dir = state.config.themes_dir.clone();
@@ -164,23 +168,23 @@ pub async fn upload_theme(
             let active = state.active_theme.read().unwrap().clone();
             if let Err(e) = state.templates.switch_theme(&active) {
                 tracing::error!("theme '{}' installed but Tera reload of '{}' failed: {:?}", theme_name, active, e);
-                return render_appearance_list(&state, Some("Theme installed but could not be reloaded. Please restart the server."))
+                return render_appearance_list(&state, Some("Theme installed but could not be reloaded. Please restart the server."), &cs)
                     .await
                     .into_response();
             }
             tracing::info!("reloaded active theme '{}' after installing '{}'", active, theme_name);
 
-            render_appearance_list(&state, Some(&format!("Theme '{}' installed successfully.", theme_name)))
+            render_appearance_list(&state, Some(&format!("Theme '{}' installed successfully.", theme_name)), &cs)
                 .await
                 .into_response()
         }
         Ok(Err(msg)) => {
             tracing::warn!("theme upload rejected: {}", msg);
-            render_appearance_list(&state, Some(&msg)).await.into_response()
+            render_appearance_list(&state, Some(&msg), &cs).await.into_response()
         }
         Err(e) => {
             tracing::error!("theme upload task panicked: {:?}", e);
-            render_appearance_list(&state, Some("Installation failed. Please try again."))
+            render_appearance_list(&state, Some("Installation failed. Please try again."), &cs)
                 .await
                 .into_response()
         }
@@ -330,7 +334,7 @@ fn tempdir_in(themes_dir: &str) -> Result<String, String> {
 
 // ── Shared list renderer ───────────────────────────────────────────────────────
 
-async fn render_appearance_list(state: &AppState, flash: Option<&str>) -> Html<String> {
+async fn render_appearance_list(state: &AppState, flash: Option<&str>, current_site: &str) -> Html<String> {
     let themes_dir = &state.config.themes_dir;
 
     let active_theme_from_db: String = sqlx::query_scalar("SELECT value FROM site_settings WHERE key = 'active_theme'")
@@ -387,5 +391,5 @@ async fn render_appearance_list(state: &AppState, flash: Option<&str>) -> Html<S
         _ => a.name.cmp(&b.name),
     });
 
-    Html(render_with_flash(&themes, flash))
+    Html(render_with_flash(&themes, flash, current_site))
 }

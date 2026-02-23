@@ -26,7 +26,8 @@ pub async fn settings(
         posts_per_page: s.posts_per_page,
         date_format: s.date_format.clone(),
     };
-    Html(admin::pages::settings::render(&data, None))
+    let cs = state.site_hostname(admin.site_id);
+    Html(admin::pages::settings::render(&data, None, &cs))
 }
 
 #[derive(Deserialize)]

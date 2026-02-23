@@ -6,7 +6,15 @@ const ADMIN_CSS: &str = include_str!("../style/admin.css");
 
 /// Wrap a rendered content HTML string in the full admin page shell.
 /// The sidebar nav, head, and body wrapper are all here.
-pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content: &str) -> String {
+pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content: &str, current_site: &str) -> String {
+    let site_indicator = if current_site.is_empty() {
+        String::new()
+    } else {
+        format!(
+            r#"<a href="/admin/sites" class="site-indicator">{}</a>"#,
+            html_escape(current_site)
+        )
+    };
     let flash_html = match flash {
         Some(msg) => {
             // Detect error messages by looking for error indicators
@@ -74,6 +82,7 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
           <span></span><span></span><span></span>
         </button>
         <h1>{title}</h1>
+        {site_indicator}
       </header>
       {flash_html}
       <div class="admin-content">
@@ -109,6 +118,7 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
         sites = nav_link("/admin/sites", "Sites"),
         flash_html = flash_html,
         content = content,
+        site_indicator = site_indicator,
     )
 }
 

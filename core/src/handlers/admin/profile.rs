@@ -10,16 +10,17 @@ use crate::middleware::admin_auth::AdminUser;
 use admin::pages::profile::ProfileForm;
 
 pub async fn view(
-    State(_state): State<AppState>,
+    State(state): State<AppState>,
     admin: AdminUser,
 ) -> Html<String> {
+    let cs = state.site_hostname(admin.site_id);
     let profile = ProfileForm {
         username: admin.user.username.clone(),
         email: admin.user.email.clone(),
         display_name: admin.user.display_name.clone(),
         bio: admin.user.bio.clone(),
     };
-    Html(admin::pages::profile::render_profile(&profile, None))
+    Html(admin::pages::profile::render_profile(&profile, None, &cs))
 }
 
 #[derive(Deserialize)]
@@ -36,6 +37,7 @@ pub async fn update_profile(
 ) -> impl IntoResponse {
     use crate::models::user::UpdateUser;
 
+    let cs = state.site_hostname(admin.site_id);
     let email = form.email.clone();
     let display_name = form.display_name.clone().filter(|s| !s.is_empty());
     let bio = form.bio.clone().filter(|s| !s.is_empty());
@@ -60,10 +62,12 @@ pub async fn update_profile(
         Ok(_) => Html(admin::pages::profile::render_profile(
             &profile,
             Some("Profile updated successfully!"),
+            &cs,
         )),
         Err(e) => Html(admin::pages::profile::render_profile(
             &profile,
             Some(&format!("Error updating profile: {}", e)),
+            &cs,
         )),
     }
 }
@@ -96,6 +100,7 @@ pub async fn change_password(
     admin: AdminUser,
     Form(form): Form<ChangePasswordForm>,
 ) -> impl IntoResponse {
+    let cs = state.site_hostname(admin.site_id);
     let profile = ProfileForm {
         username: admin.user.username.clone(),
         email: admin.user.email.clone(),
@@ -103,39 +108,37 @@ pub async fn change_password(
         bio: admin.user.bio.clone(),
     };
 
-    // Validate passwords match
     if form.new_password != form.confirm_password {
         return Html(admin::pages::profile::render_profile(
             &profile,
             Some("New passwords do not match."),
+            &cs,
         ));
     }
 
-    // Validate current password
     if !admin.user.verify_password(&form.current_password) {
         return Html(admin::pages::profile::render_profile(
             &profile,
             Some("Current password is incorrect."),
+            &cs,
         ));
     }
 
-    // Validate new password requirements
     if let Err(e) = validate_password_requirements(&form.new_password) {
-        return Html(admin::pages::profile::render_profile(&profile, Some(e)));
+        return Html(admin::pages::profile::render_profile(&profile, Some(e), &cs));
     }
 
-    // Hash new password
     let new_password_hash = match crate::models::user::hash_password(&form.new_password) {
         Ok(h) => h,
         Err(_) => {
             return Html(admin::pages::profile::render_profile(
                 &profile,
                 Some("Password hashing error. Please try again."),
+                &cs,
             ));
         }
     };
 
-    // Update password in database
     use crate::models::user::UpdateUser;
     let update = UpdateUser {
         username: None,
@@ -150,10 +153,12 @@ pub async fn change_password(
         Ok(_) => Html(admin::pages::profile::render_profile(
             &profile,
             Some("Password changed successfully!"),
+            &cs,
         )),
         Err(e) => Html(admin::pages::profile::render_profile(
             &profile,
             Some(&format!("Error changing password: {}", e)),
+            &cs,
         )),
     }
 }

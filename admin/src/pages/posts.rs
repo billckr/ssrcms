@@ -30,7 +30,7 @@ pub struct TermOption {
     pub name: String,
 }
 
-pub fn render_list(posts: &[PostRow], post_type: &str, flash: Option<&str>) -> String {
+pub fn render_list(posts: &[PostRow], post_type: &str, flash: Option<&str>, current_site: &str) -> String {
     let title = if post_type == "page" { "Pages" } else { "Posts" };
     let new_label = if post_type == "page" { "New Page" } else { "New Post" };
     let new_href = if post_type == "page" { "/admin/pages/new" } else { "/admin/posts/new" };
@@ -82,10 +82,10 @@ pub fn render_list(posts: &[PostRow], post_type: &str, flash: Option<&str>) -> S
     );
 
     let path = if post_type == "page" { "/admin/pages" } else { "/admin/posts" };
-    crate::admin_page(title, path, flash, &content)
+    crate::admin_page(title, path, flash, &content, current_site)
 }
 
-pub fn render_editor(post: &PostEdit, flash: Option<&str>) -> String {
+pub fn render_editor(post: &PostEdit, flash: Option<&str>, current_site: &str) -> String {
     let is_new = post.id.is_none();
     let title = if is_new {
         if post.post_type == "page" { "New Page".to_string() } else { "New Post".to_string() }
@@ -209,7 +209,7 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>) -> String {
     );
 
     let path = if post.post_type == "page" { "/admin/pages" } else { "/admin/posts" };
-    crate::admin_page(&title, path, flash, &content)
+    crate::admin_page(&title, path, flash, &content, current_site)
 }
 
 #[cfg(test)]
@@ -230,22 +230,22 @@ mod tests {
 
     #[test]
     fn post_view_link_uses_blog_prefix() {
-        let html = render_list(&[make_row("post", "my-post")], "post", None);
+        let html = render_list(&[make_row("post", "my-post")], "post", None, "");
         assert!(html.contains("href=\"/blog/my-post\""), "post view href should be /blog/{{slug}}");
         assert!(html.contains("target=\"_blank\""), "view link should open in new tab");
     }
 
     #[test]
     fn page_view_link_uses_root_prefix() {
-        let html = render_list(&[make_row("page", "about")], "page", None);
+        let html = render_list(&[make_row("page", "about")], "page", None, "");
         assert!(html.contains("href=\"/about\""), "page view href should be /{{slug}}");
         assert!(html.contains("target=\"_blank\""), "view link should open in new tab");
     }
 
     #[test]
     fn view_icon_present_in_both_post_and_page_lists() {
-        let post_html = render_list(&[make_row("post", "hello")], "post", None);
-        let page_html = render_list(&[make_row("page", "hello")], "page", None);
+        let post_html = render_list(&[make_row("post", "hello")], "post", None, "");
+        let page_html = render_list(&[make_row("page", "hello")], "page", None, "");
         assert!(post_html.contains("eye.svg"), "post list should include eye icon");
         assert!(page_html.contains("eye.svg"), "page list should include eye icon");
     }

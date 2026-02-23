@@ -11,7 +11,7 @@ pub struct PluginRow {
     pub meta_fields: Vec<String>,        // declared meta field keys
 }
 
-pub fn render(plugins: &[PluginRow]) -> String {
+pub fn render(plugins: &[PluginRow], current_site: &str) -> String {
     let content = if plugins.is_empty() {
         r#"<div class="empty-state">
             <p>No plugins installed. Drop a plugin directory into <code>plugins/</code> and restart the server.</p>
@@ -21,7 +21,7 @@ pub fn render(plugins: &[PluginRow]) -> String {
         format!(r#"<div class="plugin-list">{}</div>"#, cards)
     };
 
-    admin_page("Plugins", "/admin/plugins", None, &content)
+    admin_page("Plugins", "/admin/plugins", None, &content, current_site)
 }
 
 fn render_card(p: &PluginRow) -> String {

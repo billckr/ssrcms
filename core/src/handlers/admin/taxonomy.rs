@@ -15,17 +15,19 @@ pub async fn categories(
     State(state): State<AppState>,
     admin: AdminUser,
 ) -> Html<String> {
-    list_terms(state, "category", admin.site_id).await
+    let cs = state.site_hostname(admin.site_id);
+    list_terms(state, "category", admin.site_id, cs).await
 }
 
 pub async fn tags(
     State(state): State<AppState>,
     admin: AdminUser,
 ) -> Html<String> {
-    list_terms(state, "tag", admin.site_id).await
+    let cs = state.site_hostname(admin.site_id);
+    list_terms(state, "tag", admin.site_id, cs).await
 }
 
-async fn list_terms(state: AppState, taxonomy: &str, site_id: Option<Uuid>) -> Html<String> {
+async fn list_terms(state: AppState, taxonomy: &str, site_id: Option<Uuid>, current_site: String) -> Html<String> {
     let tax_type = if taxonomy == "category" { TaxonomyType::Category } else { TaxonomyType::Tag };
     let raw = crate::models::taxonomy::list(&state.db, site_id, tax_type).await.unwrap_or_else(|e| {
         tracing::warn!("failed to list {} terms: {:?}", taxonomy, e);
@@ -44,7 +46,7 @@ async fn list_terms(state: AppState, taxonomy: &str, site_id: Option<Uuid>) -> H
             post_count: count,
         });
     }
-    Html(admin::pages::taxonomy::render(&items, taxonomy, None))
+    Html(admin::pages::taxonomy::render(&items, taxonomy, None, &current_site))
 }
 
 #[derive(Deserialize)]
@@ -86,7 +88,8 @@ pub async fn create(
         } else {
             format!("Failed to create {}. Please try again.", form.taxonomy)
         };
-        return Html(admin::pages::taxonomy::render(&items, &form.taxonomy, Some(&msg))).into_response();
+        let cs = state.site_hostname(admin.site_id);
+        return Html(admin::pages::taxonomy::render(&items, &form.taxonomy, Some(&msg), &cs)).into_response();
     }
     Redirect::to(redirect).into_response()
 }

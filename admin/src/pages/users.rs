@@ -17,7 +17,7 @@ pub struct UserEdit {
     pub bio: String,
 }
 
-pub fn render_list(users: &[UserRow], flash: Option<&str>) -> String {
+pub fn render_list(users: &[UserRow], flash: Option<&str>, current_site: &str) -> String {
     let rows = users.iter().map(|u| {
         let warn_msg = format!(
             "Delete user \\u2018{}\\u2019? This will permanently delete all their posts and pages. This cannot be undone.",
@@ -58,10 +58,10 @@ pub fn render_list(users: &[UserRow], flash: Option<&str>) -> String {
         rows = rows,
     );
 
-    crate::admin_page("Users", "/admin/users", flash, &content)
+    crate::admin_page("Users", "/admin/users", flash, &content, current_site)
 }
 
-pub fn render_editor(user: &UserEdit, flash: Option<&str>) -> String {
+pub fn render_editor(user: &UserEdit, flash: Option<&str>, current_site: &str) -> String {
     let title = if user.id.is_none() { "New User" } else { "Edit User" };
     let action = match &user.id {
         Some(id) => format!("/admin/users/{}/edit", id),
@@ -119,5 +119,5 @@ pub fn render_editor(user: &UserEdit, flash: Option<&str>) -> String {
         password_hint = password_hint,
     );
 
-    crate::admin_page(title, "/admin/users", flash, &content)
+    crate::admin_page(title, "/admin/users", flash, &content, current_site)
 }

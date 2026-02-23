@@ -16,8 +16,9 @@ use tower_sessions::Session;
 /// GET /admin/sites — list all sites.
 pub async fn list(
     State(state): State<AppState>,
-    _admin: AdminUser,
+    admin: AdminUser,
 ) -> Html<String> {
+    let cs = state.site_hostname(admin.site_id);
     let sites = crate::models::site::list(&state.db).await.unwrap_or_else(|e| {
         tracing::warn!("failed to list sites: {:?}", e);
         vec![]
@@ -33,14 +34,16 @@ pub async fn list(
         });
     }
 
-    Html(admin::pages::sites::render_list(&rows, None))
+    Html(admin::pages::sites::render_list(&rows, None, &cs))
 }
 
 /// GET /admin/sites/new — new site form.
 pub async fn new_site(
-    _admin: AdminUser,
+    State(state): State<AppState>,
+    admin: AdminUser,
 ) -> Html<String> {
-    Html(admin::pages::sites::render_new(None))
+    let cs = state.site_hostname(admin.site_id);
+    Html(admin::pages::sites::render_new(None, &cs))
 }
 
 #[derive(Deserialize)]
@@ -51,12 +54,13 @@ pub struct NewSiteForm {
 /// POST /admin/sites — create a new site.
 pub async fn create(
     State(state): State<AppState>,
-    _admin: AdminUser,
+    admin: AdminUser,
     Form(form): Form<NewSiteForm>,
 ) -> impl IntoResponse {
+    let cs = state.site_hostname(admin.site_id);
     let hostname = form.hostname.trim().to_lowercase();
     if hostname.is_empty() {
-        return Html(admin::pages::sites::render_new(Some("Hostname cannot be empty."))).into_response();
+        return Html(admin::pages::sites::render_new(Some("Hostname cannot be empty."), &cs)).into_response();
     }
     match crate::models::site::create(&state.db, &hostname).await {
         Ok(_) => {
@@ -71,7 +75,7 @@ pub async fn create(
             } else {
                 format!("Failed to create site: {e}")
             };
-            Html(admin::pages::sites::render_new(Some(&msg))).into_response()
+            Html(admin::pages::sites::render_new(Some(&msg), &cs)).into_response()
         }
     }
 }
@@ -96,16 +100,17 @@ pub async fn switch(
 /// GET /admin/sites/{id}/settings — edit site hostname.
 pub async fn site_settings(
     State(state): State<AppState>,
-    _admin: AdminUser,
+    admin: AdminUser,
     Path(id): Path<Uuid>,
 ) -> impl IntoResponse {
+    let cs = state.site_hostname(admin.site_id);
     match crate::models::site::get_by_id(&state.db, id).await {
         Ok(site) => {
             let data = SiteSettingsData {
                 id: site.id.to_string(),
                 hostname: site.hostname.clone(),
             };
-            Html(admin::pages::sites::render_settings(&data, None)).into_response()
+            Html(admin::pages::sites::render_settings(&data, None, &cs)).into_response()
         }
         Err(_) => Redirect::to("/admin/sites").into_response(),
     }
@@ -119,14 +124,15 @@ pub struct SiteSettingsForm {
 /// POST /admin/sites/{id}/settings — save site hostname.
 pub async fn save_site_settings(
     State(state): State<AppState>,
-    _admin: AdminUser,
+    admin: AdminUser,
     Path(id): Path<Uuid>,
     Form(form): Form<SiteSettingsForm>,
 ) -> impl IntoResponse {
+    let cs = state.site_hostname(admin.site_id);
     let hostname = form.hostname.trim().to_lowercase();
     if hostname.is_empty() {
         let data = SiteSettingsData { id: id.to_string(), hostname: String::new() };
-        return Html(admin::pages::sites::render_settings(&data, Some("Hostname cannot be empty."))).into_response();
+        return Html(admin::pages::sites::render_settings(&data, Some("Hostname cannot be empty."), &cs)).into_response();
     }
 
     let result = sqlx::query(
@@ -151,7 +157,7 @@ pub async fn save_site_settings(
                 format!("Failed to save: {e}")
             };
             let data = SiteSettingsData { id: id.to_string(), hostname };
-            Html(admin::pages::sites::render_settings(&data, Some(&msg))).into_response()
+            Html(admin::pages::sites::render_settings(&data, Some(&msg), &cs)).into_response()
         }
     }
 }

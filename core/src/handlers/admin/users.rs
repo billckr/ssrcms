@@ -13,8 +13,9 @@ use admin::pages::users::{UserEdit, UserRow};
 
 pub async fn list(
     State(state): State<AppState>,
-    _admin: AdminUser,
+    admin: AdminUser,
 ) -> Html<String> {
+    let cs = state.site_hostname(admin.site_id);
     let raw = crate::models::user::list(&state.db).await.unwrap_or_else(|e| {
         tracing::warn!("failed to list users: {:?}", e);
         vec![]
@@ -26,13 +27,14 @@ pub async fn list(
         role: u.role.clone(),
         display_name: u.display_name.clone(),
     }).collect();
-    Html(admin::pages::users::render_list(&rows, None))
+    Html(admin::pages::users::render_list(&rows, None, &cs))
 }
 
 pub async fn new_user(
-    State(_state): State<AppState>,
-    _admin: AdminUser,
+    State(state): State<AppState>,
+    admin: AdminUser,
 ) -> Html<String> {
+    let cs = state.site_hostname(admin.site_id);
     let edit = UserEdit {
         id: None,
         username: String::new(),
@@ -41,14 +43,15 @@ pub async fn new_user(
         role: "author".into(),
         bio: String::new(),
     };
-    Html(admin::pages::users::render_editor(&edit, None))
+    Html(admin::pages::users::render_editor(&edit, None, &cs))
 }
 
 pub async fn edit_user(
     State(state): State<AppState>,
-    _admin: AdminUser,
+    admin: AdminUser,
     Path(id): Path<Uuid>,
 ) -> impl IntoResponse {
+    let cs = state.site_hostname(admin.site_id);
     let user = match crate::models::user::get_by_id(&state.db, id).await {
         Ok(u) => u,
         Err(e) => {
@@ -64,7 +67,7 @@ pub async fn edit_user(
         role: user.role.clone(),
         bio: user.bio.clone(),
     };
-    Html(admin::pages::users::render_editor(&edit, None)).into_response()
+    Html(admin::pages::users::render_editor(&edit, None, &cs)).into_response()
 }
 
 #[derive(Deserialize)]
@@ -79,9 +82,10 @@ pub struct UserForm {
 
 pub async fn save_new(
     State(state): State<AppState>,
-    _admin: AdminUser,
+    admin: AdminUser,
     Form(form): Form<UserForm>,
 ) -> impl IntoResponse {
+    let cs = state.site_hostname(admin.site_id);
     let password = match form.password.as_deref().filter(|p| !p.is_empty()) {
         Some(p) => p.to_string(),
         None => {
@@ -96,6 +100,7 @@ pub async fn save_new(
             return Html(admin::pages::users::render_editor(
                 &edit,
                 Some("Password is required for new users."),
+                &cs,
             )).into_response();
         }
     };
@@ -122,17 +127,18 @@ pub async fn save_new(
                 bio: form.bio.unwrap_or_default(),
             };
             let msg = friendly_user_error(&e);
-            Html(admin::pages::users::render_editor(&edit, Some(&msg))).into_response()
+            Html(admin::pages::users::render_editor(&edit, Some(&msg), &cs)).into_response()
         }
     }
 }
 
 pub async fn save_edit(
     State(state): State<AppState>,
-    _admin: AdminUser,
+    admin: AdminUser,
     Path(id): Path<Uuid>,
     Form(form): Form<UserForm>,
 ) -> impl IntoResponse {
+    let cs = state.site_hostname(admin.site_id);
     let new_password_hash = if let Some(pw) = form.password.as_deref().filter(|p| !p.is_empty()) {
         match crate::models::user::hash_password(pw) {
             Ok(h) => Some(h),
@@ -149,6 +155,7 @@ pub async fn save_edit(
                 return Html(admin::pages::users::render_editor(
                     &edit,
                     Some("Failed to process password. Please try again."),
+                    &cs,
                 )).into_response();
             }
         }
@@ -178,7 +185,7 @@ pub async fn save_edit(
                 bio: form.bio.unwrap_or_default(),
             };
             let msg = friendly_user_error(&e);
-            Html(admin::pages::users::render_editor(&edit, Some(&msg))).into_response()
+            Html(admin::pages::users::render_editor(&edit, Some(&msg), &cs)).into_response()
         }
     }
 }

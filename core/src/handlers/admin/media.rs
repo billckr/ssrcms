@@ -21,7 +21,8 @@ pub async fn list(
         path: m.path.clone(),
         alt_text: if m.alt_text.is_empty() { None } else { Some(m.alt_text.clone()) },
     }).collect();
-    Html(admin::pages::media::render_list(&items, None))
+    let cs = state.site_hostname(admin.site_id);
+    Html(admin::pages::media::render_list(&items, None, &cs))
 }
 
 pub async fn delete(
