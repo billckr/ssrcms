@@ -18,6 +18,9 @@ pub async fn list(
     State(state): State<AppState>,
     admin: AdminUser,
 ) -> Html<String> {
+    if !admin.is_global_admin {
+        return Html("<h1>403 Forbidden</h1>".to_string());
+    }
     let cs = state.site_hostname(admin.site_id);
     let sites = crate::models::site::list(&state.db).await.unwrap_or_else(|e| {
         tracing::warn!("failed to list sites: {:?}", e);
@@ -34,7 +37,7 @@ pub async fn list(
         });
     }
 
-    Html(admin::pages::sites::render_list(&rows, None, &cs))
+    Html(admin::pages::sites::render_list(&rows, None, &cs, true))
 }
 
 /// GET /admin/sites/new — new site form.
@@ -42,8 +45,11 @@ pub async fn new_site(
     State(state): State<AppState>,
     admin: AdminUser,
 ) -> Html<String> {
+    if !admin.is_global_admin {
+        return Html("<h1>403 Forbidden</h1>".to_string());
+    }
     let cs = state.site_hostname(admin.site_id);
-    Html(admin::pages::sites::render_new(None, &cs))
+    Html(admin::pages::sites::render_new(None, &cs, true))
 }
 
 #[derive(Deserialize)]
@@ -57,10 +63,13 @@ pub async fn create(
     admin: AdminUser,
     Form(form): Form<NewSiteForm>,
 ) -> impl IntoResponse {
+    if !admin.is_global_admin {
+        return (axum::http::StatusCode::FORBIDDEN, "Forbidden").into_response();
+    }
     let cs = state.site_hostname(admin.site_id);
     let hostname = form.hostname.trim().to_lowercase();
     if hostname.is_empty() {
-        return Html(admin::pages::sites::render_new(Some("Hostname cannot be empty."), &cs)).into_response();
+        return Html(admin::pages::sites::render_new(Some("Hostname cannot be empty."), &cs, true)).into_response();
     }
     match crate::models::site::create(&state.db, &hostname).await {
         Ok(_) => {
@@ -75,7 +84,7 @@ pub async fn create(
             } else {
                 format!("Failed to create site: {e}")
             };
-            Html(admin::pages::sites::render_new(Some(&msg), &cs)).into_response()
+            Html(admin::pages::sites::render_new(Some(&msg), &cs, true)).into_response()
         }
     }
 }
@@ -103,6 +112,9 @@ pub async fn site_settings(
     admin: AdminUser,
     Path(id): Path<Uuid>,
 ) -> impl IntoResponse {
+    if !admin.is_global_admin {
+        return (axum::http::StatusCode::FORBIDDEN, "Forbidden").into_response();
+    }
     let cs = state.site_hostname(admin.site_id);
     match crate::models::site::get_by_id(&state.db, id).await {
         Ok(site) => {
@@ -110,7 +122,7 @@ pub async fn site_settings(
                 id: site.id.to_string(),
                 hostname: site.hostname.clone(),
             };
-            Html(admin::pages::sites::render_settings(&data, None, &cs)).into_response()
+            Html(admin::pages::sites::render_settings(&data, None, &cs, true)).into_response()
         }
         Err(_) => Redirect::to("/admin/sites").into_response(),
     }
@@ -128,11 +140,14 @@ pub async fn save_site_settings(
     Path(id): Path<Uuid>,
     Form(form): Form<SiteSettingsForm>,
 ) -> impl IntoResponse {
+    if !admin.is_global_admin {
+        return (axum::http::StatusCode::FORBIDDEN, "Forbidden").into_response();
+    }
     let cs = state.site_hostname(admin.site_id);
     let hostname = form.hostname.trim().to_lowercase();
     if hostname.is_empty() {
         let data = SiteSettingsData { id: id.to_string(), hostname: String::new() };
-        return Html(admin::pages::sites::render_settings(&data, Some("Hostname cannot be empty."), &cs)).into_response();
+        return Html(admin::pages::sites::render_settings(&data, Some("Hostname cannot be empty."), &cs, true)).into_response();
     }
 
     let result = sqlx::query(
@@ -157,7 +172,7 @@ pub async fn save_site_settings(
                 format!("Failed to save: {e}")
             };
             let data = SiteSettingsData { id: id.to_string(), hostname };
-            Html(admin::pages::sites::render_settings(&data, Some(&msg), &cs)).into_response()
+            Html(admin::pages::sites::render_settings(&data, Some(&msg), &cs, true)).into_response()
         }
     }
 }
@@ -165,13 +180,16 @@ pub async fn save_site_settings(
 /// POST /admin/sites/{id}/delete — delete a site.
 pub async fn delete(
     State(state): State<AppState>,
-    _admin: AdminUser,
+    admin: AdminUser,
     Path(id): Path<Uuid>,
 ) -> impl IntoResponse {
+    if !admin.is_global_admin {
+        return (axum::http::StatusCode::FORBIDDEN, "Forbidden").into_response();
+    }
     if let Err(e) = crate::models::site::delete(&state.db, id).await {
         tracing::error!("failed to delete site {}: {:?}", id, e);
     } else if let Err(e) = state.reload_site_cache().await {
         tracing::warn!("site cache reload failed after delete: {:?}", e);
     }
-    Redirect::to("/admin/sites")
+    Redirect::to("/admin/sites").into_response()
 }

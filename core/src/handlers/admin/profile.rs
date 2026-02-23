@@ -20,7 +20,7 @@ pub async fn view(
         display_name: admin.user.display_name.clone(),
         bio: admin.user.bio.clone(),
     };
-    Html(admin::pages::profile::render_profile(&profile, None, &cs))
+    Html(admin::pages::profile::render_profile(&profile, None, &cs, admin.is_global_admin))
 }
 
 #[derive(Deserialize)]
@@ -63,11 +63,13 @@ pub async fn update_profile(
             &profile,
             Some("Profile updated successfully!"),
             &cs,
+            admin.is_global_admin,
         )),
         Err(e) => Html(admin::pages::profile::render_profile(
             &profile,
             Some(&format!("Error updating profile: {}", e)),
             &cs,
+            admin.is_global_admin,
         )),
     }
 }
@@ -113,6 +115,7 @@ pub async fn change_password(
             &profile,
             Some("New passwords do not match."),
             &cs,
+            admin.is_global_admin,
         ));
     }
 
@@ -121,11 +124,12 @@ pub async fn change_password(
             &profile,
             Some("Current password is incorrect."),
             &cs,
+            admin.is_global_admin,
         ));
     }
 
     if let Err(e) = validate_password_requirements(&form.new_password) {
-        return Html(admin::pages::profile::render_profile(&profile, Some(e), &cs));
+        return Html(admin::pages::profile::render_profile(&profile, Some(e), &cs, admin.is_global_admin));
     }
 
     let new_password_hash = match crate::models::user::hash_password(&form.new_password) {
@@ -135,6 +139,7 @@ pub async fn change_password(
                 &profile,
                 Some("Password hashing error. Please try again."),
                 &cs,
+                admin.is_global_admin,
             ));
         }
     };
@@ -154,11 +159,13 @@ pub async fn change_password(
             &profile,
             Some("Password changed successfully!"),
             &cs,
+            admin.is_global_admin,
         )),
         Err(e) => Html(admin::pages::profile::render_profile(
             &profile,
             Some(&format!("Error changing password: {}", e)),
             &cs,
+            admin.is_global_admin,
         )),
     }
 }

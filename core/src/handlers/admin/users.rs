@@ -14,26 +14,49 @@ use admin::pages::users::{UserEdit, UserRow};
 pub async fn list(
     State(state): State<AppState>,
     admin: AdminUser,
-) -> Html<String> {
+) -> impl IntoResponse {
+    if admin.site_role.as_str() != "admin" && !admin.is_global_admin {
+        return Html("<h1>403 Forbidden</h1>".to_string()).into_response();
+    }
     let cs = state.site_hostname(admin.site_id);
-    let raw = crate::models::user::list(&state.db).await.unwrap_or_else(|e| {
-        tracing::warn!("failed to list users: {:?}", e);
+    let rows: Vec<UserRow> = if admin.is_global_admin {
+        crate::models::user::list(&state.db).await.unwrap_or_else(|e| {
+            tracing::warn!("failed to list users: {:?}", e);
+            vec![]
+        }).iter().map(|u| UserRow {
+            id: u.id.to_string(),
+            username: u.username.clone(),
+            email: u.email.clone(),
+            role: u.role.clone(),
+            display_name: u.display_name.clone(),
+            is_protected: u.is_protected,
+        }).collect()
+    } else if let Some(site_id) = admin.site_id {
+        crate::models::site_user::list_for_site(&state.db, site_id).await.unwrap_or_else(|e| {
+            tracing::warn!("failed to list site users: {:?}", e);
+            vec![]
+        }).iter().map(|(u, site_role)| UserRow {
+            id: u.id.to_string(),
+            username: u.username.clone(),
+            email: u.email.clone(),
+            role: site_role.clone(),
+            display_name: u.display_name.clone(),
+            is_protected: u.is_protected,
+        }).collect()
+    } else {
         vec![]
-    });
-    let rows: Vec<UserRow> = raw.iter().map(|u| UserRow {
-        id: u.id.to_string(),
-        username: u.username.clone(),
-        email: u.email.clone(),
-        role: u.role.clone(),
-        display_name: u.display_name.clone(),
-    }).collect();
-    Html(admin::pages::users::render_list(&rows, None, &cs))
+    };
+    let current_user_id = admin.user.id.to_string();
+    Html(admin::pages::users::render_list(&rows, None, &cs, &current_user_id, admin.is_global_admin)).into_response()
 }
 
 pub async fn new_user(
     State(state): State<AppState>,
     admin: AdminUser,
-) -> Html<String> {
+) -> impl IntoResponse {
+    if admin.site_role.as_str() != "admin" && !admin.is_global_admin {
+        return Html("<h1>403 Forbidden</h1>".to_string()).into_response();
+    }
     let cs = state.site_hostname(admin.site_id);
     let edit = UserEdit {
         id: None,
@@ -43,7 +66,7 @@ pub async fn new_user(
         role: "author".into(),
         bio: String::new(),
     };
-    Html(admin::pages::users::render_editor(&edit, None, &cs))
+    Html(admin::pages::users::render_editor(&edit, None, &cs, admin.is_global_admin)).into_response()
 }
 
 pub async fn edit_user(
@@ -67,7 +90,7 @@ pub async fn edit_user(
         role: user.role.clone(),
         bio: user.bio.clone(),
     };
-    Html(admin::pages::users::render_editor(&edit, None, &cs)).into_response()
+    Html(admin::pages::users::render_editor(&edit, None, &cs, admin.is_global_admin)).into_response()
 }
 
 #[derive(Deserialize)]
@@ -85,6 +108,9 @@ pub async fn save_new(
     admin: AdminUser,
     Form(form): Form<UserForm>,
 ) -> impl IntoResponse {
+    if admin.site_role.as_str() != "admin" && !admin.is_global_admin {
+        return (axum::http::StatusCode::FORBIDDEN, "Forbidden").into_response();
+    }
     let cs = state.site_hostname(admin.site_id);
     let password = match form.password.as_deref().filter(|p| !p.is_empty()) {
         Some(p) => p.to_string(),
@@ -101,11 +127,18 @@ pub async fn save_new(
                 &edit,
                 Some("Password is required for new users."),
                 &cs,
+                admin.is_global_admin,
             )).into_response();
         }
     };
 
-    let role = parse_role(&form.role);
+    // Cap role: site admins can only create editor/author accounts.
+    let capped_role = if !admin.is_global_admin && form.role == "admin" {
+        "editor"
+    } else {
+        form.role.as_str()
+    };
+    let role = parse_role(capped_role);
     let create = CreateUser {
         username: form.username.clone(),
         email: form.email.clone(),
@@ -115,7 +148,17 @@ pub async fn save_new(
     };
 
     match crate::models::user::create(&state.db, &create).await {
-        Ok(_) => Redirect::to("/admin/users").into_response(),
+        Ok(new_user) => {
+            // Site admin: auto-scope the new user to their site.
+            if !admin.is_global_admin {
+                if let Some(site_id) = admin.site_id {
+                    if let Err(e) = crate::models::site_user::add(&state.db, site_id, new_user.id, capped_role).await {
+                        tracing::warn!("failed to add new user {} to site {}: {:?}", new_user.id, site_id, e);
+                    }
+                }
+            }
+            Redirect::to("/admin/users").into_response()
+        }
         Err(e) => {
             tracing::error!("create user error: {:?}", e);
             let edit = UserEdit {
@@ -127,7 +170,7 @@ pub async fn save_new(
                 bio: form.bio.unwrap_or_default(),
             };
             let msg = friendly_user_error(&e);
-            Html(admin::pages::users::render_editor(&edit, Some(&msg), &cs)).into_response()
+            Html(admin::pages::users::render_editor(&edit, Some(&msg), &cs, admin.is_global_admin)).into_response()
         }
     }
 }
@@ -138,6 +181,9 @@ pub async fn save_edit(
     Path(id): Path<Uuid>,
     Form(form): Form<UserForm>,
 ) -> impl IntoResponse {
+    if admin.site_role.as_str() != "admin" && !admin.is_global_admin {
+        return (axum::http::StatusCode::FORBIDDEN, "Forbidden").into_response();
+    }
     let cs = state.site_hostname(admin.site_id);
     let new_password_hash = if let Some(pw) = form.password.as_deref().filter(|p| !p.is_empty()) {
         match crate::models::user::hash_password(pw) {
@@ -156,6 +202,7 @@ pub async fn save_edit(
                     &edit,
                     Some("Failed to process password. Please try again."),
                     &cs,
+                    admin.is_global_admin,
                 )).into_response();
             }
         }
@@ -168,7 +215,8 @@ pub async fn save_edit(
         email: Some(form.email.clone()),
         display_name: form.display_name.clone(),
         password_hash: new_password_hash,
-        role: Some(parse_role(&form.role)),
+        // Cap role: site admins cannot promote users to global admin.
+        role: Some(parse_role(if !admin.is_global_admin && form.role == "admin" { "editor" } else { &form.role })),
         bio: form.bio.clone(),
     };
 
@@ -185,20 +233,77 @@ pub async fn save_edit(
                 bio: form.bio.unwrap_or_default(),
             };
             let msg = friendly_user_error(&e);
-            Html(admin::pages::users::render_editor(&edit, Some(&msg), &cs)).into_response()
+            Html(admin::pages::users::render_editor(&edit, Some(&msg), &cs, admin.is_global_admin)).into_response()
         }
     }
 }
 
 pub async fn delete_user(
     State(state): State<AppState>,
-    _admin: AdminUser,
+    admin: AdminUser,
     Path(id): Path<Uuid>,
 ) -> impl IntoResponse {
-    if let Err(e) = crate::models::user::delete(&state.db, id).await {
+    let cs = state.site_hostname(admin.site_id);
+    let current_user_id = admin.user.id.to_string();
+
+    macro_rules! deny {
+        ($msg:expr) => {{
+            tracing::warn!("delete_user denied for target={} actor={}: {}", id, admin.user.id, $msg);
+            let raw = crate::models::user::list(&state.db).await.unwrap_or_default();
+            let rows: Vec<UserRow> = raw.iter().map(|u| UserRow {
+                id: u.id.to_string(),
+                username: u.username.clone(),
+                email: u.email.clone(),
+                role: u.role.clone(),
+                display_name: u.display_name.clone(),
+                is_protected: u.is_protected,
+            }).collect();
+            return Html(admin::pages::users::render_list(
+                &rows,
+                Some($msg),
+                &cs,
+                &current_user_id,
+                admin.is_global_admin,
+            )).into_response();
+        }};
+    }
+
+    // Guard 1: no self-deletion.
+    if id == admin.user.id {
+        deny!("You cannot delete your own account.");
+    }
+
+    // Guard 2: cannot delete a protected account.
+    let target = crate::models::user::get_by_id(&state.db, id).await;
+    if let Ok(ref t) = target {
+        if t.is_protected {
+            deny!("This account is protected and cannot be deleted.");
+        }
+    }
+
+    // Guard 3: only a global admin may delete another global admin.
+    if let Ok(ref t) = target {
+        if t.role == "admin" && !admin.is_global_admin {
+            deny!("Only a global admin can delete another global admin account.");
+        }
+    }
+
+    // Guard 4: never delete the last global admin.
+    if let Ok(ref t) = target {
+        if t.role == "admin" {
+            let remaining = crate::models::user::count_global_admins(&state.db)
+                .await
+                .unwrap_or(2);
+            if remaining <= 1 {
+                deny!("Cannot delete the last global admin account.");
+            }
+        }
+    }
+
+    if let Err(e) = crate::models::user::delete_and_reassign(&state.db, id, admin.user.id).await {
         tracing::error!("delete user {} error: {:?}", id, e);
     }
-    Redirect::to("/admin/users")
+    Redirect::to("/admin/users").into_response()
 }
 
 fn friendly_user_error(e: &crate::errors::AppError) -> String {

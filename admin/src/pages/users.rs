@@ -6,6 +6,7 @@ pub struct UserRow {
     pub email: String,
     pub role: String,
     pub display_name: String,
+    pub is_protected: bool,
 }
 
 pub struct UserEdit {
@@ -17,12 +18,25 @@ pub struct UserEdit {
     pub bio: String,
 }
 
-pub fn render_list(users: &[UserRow], flash: Option<&str>, current_site: &str) -> String {
+pub fn render_list(users: &[UserRow], flash: Option<&str>, current_site: &str, current_user_id: &str, is_global_admin: bool) -> String {
     let rows = users.iter().map(|u| {
-        let warn_msg = format!(
-            "Delete user \\u2018{}\\u2019? This will permanently delete all their posts and pages. This cannot be undone.",
-            u.display_name.replace('\'', "\\'"),
-        );
+        let delete_btn = if u.id != current_user_id && !u.is_protected {
+            let warn_msg = format!(
+                "Delete user \\u2018{}\\u2019? This will permanently delete all their posts and pages. This cannot be undone.",
+                u.display_name.replace('\'', "\\'"),
+            );
+            format!(
+                r#"<form method="POST" action="/admin/users/{id}/delete" style="display:inline" onsubmit="return confirm('{warn_msg}')">
+                  <button class="icon-btn icon-danger" title="Delete user" type="submit">
+                    <img src="/admin/static/icons/delete.svg" alt="Delete">
+                  </button>
+                </form>"#,
+                id = crate::html_escape(&u.id),
+                warn_msg = warn_msg,
+            )
+        } else {
+            String::new()
+        };
         format!(
             r#"<tr>
               <td><a href="/admin/users/{id}/edit">{display_name}</a></td>
@@ -33,11 +47,7 @@ pub fn render_list(users: &[UserRow], flash: Option<&str>, current_site: &str) -
                 <a href="/admin/users/{id}/edit" class="icon-btn" title="Edit">
                   <img src="/admin/static/icons/edit.svg" alt="Edit">
                 </a>
-                <form method="POST" action="/admin/users/{id}/delete" style="display:inline" onsubmit="return confirm('{warn_msg}')">
-                  <button class="icon-btn icon-danger" title="Delete user" type="submit">
-                    <img src="/admin/static/icons/delete.svg" alt="Delete">
-                  </button>
-                </form>
+                {delete_btn}
               </td>
             </tr>"#,
             id = crate::html_escape(&u.id),
@@ -45,7 +55,7 @@ pub fn render_list(users: &[UserRow], flash: Option<&str>, current_site: &str) -
             username = crate::html_escape(&u.username),
             email = crate::html_escape(&u.email),
             role = crate::html_escape(&u.role),
-            warn_msg = warn_msg,
+            delete_btn = delete_btn,
         )
     }).collect::<Vec<_>>().join("\n");
 
@@ -58,17 +68,21 @@ pub fn render_list(users: &[UserRow], flash: Option<&str>, current_site: &str) -
         rows = rows,
     );
 
-    crate::admin_page("Users", "/admin/users", flash, &content, current_site)
+    crate::admin_page("Users", "/admin/users", flash, &content, current_site, is_global_admin)
 }
 
-pub fn render_editor(user: &UserEdit, flash: Option<&str>, current_site: &str) -> String {
+pub fn render_editor(user: &UserEdit, flash: Option<&str>, current_site: &str, is_global_admin: bool) -> String {
     let title = if user.id.is_none() { "New User" } else { "Edit User" };
     let action = match &user.id {
         Some(id) => format!("/admin/users/{}/edit", id),
         None => "/admin/users/new".to_string(),
     };
 
-    let roles = ["admin", "editor", "author", "subscriber"];
+    let roles: &[&str] = if is_global_admin {
+        &["admin", "editor", "author", "subscriber"]
+    } else {
+        &["editor", "author"]
+    };
     let role_options = roles.iter().map(|r| {
         let selected = if *r == user.role { " selected" } else { "" };
         format!(r#"<option value="{r}"{selected}>{r}</option>"#, r = r, selected = selected)
@@ -119,5 +133,5 @@ pub fn render_editor(user: &UserEdit, flash: Option<&str>, current_site: &str) -
         password_hint = password_hint,
     );
 
-    crate::admin_page(title, "/admin/users", flash, &content, current_site)
+    crate::admin_page(title, "/admin/users", flash, &content, current_site, is_global_admin)
 }

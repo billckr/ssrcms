@@ -173,6 +173,38 @@ Use `| json_encode | safe` for string values in JSON-LD:
 
 ---
 
+## Role Hierarchy and Admin Account Protection
+
+There are two tiers of admin privilege:
+
+| `users.role` | `site_users.role` | Scope |
+|---|---|---|
+| `"admin"` | (not required) | **Global admin** — access to all sites, can manage global admins, can manage Sites |
+| any | `"admin"` | **Site admin** — full access to one site only; cannot see or manage global admin accounts |
+| any | `"editor"` | Edit all posts on their site |
+| any | `"author"` | Create and edit own posts only |
+
+### Deletion guards (enforced in `handlers/admin/users.rs`)
+
+The `delete_user` handler enforces four guards in order:
+
+1. **No self-deletion** — a user cannot delete their own account.
+2. **Protected accounts** — accounts with `is_protected = TRUE` cannot be deleted by anyone. This flag is set on the install-time admin account (see Deployment Guide).
+3. **Global admin privilege** — only a global admin (`users.role = 'admin'`) can delete another global admin account. A site-scoped admin cannot.
+4. **Last global admin** — the final global admin account cannot be deleted, preventing a full lockout.
+
+The delete button is hidden in the admin UI for accounts that match guard 1 (self) or guard 2 (protected). Guards 3 and 4 are enforced server-side regardless of UI state.
+
+### Marking an account as protected
+
+After installation, mark the primary admin account as protected:
+```sql
+UPDATE users SET is_protected = TRUE WHERE username = 'your_username';
+```
+Or via migration in automated deployments. The `synaptic-cli install` command sets this automatically on the account it creates.
+
+---
+
 ## Security Checklist (run before each release)
 
 - [ ] No `tera.render_str()` calls on user-supplied content anywhere in the codebase
@@ -184,6 +216,11 @@ Use `| json_encode | safe` for string values in JSON-LD:
   - `user.rs` unit test explicitly asserts `password_hash` is absent from serialized `UserContext`
 - [ ] All admin routes have session guard middleware
   - All admin handlers take `_admin: AdminUser` extractor; missing it causes a compile error
+- [ ] Install-time admin account has `is_protected = TRUE`
+  - Prevents deletion even by other global admins
+  - Verify with: `SELECT username, is_protected FROM users WHERE role = 'admin';`
+- [ ] Site-management routes (`/admin/sites/*`) are gated behind `is_global_admin`
+  - Site-scoped admins must not see the Sites nav item or access site CRUD handlers
 - [ ] `SECRET_KEY` is documented as required in production; development default is clearly labelled
 - [ ] Plugin templates use `| json_encode | safe` (not bare `| safe`) for all values inside JSON-LD `<script>` blocks
   - Bare `| safe` on a string inside a JSON string literal produces invalid JSON if the value contains `"` or `\`
@@ -200,7 +237,8 @@ Use `| json_encode | safe` for string values in JSON-LD:
 |---|---|---|---|
 | 2026-02-22 | Claude Code | `post::update()` did not call `sanitize_content()` on new content | Fixed — `update()` now sanitizes via `match &data.content` block |
 | 2026-02-22 | Claude Code | SEO plugin JSON-LD used bare `\| safe` on URL and date values | Fixed — all JSON-LD string values now use `\| json_encode \| safe` |
+| 2026-02-23 | Claude Code | Site-scoped admin could delete global admin accounts | Fixed — four-guard system in `delete_user`: no self-delete, protected flag, global-admin-only can delete global admins, last-admin lockout prevention |
 
 ---
 
-*Synaptic Signals security rules — last updated 2026-02-22*
+*Synaptic Signals security rules — last updated 2026-02-23*

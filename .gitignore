@@ -28,6 +28,7 @@
 Thumbs.db
 
 # Application runtime
+synaptic.pid
 .synaptic.pid
 logs/
 

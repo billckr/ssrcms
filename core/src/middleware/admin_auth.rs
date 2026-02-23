@@ -29,6 +29,8 @@ pub struct AdminUser {
     pub site_id: Option<Uuid>,
     /// The user's role on the current site, or their global role as fallback.
     pub site_role: String,
+    /// True when `users.role = 'admin'` — unrestricted access to all sites.
+    pub is_global_admin: bool,
 }
 
 pub enum AdminAuthError {
@@ -82,11 +84,13 @@ impl FromRequestParts<AppState> for AdminUser {
             .await
             .map_err(|_| AdminAuthError::NotAuthenticated)?;
 
-        // Only Admin and Editor roles can access the admin.
+        // Admin, editor, and author roles can access the admin.
         match user.role.as_str() {
-            "admin" | "editor" => {}
+            "admin" | "editor" | "author" => {}
             _ => return Err(AdminAuthError::Forbidden),
         }
+
+        let is_global_admin = user.role.as_str() == "admin";
 
         // ── Site resolution ────────────────────────────────────────────────────
 
@@ -95,31 +99,45 @@ impl FromRequestParts<AppState> for AdminUser {
 
         let site_id = if let Some(sid_str) = site_id_opt {
             sid_str.parse::<Uuid>().ok()
-        } else {
-            // 2. No site in session — look up user's first accessible site.
-            match crate::models::site_user::list_for_user(&state.db, user_id).await {
+        } else if is_global_admin {
+            // 2a. Global admin — resolve via sites table directly (no site_users row needed).
+            match crate::models::site::list(&state.db).await {
                 Ok(sites) if !sites.is_empty() => {
-                    let first_id = sites[0].0.id;
-                    // Cache in session for subsequent requests.
+                    let first_id = sites[0].id;
                     let _ = session
                         .insert(SESSION_CURRENT_SITE_KEY, first_id.to_string())
                         .await;
                     Some(first_id)
                 }
-                _ => None, // No sites configured yet — single-site compat mode.
+                _ => None,
+            }
+        } else {
+            // 2b. Site user — look up their first accessible site.
+            match crate::models::site_user::list_for_user(&state.db, user_id).await {
+                Ok(sites) if !sites.is_empty() => {
+                    let first_id = sites[0].0.id;
+                    let _ = session
+                        .insert(SESSION_CURRENT_SITE_KEY, first_id.to_string())
+                        .await;
+                    Some(first_id)
+                }
+                _ => None,
             }
         };
 
         // 3. Determine the role for the current site.
-        let site_role = if let Some(sid) = site_id {
+        let site_role = if is_global_admin {
+            // Global admin always has full admin role on any site.
+            "admin".to_string()
+        } else if let Some(sid) = site_id {
             match crate::models::site_user::get_role(&state.db, sid, user_id).await {
                 Ok(Some(r)) => r,
-                _ => user.role.clone(), // Fall back to global role.
+                _ => user.role.clone(),
             }
         } else {
-            user.role.clone() // No sites — use global role.
+            user.role.clone()
         };
 
-        Ok(AdminUser { user, site_id, site_role })
+        Ok(AdminUser { user, site_id, site_role, is_global_admin })
     }
 }

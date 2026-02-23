@@ -64,6 +64,7 @@ pub struct User {
     pub avatar_media_id: Option<Uuid>,
     pub role: String,
     pub is_active: bool,
+    pub is_protected: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -229,6 +230,22 @@ pub async fn delete(pool: &PgPool, id: Uuid) -> Result<()> {
     Ok(())
 }
 
+/// Reassign all posts from `user_id` to `reassign_to`, then delete the user.
+/// Use this instead of `delete()` when content must be preserved — the deleted
+/// user's posts transfer to the reassignment target before the row is removed.
+pub async fn delete_and_reassign(pool: &PgPool, user_id: Uuid, reassign_to: Uuid) -> Result<()> {
+    sqlx::query("UPDATE posts SET author_id = $1 WHERE author_id = $2")
+        .bind(reassign_to)
+        .bind(user_id)
+        .execute(pool)
+        .await?;
+    sqlx::query("DELETE FROM users WHERE id = $1")
+        .bind(user_id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
 pub async fn list(pool: &PgPool) -> Result<Vec<User>> {
     sqlx::query_as::<_, User>(
         "SELECT * FROM users WHERE is_active = TRUE ORDER BY username",
@@ -241,6 +258,16 @@ pub async fn list(pool: &PgPool) -> Result<Vec<User>> {
 pub async fn count(pool: &PgPool) -> Result<i64> {
     let count: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM users WHERE is_active = TRUE",
+    )
+    .fetch_one(pool)
+    .await?;
+    Ok(count)
+}
+
+/// Returns how many active global-admin accounts exist.
+pub async fn count_global_admins(pool: &PgPool) -> Result<i64> {
+    let count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM users WHERE role = 'admin' AND is_active = TRUE",
     )
     .fetch_one(pool)
     .await?;

@@ -93,7 +93,14 @@ Caddy will obtain TLS certificates automatically for each domain via Let's Encry
 
 ## User and Role Management
 
-Roles are per-site:
+There are two tiers of admin privilege:
+
+| Account type | How identified | Scope |
+|---|---|---|
+| **Global admin** | `users.role = 'admin'` | All sites. Can manage Sites, other global admins, and protected accounts. |
+| **Site admin** | `site_users.role = 'admin'` | One site only. Cannot see or manage global admin accounts. |
+
+Per-site roles in `site_users`:
 
 | Role | Permissions |
 |------|------------|
@@ -102,7 +109,17 @@ Roles are per-site:
 | `author` | Create and edit own posts only |
 | `subscriber` | Read-only access |
 
-A single user can have different roles on different sites. Global admin accounts (role `admin` in the `users` table) retain access across all sites.
+A single user can have different roles on different sites. Global admin accounts (`users.role = 'admin'`) always have full access across all sites regardless of `site_users` entries.
+
+### Protected accounts
+
+The install-time global admin should be marked `is_protected = TRUE` to prevent accidental
+or malicious deletion. Protected accounts have no delete button in the admin UI and all
+server-side deletion attempts are rejected regardless of the requester's role.
+
+```sql
+UPDATE users SET is_protected = TRUE WHERE username = 'your_username';
+```
 
 ---
 

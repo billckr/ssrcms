@@ -35,5 +35,5 @@ pub async fn dashboard(
         total_users,
     };
 
-    Html(admin::pages::dashboard::render(&data, None, &cs))
+    Html(admin::pages::dashboard::render(&data, None, &cs, admin.is_global_admin))
 }

@@ -119,8 +119,10 @@ The internal error is already in the log via `tracing::error!`.
 
 ### 3. Delete handlers
 
-These are fire-and-forget — the redirect always happens. Log failures, don't swallow them.
+Delete handlers always redirect, but must check guards before deleting. When a guard
+prevents deletion, re-render the list with a flash message rather than silently redirecting.
 
+**Simple delete (no guards needed):**
 ```rust
 pub async fn delete(
     State(state): State<AppState>,
@@ -130,13 +132,47 @@ pub async fn delete(
     if let Err(e) = crate::models::thing::delete(&state.db, id).await {
         tracing::error!("failed to delete thing {}: {:?}", id, e);
     }
-    Redirect::to("/admin/things")
+    Redirect::to("/admin/things").into_response()
+}
+```
+
+**Delete with guards (e.g. user deletion):**
+
+When a delete must be conditionally blocked, re-render the list with the flash error
+rather than doing a redirect (which loses the error message):
+
+```rust
+pub async fn delete(
+    State(state): State<AppState>,
+    admin: AdminUser,
+    Path(id): Path<Uuid>,
+) -> impl IntoResponse {
+    let cs = state.site_hostname(admin.site_id);
+
+    macro_rules! deny {
+        ($msg:expr) => {{
+            tracing::warn!("delete denied for {} by {}: {}", id, admin.user.id, $msg);
+            let rows = /* fetch and map to view structs */;
+            return Html(admin::pages::thing::render_list(&rows, Some($msg), &cs, ...)).into_response();
+        }};
+    }
+
+    // Guard: example — no self-deletion
+    if id == admin.user.id {
+        deny!("You cannot delete your own account.");
+    }
+
+    if let Err(e) = crate::models::thing::delete(&state.db, id).await {
+        tracing::error!("failed to delete thing {}: {:?}", id, e);
+    }
+    Redirect::to("/admin/things").into_response()
 }
 ```
 
 **Rules:**
-- Always redirect regardless of success or failure — the admin list will reflect the actual state
-- `tracing::error!` because a failed delete is unexpected
+- Always redirect on success regardless of whether the delete failed — the admin list reflects actual state
+- On a guard failure, re-render the list with the flash message (not a redirect, which loses the message)
+- `tracing::error!` for failed DB writes; `tracing::warn!` for guard violations
 - If there is a dependent resource to delete first (e.g. file on disk), log each step separately:
 
 ```rust
@@ -225,7 +261,7 @@ async fn activate(...) -> Result<Redirect, String>
    - `edit` handler — warn-log + redirect on not found
    - `save_new` handler — re-render with flash on error
    - `save_edit` handler — re-render with flash on error
-   - `delete` handler — error-log, always redirect
+   - `delete` handler — guard checks first; re-render list with flash on denial; error-log and redirect on DB failure
    - `friendly_save_error()` helper
 
 3. **Router** (`core/src/router.rs`):
@@ -236,4 +272,4 @@ async fn activate(...) -> Result<Redirect, String>
 
 ---
 
-*Synaptic Signals admin handler patterns — last updated 2026-02-22*
+*Synaptic Signals admin handler patterns — last updated 2026-02-23*

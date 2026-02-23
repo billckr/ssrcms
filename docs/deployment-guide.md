@@ -88,9 +88,15 @@ You will be prompted for:
 
 The installer will:
 1. Connect to the database and apply all migrations
-2. Create the admin user
+2. Create the admin user with `is_protected = TRUE` (cannot be deleted by other admins)
 3. Write a `Caddyfile` in the current directory
 4. Write a `synaptic-signals.service` file in the current directory
+
+> **If you created the admin account manually** (e.g. via `synaptic-cli user create` before this
+> existed), mark it protected now:
+> ```sql
+> UPDATE users SET is_protected = TRUE WHERE username = 'your_username';
+> ```
 
 ---
 

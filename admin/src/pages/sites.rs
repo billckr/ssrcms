@@ -6,7 +6,7 @@ pub struct SiteRow {
     pub post_count: i64,
 }
 
-pub fn render_list(sites: &[SiteRow], flash: Option<&str>, current_site: &str) -> String {
+pub fn render_list(sites: &[SiteRow], flash: Option<&str>, current_site: &str, is_global_admin: bool) -> String {
     let rows = sites.iter().map(|s| {
         format!(
             r#"<tr>
@@ -35,7 +35,7 @@ pub fn render_list(sites: &[SiteRow], flash: Option<&str>, current_site: &str) -
         rows = rows,
     );
 
-    crate::admin_page("Sites", "/admin/sites", flash, &content, current_site)
+    crate::admin_page("Sites", "/admin/sites", flash, &content, current_site, is_global_admin)
 }
 
 pub struct SiteSettingsData {
@@ -43,7 +43,7 @@ pub struct SiteSettingsData {
     pub hostname: String,
 }
 
-pub fn render_settings(data: &SiteSettingsData, flash: Option<&str>, current_site: &str) -> String {
+pub fn render_settings(data: &SiteSettingsData, flash: Option<&str>, current_site: &str, is_global_admin: bool) -> String {
     let content = format!(
         r#"<form method="post" action="/admin/sites/{id}/settings" class="edit-form">
   <div class="form-group">
@@ -60,10 +60,10 @@ pub fn render_settings(data: &SiteSettingsData, flash: Option<&str>, current_sit
         hostname = crate::html_escape(&data.hostname),
     );
 
-    crate::admin_page("Site Settings", "/admin/sites", flash, &content, current_site)
+    crate::admin_page("Site Settings", "/admin/sites", flash, &content, current_site, is_global_admin)
 }
 
-pub fn render_new(flash: Option<&str>, current_site: &str) -> String {
+pub fn render_new(flash: Option<&str>, current_site: &str, is_global_admin: bool) -> String {
     let content = r#"<form method="post" action="/admin/sites" class="edit-form">
   <div class="form-group">
     <label for="hostname">Hostname</label>
@@ -76,5 +76,5 @@ pub fn render_new(flash: Option<&str>, current_site: &str) -> String {
   </div>
 </form>"#;
 
-    crate::admin_page("New Site", "/admin/sites", flash, content, current_site)
+    crate::admin_page("New Site", "/admin/sites", flash, content, current_site, is_global_admin)
 }

@@ -76,6 +76,7 @@ struct UserWithSiteRole {
     avatar_media_id: Option<Uuid>,
     role: String,
     is_active: bool,
+    is_protected: bool,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
     site_role: String,
@@ -86,7 +87,7 @@ pub async fn list_for_site(pool: &PgPool, site_id: Uuid) -> Result<Vec<(User, St
     let rows = sqlx::query_as::<_, UserWithSiteRole>(
         r#"
         SELECT u.id, u.username, u.email, u.display_name, u.password_hash, u.bio,
-               u.avatar_media_id, u.role, u.is_active, u.created_at, u.updated_at,
+               u.avatar_media_id, u.role, u.is_active, u.is_protected, u.created_at, u.updated_at,
                su.role as site_role
         FROM users u
         JOIN site_users su ON su.user_id = u.id
@@ -111,6 +112,7 @@ pub async fn list_for_site(pool: &PgPool, site_id: Uuid) -> Result<Vec<(User, St
                 avatar_media_id: r.avatar_media_id,
                 role: r.role,
                 is_active: r.is_active,
+                is_protected: r.is_protected,
                 created_at: r.created_at,
                 updated_at: r.updated_at,
             };
