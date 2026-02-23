@@ -35,6 +35,33 @@ async fn main() -> anyhow::Result<()> {
     // ── Uploads directory ─────────────────────────────────────────────────────
     std::fs::create_dir_all(&cfg.uploads_dir)?;
 
+    // ── Theme directory structure ─────────────────────────────────────────────
+    // Establish themes/global/ and themes/sites/ layout on first startup.
+    let global_themes_dir = format!("{}/global", cfg.themes_dir);
+    let sites_themes_dir = format!("{}/sites", cfg.themes_dir);
+    if !std::path::Path::new(&global_themes_dir).exists() {
+        std::fs::create_dir_all(&global_themes_dir)?;
+        // Move any existing flat theme directories into themes/global/.
+        if let Ok(entries) = std::fs::read_dir(&cfg.themes_dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if !path.is_dir() { continue; }
+                let name = match path.file_name().and_then(|n| n.to_str()) {
+                    Some(n) => n.to_string(),
+                    None => continue,
+                };
+                if name == "global" || name == "sites" { continue; }
+                let dest = std::path::Path::new(&global_themes_dir).join(&name);
+                match std::fs::rename(&path, &dest) {
+                    Ok(_) => info!("migrated theme '{}' → themes/global/", name),
+                    Err(e) => tracing::warn!("could not migrate theme '{}' to global: {}", name, e),
+                }
+            }
+        }
+        info!("theme directory structure initialised — themes/global/ ready");
+    }
+    std::fs::create_dir_all(&sites_themes_dir)?;
+
     // ── Database ──────────────────────────────────────────────────────────────
     let pool = db::connect(&cfg.database_url).await?;
     db::migrate(&pool).await?;
@@ -59,8 +86,9 @@ async fn main() -> anyhow::Result<()> {
     let hook_registry = Arc::new(HookRegistry::new());
 
     // ── Template engine ───────────────────────────────────────────────────────
+    // Point the engine at themes/global/ — the canonical home for global themes.
     let engine = TemplateEngine::new(
-        &cfg.themes_dir,
+        &global_themes_dir,
         &settings.active_theme,
         &settings.base_url,
         hook_registry.clone(),

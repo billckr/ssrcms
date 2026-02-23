@@ -27,11 +27,19 @@ pub async fn list(
 
 pub async fn delete(
     State(state): State<AppState>,
-    _admin: AdminUser,
+    admin: AdminUser,
     Path(id): Path<Uuid>,
 ) -> impl IntoResponse {
     match crate::models::media::get_by_id(&state.db, id).await {
         Ok(media) => {
+            // Enforce site ownership: non-global-admin cannot delete another site's media.
+            if !admin.is_global_admin && media.site_id != admin.site_id {
+                tracing::warn!(
+                    "media delete forbidden: user {} tried to delete media {} (site {:?}) not belonging to their site {:?}",
+                    admin.user.id, id, media.site_id, admin.site_id
+                );
+                return (axum::http::StatusCode::FORBIDDEN, "Forbidden").into_response();
+            }
             let path = std::path::Path::new(&state.config.uploads_dir).join(&media.path);
             if let Err(e) = std::fs::remove_file(&path) {
                 tracing::warn!("failed to delete media file {:?}: {:?}", path, e);
@@ -44,5 +52,5 @@ pub async fn delete(
             tracing::warn!("media {} not found for deletion: {:?}", id, e);
         }
     }
-    Redirect::to("/admin/media")
+    Redirect::to("/admin/media").into_response()
 }

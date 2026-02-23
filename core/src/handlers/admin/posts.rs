@@ -140,6 +140,11 @@ async fn edit_post_type(state: AppState, id: Uuid, site_id: Option<Uuid>, curren
         }
     };
 
+    // Site isolation: non-global admins may only edit posts that belong to their site.
+    if !is_global_admin && post.site_id != site_id {
+        return Redirect::to("/admin/posts").into_response();
+    }
+
     let (categories, tags) = fetch_term_options(&state, site_id).await;
 
     let post_terms = crate::models::taxonomy::for_post(&state.db, id).await.unwrap_or_else(|e| {
@@ -284,6 +289,17 @@ pub async fn save_edit(
     Path(id): Path<Uuid>,
     Form(form): Form<PostForm>,
 ) -> impl IntoResponse {
+    // Site isolation: verify the post belongs to the admin's site before updating.
+    if !admin.is_global_admin {
+        let belongs = crate::models::post::get_by_id(&state.db, id).await
+            .map(|p| p.site_id == admin.site_id)
+            .unwrap_or(false);
+        if !belongs {
+            let redirect = if form.post_type == "page" { "/admin/pages" } else { "/admin/posts" };
+            return Redirect::to(redirect).into_response();
+        }
+    }
+
     let status = parse_status(&form.status);
     let published_at = parse_datetime(form.published_at.as_deref());
 
@@ -344,26 +360,42 @@ pub async fn save_edit(
 
 pub async fn delete_post(
     State(state): State<AppState>,
-    _admin: AdminUser,
+    admin: AdminUser,
     Path(id): Path<Uuid>,
 ) -> impl IntoResponse {
+    if !admin.is_global_admin {
+        let belongs = crate::models::post::get_by_id(&state.db, id).await
+            .map(|p| p.site_id == admin.site_id)
+            .unwrap_or(false);
+        if !belongs {
+            return Redirect::to("/admin/posts").into_response();
+        }
+    }
     if let Err(e) = crate::models::post::delete(&state.db, id).await {
         tracing::error!("failed to delete post {}: {:?}", id, e);
     }
     crate::search::indexer::delete_post(&state.search_index, &id.to_string());
-    Redirect::to("/admin/posts")
+    Redirect::to("/admin/posts").into_response()
 }
 
 pub async fn delete_page(
     State(state): State<AppState>,
-    _admin: AdminUser,
+    admin: AdminUser,
     Path(id): Path<Uuid>,
 ) -> impl IntoResponse {
+    if !admin.is_global_admin {
+        let belongs = crate::models::post::get_by_id(&state.db, id).await
+            .map(|p| p.site_id == admin.site_id)
+            .unwrap_or(false);
+        if !belongs {
+            return Redirect::to("/admin/pages").into_response();
+        }
+    }
     if let Err(e) = crate::models::post::delete(&state.db, id).await {
         tracing::error!("failed to delete page {}: {:?}", id, e);
     }
     crate::search::indexer::delete_post(&state.search_index, &id.to_string());
-    Redirect::to("/admin/pages")
+    Redirect::to("/admin/pages").into_response()
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────

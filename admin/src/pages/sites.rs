@@ -8,6 +8,10 @@ pub struct SiteRow {
 
 pub fn render_list(sites: &[SiteRow], flash: Option<&str>, current_site: &str, is_global_admin: bool) -> String {
     let rows = sites.iter().map(|s| {
+        let confirm_msg = format!(
+            "Delete site '{}'? This will permanently delete all its content, media records, settings, and user assignments. This cannot be undone.",
+            s.hostname
+        );
         format!(
             r#"<tr>
               <td>{hostname}</td>
@@ -18,11 +22,16 @@ pub fn render_list(sites: &[SiteRow], flash: Option<&str>, current_site: &str, i
                   <button type="submit" class="btn btn-secondary btn-sm">Switch</button>
                 </form>
                 <a href="/admin/sites/{id}/settings" class="btn btn-secondary btn-sm">Settings</a>
+                <form method="post" action="/admin/sites/{id}/delete" style="display:inline"
+                      data-confirm="{confirm_msg}" onsubmit="return confirm(this.dataset.confirm)">
+                  <button type="submit" class="btn btn-danger btn-sm">Delete</button>
+                </form>
               </td>
             </tr>"#,
             id = crate::html_escape(&s.id),
             hostname = crate::html_escape(&s.hostname),
             post_count = s.post_count,
+            confirm_msg = crate::html_escape(&confirm_msg),
         )
     }).collect::<Vec<_>>().join("\n");
 
@@ -44,6 +53,10 @@ pub struct SiteSettingsData {
 }
 
 pub fn render_settings(data: &SiteSettingsData, flash: Option<&str>, current_site: &str, is_global_admin: bool) -> String {
+    let confirm_msg = format!(
+        "Delete site '{}'? This will permanently delete all its content, media records, settings, and user assignments. This cannot be undone.",
+        data.hostname
+    );
     let content = format!(
         r#"<form method="post" action="/admin/sites/{id}/settings" class="edit-form">
   <div class="form-group">
@@ -55,9 +68,14 @@ pub fn render_settings(data: &SiteSettingsData, flash: Option<&str>, current_sit
     <button type="submit" class="btn btn-primary">Save</button>
     <a href="/admin/sites" class="btn btn-secondary">Cancel</a>
   </div>
+</form>
+<hr style="margin:2rem 0">
+<form method="post" action="/admin/sites/{id}/delete" data-confirm="{confirm_msg}" onsubmit="return confirm(this.dataset.confirm)">
+  <button type="submit" class="btn btn-danger">Delete This Site</button>
 </form>"#,
         id = crate::html_escape(&data.id),
         hostname = crate::html_escape(&data.hostname),
+        confirm_msg = crate::html_escape(&confirm_msg),
     );
 
     crate::admin_page("Site Settings", "/admin/sites", flash, &content, current_site, is_global_admin)

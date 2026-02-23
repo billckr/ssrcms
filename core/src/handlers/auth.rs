@@ -41,9 +41,9 @@ pub async fn login_post(
         return Html(admin::pages::login::render(Some("Invalid email or password."))).into_response();
     }
 
-    // Check role — admin, editor, and author can log in to admin.
+    // Check role — super_admin, editor, and author can log in to admin.
     match user.role.as_str() {
-        "admin" | "editor" | "author" => {}
+        "super_admin" | "editor" | "author" => {}
         _ => {
             return Html(admin::pages::login::render(Some("Your account does not have admin access."))).into_response();
         }

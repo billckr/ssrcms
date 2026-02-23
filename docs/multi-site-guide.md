@@ -97,8 +97,8 @@ There are two tiers of admin privilege:
 
 | Account type | How identified | Scope |
 |---|---|---|
-| **Global admin** | `users.role = 'admin'` | All sites. Can manage Sites, other global admins, and protected accounts. |
-| **Site admin** | `site_users.role = 'admin'` | One site only. Cannot see or manage global admin accounts. |
+| **Super Admin** | `users.role = 'super_admin'` | All sites. Can manage Sites, themes (global), plugins, all users. `is_protected = TRUE` on the install-time account — never deletable. |
+| **Site admin** | `site_users.role = 'admin'` | One site only. Cannot see or manage super admin accounts. |
 
 Per-site roles in `site_users`:
 
@@ -109,17 +109,24 @@ Per-site roles in `site_users`:
 | `author` | Create and edit own posts only |
 | `subscriber` | Read-only access |
 
-A single user can have different roles on different sites. Global admin accounts (`users.role = 'admin'`) always have full access across all sites regardless of `site_users` entries.
+A single user can have different roles on different sites. Super admin accounts
+(`users.role = 'super_admin'`) always have full access across all sites regardless
+of `site_users` entries.
 
 ### Protected accounts
 
-The install-time global admin should be marked `is_protected = TRUE` to prevent accidental
-or malicious deletion. Protected accounts have no delete button in the admin UI and all
+The install-time super admin account is automatically marked `is_protected = TRUE` by
+`synaptic-cli install`. Migration 0013 retroactively protects any pre-existing `admin`
+accounts on upgrade. Protected accounts have no delete button in the admin UI and all
 server-side deletion attempts are rejected regardless of the requester's role.
 
-```sql
-UPDATE users SET is_protected = TRUE WHERE username = 'your_username';
-```
+### Theme uploads per site
+
+- **Super Admin** theme uploads land in `themes/global/` — available to all sites.
+- **Site Admin** theme uploads land in `themes/sites/<site_id>/` — scoped to that site.
+
+Both super admins and site admins can see global themes in the Appearance panel.
+Site admins additionally see their site-specific themes.
 
 ---
 

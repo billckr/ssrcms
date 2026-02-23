@@ -63,10 +63,21 @@ You do not need Rust, JavaScript, a build pipeline, or any server-side programmi
 
 ## 3. Theme Directory Structure
 
-A theme lives in a subdirectory of the `themes/` folder. The directory name becomes the theme's identifier and must match the `name` field in `theme.toml`.
+Themes are stored under the configured `themes/` folder, organised into two subdirectories:
+
+| Directory | Purpose | Who can upload |
+|-----------|---------|----------------|
+| `themes/global/` | Available to all sites | Super Admin only |
+| `themes/sites/<site_id>/` | Scoped to one specific site | Site Admin (or Super Admin) |
+
+On first server startup, any themes that previously lived in the flat `themes/` root are
+automatically migrated to `themes/global/`.
+
+Within either subdirectory, each theme has its own named folder. The directory name becomes
+the theme's identifier and must match the `name` field in `theme.toml`.
 
 ```
-themes/
+themes/global/
   your-theme-name/
     theme.toml                   ← required: manifest
     screenshot.png               ← optional: preview image (1200×900 recommended)
@@ -922,7 +933,7 @@ There are two ways to install a theme:
 
 **Zip upload (recommended)** — Go to **Appearance** (`/admin/appearance`), scroll to the Upload Theme section, and upload a `.zip` file containing your theme. The zip may place theme files at the root or inside a single top-level folder — both layouts are accepted. The CMS will validate the structure and reject the upload with an error message if anything is missing. On success the theme appears in the theme list immediately. Uploading a zip whose `theme.toml` names an already-installed theme replaces it in place.
 
-**Manual installation** — Copy your theme directory into the `themes/` folder on the server and restart the server process. The theme will appear in the Appearance list on next load.
+**Manual installation** — Copy your theme directory into `themes/global/` (for a theme available to all sites) or `themes/sites/<site_id>/` (for a site-specific theme). The theme will appear in the Appearance list on next server restart.
 
 ### Verify the theme loads
 

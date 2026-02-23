@@ -96,22 +96,38 @@ pub async fn create(
 
 pub async fn delete_category(
     State(state): State<AppState>,
-    _admin: AdminUser,
+    admin: AdminUser,
     Path(id): Path<Uuid>,
 ) -> impl IntoResponse {
+    if !admin.is_global_admin {
+        let belongs = crate::models::taxonomy::get_by_id(&state.db, id).await
+            .map(|t| t.site_id == admin.site_id)
+            .unwrap_or(false);
+        if !belongs {
+            return Redirect::to("/admin/categories").into_response();
+        }
+    }
     if let Err(e) = crate::models::taxonomy::delete(&state.db, id).await {
         tracing::error!("failed to delete category {}: {:?}", id, e);
     }
-    Redirect::to("/admin/categories")
+    Redirect::to("/admin/categories").into_response()
 }
 
 pub async fn delete_tag(
     State(state): State<AppState>,
-    _admin: AdminUser,
+    admin: AdminUser,
     Path(id): Path<Uuid>,
 ) -> impl IntoResponse {
+    if !admin.is_global_admin {
+        let belongs = crate::models::taxonomy::get_by_id(&state.db, id).await
+            .map(|t| t.site_id == admin.site_id)
+            .unwrap_or(false);
+        if !belongs {
+            return Redirect::to("/admin/tags").into_response();
+        }
+    }
     if let Err(e) = crate::models::taxonomy::delete(&state.db, id).await {
         tracing::error!("failed to delete tag {}: {:?}", id, e);
     }
-    Redirect::to("/admin/tags")
+    Redirect::to("/admin/tags").into_response()
 }

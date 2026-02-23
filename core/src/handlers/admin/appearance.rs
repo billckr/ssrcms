@@ -8,6 +8,7 @@ use serde::Deserialize;
 use std::fs;
 use std::io::Read as IoRead;
 use std::path::{Path as FsPath, PathBuf};
+use uuid::Uuid;
 
 use crate::app_state::{AppState, set_site_setting};
 use crate::middleware::admin_auth::AdminUser;
@@ -32,7 +33,7 @@ pub async fn list(
     admin: AdminUser,
 ) -> Html<String> {
     let cs = state.site_hostname(admin.site_id);
-    render_appearance_list(&state, None, &cs, admin.is_global_admin).await
+    render_appearance_list(&state, None, &cs, admin.is_global_admin, admin.site_id).await
 }
 
 // ── Activate ──────────────────────────────────────────────────────────────────
@@ -48,31 +49,62 @@ pub async fn activate(
     Form(form): Form<ActivateForm>,
 ) -> impl IntoResponse {
     let themes_dir = &state.config.themes_dir;
-    let theme_path = FsPath::new(themes_dir).join(&form.theme);
-
     let cs = state.site_hostname(admin.site_id);
 
-    if !theme_path.is_dir() {
+    // Reject obviously invalid names before any filesystem access.
+    if form.theme.contains("..") || form.theme.contains('/') || form.theme.contains('\\') {
+        return render_appearance_list(&state, Some("Invalid theme name."), &cs, admin.is_global_admin, admin.site_id).await.into_response();
+    }
+
+    let global_dir = FsPath::new(themes_dir).join("global");
+    let site_dir = admin.site_id.map(|id| FsPath::new(themes_dir).join("sites").join(id.to_string()));
+
+    // Resolve which directory the theme lives in.
+    let theme_path = if global_dir.join(&form.theme).is_dir() {
+        global_dir.join(&form.theme)
+    } else if let Some(ref sd) = site_dir {
+        if sd.join(&form.theme).is_dir() {
+            sd.join(&form.theme)
+        } else {
+            tracing::warn!("theme activation failed: theme '{}' not found in global or site dirs", form.theme);
+            return render_appearance_list(&state, Some("Theme not found."), &cs, admin.is_global_admin, admin.site_id).await.into_response();
+        }
+    } else {
         tracing::warn!("theme activation failed: theme '{}' not found", form.theme);
-        return render_appearance_list(&state, Some("Theme not found."), &cs, admin.is_global_admin).await.into_response();
+        return render_appearance_list(&state, Some("Theme not found."), &cs, admin.is_global_admin, admin.site_id).await.into_response();
+    };
+
+    // Path traversal guard: theme must stay within global/ or sites/<id>/.
+    let canonical_theme = match theme_path.canonicalize() {
+        Ok(p) => p,
+        Err(_) => return render_appearance_list(&state, Some("Theme not found."), &cs, admin.is_global_admin, admin.site_id).await.into_response(),
+    };
+    let canonical_global = global_dir.canonicalize().unwrap_or_default();
+    let canonical_site = site_dir
+        .as_ref()
+        .and_then(|sd| sd.canonicalize().ok())
+        .unwrap_or_default();
+    if !canonical_theme.starts_with(&canonical_global) && !canonical_theme.starts_with(&canonical_site) {
+        tracing::warn!("activate path traversal attempt: theme_name={:?}", form.theme);
+        return render_appearance_list(&state, Some("Theme not found."), &cs, admin.is_global_admin, admin.site_id).await.into_response();
     }
 
     let site_id = match admin.site_id {
         Some(id) => id,
         None => {
             tracing::warn!("theme activate: no site selected, cannot save per-site setting");
-            return render_appearance_list(&state, Some("No site selected. Run 'synaptic-cli site init' first."), &cs, admin.is_global_admin).await.into_response();
+            return render_appearance_list(&state, Some("No site selected. Run 'synaptic-cli site init' first."), &cs, admin.is_global_admin, admin.site_id).await.into_response();
         }
     };
 
     if let Err(e) = set_site_setting(&state.db, site_id, "active_theme", &form.theme).await {
         tracing::error!("failed to save active_theme to DB: {:?}", e);
-        return render_appearance_list(&state, Some("Failed to activate theme. Please try again."), &cs, admin.is_global_admin).await.into_response();
+        return render_appearance_list(&state, Some("Failed to activate theme. Please try again."), &cs, admin.is_global_admin, admin.site_id).await.into_response();
     }
 
     if let Err(e) = state.templates.switch_theme(&form.theme) {
         tracing::error!("failed to switch theme to '{}': {:?}", form.theme, e);
-        return render_appearance_list(&state, Some("Theme files could not be loaded. Please try again."), &cs, admin.is_global_admin).await.into_response();
+        return render_appearance_list(&state, Some("Theme files could not be loaded. Please try again."), &cs, admin.is_global_admin, admin.site_id).await.into_response();
     }
 
     *state.active_theme.write().unwrap() = form.theme.clone();
@@ -84,35 +116,43 @@ pub async fn activate(
 
 pub async fn screenshot(
     State(state): State<AppState>,
-    _admin: AdminUser,
+    admin: AdminUser,
     Path(theme_name): Path<String>,
 ) -> Response {
     let themes_dir = FsPath::new(&state.config.themes_dir);
+    let global_dir = themes_dir.join("global");
+    let site_dir = admin.site_id.map(|id| themes_dir.join("sites").join(id.to_string()));
 
-    // Path traversal guard: canonicalize the target and verify it stays inside themes_dir.
-    let candidate = themes_dir.join(&theme_name).join("screenshot.png");
-    let canonical_themes = match themes_dir.canonicalize() {
-        Ok(p) => p,
-        Err(_) => return StatusCode::NOT_FOUND.into_response(),
-    };
-    let canonical_candidate = match candidate.canonicalize() {
-        Ok(p) => p,
-        Err(_) => return StatusCode::NOT_FOUND.into_response(),
-    };
-    if !canonical_candidate.starts_with(&canonical_themes) {
-        tracing::warn!("screenshot path traversal attempt: theme_name={:?}", theme_name);
-        return StatusCode::NOT_FOUND.into_response();
+    // Try global dir first, then site dir.
+    let dirs_to_search: Vec<PathBuf> = std::iter::once(global_dir)
+        .chain(site_dir.into_iter())
+        .collect();
+
+    for dir in &dirs_to_search {
+        let candidate = dir.join(&theme_name).join("screenshot.png");
+        let canonical_dir = match dir.canonicalize() {
+            Ok(p) => p,
+            Err(_) => continue,
+        };
+        let canonical_candidate = match candidate.canonicalize() {
+            Ok(p) => p,
+            Err(_) => continue,
+        };
+        if !canonical_candidate.starts_with(&canonical_dir) {
+            tracing::warn!("screenshot path traversal attempt: theme_name={:?}", theme_name);
+            continue;
+        }
+        if let Ok(bytes) = fs::read(&canonical_candidate) {
+            return Response::builder()
+                .status(StatusCode::OK)
+                .header(header::CONTENT_TYPE, "image/png")
+                .header(header::CACHE_CONTROL, "public, max-age=3600")
+                .body(Body::from(bytes))
+                .unwrap_or_else(|_| StatusCode::INTERNAL_SERVER_ERROR.into_response());
+        }
     }
 
-    match fs::read(&canonical_candidate) {
-        Ok(bytes) => Response::builder()
-            .status(StatusCode::OK)
-            .header(header::CONTENT_TYPE, "image/png")
-            .header(header::CACHE_CONTROL, "public, max-age=3600")
-            .body(Body::from(bytes))
-            .unwrap_or_else(|_| StatusCode::INTERNAL_SERVER_ERROR.into_response()),
-        Err(_) => StatusCode::NOT_FOUND.into_response(),
-    }
+    StatusCode::NOT_FOUND.into_response()
 }
 
 // ── Zip upload ─────────────────────────────────────────────────────────────────
@@ -130,13 +170,13 @@ pub async fn upload_theme(
             match field.bytes().await {
                 Ok(b) if b.len() <= MAX_ZIP_BYTES => zip_bytes = Some(b.to_vec()),
                 Ok(_) => {
-                    return render_appearance_list(&state, Some("Upload too large. Maximum size is 50 MB."), &cs, admin.is_global_admin)
+                    return render_appearance_list(&state, Some("Upload too large. Maximum size is 50 MB."), &cs, admin.is_global_admin, admin.site_id)
                         .await
                         .into_response();
                 }
                 Err(e) => {
                     tracing::error!("failed to read theme zip field: {:?}", e);
-                    return render_appearance_list(&state, Some("Failed to read uploaded file. Please try again."), &cs, admin.is_global_admin)
+                    return render_appearance_list(&state, Some("Failed to read uploaded file. Please try again."), &cs, admin.is_global_admin, admin.site_id)
                         .await
                         .into_response();
                 }
@@ -146,14 +186,33 @@ pub async fn upload_theme(
 
     let zip_bytes = match zip_bytes {
         Some(b) => b,
-        None => return render_appearance_list(&state, Some("No file received."), &cs, admin.is_global_admin).await.into_response(),
+        None => return render_appearance_list(&state, Some("No file received."), &cs, admin.is_global_admin, admin.site_id).await.into_response(),
     };
 
-    let themes_dir = state.config.themes_dir.clone();
+    // Route the upload to the correct subdirectory.
+    // Super admins upload to themes/global/; site admins upload to themes/sites/<site_id>/.
+    let themes_parent = state.config.themes_dir.clone();
+    let target_dir = if admin.is_global_admin {
+        format!("{}/global", themes_parent)
+    } else if let Some(sid) = admin.site_id {
+        format!("{}/sites/{}", themes_parent, sid)
+    } else {
+        return render_appearance_list(&state, Some("No site selected. Cannot install theme."), &cs, admin.is_global_admin, admin.site_id)
+            .await
+            .into_response();
+    };
+
+    // Ensure target directory exists.
+    if let Err(e) = std::fs::create_dir_all(&target_dir) {
+        tracing::error!("failed to create theme target dir '{}': {}", target_dir, e);
+        return render_appearance_list(&state, Some("Failed to prepare theme directory."), &cs, admin.is_global_admin, admin.site_id)
+            .await
+            .into_response();
+    }
 
     // Run zip extraction on a blocking thread (zip crate is synchronous).
     let result = tokio::task::spawn_blocking(move || {
-        extract_and_install_theme(&zip_bytes, &themes_dir)
+        extract_and_install_theme(&zip_bytes, &target_dir)
     })
     .await;
 
@@ -162,38 +221,35 @@ pub async fn upload_theme(
             tracing::info!("theme '{}' installed successfully", theme_name);
 
             // Always reload the active theme in Tera after a successful upload.
-            // If the uploaded theme IS the active theme this picks up the new
-            // files immediately. If not, it is a harmless reload of the
-            // already-loaded theme. This avoids any name-comparison edge cases.
             let active = state.active_theme.read().unwrap().clone();
             if let Err(e) = state.templates.switch_theme(&active) {
                 tracing::error!("theme '{}' installed but Tera reload of '{}' failed: {:?}", theme_name, active, e);
-                return render_appearance_list(&state, Some("Theme installed but could not be reloaded. Please restart the server."), &cs, admin.is_global_admin)
+                return render_appearance_list(&state, Some("Theme installed but could not be reloaded. Please restart the server."), &cs, admin.is_global_admin, admin.site_id)
                     .await
                     .into_response();
             }
             tracing::info!("reloaded active theme '{}' after installing '{}'", active, theme_name);
 
-            render_appearance_list(&state, Some(&format!("Theme '{}' installed successfully.", theme_name)), &cs, admin.is_global_admin)
+            render_appearance_list(&state, Some(&format!("Theme '{}' installed successfully.", theme_name)), &cs, admin.is_global_admin, admin.site_id)
                 .await
                 .into_response()
         }
         Ok(Err(msg)) => {
             tracing::warn!("theme upload rejected: {}", msg);
-            render_appearance_list(&state, Some(&msg), &cs, admin.is_global_admin).await.into_response()
+            render_appearance_list(&state, Some(&msg), &cs, admin.is_global_admin, admin.site_id).await.into_response()
         }
         Err(e) => {
             tracing::error!("theme upload task panicked: {:?}", e);
-            render_appearance_list(&state, Some("Installation failed. Please try again."), &cs, admin.is_global_admin)
+            render_appearance_list(&state, Some("Installation failed. Please try again."), &cs, admin.is_global_admin, admin.site_id)
                 .await
                 .into_response()
         }
     }
 }
 
-/// Extract a theme zip into a temp directory, validate structure, then move it to themes_dir.
+/// Extract a theme zip into a temp directory, validate structure, then move it to target_dir.
 /// Returns the theme name on success, or a user-facing error string on failure.
-fn extract_and_install_theme(zip_bytes: &[u8], themes_dir: &str) -> Result<String, String> {
+fn extract_and_install_theme(zip_bytes: &[u8], target_dir: &str) -> Result<String, String> {
     use std::io::Cursor;
 
     let cursor = Cursor::new(zip_bytes);
@@ -201,11 +257,10 @@ fn extract_and_install_theme(zip_bytes: &[u8], themes_dir: &str) -> Result<Strin
         .map_err(|_| "File does not appear to be a valid zip archive.".to_string())?;
 
     // Detect top-level directory prefix (many zips wrap content in a folder).
-    // We look for the entry that contains theme.toml to find the prefix.
     let prefix = find_theme_prefix(&mut archive)?;
 
     // Extract into a temp directory.
-    let tmp_dir = tempdir_in(themes_dir)?;
+    let tmp_dir = tempdir_in(target_dir)?;
     let tmp_path = tmp_dir.clone();
 
     for i in 0..archive.len() {
@@ -214,13 +269,12 @@ fn extract_and_install_theme(zip_bytes: &[u8], themes_dir: &str) -> Result<Strin
 
         let raw_name = entry.name().to_string();
 
-        // Strip the detected prefix to get the relative path within the theme.
         let relative = if prefix.is_empty() {
             raw_name.clone()
         } else {
             match raw_name.strip_prefix(&prefix) {
                 Some(r) => r.to_string(),
-                None => continue, // skip the prefix dir entry itself
+                None => continue,
             }
         };
 
@@ -285,8 +339,8 @@ fn extract_and_install_theme(zip_bytes: &[u8], themes_dir: &str) -> Result<Strin
         ));
     }
 
-    // Move temp dir to themes/<name>, replacing any existing theme of the same name.
-    let final_path = PathBuf::from(themes_dir).join(&theme_name);
+    // Move temp dir to target_dir/<name>, replacing any existing theme of the same name.
+    let final_path = PathBuf::from(target_dir).join(&theme_name);
     if final_path.exists() {
         fs::remove_dir_all(&final_path)
             .map_err(|e| format!("Failed to replace existing theme: {}", e))?;
@@ -317,14 +371,14 @@ fn find_theme_prefix(archive: &mut zip::ZipArchive<std::io::Cursor<&[u8]>>) -> R
 
 /// Create a uniquely-named temporary directory inside themes_dir.
 /// Returns the path as a String.
-fn tempdir_in(themes_dir: &str) -> Result<String, String> {
+fn tempdir_in(dir: &str) -> Result<String, String> {
     use std::time::{SystemTime, UNIX_EPOCH};
     let ts = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .subsec_nanos();
     let tmp_name = format!(".theme_upload_tmp_{}", ts);
-    let tmp_path = PathBuf::from(themes_dir).join(&tmp_name);
+    let tmp_path = PathBuf::from(dir).join(&tmp_name);
     fs::create_dir_all(&tmp_path)
         .map_err(|e| format!("Failed to create temp directory: {}", e))?;
     tmp_path.to_str()
@@ -334,55 +388,39 @@ fn tempdir_in(themes_dir: &str) -> Result<String, String> {
 
 // ── Shared list renderer ───────────────────────────────────────────────────────
 
-async fn render_appearance_list(state: &AppState, flash: Option<&str>, current_site: &str, is_global_admin: bool) -> Html<String> {
+async fn render_appearance_list(
+    state: &AppState,
+    flash: Option<&str>,
+    current_site: &str,
+    is_global_admin: bool,
+    site_id: Option<Uuid>,
+) -> Html<String> {
     let themes_dir = &state.config.themes_dir;
 
-    let active_theme_from_db: String = sqlx::query_scalar("SELECT value FROM site_settings WHERE key = 'active_theme'")
+    // Step 11 fix: scope the active_theme query by site_id.
+    let active_theme_from_db: String = if let Some(sid) = site_id {
+        sqlx::query_scalar(
+            "SELECT value FROM site_settings WHERE site_id = $1 AND key = 'active_theme'",
+        )
+        .bind(sid)
         .fetch_optional(&state.db)
         .await
         .unwrap_or_else(|e| {
             tracing::warn!("failed to read active_theme from DB: {:?}", e);
             None
         })
-        .unwrap_or_else(|| "default".to_string());
+        .unwrap_or_else(|| "default".to_string())
+    } else {
+        "default".to_string()
+    };
+
+    let global_dir = FsPath::new(themes_dir).join("global");
+    let site_dir = site_id.map(|id| FsPath::new(themes_dir).join("sites").join(id.to_string()));
 
     let mut themes = Vec::new();
-
-    if let Ok(entries) = fs::read_dir(themes_dir) {
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if !path.is_dir() {
-                continue;
-            }
-            // Skip hidden temp dirs created during upload.
-            let dir_name = match path.file_name() {
-                Some(n) => n.to_string_lossy().to_string(),
-                None => continue,
-            };
-            if dir_name.starts_with('.') {
-                continue;
-            }
-            let toml_path = path.join("theme.toml");
-            if let Ok(toml_content) = fs::read_to_string(&toml_path) {
-                if let Ok(parsed) = toml::from_str::<toml::Table>(&toml_content) {
-                    if let Some(theme_section) = parsed.get("theme").and_then(|v| v.as_table()) {
-                        let name = theme_section.get("name").and_then(|v| v.as_str()).unwrap_or(&dir_name).to_string();
-                        let version = theme_section.get("version").and_then(|v| v.as_str()).unwrap_or("unknown").to_string();
-                        let description = theme_section.get("description").and_then(|v| v.as_str()).unwrap_or("No description").to_string();
-                        let author = theme_section.get("author").and_then(|v| v.as_str()).unwrap_or("Unknown").to_string();
-                        let has_screenshot = path.join("screenshot.png").exists();
-                        themes.push(ThemeInfo {
-                            name: name.clone(),
-                            version,
-                            description,
-                            author,
-                            active: name == active_theme_from_db,
-                            has_screenshot,
-                        });
-                    }
-                }
-            }
-        }
+    scan_theme_dir(&global_dir, &active_theme_from_db, "global", &mut themes);
+    if let Some(ref sd) = site_dir {
+        scan_theme_dir(sd, &active_theme_from_db, "site", &mut themes);
     }
 
     themes.sort_by(|a, b| match (a.active, b.active) {
@@ -392,4 +430,148 @@ async fn render_appearance_list(state: &AppState, flash: Option<&str>, current_s
     });
 
     Html(render_with_flash(&themes, flash, current_site, is_global_admin))
+}
+
+/// Scan a theme directory and append found themes to `themes`.
+/// `source` is `"global"` or `"site"`.
+fn scan_theme_dir(dir: &FsPath, active_theme: &str, source: &str, themes: &mut Vec<ThemeInfo>) {
+    let Ok(entries) = fs::read_dir(dir) else { return; };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_dir() {
+            continue;
+        }
+        let dir_name = match path.file_name() {
+            Some(n) => n.to_string_lossy().to_string(),
+            None => continue,
+        };
+        if dir_name.starts_with('.') {
+            continue;
+        }
+        let toml_path = path.join("theme.toml");
+        if let Ok(toml_content) = fs::read_to_string(&toml_path) {
+            if let Ok(parsed) = toml::from_str::<toml::Table>(&toml_content) {
+                if let Some(theme_section) = parsed.get("theme").and_then(|v| v.as_table()) {
+                    let name = theme_section.get("name").and_then(|v| v.as_str()).unwrap_or(&dir_name).to_string();
+                    let version = theme_section.get("version").and_then(|v| v.as_str()).unwrap_or("unknown").to_string();
+                    let description = theme_section.get("description").and_then(|v| v.as_str()).unwrap_or("No description").to_string();
+                    let author = theme_section.get("author").and_then(|v| v.as_str()).unwrap_or("Unknown").to_string();
+                    let has_screenshot = path.join("screenshot.png").exists();
+                    themes.push(ThemeInfo {
+                        name: name.clone(),
+                        version,
+                        description,
+                        author,
+                        active: name == active_theme,
+                        has_screenshot,
+                        source: source.to_string(),
+                    });
+                }
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use uuid::Uuid;
+
+    fn make_test_theme(dir: &FsPath, name: &str) {
+        let theme_dir = dir.join(name);
+        std::fs::create_dir_all(theme_dir.join("templates")).unwrap();
+        std::fs::write(
+            theme_dir.join("theme.toml"),
+            format!(
+                "[theme]\nname = \"{}\"\nversion = \"1.0\"\ndescription = \"Test theme\"\nauthor = \"Tester\"\n",
+                name
+            ),
+        )
+        .unwrap();
+    }
+
+    fn unique_tmp(label: &str) -> PathBuf {
+        std::env::temp_dir().join(format!("synaptic_theme_test_{}_{}", label, Uuid::new_v4()))
+    }
+
+    #[test]
+    fn theme_discovery_finds_global_themes() {
+        let tmp = unique_tmp("global");
+        let global_dir = tmp.join("global");
+        std::fs::create_dir_all(&global_dir).unwrap();
+        make_test_theme(&global_dir, "myblue");
+
+        let mut themes = Vec::new();
+        scan_theme_dir(&global_dir, "default", "global", &mut themes);
+
+        assert_eq!(themes.len(), 1);
+        assert_eq!(themes[0].name, "myblue");
+        assert_eq!(themes[0].source, "global");
+        assert!(!themes[0].active);
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn theme_discovery_finds_site_themes() {
+        let tmp = unique_tmp("site");
+        let site_id = Uuid::new_v4();
+        let site_dir = tmp.join("sites").join(site_id.to_string());
+        std::fs::create_dir_all(&site_dir).unwrap();
+        make_test_theme(&site_dir, "clienttheme");
+
+        let mut themes = Vec::new();
+        scan_theme_dir(&site_dir, "clienttheme", "site", &mut themes);
+
+        assert_eq!(themes.len(), 1);
+        assert_eq!(themes[0].name, "clienttheme");
+        assert_eq!(themes[0].source, "site");
+        assert!(themes[0].active);
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn theme_discovery_excludes_other_site_themes() {
+        let tmp = unique_tmp("isolation");
+        let site_a = Uuid::new_v4();
+        let site_b = Uuid::new_v4();
+
+        let dir_a = tmp.join("sites").join(site_a.to_string());
+        let dir_b = tmp.join("sites").join(site_b.to_string());
+        std::fs::create_dir_all(&dir_a).unwrap();
+        std::fs::create_dir_all(&dir_b).unwrap();
+
+        make_test_theme(&dir_a, "theme_for_a");
+        make_test_theme(&dir_b, "theme_for_b");
+
+        // Site A should only see its own themes.
+        let mut themes = Vec::new();
+        scan_theme_dir(&dir_a, "default", "site", &mut themes);
+
+        assert_eq!(themes.len(), 1, "site A should see exactly 1 theme");
+        assert_eq!(themes[0].name, "theme_for_a");
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn theme_discovery_skips_dot_dirs() {
+        let tmp = unique_tmp("dotdir");
+        let global_dir = tmp.join("global");
+        std::fs::create_dir_all(&global_dir).unwrap();
+
+        // Real theme.
+        make_test_theme(&global_dir, "realtheme");
+        // Hidden temp dir (as created during upload).
+        std::fs::create_dir_all(global_dir.join(".theme_upload_tmp_12345")).unwrap();
+
+        let mut themes = Vec::new();
+        scan_theme_dir(&global_dir, "default", "global", &mut themes);
+
+        assert_eq!(themes.len(), 1);
+        assert_eq!(themes[0].name, "realtheme");
+
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
 }

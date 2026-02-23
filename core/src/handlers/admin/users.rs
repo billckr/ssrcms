@@ -9,7 +9,7 @@ use uuid::Uuid;
 use crate::app_state::AppState;
 use crate::middleware::admin_auth::AdminUser;
 use crate::models::user::{CreateUser, UpdateUser, UserRole};
-use admin::pages::users::{UserEdit, UserRow};
+use admin::pages::users::{SiteOption, UserEdit, UserRow};
 
 pub async fn list(
     State(state): State<AppState>,
@@ -58,6 +58,11 @@ pub async fn new_user(
         return Html("<h1>403 Forbidden</h1>".to_string()).into_response();
     }
     let cs = state.site_hostname(admin.site_id);
+    let sites = if admin.is_global_admin {
+        fetch_site_options(&state).await
+    } else {
+        vec![]
+    };
     let edit = UserEdit {
         id: None,
         username: String::new(),
@@ -65,6 +70,8 @@ pub async fn new_user(
         display_name: String::new(),
         role: "author".into(),
         bio: String::new(),
+        sites,
+        is_super_admin_target: false,
     };
     Html(admin::pages::users::render_editor(&edit, None, &cs, admin.is_global_admin)).into_response()
 }
@@ -75,6 +82,19 @@ pub async fn edit_user(
     Path(id): Path<Uuid>,
 ) -> impl IntoResponse {
     let cs = state.site_hostname(admin.site_id);
+
+    // Site isolation: non-global admins may only edit users on their site.
+    if !admin.is_global_admin {
+        let allowed = match admin.site_id {
+            Some(sid) => crate::models::site_user::get_role(&state.db, sid, id)
+                .await.ok().flatten().is_some(),
+            None => false,
+        };
+        if !allowed {
+            return Redirect::to("/admin/users").into_response();
+        }
+    }
+
     let user = match crate::models::user::get_by_id(&state.db, id).await {
         Ok(u) => u,
         Err(e) => {
@@ -82,13 +102,28 @@ pub async fn edit_user(
             return Redirect::to("/admin/users").into_response();
         }
     };
+
+    let is_super_admin_target = user.role.as_str() == "super_admin";
+
+    // For non-super-admin targets, show site role (admin/editor/author/subscriber) in the form.
+    let display_role = if is_super_admin_target {
+        user.role.clone()
+    } else if let Some(sid) = admin.site_id {
+        crate::models::site_user::get_role(&state.db, sid, id)
+            .await.ok().flatten().unwrap_or_else(|| user.role.clone())
+    } else {
+        user.role.clone()
+    };
+
     let edit = UserEdit {
         id: Some(user.id.to_string()),
         username: user.username.clone(),
         email: user.email.clone(),
         display_name: user.display_name.clone(),
-        role: user.role.clone(),
+        role: display_role,
         bio: user.bio.clone(),
+        sites: vec![],
+        is_super_admin_target,
     };
     Html(admin::pages::users::render_editor(&edit, None, &cs, admin.is_global_admin)).into_response()
 }
@@ -101,6 +136,10 @@ pub struct UserForm {
     pub password: Option<String>,
     pub role: String,
     pub bio: Option<String>,
+    /// "existing" or "new" — only present on the new-user form for global admins.
+    pub site_assignment: Option<String>,
+    pub existing_site_id: Option<String>,
+    pub new_hostname: Option<String>,
 }
 
 pub async fn save_new(
@@ -115,6 +154,7 @@ pub async fn save_new(
     let password = match form.password.as_deref().filter(|p| !p.is_empty()) {
         Some(p) => p.to_string(),
         None => {
+            let sites = if admin.is_global_admin { fetch_site_options(&state).await } else { vec![] };
             let edit = UserEdit {
                 id: None,
                 username: form.username,
@@ -122,6 +162,8 @@ pub async fn save_new(
                 display_name: form.display_name.unwrap_or_default(),
                 role: form.role,
                 bio: form.bio.unwrap_or_default(),
+                sites,
+                is_super_admin_target: false,
             };
             return Html(admin::pages::users::render_editor(
                 &edit,
@@ -132,13 +174,20 @@ pub async fn save_new(
         }
     };
 
-    // Cap role: site admins can only create editor/author accounts.
-    let capped_role = if !admin.is_global_admin && form.role == "admin" {
+    // site_role: what goes into site_users.role (admin/editor/author/subscriber).
+    // Site admins cannot assign super_admin; cap to editor.
+    let site_role = if !admin.is_global_admin && form.role == "super_admin" {
         "editor"
     } else {
         form.role.as_str()
     };
-    let role = parse_role(capped_role);
+    // users_role: what goes into users.role. "admin" is a site_users concept; "super_admin"
+    // is CLI-only. Both map to "editor" in the users table.
+    let users_role_str = match site_role {
+        "admin" | "super_admin" => "editor",
+        other => other,
+    };
+    let role = parse_role(users_role_str);
     let create = CreateUser {
         username: form.username.clone(),
         email: form.email.clone(),
@@ -149,10 +198,45 @@ pub async fn save_new(
 
     match crate::models::user::create(&state.db, &create).await {
         Ok(new_user) => {
-            // Site admin: auto-scope the new user to their site.
-            if !admin.is_global_admin {
+            if admin.is_global_admin {
+                // Resolve target site: create new or use existing.
+                let site_id = match form.site_assignment.as_deref() {
+                    Some("new") => {
+                        let hostname = form.new_hostname.as_deref().unwrap_or("").trim().to_lowercase();
+                        if hostname.is_empty() {
+                            tracing::warn!("new user {} created but no hostname provided for new site", new_user.id);
+                            None
+                        } else {
+                            match crate::models::site::create(&state.db, &hostname).await {
+                                Ok(site) => {
+                                    if let Err(e) = state.reload_site_cache().await {
+                                        tracing::warn!("site cache reload failed: {:?}", e);
+                                    }
+                                    Some(site.id)
+                                }
+                                Err(e) => {
+                                    tracing::error!("failed to create site '{}': {:?}", hostname, e);
+                                    None
+                                }
+                            }
+                        }
+                    }
+                    _ => {
+                        // "existing" or unset — use the selected site id.
+                        form.existing_site_id
+                            .as_deref()
+                            .and_then(|s| s.parse::<Uuid>().ok())
+                    }
+                };
+                if let Some(sid) = site_id {
+                    if let Err(e) = crate::models::site_user::add(&state.db, sid, new_user.id, site_role).await {
+                        tracing::warn!("failed to add user {} to site {}: {:?}", new_user.id, sid, e);
+                    }
+                }
+            } else {
+                // Site admin: auto-scope to their site.
                 if let Some(site_id) = admin.site_id {
-                    if let Err(e) = crate::models::site_user::add(&state.db, site_id, new_user.id, capped_role).await {
+                    if let Err(e) = crate::models::site_user::add(&state.db, site_id, new_user.id, site_role).await {
                         tracing::warn!("failed to add new user {} to site {}: {:?}", new_user.id, site_id, e);
                     }
                 }
@@ -161,6 +245,7 @@ pub async fn save_new(
         }
         Err(e) => {
             tracing::error!("create user error: {:?}", e);
+            let sites = if admin.is_global_admin { fetch_site_options(&state).await } else { vec![] };
             let edit = UserEdit {
                 id: None,
                 username: form.username,
@@ -168,6 +253,8 @@ pub async fn save_new(
                 display_name: form.display_name.unwrap_or_default(),
                 role: form.role,
                 bio: form.bio.unwrap_or_default(),
+                sites,
+                is_super_admin_target: false,
             };
             let msg = friendly_user_error(&e);
             Html(admin::pages::users::render_editor(&edit, Some(&msg), &cs, admin.is_global_admin)).into_response()
@@ -185,6 +272,24 @@ pub async fn save_edit(
         return (axum::http::StatusCode::FORBIDDEN, "Forbidden").into_response();
     }
     let cs = state.site_hostname(admin.site_id);
+
+    // Site isolation: non-global admins may only edit users on their site.
+    if !admin.is_global_admin {
+        let allowed = match admin.site_id {
+            Some(sid) => crate::models::site_user::get_role(&state.db, sid, id)
+                .await.ok().flatten().is_some(),
+            None => false,
+        };
+        if !allowed {
+            return (axum::http::StatusCode::FORBIDDEN, "Forbidden").into_response();
+        }
+    }
+
+    // Fetch target to know their current role (preserve super_admin, update site_users.role).
+    let target_role = crate::models::user::get_by_id(&state.db, id).await
+        .map(|u| u.role.clone()).unwrap_or_default();
+    let is_super_admin_target = target_role == "super_admin";
+
     let new_password_hash = if let Some(pw) = form.password.as_deref().filter(|p| !p.is_empty()) {
         match crate::models::user::hash_password(pw) {
             Ok(h) => Some(h),
@@ -197,6 +302,8 @@ pub async fn save_edit(
                     display_name: form.display_name.unwrap_or_default(),
                     role: form.role,
                     bio: form.bio.unwrap_or_default(),
+                    sites: vec![],
+                    is_super_admin_target,
                 };
                 return Html(admin::pages::users::render_editor(
                     &edit,
@@ -210,15 +317,35 @@ pub async fn save_edit(
         None
     };
 
+    // Determine users.role to write:
+    // - super_admin targets keep their role (never downgraded via form)
+    // - "admin" is a site_users role concept; map to "editor" in users table
+    // - "super_admin" cannot be set via form (CLI-only)
+    let new_users_role = if is_super_admin_target {
+        parse_role("super_admin")
+    } else {
+        match form.role.as_str() {
+            "admin" | "super_admin" => parse_role("editor"),
+            other => parse_role(other),
+        }
+    };
+
     let update = UpdateUser {
         username: Some(form.username.clone()),
         email: Some(form.email.clone()),
         display_name: form.display_name.clone(),
         password_hash: new_password_hash,
-        // Cap role: site admins cannot promote users to global admin.
-        role: Some(parse_role(if !admin.is_global_admin && form.role == "admin" { "editor" } else { &form.role })),
+        role: Some(new_users_role),
         bio: form.bio.clone(),
     };
+
+    // Also sync the site_users.role for non-super-admin users.
+    if !is_super_admin_target {
+        if let Some(site_id) = admin.site_id {
+            let site_role = if form.role == "super_admin" { "editor" } else { &form.role };
+            let _ = crate::models::site_user::update_role(&state.db, site_id, id, site_role).await;
+        }
+    }
 
     match crate::models::user::update(&state.db, id, &update).await {
         Ok(_) => Redirect::to("/admin/users").into_response(),
@@ -231,6 +358,8 @@ pub async fn save_edit(
                 display_name: form.display_name.unwrap_or_default(),
                 role: form.role,
                 bio: form.bio.unwrap_or_default(),
+                sites: vec![],
+                is_super_admin_target,
             };
             let msg = friendly_user_error(&e);
             Html(admin::pages::users::render_editor(&edit, Some(&msg), &cs, admin.is_global_admin)).into_response()
@@ -249,15 +378,29 @@ pub async fn delete_user(
     macro_rules! deny {
         ($msg:expr) => {{
             tracing::warn!("delete_user denied for target={} actor={}: {}", id, admin.user.id, $msg);
-            let raw = crate::models::user::list(&state.db).await.unwrap_or_default();
-            let rows: Vec<UserRow> = raw.iter().map(|u| UserRow {
-                id: u.id.to_string(),
-                username: u.username.clone(),
-                email: u.email.clone(),
-                role: u.role.clone(),
-                display_name: u.display_name.clone(),
-                is_protected: u.is_protected,
-            }).collect();
+            let rows: Vec<UserRow> = if admin.is_global_admin {
+                crate::models::user::list(&state.db).await.unwrap_or_default()
+                    .iter().map(|u| UserRow {
+                        id: u.id.to_string(),
+                        username: u.username.clone(),
+                        email: u.email.clone(),
+                        role: u.role.clone(),
+                        display_name: u.display_name.clone(),
+                        is_protected: u.is_protected,
+                    }).collect()
+            } else if let Some(site_id) = admin.site_id {
+                crate::models::site_user::list_for_site(&state.db, site_id).await.unwrap_or_default()
+                    .into_iter().map(|(u, site_role)| UserRow {
+                        id: u.id.to_string(),
+                        username: u.username.clone(),
+                        email: u.email.clone(),
+                        role: site_role,
+                        display_name: u.display_name.clone(),
+                        is_protected: u.is_protected,
+                    }).collect()
+            } else {
+                vec![]
+            };
             return Html(admin::pages::users::render_list(
                 &rows,
                 Some($msg),
@@ -283,14 +426,14 @@ pub async fn delete_user(
 
     // Guard 3: only a global admin may delete another global admin.
     if let Ok(ref t) = target {
-        if t.role == "admin" && !admin.is_global_admin {
+        if t.role == "super_admin" && !admin.is_global_admin {
             deny!("Only a global admin can delete another global admin account.");
         }
     }
 
     // Guard 4: never delete the last global admin.
     if let Ok(ref t) = target {
-        if t.role == "admin" {
+        if t.role == "super_admin" {
             let remaining = crate::models::user::count_global_admins(&state.db)
                 .await
                 .unwrap_or(2);
@@ -317,9 +460,17 @@ fn friendly_user_error(e: &crate::errors::AppError) -> String {
 
 fn parse_role(s: &str) -> UserRole {
     match s {
-        "admin" => UserRole::Admin,
+        "super_admin" => UserRole::SuperAdmin,
         "editor" => UserRole::Editor,
         "author" => UserRole::Author,
         _ => UserRole::Subscriber,
     }
+}
+
+async fn fetch_site_options(state: &AppState) -> Vec<SiteOption> {
+    crate::models::site::list(&state.db).await
+        .unwrap_or_else(|e| { tracing::warn!("failed to list sites for user form: {:?}", e); vec![] })
+        .into_iter()
+        .map(|s| SiteOption { id: s.id.to_string(), hostname: s.hostname })
+        .collect()
 }

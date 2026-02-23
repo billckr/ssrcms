@@ -16,8 +16,9 @@ pub enum UserRole {
     Author,
     #[sqlx(rename = "editor")]
     Editor,
-    #[sqlx(rename = "admin")]
-    Admin,
+    /// Agency-level super-admin. Unrestricted access to all sites; bypasses site_users.
+    #[sqlx(rename = "super_admin")]
+    SuperAdmin,
 }
 
 #[allow(dead_code)]
@@ -27,7 +28,7 @@ impl UserRole {
             UserRole::Subscriber => "subscriber",
             UserRole::Author => "author",
             UserRole::Editor => "editor",
-            UserRole::Admin => "admin",
+            UserRole::SuperAdmin => "super_admin",
         }
     }
 
@@ -36,17 +37,17 @@ impl UserRole {
             "subscriber" => Some(UserRole::Subscriber),
             "author" => Some(UserRole::Author),
             "editor" => Some(UserRole::Editor),
-            "admin" => Some(UserRole::Admin),
+            "super_admin" => Some(UserRole::SuperAdmin),
             _ => None,
         }
     }
 
     pub fn can_publish(&self) -> bool {
-        matches!(self, UserRole::Author | UserRole::Editor | UserRole::Admin)
+        matches!(self, UserRole::Author | UserRole::Editor | UserRole::SuperAdmin)
     }
 
     pub fn can_manage_users(&self) -> bool {
-        matches!(self, UserRole::Admin)
+        matches!(self, UserRole::SuperAdmin)
     }
 }
 
@@ -264,11 +265,22 @@ pub async fn count(pool: &PgPool) -> Result<i64> {
     Ok(count)
 }
 
-/// Returns how many active global-admin accounts exist.
+/// Returns how many active super-admin accounts exist.
 pub async fn count_global_admins(pool: &PgPool) -> Result<i64> {
     let count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM users WHERE role = 'admin' AND is_active = TRUE",
+        "SELECT COUNT(*) FROM users WHERE role = 'super_admin' AND is_active = TRUE",
     )
+    .fetch_one(pool)
+    .await?;
+    Ok(count)
+}
+
+/// Returns the number of users assigned to a specific site via site_users.
+pub async fn count_for_site(pool: &PgPool, site_id: Uuid) -> Result<i64> {
+    let count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM site_users WHERE site_id = $1",
+    )
+    .bind(site_id)
     .fetch_one(pool)
     .await?;
     Ok(count)
@@ -341,7 +353,7 @@ mod tests {
         assert_eq!(UserRole::Subscriber.as_str(), "subscriber");
         assert_eq!(UserRole::Author.as_str(), "author");
         assert_eq!(UserRole::Editor.as_str(), "editor");
-        assert_eq!(UserRole::Admin.as_str(), "admin");
+        assert_eq!(UserRole::SuperAdmin.as_str(), "super_admin");
     }
 
     #[test]
@@ -349,7 +361,7 @@ mod tests {
         assert_eq!(UserRole::from_str("subscriber"), Some(UserRole::Subscriber));
         assert_eq!(UserRole::from_str("author"), Some(UserRole::Author));
         assert_eq!(UserRole::from_str("editor"), Some(UserRole::Editor));
-        assert_eq!(UserRole::from_str("admin"), Some(UserRole::Admin));
+        assert_eq!(UserRole::from_str("super_admin"), Some(UserRole::SuperAdmin));
     }
 
     #[test]
@@ -360,17 +372,23 @@ mod tests {
     }
 
     #[test]
+    fn user_role_from_str_admin_no_longer_valid() {
+        // "admin" was the old role string; it must no longer parse to a valid variant.
+        assert_eq!(UserRole::from_str("admin"), None);
+    }
+
+    #[test]
     fn user_role_from_str_case_sensitive() {
-        assert_eq!(UserRole::from_str("Admin"), None);
-        assert_eq!(UserRole::from_str("ADMIN"), None);
+        assert_eq!(UserRole::from_str("SuperAdmin"), None);
+        assert_eq!(UserRole::from_str("SUPER_ADMIN"), None);
         assert_eq!(UserRole::from_str("Author"), None);
     }
 
     #[test]
-    fn can_publish_for_author_editor_admin() {
+    fn can_publish_for_author_editor_super_admin() {
         assert!(UserRole::Author.can_publish());
         assert!(UserRole::Editor.can_publish());
-        assert!(UserRole::Admin.can_publish());
+        assert!(UserRole::SuperAdmin.can_publish());
     }
 
     #[test]
@@ -379,8 +397,8 @@ mod tests {
     }
 
     #[test]
-    fn can_manage_users_admin_only() {
-        assert!(UserRole::Admin.can_manage_users());
+    fn can_manage_users_super_admin_only() {
+        assert!(UserRole::SuperAdmin.can_manage_users());
         assert!(!UserRole::Editor.can_manage_users());
         assert!(!UserRole::Author.can_manage_users());
         assert!(!UserRole::Subscriber.can_manage_users());
@@ -412,6 +430,7 @@ mod tests {
             avatar_media_id: None,
             role: "author".to_string(),
             is_active: true,
+            is_protected: false,
             created_at: Utc::now(),
             updated_at: Utc::now(),
         };

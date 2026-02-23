@@ -92,8 +92,8 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
         let id = Uuid::new_v4();
 
         sqlx::query(
-            "INSERT INTO users (id, username, email, display_name, password_hash, role, created_at)
-             VALUES ($1, $2, $3, $4, $5, 'admin', NOW())
+            "INSERT INTO users (id, username, email, display_name, password_hash, role, is_protected, created_at)
+             VALUES ($1, $2, $3, $4, $5, 'super_admin', TRUE, NOW())
              ON CONFLICT (email) DO NOTHING"
         )
         .bind(id)
@@ -107,6 +107,22 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
 
         println!("Admin user '{}' ({}) created.", username, email);
     }
+
+    // ── Initial site ───────────────────────────────────────────────────────
+    // Insert the domain as the first site so the super admin has a default
+    // site context on first login.
+    let site_id = Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO sites (id, hostname, created_at, updated_at)
+         VALUES ($1, $2, NOW(), NOW())
+         ON CONFLICT (hostname) DO NOTHING"
+    )
+    .bind(site_id)
+    .bind(&domain)
+    .execute(&pool)
+    .await
+    .map_err(|e| anyhow::anyhow!("Failed to create initial site: {e}"))?;
+    println!("Initial site '{}' created.", domain);
 
     // ── Deployment files ───────────────────────────────────────────────────
 
@@ -122,6 +138,17 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
     // ── Summary ────────────────────────────────────────────────────────────
 
     println!("\n── Done ─────────────────────────────────────────────────");
+
+    // Warn if the app is already running — its site cache needs a restart to
+    // reflect the newly created site and admin account.
+    let pid_file = std::path::Path::new(&install_dir).join(".synaptic.pid");
+    if pid_file.exists() {
+        println!("\n⚠️  The app is currently running.");
+        println!("   Run './app.sh rebuild' to restart it and load the new site into memory.");
+    } else {
+        println!("\n   Run './app.sh rebuild' to build and start the app.");
+    }
+
     println!("\nNext steps:");
     println!(
         "  1. Copy the binary and files to {}",

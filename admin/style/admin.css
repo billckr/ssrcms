@@ -84,8 +84,8 @@ a:hover { text-decoration: underline; }
 .btn-link { background: none; border: none; cursor: pointer; color: var(--primary); font-size: 13px; padding: 0; transition: none; will-change: auto; }
 .btn-danger { color: var(--danger); border-color: var(--border); }
 .btn-danger:hover { background: #fee2e2; border-color: var(--danger); text-decoration: none; }
-.btn-secondary { background: #e2e8f0; color: var(--text); border-color: var(--border); cursor: not-allowed; opacity: 0.6; }
-.btn-secondary:hover { background: #e2e8f0; text-decoration: none; transform: none; box-shadow: none; }
+.btn-secondary { background: #e2e8f0; color: var(--text); border-color: var(--border); }
+.btn-secondary:hover { background: #d1d9e6; text-decoration: none; }
 
 /* Icon buttons */
 .icon-btn { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0; background: none; border: 1px solid var(--border); border-radius: var(--radius); cursor: pointer; color: var(--primary); transition: background .2s, border-color .2s; }

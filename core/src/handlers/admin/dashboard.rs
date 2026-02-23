@@ -23,8 +23,15 @@ pub async fn dashboard(
         &state.db, site_id, None, Some(crate::models::post::PostType::Page)
     ).await.unwrap_or_else(|e| { tracing::warn!("dashboard pages count error: {:?}", e); 0 });
 
-    let total_users = crate::models::user::count(&state.db).await
-        .unwrap_or_else(|e| { tracing::warn!("dashboard users count error: {:?}", e); 0 });
+    let total_users = if admin.is_global_admin {
+        crate::models::user::count(&state.db).await
+            .unwrap_or_else(|e| { tracing::warn!("dashboard users count error: {:?}", e); 0 })
+    } else if let Some(sid) = admin.site_id {
+        crate::models::user::count_for_site(&state.db, sid).await
+            .unwrap_or_else(|e| { tracing::warn!("dashboard site users count error: {:?}", e); 0 })
+    } else {
+        0
+    };
 
     let cs = state.site_hostname(site_id);
 

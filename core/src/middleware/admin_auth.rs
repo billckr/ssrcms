@@ -29,7 +29,7 @@ pub struct AdminUser {
     pub site_id: Option<Uuid>,
     /// The user's role on the current site, or their global role as fallback.
     pub site_role: String,
-    /// True when `users.role = 'admin'` — unrestricted access to all sites.
+    /// True when `users.role = 'super_admin'` — unrestricted access to all sites.
     pub is_global_admin: bool,
 }
 
@@ -84,13 +84,13 @@ impl FromRequestParts<AppState> for AdminUser {
             .await
             .map_err(|_| AdminAuthError::NotAuthenticated)?;
 
-        // Admin, editor, and author roles can access the admin.
+        // Super admin, editor, and author roles can access the admin.
         match user.role.as_str() {
-            "admin" | "editor" | "author" => {}
+            "super_admin" | "editor" | "author" => {}
             _ => return Err(AdminAuthError::Forbidden),
         }
 
-        let is_global_admin = user.role.as_str() == "admin";
+        let is_global_admin = user.role.as_str() == "super_admin";
 
         // ── Site resolution ────────────────────────────────────────────────────
 

@@ -175,33 +175,35 @@ Use `| json_encode | safe` for string values in JSON-LD:
 
 ## Role Hierarchy and Admin Account Protection
 
-There are two tiers of admin privilege:
+There are three tiers of access privilege:
 
 | `users.role` | `site_users.role` | Scope |
 |---|---|---|
-| `"admin"` | (not required) | **Global admin** — access to all sites, can manage global admins, can manage Sites |
-| any | `"admin"` | **Site admin** — full access to one site only; cannot see or manage global admin accounts |
+| `"super_admin"` | (not required) | **Super Admin** — unrestricted access to all sites; bypasses `site_users`; can manage sites, themes, plugins, all users. Install-time account is `is_protected = TRUE`. |
+| any | `"admin"` | **Site Admin** — full control of one site only: content, settings, themes (activate), plugins (configure), users for their site. Cannot see or manage super admin accounts. |
 | any | `"editor"` | Edit all posts on their site |
 | any | `"author"` | Create and edit own posts only |
+
+**Important:** `users.role` no longer has an `"admin"` value. The agency super-admin
+is identified by `role = 'super_admin'`. Site admin privilege is stored in
+`site_users.role = 'admin'`, not in the `users` table.
 
 ### Deletion guards (enforced in `handlers/admin/users.rs`)
 
 The `delete_user` handler enforces four guards in order:
 
 1. **No self-deletion** — a user cannot delete their own account.
-2. **Protected accounts** — accounts with `is_protected = TRUE` cannot be deleted by anyone. This flag is set on the install-time admin account (see Deployment Guide).
-3. **Global admin privilege** — only a global admin (`users.role = 'admin'`) can delete another global admin account. A site-scoped admin cannot.
-4. **Last global admin** — the final global admin account cannot be deleted, preventing a full lockout.
+2. **Protected accounts** — accounts with `is_protected = TRUE` cannot be deleted by anyone. The install-time super admin account has this flag set automatically.
+3. **Super admin privilege** — only a super admin (`users.role = 'super_admin'`) can delete another super admin account. A site-scoped admin cannot.
+4. **Last super admin** — the final super admin account cannot be deleted, preventing a full lockout.
 
 The delete button is hidden in the admin UI for accounts that match guard 1 (self) or guard 2 (protected). Guards 3 and 4 are enforced server-side regardless of UI state.
 
 ### Marking an account as protected
 
-After installation, mark the primary admin account as protected:
-```sql
-UPDATE users SET is_protected = TRUE WHERE username = 'your_username';
-```
-Or via migration in automated deployments. The `synaptic-cli install` command sets this automatically on the account it creates.
+The `synaptic-cli install` command automatically sets `is_protected = TRUE` on the
+account it creates. For manual upgrades, migration 0013 retroactively sets
+`is_protected = TRUE` on all pre-existing accounts that had `role = 'admin'`.
 
 ---
 
@@ -216,9 +218,9 @@ Or via migration in automated deployments. The `synaptic-cli install` command se
   - `user.rs` unit test explicitly asserts `password_hash` is absent from serialized `UserContext`
 - [ ] All admin routes have session guard middleware
   - All admin handlers take `_admin: AdminUser` extractor; missing it causes a compile error
-- [ ] Install-time admin account has `is_protected = TRUE`
-  - Prevents deletion even by other global admins
-  - Verify with: `SELECT username, is_protected FROM users WHERE role = 'admin';`
+- [ ] Install-time super admin account has `is_protected = TRUE`
+  - Prevents deletion even by other super admins
+  - Verify with: `SELECT username, is_protected FROM users WHERE role = 'super_admin';`
 - [ ] Site-management routes (`/admin/sites/*`) are gated behind `is_global_admin`
   - Site-scoped admins must not see the Sites nav item or access site CRUD handlers
 - [ ] `SECRET_KEY` is documented as required in production; development default is clearly labelled

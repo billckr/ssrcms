@@ -7,6 +7,8 @@ pub struct ThemeInfo {
     pub author: String,
     pub active: bool,
     pub has_screenshot: bool,
+    /// Origin of this theme: `"global"` (available to all sites) or `"site"` (site-specific).
+    pub source: String,
 }
 
 pub fn render_with_flash(themes: &[ThemeInfo], flash: Option<&str>, current_site: &str, is_global_admin: bool) -> String {

@@ -104,7 +104,7 @@ LOG_LEVEL=info
 
 ```bash
 synaptic-cli migrate
-synaptic-cli user create   # choose role: admin
+synaptic-cli user create   # choose role: super_admin
 ```
 
 ---

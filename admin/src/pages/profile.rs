@@ -17,8 +17,8 @@ pub fn render_profile(profile: &ProfileForm, flash: Option<&str>, current_site: 
       <legend>Profile Information</legend>
       
       <div class="form-group">
-        <label for="username">Username</label>
-        <input type="text" id="username" name="username" value="{username}" disabled>
+        <label>Username</label>
+        <p class="form-static-value">{username}</p>
         <small>Username cannot be changed.</small>
       </div>
       

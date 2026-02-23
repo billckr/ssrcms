@@ -41,7 +41,7 @@ async fn create() -> anyhow::Result<()> {
         .with_confirmation("Confirm password", "Passwords do not match")
         .interact()?;
 
-    let roles = &["admin", "editor", "author", "subscriber"];
+    let roles = &["super_admin", "editor", "author", "subscriber"];
     let role_idx = Select::new()
         .with_prompt("Role")
         .items(roles)

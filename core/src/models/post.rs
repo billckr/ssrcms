@@ -218,6 +218,7 @@ mod tests {
             avatar_media_id: None,
             role: "author".to_string(),
             is_active: true,
+            is_protected: false,
             created_at: Utc::now(),
             updated_at: Utc::now(),
         }
