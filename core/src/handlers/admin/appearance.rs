@@ -541,21 +541,26 @@ async fn render_appearance_list(
         scan_theme_dir(sd, &active_theme_from_db, "site", &mut themes);
     }
 
-    // Fetch the set of all theme names currently active on any site (for global in-use guard).
-    let globally_active: std::collections::HashSet<String> = sqlx::query_scalar(
-        "SELECT DISTINCT value FROM site_settings WHERE key = 'active_theme'",
+    // Fetch usage counts: how many sites have each theme as their active_theme.
+    let usage_rows: Vec<(String, i64)> = sqlx::query_as(
+        "SELECT value, COUNT(*) FROM site_settings WHERE key = 'active_theme' GROUP BY value",
     )
     .fetch_all(&state.db)
     .await
-    .unwrap_or_default()
-    .into_iter()
-    .collect();
+    .unwrap_or_default();
 
-    // Compute can_delete for each theme.
+    let usage_counts: std::collections::HashMap<String, usize> = usage_rows
+        .into_iter()
+        .map(|(name, count)| (name, count as usize))
+        .collect();
+
+    // Compute can_delete and in_use_by for each theme.
     for theme in &mut themes {
+        let in_use = usage_counts.get(&theme.name).copied().unwrap_or(0);
+        theme.in_use_by = if theme.source == "global" { in_use } else { 0 };
         theme.can_delete = if theme.source == "global" {
             // Super admin only; not active anywhere.
-            is_global_admin && !theme.active && !globally_active.contains(&theme.name)
+            is_global_admin && !theme.active && in_use == 0
         } else {
             // Site theme: either admin type can delete, as long as it's not active.
             !theme.active
@@ -605,6 +610,7 @@ fn scan_theme_dir(dir: &FsPath, active_theme: &str, source: &str, themes: &mut V
                         has_screenshot,
                         source: source.to_string(),
                         can_delete: false, // computed after scanning in render_appearance_list
+                        in_use_by: 0,      // computed after scanning in render_appearance_list
                     });
                 }
             }

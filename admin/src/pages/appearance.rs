@@ -12,6 +12,8 @@ pub struct ThemeInfo {
     /// Whether the current user is permitted to delete this theme.
     /// Computed server-side; never shown for active themes.
     pub can_delete: bool,
+    /// Number of sites currently using this theme (global themes only).
+    pub in_use_by: usize,
 }
 
 pub fn render_with_flash(themes: &[ThemeInfo], flash: Option<&str>, current_site: &str, is_global_admin: bool) -> String {
@@ -105,10 +107,18 @@ fn render_card(t: &ThemeInfo) -> String {
         screenshot = screenshot_html,
         name = crate::html_escape(&t.name),
         version = crate::html_escape(&t.version),
-        source_badge = if t.source == "global" {
-            r#"<span class="badge badge">global</span>"#
-        } else {
-            r#"<span class="badge badge">site</span>"#
+        source_badge = {
+            let source_label = if t.source == "global" { "global" } else { "site" };
+            let in_use_badge = if t.source == "global" && t.in_use_by > 0 {
+                format!(
+                    r#" <span class="badge badge-in-use" title="Active on {n} site(s) — cannot delete">used by {n} site{s}</span>"#,
+                    n = t.in_use_by,
+                    s = if t.in_use_by == 1 { "" } else { "s" },
+                )
+            } else {
+                String::new()
+            };
+            format!(r#"<span class="badge">{source_label}</span>{in_use_badge}"#)
         },
         desc = crate::html_escape(&t.description),
         author = crate::html_escape(&t.author),

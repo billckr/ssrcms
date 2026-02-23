@@ -73,6 +73,7 @@ a:hover { text-decoration: underline; }
 .badge-draft { background: #fef9c3; color: #854d0e; }
 .badge-trashed { background: #fee2e2; color: #991b1b; }
 .badge-scheduled { background: #dbeafe; color: #1e40af; }
+.badge-in-use { background: #fef3c7; color: #92400e; cursor: help; }
 
 /* Buttons */
 .btn { display: inline-flex; align-items: center; justify-content: center; padding: .4rem .9rem; border-radius: var(--radius); border: 1px solid var(--border); cursor: pointer; font-size: 13px; background: var(--surface); color: var(--text); text-decoration: none; transition: box-shadow .15s, transform .15s; touch-action: manipulation; white-space: nowrap; user-select: none; -webkit-user-select: none; will-change: box-shadow, transform; }
