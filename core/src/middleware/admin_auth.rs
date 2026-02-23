@@ -94,11 +94,28 @@ impl FromRequestParts<AppState> for AdminUser {
 
         // ── Site resolution ────────────────────────────────────────────────────
 
-        // 1. Try to get the current site from the session.
+        // 1. Try to get the current site from the session, validating it still exists.
+        //    Stale UUIDs arise when the session store survives a DB reset.
         let site_id_opt: Option<String> = session.get(SESSION_CURRENT_SITE_KEY).await.unwrap_or(None);
+        let session_site_id: Option<Uuid> = if let Some(sid_str) = site_id_opt {
+            if let Ok(uuid) = sid_str.parse::<Uuid>() {
+                match crate::models::site::get_by_id(&state.db, uuid).await {
+                    Ok(_) => Some(uuid),
+                    Err(_) => {
+                        // Site no longer exists — clear stale key and re-resolve below.
+                        let _ = session.remove::<String>(SESSION_CURRENT_SITE_KEY).await;
+                        None
+                    }
+                }
+            } else {
+                None
+            }
+        } else {
+            None
+        };
 
-        let site_id = if let Some(sid_str) = site_id_opt {
-            sid_str.parse::<Uuid>().ok()
+        let site_id = if let Some(id) = session_site_id {
+            Some(id)
         } else if is_global_admin {
             // 2a. Global admin — resolve via sites table directly (no site_users row needed).
             match crate::models::site::list(&state.db).await {
