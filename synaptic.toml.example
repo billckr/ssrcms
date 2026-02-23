@@ -37,6 +37,9 @@ search_index_path = "search-index"
 # Examples: "info", "debug", "synaptic_core=debug,info"
 log_level = "info"
 
+# Log output format: "text" (human-readable, default) or "json" (structured, for Datadog/Loki/CloudWatch etc.)
+log_format = "text"
+
 # ── Development ───────────────────────────────────────────────────────────────
 
 # Enable hot reload of templates and plugins (do not use in production)
