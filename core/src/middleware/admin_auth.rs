@@ -140,10 +140,31 @@ impl FromRequestParts<AppState> for AdminUser {
             // 2a. Global admin — prefer the site matching the request's Host header
             //     so that logging in from bckr.local lands on the bckr.local site.
             //     Falls back to the first site in the DB for direct/localhost access.
-            let host_site_id = request_hostname
+            //
+            // NOTE: resolve_site() uses the in-memory cache which can be stale after
+            // a `dev reset`. We validate the cached result against the DB; on failure
+            // we reload the cache so the next resolve attempt returns current data.
+            let cached_site_id = request_hostname
                 .as_deref()
                 .and_then(|h| state.resolve_site(h))
                 .map(|(s, _)| s.id);
+
+            let host_site_id = match cached_site_id {
+                Some(id) => {
+                    match crate::models::site::get_by_id(&state.db, id).await {
+                        Ok(_) => Some(id),
+                        Err(_) => {
+                            // Cache is stale (e.g. after dev reset) — reload and retry.
+                            let _ = state.reload_site_cache().await;
+                            request_hostname
+                                .as_deref()
+                                .and_then(|h| state.resolve_site(h))
+                                .map(|(s, _)| s.id)
+                        }
+                    }
+                }
+                None => None,
+            };
 
             let resolved = if host_site_id.is_some() {
                 host_site_id

@@ -6,7 +6,7 @@ const ADMIN_CSS: &str = include_str!("../style/admin.css");
 
 /// Wrap a rendered content HTML string in the full admin page shell.
 /// The sidebar nav, head, and body wrapper are all here.
-pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content: &str, current_site: &str, is_global_admin: bool, visiting_foreign_site: bool, user_email: &str, can_manage_users: bool) -> String {
+pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content: &str, current_site: &str, _is_global_admin: bool, visiting_foreign_site: bool, user_email: &str, can_manage_users: bool) -> String {
     let visiting_badge = if visiting_foreign_site && !current_site.is_empty() {
         format!(
             r#"<span class="badge-visiting">Super Admin → {}</span>"#,

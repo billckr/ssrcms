@@ -197,7 +197,6 @@ pub async fn save_site_settings(
     Path(id): Path<Uuid>,
     Form(form): Form<SiteSettingsForm>,
 ) -> impl IntoResponse {
-    let cs = state.site_hostname(admin.site_id);
     let site = match crate::models::site::get_by_id(&state.db, id).await {
         Ok(s) => s,
         Err(_) => return Redirect::to("/admin/sites").into_response(),
