@@ -6,7 +6,15 @@ const ADMIN_CSS: &str = include_str!("../style/admin.css");
 
 /// Wrap a rendered content HTML string in the full admin page shell.
 /// The sidebar nav, head, and body wrapper are all here.
-pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content: &str, current_site: &str, is_global_admin: bool, user_email: &str) -> String {
+pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content: &str, current_site: &str, is_global_admin: bool, visiting_foreign_site: bool, user_email: &str) -> String {
+    let visiting_badge = if visiting_foreign_site && !current_site.is_empty() {
+        format!(
+            r#"<span class="badge-visiting">Super Admin → {}</span>"#,
+            html_escape(current_site)
+        )
+    } else {
+        String::new()
+    };
     let site_indicator = if current_site.is_empty() {
         String::new()
     } else {
@@ -82,6 +90,7 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
           <span></span><span></span><span></span>
         </button>
         <h1>{title}</h1>
+        {visiting_badge}
         {site_indicator}
       </header>
       {flash_html}
@@ -118,6 +127,7 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
         sites = if is_global_admin { nav_link("/admin/sites", "Sites") } else { String::new() },
         flash_html = flash_html,
         content = content,
+        visiting_badge = visiting_badge,
         site_indicator = site_indicator,
         user_email = html_escape(user_email),
     )

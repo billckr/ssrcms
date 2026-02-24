@@ -23,7 +23,7 @@ pub async fn list(
     Query(q): Query<PostsQuery>,
 ) -> Html<String> {
     let cs = state.site_hostname(admin.site_id);
-    list_type(state, "post", q.page, admin.site_id, cs, admin.is_global_admin, admin.user.email.clone()).await
+    list_type(state, "post", q.page, admin.site_id, cs, admin.is_global_admin, admin.is_visiting_foreign_site, admin.user.email.clone()).await
 }
 
 pub async fn list_pages(
@@ -32,10 +32,10 @@ pub async fn list_pages(
     Query(q): Query<PostsQuery>,
 ) -> Html<String> {
     let cs = state.site_hostname(admin.site_id);
-    list_type(state, "page", q.page, admin.site_id, cs, admin.is_global_admin, admin.user.email.clone()).await
+    list_type(state, "page", q.page, admin.site_id, cs, admin.is_global_admin, admin.is_visiting_foreign_site, admin.user.email.clone()).await
 }
 
-async fn list_type(state: AppState, post_type: &str, page: Option<i64>, site_id: Option<Uuid>, current_site: String, is_global_admin: bool, user_email: String) -> Html<String> {
+async fn list_type(state: AppState, post_type: &str, page: Option<i64>, site_id: Option<Uuid>, current_site: String, is_global_admin: bool, visiting_foreign_site: bool, user_email: String) -> Html<String> {
     let per_page = 20i64;
     let page = page.unwrap_or(1).max(1);
     let offset = (page - 1) * per_page;
@@ -75,7 +75,7 @@ async fn list_type(state: AppState, post_type: &str, page: Option<i64>, site_id:
         });
     }
 
-    Html(admin::pages::posts::render_list(&rows, post_type, None, &current_site, is_global_admin, &user_email))
+    Html(admin::pages::posts::render_list(&rows, post_type, None, &current_site, is_global_admin, visiting_foreign_site, &user_email))
 }
 
 pub async fn new_post(
@@ -83,7 +83,7 @@ pub async fn new_post(
     admin: AdminUser,
 ) -> Html<String> {
     let cs = state.site_hostname(admin.site_id);
-    new_post_type(state, "post", admin.site_id, cs, admin.is_global_admin, admin.user.email.clone()).await
+    new_post_type(state, "post", admin.site_id, cs, admin.is_global_admin, admin.is_visiting_foreign_site, admin.user.email.clone()).await
 }
 
 pub async fn new_page(
@@ -91,10 +91,10 @@ pub async fn new_page(
     admin: AdminUser,
 ) -> Html<String> {
     let cs = state.site_hostname(admin.site_id);
-    new_post_type(state, "page", admin.site_id, cs, admin.is_global_admin, admin.user.email.clone()).await
+    new_post_type(state, "page", admin.site_id, cs, admin.is_global_admin, admin.is_visiting_foreign_site, admin.user.email.clone()).await
 }
 
-async fn new_post_type(state: AppState, post_type: &str, site_id: Option<Uuid>, current_site: String, is_global_admin: bool, user_email: String) -> Html<String> {
+async fn new_post_type(state: AppState, post_type: &str, site_id: Option<Uuid>, current_site: String, is_global_admin: bool, visiting_foreign_site: bool, user_email: String) -> Html<String> {
     let (categories, tags) = fetch_term_options(&state, site_id).await;
     let edit = PostEdit {
         id: None,
@@ -110,7 +110,7 @@ async fn new_post_type(state: AppState, post_type: &str, site_id: Option<Uuid>, 
         selected_categories: vec![],
         selected_tags: vec![],
     };
-    Html(admin::pages::posts::render_editor(&edit, None, &current_site, is_global_admin, &user_email))
+    Html(admin::pages::posts::render_editor(&edit, None, &current_site, is_global_admin, visiting_foreign_site, &user_email))
 }
 
 pub async fn edit_post(
@@ -119,7 +119,7 @@ pub async fn edit_post(
     Path(id): Path<Uuid>,
 ) -> impl IntoResponse {
     let cs = state.site_hostname(admin.site_id);
-    edit_post_type(state, id, admin.site_id, cs, admin.is_global_admin, admin.user.email.clone()).await
+    edit_post_type(state, id, admin.site_id, cs, admin.is_global_admin, admin.is_visiting_foreign_site, admin.user.email.clone()).await
 }
 
 pub async fn edit_page(
@@ -128,10 +128,10 @@ pub async fn edit_page(
     Path(id): Path<Uuid>,
 ) -> impl IntoResponse {
     let cs = state.site_hostname(admin.site_id);
-    edit_post_type(state, id, admin.site_id, cs, admin.is_global_admin, admin.user.email.clone()).await
+    edit_post_type(state, id, admin.site_id, cs, admin.is_global_admin, admin.is_visiting_foreign_site, admin.user.email.clone()).await
 }
 
-async fn edit_post_type(state: AppState, id: Uuid, site_id: Option<Uuid>, current_site: String, is_global_admin: bool, user_email: String) -> impl IntoResponse {
+async fn edit_post_type(state: AppState, id: Uuid, site_id: Option<Uuid>, current_site: String, is_global_admin: bool, visiting_foreign_site: bool, user_email: String) -> impl IntoResponse {
     let post = match crate::models::post::get_by_id(&state.db, id).await {
         Ok(p) => p,
         Err(e) => {
@@ -175,7 +175,7 @@ async fn edit_post_type(state: AppState, id: Uuid, site_id: Option<Uuid>, curren
         selected_tags,
     };
 
-    Html(admin::pages::posts::render_editor(&edit, None, &current_site, is_global_admin, &user_email)).into_response()
+    Html(admin::pages::posts::render_editor(&edit, None, &current_site, is_global_admin, visiting_foreign_site, &user_email)).into_response()
 }
 
 /// HTML forms send repeated keys for multiple checkboxes, but only a bare
@@ -278,7 +278,7 @@ pub async fn save_new(
                 selected_tags: form.tags,
             };
             let msg = friendly_save_error(&e);
-            Html(admin::pages::posts::render_editor(&edit, Some(&msg), &cs, admin.is_global_admin, &admin.user.email)).into_response()
+            Html(admin::pages::posts::render_editor(&edit, Some(&msg), &cs, admin.is_global_admin, admin.is_visiting_foreign_site, &admin.user.email)).into_response()
         }
     }
 }
@@ -353,7 +353,7 @@ pub async fn save_edit(
                 selected_tags,
             };
             let msg = friendly_save_error(&e);
-            Html(admin::pages::posts::render_editor(&edit, Some(&msg), &cs, admin.is_global_admin, &admin.user.email)).into_response()
+            Html(admin::pages::posts::render_editor(&edit, Some(&msg), &cs, admin.is_global_admin, admin.is_visiting_foreign_site, &admin.user.email)).into_response()
         }
     }
 }

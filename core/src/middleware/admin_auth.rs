@@ -31,6 +31,9 @@ pub struct AdminUser {
     pub site_role: String,
     /// True when `users.role = 'super_admin'` — unrestricted access to all sites.
     pub is_global_admin: bool,
+    /// True when a super_admin is viewing a site they do not own.
+    /// Used to display a "visiting" badge in the admin header.
+    pub is_visiting_foreign_site: bool,
 }
 
 pub enum AdminAuthError {
@@ -182,6 +185,20 @@ impl FromRequestParts<AppState> for AdminUser {
             user.role.clone()
         };
 
-        Ok(AdminUser { user, site_id, site_role, is_global_admin })
+        // Determine if super_admin is browsing a site they don't own.
+        let is_visiting_foreign_site = if is_global_admin {
+            if let Some(sid) = site_id {
+                match crate::models::site::get_by_id(&state.db, sid).await {
+                    Ok(site) => site.owner_user_id != Some(user.id),
+                    Err(_) => false,
+                }
+            } else {
+                false
+            }
+        } else {
+            false
+        };
+
+        Ok(AdminUser { user, site_id, site_role, is_global_admin, is_visiting_foreign_site })
     }
 }

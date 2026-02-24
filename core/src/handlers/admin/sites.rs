@@ -48,7 +48,7 @@ pub async fn list(
         });
     }
 
-    Html(admin::pages::sites::render_list(&rows, None, &cs, admin.is_global_admin, &admin.user.email))
+    Html(admin::pages::sites::render_list(&rows, None, &cs, admin.is_global_admin, admin.is_visiting_foreign_site, &admin.user.email))
 }
 
 /// GET /admin/sites/new — new site form.
@@ -62,7 +62,7 @@ pub async fn new_site(
         return Html("<h1>403 Forbidden</h1>".to_string());
     }
     let cs = state.site_hostname(admin.site_id);
-    Html(admin::pages::sites::render_new(None, &cs, admin.is_global_admin, &admin.user.email))
+    Html(admin::pages::sites::render_new(None, &cs, admin.is_global_admin, admin.is_visiting_foreign_site, &admin.user.email))
 }
 
 #[derive(Deserialize)]
@@ -85,7 +85,7 @@ pub async fn create(
     let cs = state.site_hostname(admin.site_id);
     let hostname = form.hostname.trim().to_lowercase();
     if hostname.is_empty() {
-        return Html(admin::pages::sites::render_new(Some("Hostname cannot be empty."), &cs, admin.is_global_admin, &admin.user.email)).into_response();
+        return Html(admin::pages::sites::render_new(Some("Hostname cannot be empty."), &cs, admin.is_global_admin, admin.is_visiting_foreign_site, &admin.user.email)).into_response();
     }
 
     let result = crate::models::site::create_with_defaults(&state.db, &hostname, admin.user.id)
@@ -105,7 +105,7 @@ pub async fn create(
             } else {
                 format!("Failed to create site: {e}")
             };
-            Html(admin::pages::sites::render_new(Some(&msg), &cs, admin.is_global_admin, &admin.user.email)).into_response()
+            Html(admin::pages::sites::render_new(Some(&msg), &cs, admin.is_global_admin, admin.is_visiting_foreign_site, &admin.user.email)).into_response()
         }
     }
 }
@@ -159,7 +159,7 @@ pub async fn site_settings(
                 id: site.id.to_string(),
                 hostname: site.hostname.clone(),
             };
-            Html(admin::pages::sites::render_settings(&data, None, &cs, true, &admin.user.email)).into_response()
+            Html(admin::pages::sites::render_settings(&data, None, &cs, true, admin.is_visiting_foreign_site, &admin.user.email)).into_response()
         }
         Err(_) => Redirect::to("/admin/sites").into_response(),
     }
@@ -184,7 +184,7 @@ pub async fn save_site_settings(
     let hostname = form.hostname.trim().to_lowercase();
     if hostname.is_empty() {
         let data = SiteSettingsData { id: id.to_string(), hostname: String::new() };
-        return Html(admin::pages::sites::render_settings(&data, Some("Hostname cannot be empty."), &cs, true, &admin.user.email)).into_response();
+        return Html(admin::pages::sites::render_settings(&data, Some("Hostname cannot be empty."), &cs, true, admin.is_visiting_foreign_site, &admin.user.email)).into_response();
     }
 
     let result = sqlx::query(
@@ -209,7 +209,7 @@ pub async fn save_site_settings(
                 format!("Failed to save: {e}")
             };
             let data = SiteSettingsData { id: id.to_string(), hostname };
-            Html(admin::pages::sites::render_settings(&data, Some(&msg), &cs, true, &admin.user.email)).into_response()
+            Html(admin::pages::sites::render_settings(&data, Some(&msg), &cs, true, admin.is_visiting_foreign_site, &admin.user.email)).into_response()
         }
     }
 }

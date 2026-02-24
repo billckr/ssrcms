@@ -46,6 +46,7 @@ a:hover { text-decoration: underline; }
 .admin-header h1 { font-size: 1.1rem; font-weight: 600; flex: 1; }
 .site-indicator { margin-left: auto; font-size: .8rem; color: var(--muted); text-decoration: none; border: 1px solid var(--border); border-radius: 4px; padding: .2rem .6rem; white-space: nowrap; }
 .site-indicator:hover { color: var(--accent); border-color: var(--accent); }
+.badge-visiting { margin-left: auto; font-size: .78rem; font-weight: 600; background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; border-radius: 4px; padding: .2rem .6rem; white-space: nowrap; }
 .admin-content { padding: 1.5rem; }
 
 /* Flash messages */

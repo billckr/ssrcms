@@ -50,7 +50,7 @@ pub struct UserEdit {
     pub is_super_admin_target: bool,
 }
 
-pub fn render_list(users: &[UserRow], flash: Option<&str>, current_site: &str, current_user_id: &str, is_global_admin: bool, user_email: &str) -> String {
+pub fn render_list(users: &[UserRow], flash: Option<&str>, current_site: &str, current_user_id: &str, is_global_admin: bool, visiting_foreign_site: bool, user_email: &str) -> String {
     let rows = users.iter().map(|u| {
         let delete_btn = if u.id != current_user_id && !u.is_protected {
             let warn_msg = format!(
@@ -101,10 +101,10 @@ pub fn render_list(users: &[UserRow], flash: Option<&str>, current_site: &str, c
         rows = rows,
     );
 
-    crate::admin_page("Users", "/admin/users", flash, &content, current_site, is_global_admin, user_email)
+    crate::admin_page("Users", "/admin/users", flash, &content, current_site, is_global_admin, visiting_foreign_site, user_email)
 }
 
-pub fn render_editor(user: &UserEdit, flash: Option<&str>, current_site: &str, is_global_admin: bool, user_email: &str) -> String {
+pub fn render_editor(user: &UserEdit, flash: Option<&str>, current_site: &str, is_global_admin: bool, visiting_foreign_site: bool, user_email: &str) -> String {
     let title = if user.id.is_none() { "New User" } else { "Edit User" };
     let action = match &user.id {
         Some(id) => format!("/admin/users/{}/edit", id),
@@ -228,5 +228,5 @@ pub fn render_editor(user: &UserEdit, flash: Option<&str>, current_site: &str, i
         password_hint = password_hint,
     );
 
-    crate::admin_page(title, "/admin/users", flash, &content, current_site, is_global_admin, user_email)
+    crate::admin_page(title, "/admin/users", flash, &content, current_site, is_global_admin, visiting_foreign_site, user_email)
 }
