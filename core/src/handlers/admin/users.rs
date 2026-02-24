@@ -230,14 +230,14 @@ pub async fn save_new(
                     }
                 };
                 if let Some(sid) = site_id {
-                    if let Err(e) = crate::models::site_user::add(&state.db, sid, new_user.id, site_role).await {
+                    if let Err(e) = crate::models::site_user::add(&state.db, sid, new_user.id, site_role, None).await {
                         tracing::warn!("failed to add user {} to site {}: {:?}", new_user.id, sid, e);
                     }
                 }
             } else {
-                // Site admin: auto-scope to their site.
+                // Site admin: auto-scope to their site, record who invited.
                 if let Some(site_id) = admin.site_id {
-                    if let Err(e) = crate::models::site_user::add(&state.db, site_id, new_user.id, site_role).await {
+                    if let Err(e) = crate::models::site_user::add(&state.db, site_id, new_user.id, site_role, Some(admin.user.id)).await {
                         tracing::warn!("failed to add new user {} to site {}: {:?}", new_user.id, site_id, e);
                     }
                 }

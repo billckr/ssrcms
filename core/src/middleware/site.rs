@@ -98,6 +98,7 @@ impl FromRequestParts<AppState> for CurrentSite {
             let fallback_site = Site {
                 id: Uuid::nil(),
                 hostname: hostname.clone(),
+                owner_user_id: None,
                 created_at: Utc::now(),
                 updated_at: Utc::now(),
             };
