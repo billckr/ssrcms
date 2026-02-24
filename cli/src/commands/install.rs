@@ -130,7 +130,13 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
     println!("Initial site '{}' created.", domain);
 
     // Seed default site_settings so the admin panel shows real values on first login.
-    let site_url = format!("http://{domain}");
+    // Include the port in site_url when it's not the standard HTTP/HTTPS port,
+    // so that post/page links resolve correctly during local dev (e.g. port 3000).
+    let site_url = match port {
+        80  => format!("http://{domain}"),
+        443 => format!("https://{domain}"),
+        _   => format!("http://{domain}:{port}"),
+    };
     let settings_defaults: &[(&str, &str)] = &[
         ("site_name",        &domain),
         ("site_description", ""),
