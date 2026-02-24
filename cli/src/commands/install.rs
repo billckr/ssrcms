@@ -168,6 +168,16 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
         .await
         .map_err(|e| anyhow::anyhow!("Failed to link admin to site: {e}"))?;
         println!("Admin linked to site '{}' as owner.", domain);
+
+        // Set the admin's default site.
+        sqlx::query(
+            "UPDATE users SET default_site_id = $1, updated_at = NOW() WHERE id = $2 AND default_site_id IS NULL"
+        )
+        .bind(site_id)
+        .bind(uid)
+        .execute(&pool)
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to set default site: {e}"))?;
     }
 
     // ── Deployment files ───────────────────────────────────────────────────

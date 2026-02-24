@@ -175,7 +175,15 @@ async fn init(hostname: String, database_url: Option<String>) -> anyhow::Result<
         .await
         .map_err(|e| anyhow::anyhow!("Failed to set site owner: {e}"))?;
         println!("Site owner set to protected super_admin ({}).", owner_id);
-    } else {
+        // Set the owner's default_site_id if not already set.
+        sqlx::query(
+            "UPDATE users SET default_site_id = $1, updated_at = NOW() WHERE id = $2 AND default_site_id IS NULL"
+        )
+        .bind(site_id)
+        .bind(owner_id)
+        .execute(&pool)
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to set default site: {e}"))?;    } else {
         println!("No protected super_admin found — owner_user_id left NULL. Backfill with:\n  UPDATE sites SET owner_user_id = '<user-uuid>' WHERE id = '{}';", site_id);
     }
 
@@ -245,7 +253,15 @@ async fn create(hostname: String, database_url: Option<String>) -> anyhow::Resul
         .await
         .map_err(|e| anyhow::anyhow!("Failed to set site owner: {e}"))?;
         println!("Site owner set to protected super_admin ({}).", owner_id);
-    } else {
+        // Set the owner's default_site_id if not already set.
+        sqlx::query(
+            "UPDATE users SET default_site_id = $1, updated_at = NOW() WHERE id = $2 AND default_site_id IS NULL"
+        )
+        .bind(site_id)
+        .bind(owner_id)
+        .execute(&pool)
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to set default site: {e}"))?;    } else {
         println!("No protected super_admin found — owner_user_id left NULL.");
         println!("Backfill with: UPDATE sites SET owner_user_id = '<user-uuid>' WHERE id = '{}'", site_id);
     }

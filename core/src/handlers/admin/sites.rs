@@ -38,13 +38,13 @@ pub async fn list(
     };
 
     let mut rows = Vec::with_capacity(sites.len());
-    for (i, s) in sites.iter().enumerate() {
+    for s in sites.iter() {
         let post_count = crate::models::site::post_count(&state.db, s.id).await.unwrap_or(0);
         rows.push(SiteRow {
             id: s.id.to_string(),
             hostname: s.hostname.clone(),
             post_count,
-            is_default: if admin.is_global_admin { i == 0 } else { s.owner_user_id == Some(admin.user.id) },
+            is_default: admin.user.default_site_id == Some(s.id),
         });
     }
 

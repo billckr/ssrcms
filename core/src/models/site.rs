@@ -88,6 +88,15 @@ pub async fn create_with_defaults(
     .execute(&mut *tx)
     .await?;
 
+    // Set owner's default_site_id if they don't have one yet.
+    sqlx::query(
+        "UPDATE users SET default_site_id = $1, updated_at = NOW() WHERE id = $2 AND default_site_id IS NULL",
+    )
+    .bind(site.id)
+    .bind(owner_user_id)
+    .execute(&mut *tx)
+    .await?;
+
     tx.commit().await?;
     Ok(site)
 }

@@ -75,6 +75,8 @@ pub struct User {
     pub updated_at: DateTime<Utc>,
     /// Non-NULL = soft-deleted. User cannot log in; their content is preserved.
     pub deleted_at: Option<DateTime<Utc>>,
+    /// The user's preferred/default site. NULL until first site is created.
+    pub default_site_id: Option<Uuid>,
 }
 
 #[allow(dead_code)]
@@ -356,6 +358,16 @@ pub fn hash_password(password: &str) -> Result<String> {
         .map_err(|e| AppError::Internal(format!("password hashing failed: {e}")))
 }
 
+/// Set (or clear) a user's default site. Pass `None` to clear.
+pub async fn set_default_site(pool: &PgPool, user_id: Uuid, site_id: Option<Uuid>) -> Result<()> {
+    sqlx::query("UPDATE users SET default_site_id = $1, updated_at = NOW() WHERE id = $2")
+        .bind(site_id)
+        .bind(user_id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
 /// Verify a plaintext password against a stored Argon2 hash.
 #[allow(dead_code)]
 pub fn verify_password(password: &str, hash: &str) -> bool {
@@ -459,6 +471,7 @@ mod tests {
             created_at: Utc::now(),
             updated_at: Utc::now(),
             deleted_at: None,
+            default_site_id: None,
         };
         let ctx = UserContext::from_user(&user, "https://example.com");
         assert_eq!(ctx.url, "https://example.com/author/janedoe");

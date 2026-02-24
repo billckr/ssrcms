@@ -269,6 +269,8 @@ pub async fn save_new(
                         .bind(sid)
                         .execute(&state.db)
                         .await;
+                        // Set the new user's default site.
+                        let _ = crate::models::user::set_default_site(&state.db, new_user.id, Some(sid)).await;
                     }
                 }
             } else {
@@ -276,6 +278,10 @@ pub async fn save_new(
                 if let Some(site_id) = admin.site_id {
                     if let Err(e) = crate::models::site_user::add(&state.db, site_id, new_user.id, site_role, Some(admin.user.id)).await {
                         tracing::warn!("failed to add new user {} to site {}: {:?}", new_user.id, site_id, e);
+                    }
+                    // If new user is an admin, set their default site.
+                    if site_role == "admin" {
+                        let _ = crate::models::user::set_default_site(&state.db, new_user.id, Some(site_id)).await;
                     }
                 }
             }
