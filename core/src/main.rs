@@ -73,7 +73,17 @@ async fn main() -> anyhow::Result<()> {
 
     let session_store = PostgresStore::new(pool.clone());
     session_store.migrate().await?;
-    let session_layer = SessionManagerLayer::new(session_store);
+    let session_layer = SessionManagerLayer::new(session_store)
+        // Axum always runs behind Caddy on plain HTTP — never directly over HTTPS.
+        // Secure:true means the browser will never send the cookie back over HTTP,
+        // which breaks every login. Caddy handles TLS; we own the cookie content.
+        .with_secure(false)
+        // Lax: cookie is sent on top-level navigations and form POST redirects.
+        .with_same_site(tower_sessions::cookie::SameSite::Lax)
+        // 7-day inactivity expiry — industry standard for CMS admin sessions.
+        .with_expiry(tower_sessions::Expiry::OnInactivity(
+            tower_sessions::cookie::time::Duration::days(7),
+        ));
     info!("session store ready");
 
     // ── Site settings (from DB) ───────────────────────────────────────────────

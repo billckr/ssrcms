@@ -73,7 +73,10 @@ impl FromRequestParts<AppState> for AdminUser {
             .await
             .map_err(|e| AdminAuthError::Internal(format!("session get error: {e}")))?;
 
-        let user_id_str = user_id_str.ok_or(AdminAuthError::NotAuthenticated)?;
+        let user_id_str = user_id_str.ok_or_else(|| {
+            tracing::warn!("admin_auth: no user_id in session — redirecting to login");
+            AdminAuthError::NotAuthenticated
+        })?;
 
         let user_id: Uuid = user_id_str
             .parse()
@@ -114,20 +117,44 @@ impl FromRequestParts<AppState> for AdminUser {
             None
         };
 
+        // Extract hostname from the Host header for site resolution fallback.
+        let request_hostname: Option<String> = parts
+            .headers
+            .get(axum::http::header::HOST)
+            .and_then(|v| v.to_str().ok())
+            .map(|raw| {
+                if let Some(pos) = raw.rfind(':') {
+                    if raw[pos + 1..].chars().all(|c| c.is_ascii_digit()) {
+                        return raw[..pos].to_string();
+                    }
+                }
+                raw.to_string()
+            });
+
         let site_id = if let Some(id) = session_site_id {
             Some(id)
         } else if is_global_admin {
-            // 2a. Global admin — resolve via sites table directly (no site_users row needed).
-            match crate::models::site::list(&state.db).await {
-                Ok(sites) if !sites.is_empty() => {
-                    let first_id = sites[0].id;
-                    let _ = session
-                        .insert(SESSION_CURRENT_SITE_KEY, first_id.to_string())
-                        .await;
-                    Some(first_id)
+            // 2a. Global admin — prefer the site matching the request's Host header
+            //     so that logging in from bckr.local lands on the bckr.local site.
+            //     Falls back to the first site in the DB for direct/localhost access.
+            let host_site_id = request_hostname
+                .as_deref()
+                .and_then(|h| state.resolve_site(h))
+                .map(|(s, _)| s.id);
+
+            let resolved = if host_site_id.is_some() {
+                host_site_id
+            } else {
+                match crate::models::site::list(&state.db).await {
+                    Ok(sites) if !sites.is_empty() => Some(sites[0].id),
+                    _ => None,
                 }
-                _ => None,
+            };
+
+            if let Some(id) = resolved {
+                let _ = session.insert(SESSION_CURRENT_SITE_KEY, id.to_string()).await;
             }
+            resolved
         } else {
             // 2b. Site user — look up their first accessible site.
             match crate::models::site_user::list_for_user(&state.db, user_id).await {
