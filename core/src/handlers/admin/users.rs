@@ -20,14 +20,29 @@ pub async fn list(
     }
     let cs = state.site_hostname(admin.site_id);
     let rows: Vec<UserRow> = if admin.is_global_admin {
-        crate::models::user::list(&state.db).await.unwrap_or_else(|e| {
+        // For super_admin: fetch all users, but show their role in the current
+        // site context (site_users) when available, else fall back to users.role.
+        let users = crate::models::user::list(&state.db).await.unwrap_or_else(|e| {
             tracing::warn!("failed to list users: {:?}", e);
             vec![]
-        }).iter().map(|u| UserRow {
+        });
+        // Build a site_users map for the current site if one is set.
+        let site_role_map: std::collections::HashMap<uuid::Uuid, String> =
+            if let Some(sid) = admin.site_id {
+                crate::models::site_user::list_for_site(&state.db, sid)
+                    .await
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(|(u, r)| (u.id, r))
+                    .collect()
+            } else {
+                std::collections::HashMap::new()
+            };
+        users.iter().map(|u| UserRow {
             id: u.id.to_string(),
             username: u.username.clone(),
             email: u.email.clone(),
-            role: u.role.clone(),
+            role: site_role_map.get(&u.id).cloned().unwrap_or_else(|| u.role.clone()),
             display_name: u.display_name.clone(),
             is_protected: u.is_protected,
         }).collect()
@@ -182,10 +197,11 @@ pub async fn save_new(
     } else {
         form.role.as_str()
     };
-    // users_role: what goes into users.role. "admin" is a site_users concept; "super_admin"
-    // is CLI-only. Both map to "editor" in the users table.
+    // users_role: what goes into users.role. "admin" is a site_users concept, stored
+    // as "site_admin" in users.role. "super_admin" is CLI-only.
     let users_role_str = match site_role {
-        "admin" | "super_admin" => "editor",
+        "admin" => "site_admin",
+        "super_admin" => "site_admin",
         other => other,
     };
     let role = parse_role(users_role_str);
@@ -213,6 +229,16 @@ pub async fn save_new(
                                     if let Err(e) = state.reload_site_cache().await {
                                         tracing::warn!("site cache reload failed: {:?}", e);
                                     }
+                                    // If assigning as admin, claim ownership of the new site.
+                                    if site_role == "admin" {
+                                        let _ = sqlx::query(
+                                            "UPDATE sites SET owner_user_id = $1 WHERE id = $2 AND owner_user_id IS NULL",
+                                        )
+                                        .bind(new_user.id)
+                                        .bind(site.id)
+                                        .execute(&state.db)
+                                        .await;
+                                    }
                                     Some(site.id)
                                 }
                                 Err(e) => {
@@ -230,14 +256,24 @@ pub async fn save_new(
                     }
                 };
                 if let Some(sid) = site_id {
-                    if let Err(e) = crate::models::site_user::add(&state.db, sid, new_user.id, site_role).await {
+                    if let Err(e) = crate::models::site_user::add(&state.db, sid, new_user.id, site_role, None).await {
                         tracing::warn!("failed to add user {} to site {}: {:?}", new_user.id, sid, e);
+                    }
+                    // If assigning as admin and the site has no owner yet, claim ownership.
+                    if site_role == "admin" {
+                        let _ = sqlx::query(
+                            "UPDATE sites SET owner_user_id = $1 WHERE id = $2 AND owner_user_id IS NULL",
+                        )
+                        .bind(new_user.id)
+                        .bind(sid)
+                        .execute(&state.db)
+                        .await;
                     }
                 }
             } else {
-                // Site admin: auto-scope to their site.
+                // Site admin: auto-scope to their site, record who invited.
                 if let Some(site_id) = admin.site_id {
-                    if let Err(e) = crate::models::site_user::add(&state.db, site_id, new_user.id, site_role).await {
+                    if let Err(e) = crate::models::site_user::add(&state.db, site_id, new_user.id, site_role, Some(admin.user.id)).await {
                         tracing::warn!("failed to add new user {} to site {}: {:?}", new_user.id, site_id, e);
                     }
                 }
@@ -321,13 +357,13 @@ pub async fn save_edit(
 
     // Determine users.role to write:
     // - super_admin targets keep their role (never downgraded via form)
-    // - "admin" is a site_users role concept; map to "editor" in users table
+    // - "admin" is a site_users role concept; map to "site_admin" in users table
     // - "super_admin" cannot be set via form (CLI-only)
     let new_users_role = if is_super_admin_target {
         parse_role("super_admin")
     } else {
         match form.role.as_str() {
-            "admin" | "super_admin" => parse_role("editor"),
+            "admin" | "super_admin" => parse_role("site_admin"),
             other => parse_role(other),
         }
     };
@@ -464,6 +500,7 @@ fn friendly_user_error(e: &crate::errors::AppError) -> String {
 fn parse_role(s: &str) -> UserRole {
     match s {
         "super_admin" => UserRole::SuperAdmin,
+        "site_admin" => UserRole::SiteAdmin,
         "editor" => UserRole::Editor,
         "author" => UserRole::Author,
         _ => UserRole::Subscriber,

@@ -14,14 +14,25 @@ pub struct SiteUser {
     pub site_id: Uuid,
     pub user_id: Uuid,
     pub role: String,
+    /// Who added this user to this site. NULL for legacy / CLI-seeded rows.
+    pub invited_by: Option<Uuid>,
     pub created_at: DateTime<Utc>,
 }
 
-pub async fn add(pool: &PgPool, site_id: Uuid, user_id: Uuid, role: &str) -> Result<SiteUser> {
+/// Add (or update role of) a user on a site, recording who did the inviting.
+/// Pass `invited_by: None` for CLI-seeded rows or super_admin-initiated entries
+/// where attribution is not required.
+pub async fn add(
+    pool: &PgPool,
+    site_id: Uuid,
+    user_id: Uuid,
+    role: &str,
+    invited_by: Option<Uuid>,
+) -> Result<SiteUser> {
     let su = sqlx::query_as::<_, SiteUser>(
         r#"
-        INSERT INTO site_users (site_id, user_id, role)
-        VALUES ($1, $2, $3)
+        INSERT INTO site_users (site_id, user_id, role, invited_by)
+        VALUES ($1, $2, $3, $4)
         ON CONFLICT (site_id, user_id) DO UPDATE SET role = EXCLUDED.role
         RETURNING *
         "#,
@@ -29,6 +40,7 @@ pub async fn add(pool: &PgPool, site_id: Uuid, user_id: Uuid, role: &str) -> Res
     .bind(site_id)
     .bind(user_id)
     .bind(role)
+    .bind(invited_by)
     .fetch_one(pool)
     .await?;
     Ok(su)
@@ -79,19 +91,23 @@ struct UserWithSiteRole {
     is_protected: bool,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
+    deleted_at: Option<DateTime<Utc>>,
     site_role: String,
 }
 
 /// List all users and their roles for a given site.
+/// Excludes soft-deleted users.
 pub async fn list_for_site(pool: &PgPool, site_id: Uuid) -> Result<Vec<(User, String)>> {
     let rows = sqlx::query_as::<_, UserWithSiteRole>(
         r#"
         SELECT u.id, u.username, u.email, u.display_name, u.password_hash, u.bio,
-               u.avatar_media_id, u.role, u.is_active, u.is_protected, u.created_at, u.updated_at,
+               u.avatar_media_id, u.role, u.is_active, u.is_protected,
+               u.created_at, u.updated_at, u.deleted_at,
                su.role as site_role
         FROM users u
         JOIN site_users su ON su.user_id = u.id
         WHERE su.site_id = $1
+          AND u.deleted_at IS NULL
         ORDER BY u.username
         "#,
     )
@@ -115,6 +131,7 @@ pub async fn list_for_site(pool: &PgPool, site_id: Uuid) -> Result<Vec<(User, St
                 is_protected: r.is_protected,
                 created_at: r.created_at,
                 updated_at: r.updated_at,
+                deleted_at: r.deleted_at,
             };
             (user, r.site_role)
         })
@@ -126,6 +143,7 @@ pub async fn list_for_site(pool: &PgPool, site_id: Uuid) -> Result<Vec<(User, St
 struct SiteWithRole {
     id: Uuid,
     hostname: String,
+    owner_user_id: Option<Uuid>,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
     site_role: String,
@@ -135,7 +153,7 @@ struct SiteWithRole {
 pub async fn list_for_user(pool: &PgPool, user_id: Uuid) -> Result<Vec<(Site, String)>> {
     let rows = sqlx::query_as::<_, SiteWithRole>(
         r#"
-        SELECT s.id, s.hostname, s.created_at, s.updated_at,
+        SELECT s.id, s.hostname, s.owner_user_id, s.created_at, s.updated_at,
                su.role as site_role
         FROM sites s
         JOIN site_users su ON su.site_id = s.id
@@ -153,6 +171,7 @@ pub async fn list_for_user(pool: &PgPool, user_id: Uuid) -> Result<Vec<(Site, St
             let site = Site {
                 id: r.id,
                 hostname: r.hostname,
+                owner_user_id: r.owner_user_id,
                 created_at: r.created_at,
                 updated_at: r.updated_at,
             };

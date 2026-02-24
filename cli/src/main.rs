@@ -19,6 +19,11 @@ enum Commands {
     Install(commands::install::InstallArgs),
     /// Run pending database migrations
     Migrate(commands::migrate::MigrateArgs),
+    /// Development utilities (destructive — do not use in production)
+    Dev {
+        #[command(subcommand)]
+        action: commands::dev::DevAction,
+    },
     /// User management
     User {
         #[command(subcommand)]
@@ -51,6 +56,7 @@ async fn main() -> anyhow::Result<()> {
     match cli.command {
         Commands::Install(args) => commands::install::run(args).await?,
         Commands::Migrate(args) => commands::migrate::run(args).await?,
+        Commands::Dev { action } => commands::dev::run(action).await?,
         Commands::User { action } => commands::user::run(action).await?,
         Commands::Plugin { action } => commands::plugin::run(action).await?,
         Commands::Theme { action } => commands::theme::run(action).await?,

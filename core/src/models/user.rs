@@ -16,6 +16,9 @@ pub enum UserRole {
     Author,
     #[sqlx(rename = "editor")]
     Editor,
+    /// Owns and administers one or more sites. Accesses admin via site_users role.
+    #[sqlx(rename = "site_admin")]
+    SiteAdmin,
     /// Agency-level super-admin. Unrestricted access to all sites; bypasses site_users.
     #[sqlx(rename = "super_admin")]
     SuperAdmin,
@@ -28,6 +31,7 @@ impl UserRole {
             UserRole::Subscriber => "subscriber",
             UserRole::Author => "author",
             UserRole::Editor => "editor",
+            UserRole::SiteAdmin => "site_admin",
             UserRole::SuperAdmin => "super_admin",
         }
     }
@@ -37,6 +41,7 @@ impl UserRole {
             "subscriber" => Some(UserRole::Subscriber),
             "author" => Some(UserRole::Author),
             "editor" => Some(UserRole::Editor),
+            "site_admin" => Some(UserRole::SiteAdmin),
             "super_admin" => Some(UserRole::SuperAdmin),
             _ => None,
         }
@@ -68,6 +73,8 @@ pub struct User {
     pub is_protected: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    /// Non-NULL = soft-deleted. User cannot log in; their content is preserved.
+    pub deleted_at: Option<DateTime<Utc>>,
 }
 
 #[allow(dead_code)]
@@ -163,7 +170,7 @@ pub async fn create(pool: &PgPool, data: &CreateUser) -> Result<User> {
 }
 
 pub async fn get_by_id(pool: &PgPool, id: Uuid) -> Result<User> {
-    sqlx::query_as::<_, User>("SELECT * FROM users WHERE id = $1 AND is_active = TRUE")
+    sqlx::query_as::<_, User>("SELECT * FROM users WHERE id = $1 AND is_active = TRUE AND deleted_at IS NULL")
         .bind(id)
         .fetch_optional(pool)
         .await?
@@ -172,7 +179,7 @@ pub async fn get_by_id(pool: &PgPool, id: Uuid) -> Result<User> {
 
 pub async fn get_by_username(pool: &PgPool, username: &str) -> Result<User> {
     sqlx::query_as::<_, User>(
-        "SELECT * FROM users WHERE username = $1 AND is_active = TRUE",
+        "SELECT * FROM users WHERE username = $1 AND is_active = TRUE AND deleted_at IS NULL",
     )
     .bind(username)
     .fetch_optional(pool)
@@ -182,7 +189,7 @@ pub async fn get_by_username(pool: &PgPool, username: &str) -> Result<User> {
 
 pub async fn get_by_email(pool: &PgPool, email: &str) -> Result<User> {
     sqlx::query_as::<_, User>(
-        "SELECT * FROM users WHERE email = $1 AND is_active = TRUE",
+        "SELECT * FROM users WHERE email = $1 AND is_active = TRUE AND deleted_at IS NULL",
     )
     .bind(email)
     .fetch_optional(pool)
@@ -218,6 +225,24 @@ pub async fn deactivate(pool: &PgPool, id: Uuid) -> Result<()> {
     Ok(())
 }
 
+/// Soft-delete a user. Their content (posts, pages, media) is preserved.
+/// The user can no longer log in and will not appear in any admin list.
+/// Use `delete()` or `delete_and_reassign()` only when hard removal is explicitly required.
+pub async fn soft_delete(pool: &PgPool, id: Uuid) -> Result<()> {
+    let affected = sqlx::query(
+        "UPDATE users SET deleted_at = NOW(), is_active = FALSE, updated_at = NOW() WHERE id = $1 AND deleted_at IS NULL",
+    )
+    .bind(id)
+    .execute(pool)
+    .await?
+    .rows_affected();
+
+    if affected == 0 {
+        return Err(AppError::NotFound(format!("user {id}")));
+    }
+    Ok(())
+}
+
 /// Permanently delete a user and all their posts/pages (cascades post_meta and post_taxonomies).
 pub async fn delete(pool: &PgPool, id: Uuid) -> Result<()> {
     sqlx::query("DELETE FROM posts WHERE author_id = $1")
@@ -249,7 +274,7 @@ pub async fn delete_and_reassign(pool: &PgPool, user_id: Uuid, reassign_to: Uuid
 
 pub async fn list(pool: &PgPool) -> Result<Vec<User>> {
     sqlx::query_as::<_, User>(
-        "SELECT * FROM users WHERE is_active = TRUE ORDER BY username",
+        "SELECT * FROM users WHERE is_active = TRUE AND deleted_at IS NULL ORDER BY username",
     )
     .fetch_all(pool)
     .await
@@ -258,7 +283,7 @@ pub async fn list(pool: &PgPool) -> Result<Vec<User>> {
 
 pub async fn count(pool: &PgPool) -> Result<i64> {
     let count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM users WHERE is_active = TRUE",
+        "SELECT COUNT(*) FROM users WHERE is_active = TRUE AND deleted_at IS NULL",
     )
     .fetch_one(pool)
     .await?;
@@ -268,7 +293,7 @@ pub async fn count(pool: &PgPool) -> Result<i64> {
 /// Returns how many active super-admin accounts exist.
 pub async fn count_global_admins(pool: &PgPool) -> Result<i64> {
     let count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM users WHERE role = 'super_admin' AND is_active = TRUE",
+        "SELECT COUNT(*) FROM users WHERE role = 'super_admin' AND is_active = TRUE AND deleted_at IS NULL",
     )
     .fetch_one(pool)
     .await?;
@@ -433,6 +458,7 @@ mod tests {
             is_protected: false,
             created_at: Utc::now(),
             updated_at: Utc::now(),
+            deleted_at: None,
         };
         let ctx = UserContext::from_user(&user, "https://example.com");
         assert_eq!(ctx.url, "https://example.com/author/janedoe");

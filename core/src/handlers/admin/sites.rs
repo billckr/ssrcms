@@ -13,19 +13,29 @@ use crate::middleware::admin_auth::{AdminUser, SESSION_CURRENT_SITE_KEY};
 use admin::pages::sites::{SiteRow, SiteSettingsData};
 use tower_sessions::Session;
 
-/// GET /admin/sites — list all sites.
+/// GET /admin/sites — list sites.
+/// super_admin sees all sites. site_admin sees only sites where they are the owner.
 pub async fn list(
     State(state): State<AppState>,
     admin: AdminUser,
 ) -> Html<String> {
-    if !admin.is_global_admin {
+    let is_site_admin = admin.site_role.as_str() == "admin" && !admin.is_global_admin;
+    if !admin.is_global_admin && !is_site_admin {
         return Html("<h1>403 Forbidden</h1>".to_string());
     }
     let cs = state.site_hostname(admin.site_id);
-    let sites = crate::models::site::list(&state.db).await.unwrap_or_else(|e| {
-        tracing::warn!("failed to list sites: {:?}", e);
-        vec![]
-    });
+    let sites = if admin.is_global_admin {
+        crate::models::site::list(&state.db).await.unwrap_or_else(|e| {
+            tracing::warn!("failed to list sites: {:?}", e);
+            vec![]
+        })
+    } else {
+        // site_admin: show sites they own.
+        crate::models::site::list_by_owner(&state.db, admin.user.id).await.unwrap_or_else(|e| {
+            tracing::warn!("failed to list owned sites for {}: {:?}", admin.user.id, e);
+            vec![]
+        })
+    };
 
     let mut rows = Vec::with_capacity(sites.len());
     for (i, s) in sites.iter().enumerate() {
@@ -34,23 +44,25 @@ pub async fn list(
             id: s.id.to_string(),
             hostname: s.hostname.clone(),
             post_count,
-            is_default: i == 0, // first by created_at is the CLI install site
+            is_default: admin.is_global_admin && i == 0,
         });
     }
 
-    Html(admin::pages::sites::render_list(&rows, None, &cs, true, &admin.user.email))
+    Html(admin::pages::sites::render_list(&rows, None, &cs, admin.is_global_admin, &admin.user.email))
 }
 
 /// GET /admin/sites/new — new site form.
+/// Available to super_admin and site_admin roles.
 pub async fn new_site(
     State(state): State<AppState>,
     admin: AdminUser,
 ) -> Html<String> {
-    if !admin.is_global_admin {
+    let is_site_admin = admin.site_role.as_str() == "admin" && !admin.is_global_admin;
+    if !admin.is_global_admin && !is_site_admin {
         return Html("<h1>403 Forbidden</h1>".to_string());
     }
     let cs = state.site_hostname(admin.site_id);
-    Html(admin::pages::sites::render_new(None, &cs, true, &admin.user.email))
+    Html(admin::pages::sites::render_new(None, &cs, admin.is_global_admin, &admin.user.email))
 }
 
 #[derive(Deserialize)]
@@ -59,20 +71,28 @@ pub struct NewSiteForm {
 }
 
 /// POST /admin/sites — create a new site.
+/// super_admin uses plain `create()`; site_admin uses `create_with_defaults()` which
+/// seeds site_settings and registers them as owner/admin in a single transaction.
 pub async fn create(
     State(state): State<AppState>,
     admin: AdminUser,
     Form(form): Form<NewSiteForm>,
 ) -> impl IntoResponse {
-    if !admin.is_global_admin {
+    let is_site_admin = admin.site_role.as_str() == "admin" && !admin.is_global_admin;
+    if !admin.is_global_admin && !is_site_admin {
         return (axum::http::StatusCode::FORBIDDEN, "Forbidden").into_response();
     }
     let cs = state.site_hostname(admin.site_id);
     let hostname = form.hostname.trim().to_lowercase();
     if hostname.is_empty() {
-        return Html(admin::pages::sites::render_new(Some("Hostname cannot be empty."), &cs, true, &admin.user.email)).into_response();
+        return Html(admin::pages::sites::render_new(Some("Hostname cannot be empty."), &cs, admin.is_global_admin, &admin.user.email)).into_response();
     }
-    match crate::models::site::create(&state.db, &hostname).await {
+
+    let result = crate::models::site::create_with_defaults(&state.db, &hostname, admin.user.id)
+        .await
+        .map(|_| ());
+
+    match result {
         Ok(_) => {
             if let Err(e) = state.reload_site_cache().await {
                 tracing::warn!("site cache reload failed after create: {:?}", e);
@@ -85,7 +105,7 @@ pub async fn create(
             } else {
                 format!("Failed to create site: {e}")
             };
-            Html(admin::pages::sites::render_new(Some(&msg), &cs, true, &admin.user.email)).into_response()
+            Html(admin::pages::sites::render_new(Some(&msg), &cs, admin.is_global_admin, &admin.user.email)).into_response()
         }
     }
 }
@@ -96,13 +116,29 @@ pub struct SwitchForm {
 }
 
 /// POST /admin/sites/switch — switch the current site in session.
+/// site_admin can only switch to sites they are assigned to; super_admin can switch to any.
 pub async fn switch(
-    _admin: AdminUser,
+    State(state): State<AppState>,
+    admin: AdminUser,
     session: Session,
     Form(form): Form<SwitchForm>,
 ) -> impl IntoResponse {
     if let Ok(uuid) = form.site_id.parse::<Uuid>() {
-        let _ = session.insert(SESSION_CURRENT_SITE_KEY, uuid.to_string()).await;
+        // For site_admin: verify they actually have a role on the target site.
+        let allowed = if admin.is_global_admin {
+            true
+        } else {
+            crate::models::site_user::get_role(&state.db, uuid, admin.user.id)
+                .await
+                .ok()
+                .flatten()
+                .is_some()
+        };
+        if allowed {
+            let _ = session.insert(SESSION_CURRENT_SITE_KEY, uuid.to_string()).await;
+        } else {
+            tracing::warn!("site_admin {} attempted to switch to unauthorised site {}", admin.user.id, uuid);
+        }
     }
     Redirect::to("/admin")
 }

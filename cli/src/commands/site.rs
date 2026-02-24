@@ -156,6 +156,29 @@ async fn init(hostname: String, database_url: Option<String>) -> anyhow::Result<
 
     println!("Added {} users to site '{}'", users_added, hostname);
 
+    // Set the protected super_admin as site owner if one exists.
+    let owner: Option<Uuid> = sqlx::query_scalar(
+        "SELECT id FROM users WHERE is_protected = TRUE AND deleted_at IS NULL LIMIT 1"
+    )
+    .fetch_optional(&pool)
+    .await
+    .ok()
+    .flatten();
+
+    if let Some(owner_id) = owner {
+        sqlx::query(
+            "UPDATE sites SET owner_user_id = $1 WHERE id = $2 AND owner_user_id IS NULL"
+        )
+        .bind(owner_id)
+        .bind(site_id)
+        .execute(&pool)
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to set site owner: {e}"))?;
+        println!("Site owner set to protected super_admin ({}).", owner_id);
+    } else {
+        println!("No protected super_admin found — owner_user_id left NULL. Backfill with:\n  UPDATE sites SET owner_user_id = '<user-uuid>' WHERE id = '{}';", site_id);
+    }
+
     // Now that all site_settings rows have a non-null site_id, we can upgrade
     // the site_settings primary key from single-column (key) to composite (site_id, key).
     // This allows multiple sites to each have their own copy of every setting key.
@@ -202,6 +225,31 @@ async fn create(hostname: String, database_url: Option<String>) -> anyhow::Resul
     })?;
 
     println!("Created site '{}' with id {}", hostname, site_id);
+
+    // Auto-assign the protected super_admin as owner.
+    let owner: Option<Uuid> = sqlx::query_scalar(
+        "SELECT id FROM users WHERE is_protected = TRUE AND deleted_at IS NULL LIMIT 1"
+    )
+    .fetch_optional(&pool)
+    .await
+    .ok()
+    .flatten();
+
+    if let Some(owner_id) = owner {
+        sqlx::query(
+            "UPDATE sites SET owner_user_id = $1 WHERE id = $2 AND owner_user_id IS NULL"
+        )
+        .bind(owner_id)
+        .bind(site_id)
+        .execute(&pool)
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to set site owner: {e}"))?;
+        println!("Site owner set to protected super_admin ({}).", owner_id);
+    } else {
+        println!("No protected super_admin found — owner_user_id left NULL.");
+        println!("Backfill with: UPDATE sites SET owner_user_id = '<user-uuid>' WHERE id = '{}'", site_id);
+    }
+
     Ok(())
 }
 

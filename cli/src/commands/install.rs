@@ -66,6 +66,9 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
         .default(true)
         .interact()?;
 
+    // Track the created admin's UUID so we can link them to the site as owner.
+    let mut admin_id: Option<Uuid> = None;
+
     if create_admin {
         println!("\n── Admin User ───────────────────────────────────────────");
 
@@ -90,6 +93,7 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
 
         let hash = hash_password(&password)?;
         let id = Uuid::new_v4();
+        admin_id = Some(id);
 
         sqlx::query(
             "INSERT INTO users (id, username, email, display_name, password_hash, role, is_protected, created_at)
@@ -110,19 +114,61 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
 
     // ── Initial site ───────────────────────────────────────────────────────
     // Insert the domain as the first site so the super admin has a default
-    // site context on first login.
+    // site context on first login. Link the admin as owner if one was created.
     let site_id = Uuid::new_v4();
     sqlx::query(
-        "INSERT INTO sites (id, hostname, created_at, updated_at)
-         VALUES ($1, $2, NOW(), NOW())
+        "INSERT INTO sites (id, hostname, owner_user_id, created_at, updated_at)
+         VALUES ($1, $2, $3, NOW(), NOW())
          ON CONFLICT (hostname) DO NOTHING"
     )
     .bind(site_id)
     .bind(&domain)
+    .bind(admin_id)
     .execute(&pool)
     .await
     .map_err(|e| anyhow::anyhow!("Failed to create initial site: {e}"))?;
     println!("Initial site '{}' created.", domain);
+
+    // Seed default site_settings so the admin panel shows real values on first login.
+    let site_url = format!("http://{domain}");
+    let settings_defaults: &[(&str, &str)] = &[
+        ("site_name",        &domain),
+        ("site_description", ""),
+        ("site_url",         &site_url),
+        ("site_language",    "en-US"),
+        ("active_theme",     "default"),
+        ("posts_per_page",   "10"),
+        ("date_format",      "%B %-d, %Y"),
+    ];
+    for (key, value) in settings_defaults {
+        sqlx::query(
+            "INSERT INTO site_settings (site_id, key, value)
+             VALUES ($1, $2, $3)
+             ON CONFLICT (site_id, key) WHERE site_id IS NOT NULL DO NOTHING"
+        )
+        .bind(site_id)
+        .bind(key)
+        .bind(value)
+        .execute(&pool)
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to seed site_settings: {e}"))?;
+    }
+    println!("Default site settings seeded.");
+
+    // Link the admin user to their site in site_users so the switcher works.
+    if let Some(uid) = admin_id {
+        sqlx::query(
+            "INSERT INTO site_users (site_id, user_id, role)
+             VALUES ($1, $2, 'admin')
+             ON CONFLICT DO NOTHING"
+        )
+        .bind(site_id)
+        .bind(uid)
+        .execute(&pool)
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to link admin to site: {e}"))?;
+        println!("Admin linked to site '{}' as owner.", domain);
+    }
 
     // ── Deployment files ───────────────────────────────────────────────────
 

@@ -1,3 +1,4 @@
+pub mod dev;
 pub mod install;
 pub mod migrate;
 pub mod plugin;

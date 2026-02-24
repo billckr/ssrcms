@@ -233,6 +233,15 @@ cmd_update_cli() {
     log "synaptic-cli updated: $(command -v synaptic-cli)"
 }
 
+cmd_dev_reset() {
+    if ! command -v synaptic-cli &>/dev/null; then
+        log "synaptic-cli not found — run './app.sh update-cli' first."
+        exit 1
+    fi
+    cd "$SCRIPT_DIR"
+    synaptic-cli dev reset
+}
+
 cmd_migrate() {
     if ! command -v synaptic-cli &>/dev/null; then
         log "synaptic-cli not found — run './app.sh update-cli' first."
@@ -301,6 +310,7 @@ case "$COMMAND" in
     build-release) cmd_build_release ;;
     update-cli)    cmd_update_cli ;;
     migrate)       cmd_migrate ;;
+    dev-reset)     cmd_dev_reset ;;
     clean-index)   cmd_clean_index ;;
     clean-build)   cmd_clean_build ;;
     test)          cmd_test ;;
@@ -321,6 +331,9 @@ case "$COMMAND" in
         echo "  build          Compile debug build"
         echo "  build-release  Compile optimised release build"
         echo "  update-cli     Reinstall synaptic-cli after CLI source changes"
+        echo ""
+        echo "Development:"
+        echo "  dev-reset      Wipe all DB data (keeps schema/migrations) for a clean install run"
         echo ""
         echo "Maintenance:"
         echo "  migrate        Run pending database migrations"
