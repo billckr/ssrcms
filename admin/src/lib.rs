@@ -124,7 +124,7 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
         plugins = nav_link("/admin/plugins", "Plugins"),
         appearance = nav_link("/admin/appearance", "Appearance"),
         settings = nav_link("/admin/settings", "Settings"),
-        sites = if is_global_admin { nav_link("/admin/sites", "Sites") } else { String::new() },
+        sites = nav_link("/admin/sites", "Sites"),
         flash_html = flash_html,
         content = content,
         visiting_badge = visiting_badge,
