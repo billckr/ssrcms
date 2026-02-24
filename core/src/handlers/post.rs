@@ -24,7 +24,7 @@ pub async fn single_post(
     let base_url = current_site.base_url.clone();
     match render_post(state.clone(), slug, uri, site_id, &base_url).await {
         Ok(html) => Html(html).into_response(),
-        Err(e) => render_error_page(e, &state, &path).await,
+        Err(e) => render_error_page(e, &state, &path, Some(current_site.site.id)).await,
     }
 }
 
@@ -82,11 +82,13 @@ async fn render_post(
     ctx.insert("next_post", &next);
     ctx.insert("related_posts", &related);
 
-    let hook_outputs = state.templates.render_hooks(
+    let theme = state.active_theme_for_site(Some(site_id));
+    let hook_outputs = state.templates.render_hooks_for_theme(
+        &theme,
         &["head_start", "head_end", "body_start", "body_end", "before_content", "after_content", "footer"],
         &ctx,
     );
     ContextBuilder::add_hook_outputs(&mut ctx, &hook_outputs);
 
-    state.templates.render("single.html", &ctx)
+    state.templates.render_for_theme(&theme, "single.html", &ctx)
 }

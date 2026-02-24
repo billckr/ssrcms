@@ -41,7 +41,7 @@ pub async fn category_archive(
     let base_url = current_site.base_url.clone();
     match render_taxonomy_archive(state.clone(), slug, TaxonomyType::Category, query.page, uri, site_id, &base_url).await {
         Ok(html) => Html(html).into_response(),
-        Err(e) => render_error_page(e, &state, &path).await,
+        Err(e) => render_error_page(e, &state, &path, Some(current_site.site.id)).await,
     }
 }
 
@@ -58,7 +58,7 @@ pub async fn tag_archive(
     let base_url = current_site.base_url.clone();
     match render_taxonomy_archive(state.clone(), slug, TaxonomyType::Tag, query.page, uri, site_id, &base_url).await {
         Ok(html) => Html(html).into_response(),
-        Err(e) => render_error_page(e, &state, &path).await,
+        Err(e) => render_error_page(e, &state, &path, Some(current_site.site.id)).await,
     }
 }
 
@@ -75,7 +75,7 @@ pub async fn author_archive(
     let base_url = current_site.base_url.clone();
     match render_author_archive(state.clone(), username, query.page, uri, site_id, &base_url).await {
         Ok(html) => Html(html).into_response(),
-        Err(e) => render_error_page(e, &state, &path).await,
+        Err(e) => render_error_page(e, &state, &path, Some(current_site.site.id)).await,
     }
 }
 
@@ -151,13 +151,15 @@ async fn render_taxonomy_archive(
     ctx.insert("posts", &archive.posts);
     ctx.insert("pagination", &archive.pagination);
 
-    let hook_outputs = state.templates.render_hooks(
+    let theme = state.active_theme_for_site(Some(site_id));
+    let hook_outputs = state.templates.render_hooks_for_theme(
+        &theme,
         &["head_start", "head_end", "body_start", "body_end", "before_content", "after_content", "footer"],
         &ctx,
     );
     ContextBuilder::add_hook_outputs(&mut ctx, &hook_outputs);
 
-    state.templates.render("archive.html", &ctx)
+    state.templates.render_for_theme(&theme, "archive.html", &ctx)
 }
 
 async fn render_author_archive(
@@ -220,11 +222,13 @@ async fn render_author_archive(
     ctx.insert("posts", &posts);
     ctx.insert("pagination", &pagination);
 
-    let hook_outputs = state.templates.render_hooks(
+    let theme = state.active_theme_for_site(Some(site_id));
+    let hook_outputs = state.templates.render_hooks_for_theme(
+        &theme,
         &["head_start", "head_end", "body_start", "body_end", "before_content", "after_content", "footer"],
         &ctx,
     );
     ContextBuilder::add_hook_outputs(&mut ctx, &hook_outputs);
 
-    state.templates.render("archive.html", &ctx)
+    state.templates.render_for_theme(&theme, "archive.html", &ctx)
 }

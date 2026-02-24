@@ -158,6 +158,15 @@ impl AppState {
         self.site_cache.read().ok()?.get(hostname).cloned()
     }
 
+    /// Return the active theme for a given site, falling back to the global
+    /// active_theme when the site is not found in the cache.
+    pub fn active_theme_for_site(&self, site_id: Option<Uuid>) -> String {
+        site_id
+            .and_then(|id| self.get_site_by_id(id))
+            .map(|(_, s)| s.active_theme)
+            .unwrap_or_else(|| self.active_theme.read().unwrap().clone())
+    }
+
     /// Return the hostname for a site_id — used to populate the header site indicator.
     pub fn site_hostname(&self, site_id: Option<Uuid>) -> String {
         site_id
@@ -174,6 +183,20 @@ impl AppState {
             .values()
             .find(|(s, _)| s.id == site_id)
             .cloned()
+    }
+
+    /// Update the active_theme for a specific site in the in-memory cache.
+    /// Called after a successful theme switch so the static file handler
+    /// immediately serves assets from the new theme without a restart.
+    pub fn update_site_theme_in_cache(&self, site_id: Uuid, theme: &str) {
+        if let Ok(mut cache) = self.site_cache.write() {
+            for val in cache.values_mut() {
+                if val.0.id == site_id {
+                    val.1.active_theme = theme.to_string();
+                    break;
+                }
+            }
+        }
     }
 
     /// Reload the site cache from the database.

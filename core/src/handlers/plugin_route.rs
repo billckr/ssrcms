@@ -129,5 +129,6 @@ async fn render_plugin_route(
     ctx.insert("all_posts", &all_posts);
     ctx.insert("all_pages", &all_pages);
 
-    state.templates.render(template_name, &ctx)
+    let theme = state.active_theme_for_site(Some(site_id));
+    state.templates.render_for_theme(&theme, template_name, &ctx)
 }

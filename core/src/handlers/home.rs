@@ -40,7 +40,7 @@ pub async fn home(
         Ok(html) => Html(html).into_response(),
         Err(e) => {
             tracing::error!("home handler error: {:?}", e);
-            render_error_page(e, &state, &path).await
+            render_error_page(e, &state, &path, Some(current_site.site.id)).await
         }
     }
 }
@@ -119,22 +119,25 @@ async fn render_home(
     ctx.insert("tag_cloud", &tag_cloud);
     ctx.insert("category_cloud", &category_cloud);
 
+    let theme = state.active_theme_for_site(Some(site_id));
+
     // Pre-render hooks
-    let hook_outputs = state.templates.render_hooks(
+    let hook_outputs = state.templates.render_hooks_for_theme(
+        &theme,
         &["head_start", "head_end", "body_start", "body_end", "before_content", "after_content", "footer"],
         &ctx,
     );
     ContextBuilder::add_hook_outputs(&mut ctx, &hook_outputs);
 
-    state.templates.render("index.html", &ctx)
+    state.templates.render_for_theme(&theme, "index.html", &ctx)
 }
 
 /// Render an error response, using the active theme's 404.html for NotFound errors.
 /// Falls back to plain HTML if the template engine is unavailable.
-pub async fn render_error_page(err: AppError, state: &AppState, path: &str) -> Response {
+pub async fn render_error_page(err: AppError, state: &AppState, path: &str, site_id: Option<uuid::Uuid>) -> Response {
     match err {
         AppError::NotFound(_) => {
-            match render_404(state, path).await {
+            match render_404(state, path, site_id).await {
                 Ok(html) => (axum::http::StatusCode::NOT_FOUND, Html(html)).into_response(),
                 Err(e) => {
                     tracing::warn!("could not render theme 404 page: {:?}", e);
@@ -157,9 +160,9 @@ pub async fn render_error_page(err: AppError, state: &AppState, path: &str) -> R
     }
 }
 
-async fn render_404(state: &AppState, path: &str) -> Result<String> {
+async fn render_404(state: &AppState, path: &str, site_id: Option<uuid::Uuid>) -> Result<String> {
     let base_url = &state.settings.base_url;
-    let site_ctx = build_site_context(state, None, base_url).await?;
+    let site_ctx = build_site_context(state, site_id, base_url).await?;
 
     let mut ctx = ContextBuilder {
         site: site_ctx,
@@ -173,13 +176,15 @@ async fn render_404(state: &AppState, path: &str) -> Result<String> {
     }
     .into_tera_context();
 
-    let hook_outputs = state.templates.render_hooks(
+    let theme = state.active_theme_for_site(site_id);
+    let hook_outputs = state.templates.render_hooks_for_theme(
+        &theme,
         &["head_start", "head_end", "body_start", "body_end", "before_content", "after_content", "footer"],
         &ctx,
     );
     ContextBuilder::add_hook_outputs(&mut ctx, &hook_outputs);
 
-    state.templates.render("404.html", &ctx)
+    state.templates.render_for_theme(&theme, "404.html", &ctx)
 }
 
 // ── Shared helpers ──────────────────────────────────────────────────────────

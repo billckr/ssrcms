@@ -87,10 +87,29 @@ async fn main() -> anyhow::Result<()> {
     info!("session store ready");
 
     // ── Site settings (from DB) ───────────────────────────────────────────────
-    // Try to load global (legacy single-site) settings for backward compat.
-    // Multi-site settings are loaded per-site into site_cache below.
+    // Load global (legacy single-site) settings for backward compat.
     let settings = SiteSettings::load_global(&pool).await.unwrap_or_default();
     info!("site: {} — {}", settings.site_name, settings.base_url);
+
+    // ── Determine startup theme ───────────────────────────────────────────────
+    // In a multi-site setup, the per-site active_theme (stored with a real
+    // site_id) is the authoritative value — it is updated by the admin theme
+    // switcher.  The null-site global row is legacy/single-site only and is
+    // never written by the admin UI, so it drifts out of sync after the first
+    // theme change.  Load sites now (before building the template engine) so
+    // we can pick the correct startup theme.
+    let startup_sites = synaptic_core::models::site::list(&pool).await.unwrap_or_default();
+    let startup_theme = if let Some(primary_site) = startup_sites.first() {
+        let site_settings = SiteSettings::load(&pool, primary_site.id).await.unwrap_or_default();
+        info!(
+            "startup theme resolved from site '{}' ({}): '{}'",
+            primary_site.hostname, primary_site.id, site_settings.active_theme
+        );
+        site_settings.active_theme
+    } else {
+        info!("no sites found — using global active_theme: '{}'", settings.active_theme);
+        settings.active_theme.clone()
+    };
 
     // ── Plugin & hook registry ────────────────────────────────────────────────
     let hook_registry = Arc::new(HookRegistry::new());
@@ -99,7 +118,7 @@ async fn main() -> anyhow::Result<()> {
     // Point the engine at themes/global/ — the canonical home for global themes.
     let engine = TemplateEngine::new(
         &cfg.themes_dir,
-        &settings.active_theme,
+        &startup_theme,
         &settings.base_url,
         hook_registry.clone(),
         pool.clone(),
@@ -141,9 +160,8 @@ async fn main() -> anyhow::Result<()> {
     let site_cache: SiteCache = {
         use std::collections::HashMap;
         use std::sync::RwLock;
-        let sites = synaptic_core::models::site::list(&pool).await.unwrap_or_default();
         let mut cache = HashMap::new();
-        for site in sites {
+        for site in startup_sites {
             let s = SiteSettings::load(&pool, site.id).await.unwrap_or_default();
             info!("loaded site '{}' ({})", site.hostname, site.id);
             cache.insert(site.hostname.clone(), (site, s));
@@ -152,7 +170,7 @@ async fn main() -> anyhow::Result<()> {
     };
 
     // ── Application state ─────────────────────────────────────────────────────
-    let active_theme = Arc::new(std::sync::RwLock::new(settings.active_theme.clone()));
+    let active_theme = Arc::new(std::sync::RwLock::new(startup_theme));
     let state = AppState {
         db: pool.clone(),
         templates: engine,

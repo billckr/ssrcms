@@ -11,21 +11,25 @@ use tracing::info;
 use crate::plugins::HookRegistry;
 use crate::templates::filters;
 use crate::templates::functions::{GetPostsFunction, GetTermsFunction, HookFunction, UrlForFunction};
-use crate::errors::Result;
+use crate::errors::{AppError, Result};
 
 /// Thread-safe Tera template engine wrapper.
+///
+/// Holds one Tera instance **per loaded theme** so multiple sites with different
+/// themes can render concurrently without stomping on each other.
 #[derive(Clone)]
 pub struct TemplateEngine {
-    inner: Arc<RwLock<Tera>>,
+    /// Per-theme Tera instances: theme_name → Tera.
+    engines: Arc<RwLock<HashMap<String, Tera>>>,
     /// Root of the themes directory tree (parent of `global/` and `sites/`).
     themes_root: PathBuf,
-    /// Shared so switch_theme() and reload_theme() always agree on the current theme name.
+    /// Fallback theme name for legacy single-argument render() paths.
     active_theme: Arc<RwLock<String>>,
     base_url: String,
     hook_registry: Arc<HookRegistry>,
     db: PgPool,
     /// Plugin templates registered via add_raw_template(), keyed by template name.
-    /// Stored so switch_theme() can re-add them to the fresh Tera instance.
+    /// Stored so switch_theme() can re-add them when a fresh Tera instance is loaded.
     plugin_templates: Arc<RwLock<HashMap<String, String>>>,
 }
 
@@ -33,7 +37,6 @@ impl TemplateEngine {
     /// Create and initialize a template engine for the given theme and base URL.
     ///
     /// `themes_root` is the parent of the `global/` and `sites/` subdirectories.
-    /// The initial `active_theme` is always loaded from `themes_root/global/<active_theme>`.
     pub fn new(
         themes_root: impl Into<PathBuf>,
         active_theme: &str,
@@ -42,18 +45,9 @@ impl TemplateEngine {
         db: PgPool,
     ) -> anyhow::Result<Self> {
         let themes_root = themes_root.into();
-        let theme_path = themes_root.join("global").join(active_theme).join("templates");
-
-        let glob = format!("{}/**/*.html", theme_path.display());
-        let mut tera = Tera::new(&glob)
-            .map_err(|e| anyhow::anyhow!("Failed to load theme '{}': {}", active_theme, e))?;
-
-        // Auto-escape HTML and XML templates; raw strings from the DB are already sanitised
-        // by ammonia before storage, but auto-escaping is a defence-in-depth measure.
-        tera.autoescape_on(vec![".html", ".xml"]);
 
         let engine = TemplateEngine {
-            inner: Arc::new(RwLock::new(tera)),
+            engines: Arc::new(RwLock::new(HashMap::new())),
             themes_root,
             active_theme: Arc::new(RwLock::new(active_theme.to_string())),
             base_url: base_url.to_string(),
@@ -62,7 +56,7 @@ impl TemplateEngine {
             plugin_templates: Arc::new(RwLock::new(HashMap::new())),
         };
 
-        engine.register_filters_and_functions()?;
+        engine.load_theme(active_theme)?;
 
         info!("template engine initialized with theme '{}'", active_theme);
         Ok(engine)
@@ -87,10 +81,46 @@ impl TemplateEngine {
         None
     }
 
-    fn register_filters_and_functions(&self) -> anyhow::Result<()> {
-        let mut tera = self.inner.write().unwrap();
+    /// Load (or reload) a theme into the engine map.
+    ///
+    /// Safe to call for an already-loaded theme (reloads it in place).
+    fn load_theme(&self, theme_name: &str) -> anyhow::Result<()> {
+        let theme_dir = self.resolve_theme_dir(theme_name)
+            .ok_or_else(|| anyhow::anyhow!("Theme '{}' not found", theme_name))?;
+        let theme_path = theme_dir.join("templates");
+        let glob = format!("{}/**/*.html", theme_path.display());
 
-        // ── Filters ──────────────────────────────────────────────────────────
+        let mut tera = Tera::new(&glob)
+            .map_err(|e| anyhow::anyhow!("Failed to load theme '{}': {}", theme_name, e))?;
+
+        tera.autoescape_on(vec![".html", ".xml"]);
+
+        // Re-add plugin templates.
+        let plugin_templates = self.plugin_templates.read().unwrap();
+        for (name, source) in plugin_templates.iter() {
+            if let Err(e) = tera.add_raw_template(name, source) {
+                tracing::warn!("load_theme: could not add plugin template '{}': {}", name, e);
+            }
+        }
+        drop(plugin_templates);
+
+        self.register_on_tera(&mut tera);
+
+        self.engines.write().unwrap().insert(theme_name.to_string(), tera);
+        info!("loaded theme '{}'", theme_name);
+        Ok(())
+    }
+
+    /// Ensure a theme is loaded into the engine map, loading lazily if needed.
+    fn ensure_theme_loaded(&self, theme_name: &str) {
+        if !self.engines.read().unwrap().contains_key(theme_name) {
+            if let Err(e) = self.load_theme(theme_name) {
+                tracing::warn!("ensure_theme_loaded: could not load '{}': {}", theme_name, e);
+            }
+        }
+    }
+
+    fn register_on_tera(&self, tera: &mut Tera) {
         tera.register_filter("date_format", filters::date_format);
         tera.register_filter("excerpt", filters::excerpt);
         tera.register_filter("strip_html", filters::strip_html);
@@ -99,16 +129,13 @@ impl TemplateEngine {
         tera.register_filter("truncate_words", filters::truncate_words);
         tera.register_filter("absolute_url", filters::absolute_url);
 
-        // ── Functions ─────────────────────────────────────────────────────────
         tera.register_function(
             "hook",
             HookFunction {
                 registry: self.hook_registry.clone(),
             },
         );
-
         tera.register_function("url_for", UrlForFunction { base_url: self.base_url.clone() });
-
         tera.register_function(
             "get_posts",
             GetPostsFunction {
@@ -116,7 +143,6 @@ impl TemplateEngine {
                 base_url: self.base_url.clone(),
             },
         );
-
         tera.register_function(
             "get_terms",
             GetTermsFunction {
@@ -124,70 +150,97 @@ impl TemplateEngine {
                 base_url: self.base_url.clone(),
             },
         );
-
-        Ok(())
     }
 
-    /// Add plugin templates to the engine (called by plugin loader).
-    /// Templates are persisted internally so switch_theme() can re-add them after a theme swap.
+    /// Add plugin templates to every loaded theme engine, and persist them so
+    /// future loads also receive the templates.
     pub fn add_raw_template(&self, name: &str, source: &str) -> anyhow::Result<()> {
-        let mut tera = self.inner.write().unwrap();
-        tera.add_raw_template(name, source)?;
-        drop(tera);
         self.plugin_templates.write().unwrap().insert(name.to_string(), source.to_string());
+        let mut engines = self.engines.write().unwrap();
+        for tera in engines.values_mut() {
+            if let Err(e) = tera.add_raw_template(name, source) {
+                tracing::warn!("add_raw_template: could not add '{}': {}", name, e);
+            }
+        }
         Ok(())
     }
 
-    /// Render a template with the given context, then resolve [[HOOK:...]] sentinels.
-    pub fn render(&self, template_name: &str, context: &tera::Context) -> Result<String> {
-        let tera = self.inner.read().unwrap();
+    /// Render a template using the specified theme. Falls back to `active_theme`
+    /// if the requested theme is not yet loaded.
+    pub fn render_for_theme(&self, theme: &str, template_name: &str, context: &tera::Context) -> Result<String> {
+        self.ensure_theme_loaded(theme);
+        let engines = self.engines.read().unwrap();
+        let active = self.active_theme.read().unwrap().clone();
+        let tera = engines.get(theme)
+            .or_else(|| engines.get(&active))
+            .ok_or_else(|| AppError::Internal("No theme engine available".to_string()))?;
         let rendered = tera.render(template_name, context)?;
-        let resolved = Self::resolve_hook_sentinels(rendered, context);
-        Ok(resolved)
+        drop(engines);
+        Ok(Self::resolve_hook_sentinels(rendered, context))
+    }
+
+    /// Render a template using the current `active_theme` (legacy / single-site path).
+    pub fn render(&self, template_name: &str, context: &tera::Context) -> Result<String> {
+        let theme = self.active_theme.read().unwrap().clone();
+        self.render_for_theme(&theme, template_name, context)
     }
 
     /// Render a template by raw source string (used for plugin-registered routes).
     #[allow(dead_code)]
     pub fn render_str(&self, source: &str, context: &tera::Context) -> Result<String> {
-        let mut tera = self.inner.read().unwrap().clone();
+        let active = self.active_theme.read().unwrap().clone();
+        self.ensure_theme_loaded(&active);
+        let engines = self.engines.read().unwrap();
+        let mut tera = engines.get(&active)
+            .ok_or_else(|| AppError::Internal("No theme engine available".to_string()))?
+            .clone();
+        drop(engines);
         tera.add_raw_template("__inline__", source)?;
         let rendered = tera.render("__inline__", context)?;
-        let resolved = Self::resolve_hook_sentinels(rendered, context);
-        Ok(resolved)
+        Ok(Self::resolve_hook_sentinels(rendered, context))
     }
 
-    /// Pre-render all hook outputs for the named hook points, given a context.
-    /// Returns a map of hook_name → rendered HTML to be injected into the context.
+    /// Pre-render hook outputs using a specific theme's engine.
+    pub fn render_hooks_for_theme(
+        &self,
+        theme: &str,
+        hook_names: &[&str],
+        context: &tera::Context,
+    ) -> HashMap<String, String> {
+        self.ensure_theme_loaded(theme);
+        let engines = self.engines.read().unwrap();
+        let active = self.active_theme.read().unwrap().clone();
+        let tera = match engines.get(theme).or_else(|| engines.get(&active)) {
+            Some(t) => t,
+            None => return HashMap::new(),
+        };
+
+        let mut outputs = HashMap::new();
+        for hook_name in hook_names {
+            let handlers = self.hook_registry.handlers_for(hook_name);
+            let mut html = String::new();
+            for handler in &handlers {
+                match tera.render(&handler.template_path, context) {
+                    Ok(output) => html.push_str(&output),
+                    Err(e) => tracing::warn!(
+                        "hook '{}' template '{}' render error: {}",
+                        hook_name, handler.template_path, e
+                    ),
+                }
+            }
+            outputs.insert(hook_name.to_string(), html);
+        }
+        outputs
+    }
+
+    /// Pre-render hook outputs using the current `active_theme` (legacy path).
     pub fn render_hooks(
         &self,
         hook_names: &[&str],
         context: &tera::Context,
     ) -> HashMap<String, String> {
-        let tera = self.inner.read().unwrap();
-        let mut outputs = HashMap::new();
-
-        for hook_name in hook_names {
-            let handlers = self.hook_registry.handlers_for(hook_name);
-            let mut html = String::new();
-
-            for handler in &handlers {
-                match tera.render(&handler.template_path, context) {
-                    Ok(output) => html.push_str(&output),
-                    Err(e) => {
-                        tracing::warn!(
-                            "hook '{}' template '{}' render error: {}",
-                            hook_name,
-                            handler.template_path,
-                            e
-                        );
-                    }
-                }
-            }
-
-            outputs.insert(hook_name.to_string(), html);
-        }
-
-        outputs
+        let theme = self.active_theme.read().unwrap().clone();
+        self.render_hooks_for_theme(&theme, hook_names, context)
     }
 
     /// Replace `[[HOOK:__hook_output__<name>]]` sentinels in rendered HTML
@@ -199,66 +252,36 @@ impl TemplateEngine {
         let mut result = rendered.clone();
         for cap in sentinel_re.captures_iter(&rendered) {
             let full_match = &cap[0];
-            let hook_name = &cap[1]; // e.g. "head_end"
+            let hook_name = &cap[1];
             let ctx_key = format!("__hook_output__{}", hook_name);
-
             let replacement = context
                 .get(&ctx_key)
                 .and_then(|v| v.as_str())
                 .unwrap_or("")
                 .to_string();
-
             result = result.replace(full_match, &replacement);
         }
-
         result
     }
 
-    /// Hot-reload theme templates (dev mode).
+    /// Hot-reload the currently active theme's templates (dev mode).
     #[allow(dead_code)]
     pub fn reload_theme(&self) -> anyhow::Result<()> {
         let active = self.active_theme.read().unwrap().clone();
-        let theme_dir = self.resolve_theme_dir(&active)
-            .ok_or_else(|| anyhow::anyhow!("Theme '{}' not found", active))?;
-        let theme_path = theme_dir.join("templates");
-        let glob = format!("{}/**/*.html", theme_path.display());
-
-        let mut tera = self.inner.write().unwrap();
-        *tera = Tera::new(&glob)?;
-        drop(tera);
-
-        self.register_filters_and_functions()?;
+        self.load_theme(&active)?;
         info!("theme '{}' reloaded", active);
         Ok(())
     }
 
-    /// Dynamically switch to a different theme and reload templates.
-    /// Searches `themes_root/global/<name>` first, then `themes_root/sites/*/<name>`,
-    /// so both global and site-specific themes can be activated.
-    /// Re-adds all plugin templates so hooks continue to work after the switch.
+    /// Load a theme into the engine map and set it as the fallback active_theme.
+    ///
+    /// Does NOT remove other loaded themes — all sites keep their engines intact.
     pub fn switch_theme(&self, new_theme: &str) -> anyhow::Result<()> {
-        let theme_dir = self.resolve_theme_dir(new_theme)
-            .ok_or_else(|| anyhow::anyhow!("Theme '{}' not found in global or site directories", new_theme))?;
-        let theme_path = theme_dir.join("templates");
-        let glob = format!("{}/**/*.html", theme_path.display());
-
-        let mut tera = self.inner.write().unwrap();
-        *tera = Tera::new(&glob)
-            .map_err(|e| anyhow::anyhow!("Failed to load theme '{}': {}", new_theme, e))?;
-
-        // Re-add plugin templates — they are not part of the theme glob.
-        let plugin_templates = self.plugin_templates.read().unwrap();
-        for (name, source) in plugin_templates.iter() {
-            if let Err(e) = tera.add_raw_template(name, source) {
-                tracing::warn!("switch_theme: could not re-add plugin template '{}': {}", name, e);
-            }
-        }
-        drop(plugin_templates);
-        drop(tera);
-
+        self.load_theme(new_theme)?;
         *self.active_theme.write().unwrap() = new_theme.to_string();
-        self.register_filters_and_functions()?;
-        info!("switched to theme '{}'", new_theme);
+        info!("switched active theme to '{}'", new_theme);
         Ok(())
     }
 }
+
+

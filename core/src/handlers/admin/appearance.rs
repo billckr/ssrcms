@@ -109,6 +109,10 @@ pub async fn activate(
 
     *state.active_theme.write().unwrap() = form.theme.clone();
 
+    // Keep the in-memory site_cache in sync so the static file handler
+    // immediately serves assets from the newly selected theme.
+    state.update_site_theme_in_cache(site_id, &form.theme);
+
     Redirect::to("/admin/appearance").into_response()
 }
 
