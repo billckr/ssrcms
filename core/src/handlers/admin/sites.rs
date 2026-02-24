@@ -149,20 +149,20 @@ pub async fn site_settings(
     admin: AdminUser,
     Path(id): Path<Uuid>,
 ) -> impl IntoResponse {
-    if !admin.is_global_admin {
+    let cs = state.site_hostname(admin.site_id);
+    let site = match crate::models::site::get_by_id(&state.db, id).await {
+        Ok(s) => s,
+        Err(_) => return Redirect::to("/admin/sites").into_response(),
+    };
+    let is_owner = site.owner_user_id == Some(admin.user.id);
+    if !admin.is_global_admin && !is_owner {
         return (axum::http::StatusCode::FORBIDDEN, "Forbidden").into_response();
     }
-    let cs = state.site_hostname(admin.site_id);
-    match crate::models::site::get_by_id(&state.db, id).await {
-        Ok(site) => {
-            let data = SiteSettingsData {
-                id: site.id.to_string(),
-                hostname: site.hostname.clone(),
-            };
-            Html(admin::pages::sites::render_settings(&data, None, &cs, true, admin.is_visiting_foreign_site, &admin.user.email)).into_response()
-        }
-        Err(_) => Redirect::to("/admin/sites").into_response(),
-    }
+    let data = SiteSettingsData {
+        id: site.id.to_string(),
+        hostname: site.hostname.clone(),
+    };
+    Html(admin::pages::sites::render_settings(&data, None, &cs, admin.is_global_admin, admin.is_visiting_foreign_site, &admin.user.email)).into_response()
 }
 
 #[derive(Deserialize)]
@@ -177,14 +177,20 @@ pub async fn save_site_settings(
     Path(id): Path<Uuid>,
     Form(form): Form<SiteSettingsForm>,
 ) -> impl IntoResponse {
-    if !admin.is_global_admin {
+    let cs = state.site_hostname(admin.site_id);
+    let site = match crate::models::site::get_by_id(&state.db, id).await {
+        Ok(s) => s,
+        Err(_) => return Redirect::to("/admin/sites").into_response(),
+    };
+    let is_owner = site.owner_user_id == Some(admin.user.id);
+    if !admin.is_global_admin && !is_owner {
         return (axum::http::StatusCode::FORBIDDEN, "Forbidden").into_response();
     }
     let cs = state.site_hostname(admin.site_id);
     let hostname = form.hostname.trim().to_lowercase();
     if hostname.is_empty() {
         let data = SiteSettingsData { id: id.to_string(), hostname: String::new() };
-        return Html(admin::pages::sites::render_settings(&data, Some("Hostname cannot be empty."), &cs, true, admin.is_visiting_foreign_site, &admin.user.email)).into_response();
+        return Html(admin::pages::sites::render_settings(&data, Some("Hostname cannot be empty."), &cs, admin.is_global_admin, admin.is_visiting_foreign_site, &admin.user.email)).into_response();
     }
 
     let result = sqlx::query(
@@ -209,7 +215,7 @@ pub async fn save_site_settings(
                 format!("Failed to save: {e}")
             };
             let data = SiteSettingsData { id: id.to_string(), hostname };
-            Html(admin::pages::sites::render_settings(&data, Some(&msg), &cs, true, admin.is_visiting_foreign_site, &admin.user.email)).into_response()
+            Html(admin::pages::sites::render_settings(&data, Some(&msg), &cs, admin.is_global_admin, admin.is_visiting_foreign_site, &admin.user.email)).into_response()
         }
     }
 }
