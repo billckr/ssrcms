@@ -164,7 +164,8 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, current_site: &str, i
     };
 
     let content = format!(
-        r#"<form method="POST" action="{action}">
+        r#"<link rel="stylesheet" href="/admin/static/quill/quill.snow.css">
+<form method="POST" action="{action}">
   <div class="editor-layout">
     <div class="editor-main">
       <div class="form-group">
@@ -179,8 +180,9 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, current_site: &str, i
         <small>Lowercase, hyphens only. Spaces auto-convert to hyphens.</small>
       </div>
       <div class="form-group">
-        <label for="content">Content (HTML)</label>
-        <textarea id="content" name="content" rows="20" class="content-editor">{content_val}</textarea>
+        <label>Content</label>
+        <div id="quill-editor" style="height:480px;background:#fff;font-size:1rem"></div>
+        <input type="hidden" id="content" name="content">
       </div>
       <div class="form-group">
         <label for="excerpt">Excerpt</label>
@@ -204,11 +206,43 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, current_site: &str, i
       {categories_section}
     </div>
   </div>
-</form>"#,
+</form>
+<script src="/admin/static/quill/quill.min.js"></script>
+<script>
+(function() {{
+  var quill = new Quill('#quill-editor', {{
+    theme: 'snow',
+    modules: {{
+      toolbar: [
+        [{{ header: [1, 2, 3, false] }}],
+        ['bold', 'italic', 'underline', 'strike'],
+        ['blockquote', 'code-block'],
+        [{{ list: 'ordered' }}, {{ list: 'bullet' }}],
+        ['link', 'image'],
+        ['clean']
+      ]
+    }}
+  }});
+
+  // Load existing content
+  var existing = document.getElementById('content').value;
+  if (!existing) {{
+    existing = {content_js};
+  }}
+  if (existing) {{
+    quill.clipboard.dangerouslyPasteHTML(existing);
+  }}
+
+  // On submit, copy Quill HTML into the hidden input
+  document.querySelector('form').addEventListener('submit', function() {{
+    document.getElementById('content').value = quill.root.innerHTML;
+  }});
+}})();
+</script>"#,
         action = action,
         title_val = crate::html_escape(&post.title),
         slug = crate::html_escape(&post.slug),
-        content_val = crate::html_escape(&post.content),
+        content_js = serde_json::to_string(&post.content).unwrap_or_else(|_| "\"\"".into()),
         excerpt = crate::html_escape(&post.excerpt),
         status_options = status_options,
         published_at = crate::html_escape(&published_at),

@@ -15,6 +15,7 @@ dependencies = [
  "chrono",
  "leptos",
  "serde",
+ "serde_json",
  "uuid",
 ]
 

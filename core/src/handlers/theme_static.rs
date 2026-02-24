@@ -6,7 +6,7 @@
 
 use axum::{
     extract::{Path, State},
-    http::{header, StatusCode},
+    http::{header, HeaderMap, StatusCode},
     response::{IntoResponse, Response},
 };
 
@@ -14,9 +14,18 @@ use crate::app_state::AppState;
 
 pub async fn serve(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Path(path): Path<String>,
 ) -> Response {
-    let active_theme = state.active_theme.read().unwrap().clone();
+    // Resolve per-site active theme from the Host header; fall back to the
+    // global active_theme for single-site / pre-migration setups.
+    let active_theme = headers
+        .get(header::HOST)
+        .and_then(|v| v.to_str().ok())
+        .map(|h| h.split(':').next().unwrap_or(h).to_string())
+        .and_then(|hostname| state.resolve_site(&hostname))
+        .map(|(_, settings)| settings.active_theme.clone())
+        .unwrap_or_else(|| state.active_theme.read().unwrap().clone());
 
     // Resolve theme directory: global/, then sites/*/, then legacy flat layout.
     let static_base = if let Some(theme_dir) = state.templates.resolve_theme_dir(&active_theme) {

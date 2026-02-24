@@ -267,7 +267,12 @@ a:hover {
 }
 
 .post-content p {
-  margin-bottom: 1.5rem;
+  margin-bottom: 0.25rem;
+}
+/* Quill emits <p><br></p> for blank lines — shrink them to act like a half-line gap */
+.post-content p:has(> br:only-child) {
+  line-height: 0.8;
+  margin: 0;
 }
 
 .post-content h2,
