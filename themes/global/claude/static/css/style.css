@@ -299,13 +299,19 @@ a:hover {
   margin: 0;
 }
 
-.post-content pre {
-  background: #f3f4f6;
-  border-radius: 6px;
+.post-content pre,
+.page-content pre {
+  background: #f8f6f3;
+  border-left: 4px solid var(--orange-primary);
+  border-top: 1px solid var(--border-color);
+  border-right: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-color);
+  border-radius: 0 6px 6px 0;
   padding: 1rem 1.25rem;
   overflow-x: auto;
   font-size: 0.9rem;
   margin: 1.5rem 0;
+  box-shadow: 2px 2px 8px rgba(255, 107, 53, 0.06);
 }
 
 .post-content ul,
