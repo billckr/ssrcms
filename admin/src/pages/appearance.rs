@@ -16,7 +16,7 @@ pub struct ThemeInfo {
     pub in_use_by: usize,
 }
 
-pub fn render_with_flash(themes: &[ThemeInfo], flash: Option<&str>, current_site: &str, is_global_admin: bool, visiting_foreign_site: bool, user_email: &str) -> String {
+pub fn render_with_flash(themes: &[ThemeInfo], flash: Option<&str>, current_site: &str, is_global_admin: bool, visiting_foreign_site: bool, user_email: &str, can_manage_users: bool) -> String {
     let cards: String = if themes.is_empty() {
         r#"<div class="empty-state">
             <p>No themes found. Add a theme directory to <code>themes/</code> and restart the server.</p>
@@ -40,11 +40,11 @@ pub fn render_with_flash(themes: &[ThemeInfo], flash: Option<&str>, current_site
 </div>"#
     );
 
-    admin_page("Appearance", "/admin/appearance", flash, &content, current_site, is_global_admin, visiting_foreign_site, user_email)
+    admin_page("Appearance", "/admin/appearance", flash, &content, current_site, is_global_admin, visiting_foreign_site, user_email, can_manage_users)
 }
 
-pub fn render(themes: &[ThemeInfo], current_site: &str, is_global_admin: bool, visiting_foreign_site: bool, user_email: &str) -> String {
-    render_with_flash(themes, None, current_site, is_global_admin, visiting_foreign_site, user_email)
+pub fn render(themes: &[ThemeInfo], current_site: &str, is_global_admin: bool, visiting_foreign_site: bool, user_email: &str, can_manage_users: bool) -> String {
+    render_with_flash(themes, None, current_site, is_global_admin, visiting_foreign_site, user_email, can_manage_users)
 }
 
 fn render_card(t: &ThemeInfo, is_global_admin: bool) -> String {

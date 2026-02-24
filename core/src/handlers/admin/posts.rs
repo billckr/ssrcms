@@ -75,7 +75,7 @@ async fn list_type(state: AppState, post_type: &str, page: Option<i64>, site_id:
         });
     }
 
-    Html(admin::pages::posts::render_list(&rows, post_type, None, &current_site, is_global_admin, visiting_foreign_site, &user_email))
+    Html(admin::pages::posts::render_list(&rows, post_type, None, &current_site, is_global_admin, visiting_foreign_site, &user_email, is_global_admin))
 }
 
 pub async fn new_post(
@@ -110,7 +110,7 @@ async fn new_post_type(state: AppState, post_type: &str, site_id: Option<Uuid>, 
         selected_categories: vec![],
         selected_tags: vec![],
     };
-    Html(admin::pages::posts::render_editor(&edit, None, &current_site, is_global_admin, visiting_foreign_site, &user_email))
+    Html(admin::pages::posts::render_editor(&edit, None, &current_site, is_global_admin, visiting_foreign_site, &user_email, is_global_admin))
 }
 
 pub async fn edit_post(
@@ -175,7 +175,7 @@ async fn edit_post_type(state: AppState, id: Uuid, site_id: Option<Uuid>, curren
         selected_tags,
     };
 
-    Html(admin::pages::posts::render_editor(&edit, None, &current_site, is_global_admin, visiting_foreign_site, &user_email)).into_response()
+    Html(admin::pages::posts::render_editor(&edit, None, &current_site, is_global_admin, visiting_foreign_site, &user_email, is_global_admin)).into_response()
 }
 
 /// HTML forms send repeated keys for multiple checkboxes, but only a bare
@@ -278,7 +278,7 @@ pub async fn save_new(
                 selected_tags: form.tags,
             };
             let msg = friendly_save_error(&e);
-            Html(admin::pages::posts::render_editor(&edit, Some(&msg), &cs, admin.is_global_admin, admin.is_visiting_foreign_site, &admin.user.email)).into_response()
+            Html(admin::pages::posts::render_editor(&edit, Some(&msg), &cs, admin.is_global_admin, admin.is_visiting_foreign_site, &admin.user.email, admin.is_global_admin || admin.site_role.as_str() == "admin")).into_response()
         }
     }
 }
@@ -353,7 +353,7 @@ pub async fn save_edit(
                 selected_tags,
             };
             let msg = friendly_save_error(&e);
-            Html(admin::pages::posts::render_editor(&edit, Some(&msg), &cs, admin.is_global_admin, admin.is_visiting_foreign_site, &admin.user.email)).into_response()
+            Html(admin::pages::posts::render_editor(&edit, Some(&msg), &cs, admin.is_global_admin, admin.is_visiting_foreign_site, &admin.user.email, admin.is_global_admin || admin.site_role.as_str() == "admin")).into_response()
         }
     }
 }

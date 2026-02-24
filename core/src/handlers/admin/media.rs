@@ -22,7 +22,7 @@ pub async fn list(
         alt_text: if m.alt_text.is_empty() { None } else { Some(m.alt_text.clone()) },
     }).collect();
     let cs = state.site_hostname(admin.site_id);
-    Html(admin::pages::media::render_list(&items, None, &cs, admin.is_global_admin, admin.is_visiting_foreign_site, &admin.user.email))
+    Html(admin::pages::media::render_list(&items, None, &cs, admin.is_global_admin, admin.is_visiting_foreign_site, &admin.user.email, admin.is_global_admin || admin.site_role.as_str() == "admin"))
 }
 
 pub async fn delete(

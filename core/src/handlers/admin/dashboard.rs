@@ -42,5 +42,5 @@ pub async fn dashboard(
         total_users,
     };
 
-    Html(admin::pages::dashboard::render(&data, None, &cs, admin.is_global_admin, admin.is_visiting_foreign_site, &admin.user.email))
+    Html(admin::pages::dashboard::render(&data, None, &cs, admin.is_global_admin, admin.is_visiting_foreign_site, &admin.user.email, admin.is_global_admin || admin.site_role.as_str() == "admin"))
 }

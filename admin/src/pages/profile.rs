@@ -7,7 +7,7 @@ pub struct ProfileForm {
     pub bio: String,
 }
 
-pub fn render_profile(profile: &ProfileForm, flash: Option<&str>, current_site: &str, is_global_admin: bool, visiting_foreign_site: bool, user_email: &str) -> String {
+pub fn render_profile(profile: &ProfileForm, flash: Option<&str>, current_site: &str, is_global_admin: bool, visiting_foreign_site: bool, user_email: &str, can_manage_users: bool) -> String {
     let content = format!(
         r#"<div class="profile-container">
   <h2>My Profile</h2>
@@ -83,5 +83,5 @@ pub fn render_profile(profile: &ProfileForm, flash: Option<&str>, current_site: 
         bio = crate::html_escape(&profile.bio),
     );
 
-    crate::admin_page("My Profile", "/admin/profile", flash, &content, current_site, is_global_admin, visiting_foreign_site, user_email)
+    crate::admin_page("My Profile", "/admin/profile", flash, &content, current_site, is_global_admin, visiting_foreign_site, user_email, can_manage_users)
 }

@@ -20,7 +20,7 @@ pub async fn view(
         display_name: admin.user.display_name.clone(),
         bio: admin.user.bio.clone(),
     };
-    Html(admin::pages::profile::render_profile(&profile, None, &cs, admin.is_global_admin, admin.is_visiting_foreign_site, &admin.user.email))
+    Html(admin::pages::profile::render_profile(&profile, None, &cs, admin.is_global_admin, admin.is_visiting_foreign_site, &admin.user.email, admin.is_global_admin || admin.site_role.as_str() == "admin"))
 }
 
 #[derive(Deserialize)]
@@ -66,6 +66,7 @@ pub async fn update_profile(
             admin.is_global_admin,
             admin.is_visiting_foreign_site,
             &email,
+            admin.is_global_admin || admin.site_role.as_str() == "admin",
         )),
         Err(e) => Html(admin::pages::profile::render_profile(
             &profile,
@@ -74,6 +75,7 @@ pub async fn update_profile(
             admin.is_global_admin,
             admin.is_visiting_foreign_site,
             &email,
+            admin.is_global_admin || admin.site_role.as_str() == "admin",
         )),
     }
 }
@@ -122,6 +124,7 @@ pub async fn change_password(
             admin.is_global_admin,
             admin.is_visiting_foreign_site,
             &admin.user.email,
+            admin.is_global_admin || admin.site_role.as_str() == "admin",
         ));
     }
 
@@ -133,11 +136,12 @@ pub async fn change_password(
             admin.is_global_admin,
             admin.is_visiting_foreign_site,
             &admin.user.email,
+            admin.is_global_admin || admin.site_role.as_str() == "admin",
         ));
     }
 
     if let Err(e) = validate_password_requirements(&form.new_password) {
-        return Html(admin::pages::profile::render_profile(&profile, Some(e), &cs, admin.is_global_admin, admin.is_visiting_foreign_site, &admin.user.email));
+        return Html(admin::pages::profile::render_profile(&profile, Some(e), &cs, admin.is_global_admin, admin.is_visiting_foreign_site, &admin.user.email, admin.is_global_admin || admin.site_role.as_str() == "admin"));
     }
 
     let new_password_hash = match crate::models::user::hash_password(&form.new_password) {
@@ -150,6 +154,7 @@ pub async fn change_password(
                 admin.is_global_admin,
                 admin.is_visiting_foreign_site,
                 &admin.user.email,
+                admin.is_global_admin || admin.site_role.as_str() == "admin",
             ));
         }
     };
@@ -172,6 +177,7 @@ pub async fn change_password(
             admin.is_global_admin,
             admin.is_visiting_foreign_site,
             &admin.user.email,
+            admin.is_global_admin || admin.site_role.as_str() == "admin",
         )),
         Err(e) => Html(admin::pages::profile::render_profile(
             &profile,
@@ -180,6 +186,7 @@ pub async fn change_password(
             admin.is_global_admin,
             admin.is_visiting_foreign_site,
             &admin.user.email,
+            admin.is_global_admin || admin.site_role.as_str() == "admin",
         )),
     }
 }

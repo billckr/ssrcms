@@ -46,7 +46,7 @@ async fn list_terms(state: AppState, taxonomy: &str, site_id: Option<Uuid>, curr
             post_count: count,
         });
     }
-    Html(admin::pages::taxonomy::render(&items, taxonomy, None, &current_site, is_global_admin, visiting_foreign_site, &user_email))
+    Html(admin::pages::taxonomy::render(&items, taxonomy, None, &current_site, is_global_admin, visiting_foreign_site, &user_email, is_global_admin))
 }
 
 #[derive(Deserialize)]
@@ -75,7 +75,7 @@ pub async fn create(
             items.push(TermItem { id: t.id.to_string(), name: t.name.clone(), slug: t.slug.clone(), post_count: count });
         }
         let cs = state.site_hostname(admin.site_id);
-        return Html(admin::pages::taxonomy::render(&items, &form.taxonomy, Some("Slug must be lowercase letters, numbers, and hyphens only — no spaces."), &cs, admin.is_global_admin, admin.is_visiting_foreign_site, &admin.user.email)).into_response();
+        return Html(admin::pages::taxonomy::render(&items, &form.taxonomy, Some("Slug must be lowercase letters, numbers, and hyphens only — no spaces."), &cs, admin.is_global_admin, admin.is_visiting_foreign_site, &admin.user.email, admin.is_global_admin || admin.site_role.as_str() == "admin")).into_response();
     }
     let create = CreateTaxonomy {
         site_id: admin.site_id,
@@ -101,7 +101,7 @@ pub async fn create(
             format!("Failed to create {}. Please try again.", form.taxonomy)
         };
         let cs = state.site_hostname(admin.site_id);
-        return Html(admin::pages::taxonomy::render(&items, &form.taxonomy, Some(&msg), &cs, admin.is_global_admin, admin.is_visiting_foreign_site, &admin.user.email)).into_response();
+        return Html(admin::pages::taxonomy::render(&items, &form.taxonomy, Some(&msg), &cs, admin.is_global_admin, admin.is_visiting_foreign_site, &admin.user.email, admin.is_global_admin || admin.site_role.as_str() == "admin")).into_response();
     }
     Redirect::to(redirect).into_response()
 }

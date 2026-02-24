@@ -9,7 +9,7 @@ pub struct SettingsData {
     pub date_format: String,
 }
 
-pub fn render(data: &SettingsData, flash: Option<&str>, current_site: &str, is_global_admin: bool, visiting_foreign_site: bool, user_email: &str) -> String {
+pub fn render(data: &SettingsData, flash: Option<&str>, current_site: &str, is_global_admin: bool, visiting_foreign_site: bool, user_email: &str, can_manage_users: bool) -> String {
     let content = format!(
         r#"<form method="POST" action="/admin/settings">
   <div class="form-group">
@@ -47,5 +47,5 @@ pub fn render(data: &SettingsData, flash: Option<&str>, current_site: &str, is_g
         date_format = crate::html_escape(&data.date_format),
     );
 
-    crate::admin_page("Site Settings", "/admin/settings", flash, &content, current_site, is_global_admin, visiting_foreign_site, user_email)
+    crate::admin_page("Site Settings", "/admin/settings", flash, &content, current_site, is_global_admin, visiting_foreign_site, user_email, can_manage_users)
 }

@@ -63,7 +63,7 @@ pub async fn list(
     };
     let current_user_id = admin.user.id.to_string();
     let can_manage_access = admin.is_global_admin || admin.site_role.as_str() == "admin";
-    Html(admin::pages::users::render_list(&rows, None, &cs, &current_user_id, can_manage_access, admin.is_global_admin, admin.is_visiting_foreign_site, &admin.user.email)).into_response()
+    Html(admin::pages::users::render_list(&rows, None, &cs, &current_user_id, can_manage_access, admin.is_global_admin, admin.is_visiting_foreign_site, &admin.user.email, admin.is_global_admin || admin.site_role.as_str() == "admin")).into_response()
 }
 
 pub async fn new_user(
@@ -89,7 +89,7 @@ pub async fn new_user(
         sites,
         is_super_admin_target: false,
     };
-    Html(admin::pages::users::render_editor(&edit, None, &cs, admin.is_global_admin, admin.is_visiting_foreign_site, &admin.user.email)).into_response()
+    Html(admin::pages::users::render_editor(&edit, None, &cs, admin.is_global_admin, admin.is_visiting_foreign_site, &admin.user.email, admin.is_global_admin || admin.site_role.as_str() == "admin")).into_response()
 }
 
 pub async fn edit_user(
@@ -141,7 +141,7 @@ pub async fn edit_user(
         sites: vec![],
         is_super_admin_target,
     };
-    Html(admin::pages::users::render_editor(&edit, None, &cs, admin.is_global_admin, admin.is_visiting_foreign_site, &admin.user.email)).into_response()
+    Html(admin::pages::users::render_editor(&edit, None, &cs, admin.is_global_admin, admin.is_visiting_foreign_site, &admin.user.email, admin.is_global_admin || admin.site_role.as_str() == "admin")).into_response()
 }
 
 #[derive(Deserialize)]
@@ -188,6 +188,7 @@ pub async fn save_new(
                 admin.is_global_admin,
                 admin.is_visiting_foreign_site,
                 &admin.user.email,
+                admin.is_global_admin || admin.site_role.as_str() == "admin",
             )).into_response();
         }
     };
@@ -302,7 +303,7 @@ pub async fn save_new(
                 is_super_admin_target: false,
             };
             let msg = friendly_user_error(&e);
-            Html(admin::pages::users::render_editor(&edit, Some(&msg), &cs, admin.is_global_admin, admin.is_visiting_foreign_site, &admin.user.email)).into_response()
+            Html(admin::pages::users::render_editor(&edit, Some(&msg), &cs, admin.is_global_admin, admin.is_visiting_foreign_site, &admin.user.email, admin.is_global_admin || admin.site_role.as_str() == "admin")).into_response()
         }
     }
 }
@@ -357,6 +358,7 @@ pub async fn save_edit(
                     admin.is_global_admin,
                     admin.is_visiting_foreign_site,
                     &admin.user.email,
+                    admin.is_global_admin || admin.site_role.as_str() == "admin",
                 )).into_response();
             }
         }
@@ -409,7 +411,7 @@ pub async fn save_edit(
                 is_super_admin_target,
             };
             let msg = friendly_user_error(&e);
-            Html(admin::pages::users::render_editor(&edit, Some(&msg), &cs, admin.is_global_admin, admin.is_visiting_foreign_site, &admin.user.email)).into_response()
+            Html(admin::pages::users::render_editor(&edit, Some(&msg), &cs, admin.is_global_admin, admin.is_visiting_foreign_site, &admin.user.email, admin.is_global_admin || admin.site_role.as_str() == "admin")).into_response()
         }
     }
 }
@@ -458,6 +460,7 @@ pub async fn delete_user(
                 admin.is_global_admin,
                 admin.is_visiting_foreign_site,
                 &admin.user.email,
+                admin.is_global_admin || admin.site_role.as_str() == "admin",
             )).into_response();
         }};
     }
@@ -591,6 +594,7 @@ pub async fn site_access_page(
         admin.is_global_admin,
         admin.is_visiting_foreign_site,
         &admin.user.email,
+        admin.is_global_admin || admin.site_role.as_str() == "admin",
     )).into_response()
 }
 

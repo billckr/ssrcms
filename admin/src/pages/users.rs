@@ -50,7 +50,7 @@ pub struct UserEdit {
     pub is_super_admin_target: bool,
 }
 
-pub fn render_list(users: &[UserRow], flash: Option<&str>, current_site: &str, current_user_id: &str, can_manage_access: bool, is_global_admin: bool, visiting_foreign_site: bool, user_email: &str) -> String {
+pub fn render_list(users: &[UserRow], flash: Option<&str>, current_site: &str, current_user_id: &str, can_manage_access: bool, is_global_admin: bool, visiting_foreign_site: bool, user_email: &str, can_manage_users: bool) -> String {
     let rows = users.iter().map(|u| {
         let site_access_btn = if can_manage_access && u.role != "super_admin" {
             format!(
@@ -113,10 +113,10 @@ pub fn render_list(users: &[UserRow], flash: Option<&str>, current_site: &str, c
         rows = rows,
     );
 
-    crate::admin_page("Users", "/admin/users", flash, &content, current_site, is_global_admin, visiting_foreign_site, user_email)
+    crate::admin_page("Users", "/admin/users", flash, &content, current_site, is_global_admin, visiting_foreign_site, user_email, can_manage_users)
 }
 
-pub fn render_editor(user: &UserEdit, flash: Option<&str>, current_site: &str, is_global_admin: bool, visiting_foreign_site: bool, user_email: &str) -> String {
+pub fn render_editor(user: &UserEdit, flash: Option<&str>, current_site: &str, is_global_admin: bool, visiting_foreign_site: bool, user_email: &str, can_manage_users: bool) -> String {
     let title = if user.id.is_none() { "New User" } else { "Edit User" };
     let action = match &user.id {
         Some(id) => format!("/admin/users/{}/edit", id),
@@ -240,7 +240,7 @@ pub fn render_editor(user: &UserEdit, flash: Option<&str>, current_site: &str, i
         password_hint = password_hint,
     );
 
-    crate::admin_page(title, "/admin/users", flash, &content, current_site, is_global_admin, visiting_foreign_site, user_email)
+    crate::admin_page(title, "/admin/users", flash, &content, current_site, is_global_admin, visiting_foreign_site, user_email, can_manage_users)
 }
 
 // ── Site access management ──────────────────────────────────────────────────
@@ -268,6 +268,7 @@ pub fn render_site_access(
     is_global_admin: bool,
     visiting_foreign_site: bool,
     user_email: &str,
+    can_manage_users: bool,
 ) -> String {
     let assignment_rows = if data.assignments.is_empty() {
         "<tr><td colspan=\"3\"><em>No site assignments yet.</em></td></tr>".to_string()
@@ -356,6 +357,7 @@ pub fn render_site_access(
         is_global_admin,
         visiting_foreign_site,
         user_email,
+        can_manage_users,
     )
 }
 
