@@ -38,7 +38,6 @@ config.workspace = true
 dotenvy.workspace = true
 once_cell.workspace = true
 notify.workspace = true
-slug.workspace = true
 ammonia.workspace = true
 glob.workspace = true
 regex-lite.workspace = true

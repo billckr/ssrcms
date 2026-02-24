@@ -127,7 +127,7 @@ a:hover {
 
 .archive-header {
   background: linear-gradient(135deg, var(--orange-pale), white);
-  padding: 3rem 2rem;
+  padding: 1.5rem 2rem;
   border-left: 4px solid var(--orange-primary);
   margin-bottom: 2rem;
   border-radius: 8px;

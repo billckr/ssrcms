@@ -37,10 +37,15 @@ pub fn render_list(posts: &[PostRow], post_type: &str, flash: Option<&str>, curr
     let edit_prefix = if post_type == "page" { "/admin/pages" } else { "/admin/posts" };
 
     let rows = posts.iter().map(|p| {
-        let view_href = if p.post_type == "page" {
+        let path = if p.post_type == "page" {
             format!("/{}", p.slug)
         } else {
             format!("/blog/{}", p.slug)
+        };
+        let view_href = if current_site.is_empty() {
+            path
+        } else {
+            format!("//{}{}", current_site, path)
         };
         format!(
             r#"<tr>
@@ -168,7 +173,10 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, current_site: &str, i
       </div>
       <div class="form-group">
         <label for="slug">Slug</label>
-        <input type="text" id="slug" name="slug" value="{slug}">
+        <input type="text" id="slug" name="slug" value="{slug}"
+          onkeydown="if(event.key===' '){{ event.preventDefault(); var i=this.selectionStart; this.value=this.value.slice(0,i)+'-'+this.value.slice(this.selectionEnd); this.selectionStart=this.selectionEnd=i+1; }}"
+          onblur="this.value=this.value.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'');">
+        <small>Lowercase, hyphens only. Spaces auto-convert to hyphens.</small>
       </div>
       <div class="form-group">
         <label for="content">Content (HTML)</label>

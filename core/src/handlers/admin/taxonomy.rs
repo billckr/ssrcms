@@ -64,7 +64,19 @@ pub async fn create(
     let tax_type = if form.taxonomy == "category" { TaxonomyType::Category } else { TaxonomyType::Tag };
     let slug = form.slug
         .filter(|s| !s.is_empty())
-        .unwrap_or_else(|| slug::slugify(&form.name));
+        .unwrap_or_else(|| crate::utils::slugify::slugify(&form.name));
+
+    if !crate::utils::slugify::is_valid_slug(&slug) {
+        let tax_type2 = if form.taxonomy == "category" { TaxonomyType::Category } else { TaxonomyType::Tag };
+        let raw = crate::models::taxonomy::list(&state.db, admin.site_id, tax_type2).await.unwrap_or_default();
+        let mut items: Vec<TermItem> = Vec::new();
+        for t in &raw {
+            let count = crate::models::taxonomy::post_count(&state.db, t.id).await.unwrap_or(0);
+            items.push(TermItem { id: t.id.to_string(), name: t.name.clone(), slug: t.slug.clone(), post_count: count });
+        }
+        let cs = state.site_hostname(admin.site_id);
+        return Html(admin::pages::taxonomy::render(&items, &form.taxonomy, Some("Slug must be lowercase letters, numbers, and hyphens only — no spaces."), &cs, admin.is_global_admin, &admin.user.email)).into_response();
+    }
     let create = CreateTaxonomy {
         site_id: admin.site_id,
         name: form.name,

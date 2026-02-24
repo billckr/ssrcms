@@ -12,3 +12,4 @@ pub mod plugins;
 pub mod router;
 pub mod search;
 pub mod templates;
+pub mod utils;

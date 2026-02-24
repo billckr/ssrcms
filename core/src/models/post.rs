@@ -397,7 +397,7 @@ mod tests {
 }
 
 pub async fn create(pool: &PgPool, data: &CreatePost) -> Result<Post> {
-    let slug = data.slug.clone().unwrap_or_else(|| slug::slugify(&data.title));
+    let slug = data.slug.clone().unwrap_or_else(|| crate::utils::slugify::slugify(&data.title));
     let format = data.content_format.as_deref().unwrap_or("html");
     let sanitized_content = sanitize_content(&data.content);
 

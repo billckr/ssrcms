@@ -90,7 +90,7 @@ pub fn slugify(value: &Value, _args: &HashMap<String, Value>) -> Result<Value> {
     let s = value
         .as_str()
         .ok_or_else(|| tera::Error::msg("slugify requires a string value"))?;
-    Ok(Value::String(slug::slugify(s)))
+    Ok(Value::String(crate::utils::slugify::slugify(s)))
 }
 
 /// `{{ value | truncate_words(count=20) }}`

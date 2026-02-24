@@ -51,7 +51,10 @@ pub fn render(terms: &[TermItem], taxonomy: &str, flash: Option<&str>, current_s
       </div>
       <div class="form-group">
         <label for="slug">Slug (optional)</label>
-        <input type="text" id="slug" name="slug">
+        <input type="text" id="slug" name="slug"
+          onkeydown="if(event.key===' '){{ event.preventDefault(); var i=this.selectionStart; this.value=this.value.slice(0,i)+'-'+this.value.slice(this.selectionEnd); this.selectionStart=this.selectionEnd=i+1; }}"
+          onblur="this.value=this.value.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'');">
+        <small>Lowercase, hyphens only. Auto-generated from name if left blank.</small>
       </div>
       <input type="hidden" name="taxonomy" value="{taxonomy}">
       <button type="submit" class="btn btn-primary">Add {title_s}</button>

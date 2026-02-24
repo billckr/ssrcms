@@ -239,7 +239,7 @@ pub async fn save_new(
     let create = CreatePost {
         site_id: admin.site_id,
         title: form.title.clone(),
-        slug: form.slug.clone().filter(|s| !s.is_empty()),
+        slug: form.slug.clone().filter(|s| !s.is_empty()).map(|s| crate::utils::slugify::slugify(&s)),
         content: form.content.clone(),
         content_format: Some("html".into()),
         excerpt: form.excerpt.clone().filter(|s| !s.is_empty()),
@@ -305,7 +305,7 @@ pub async fn save_edit(
 
     let update = UpdatePost {
         title: Some(form.title.clone()),
-        slug: form.slug.clone().filter(|s| !s.is_empty()),
+        slug: form.slug.clone().filter(|s| !s.is_empty()).map(|s| crate::utils::slugify::slugify(&s)),
         content: Some(form.content.clone()),
         content_format: None,
         excerpt: form.excerpt.clone(),

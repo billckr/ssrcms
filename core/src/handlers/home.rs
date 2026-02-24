@@ -103,10 +103,21 @@ async fn render_home(
         }
     }
 
+    // Build category cloud for sidebar
+    let raw_cats = taxonomy::list(&state.db, Some(site_id), TaxonomyType::Category).await.unwrap_or_default();
+    let mut category_cloud = Vec::with_capacity(raw_cats.len());
+    for c in &raw_cats {
+        let count = taxonomy::post_count(&state.db, c.id).await.unwrap_or(0);
+        if count > 0 {
+            category_cloud.push(taxonomy::TermContext::from_taxonomy(c, base_url, count));
+        }
+    }
+
     ctx.insert("posts", &posts);
     ctx.insert("pagination", &pagination);
     ctx.insert("featured_post", &Option::<PostContext>::None);
     ctx.insert("tag_cloud", &tag_cloud);
+    ctx.insert("category_cloud", &category_cloud);
 
     // Pre-render hooks
     let hook_outputs = state.templates.render_hooks(
