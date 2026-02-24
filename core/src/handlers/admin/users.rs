@@ -62,7 +62,8 @@ pub async fn list(
         vec![]
     };
     let current_user_id = admin.user.id.to_string();
-    Html(admin::pages::users::render_list(&rows, None, &cs, &current_user_id, admin.is_global_admin, admin.is_visiting_foreign_site, &admin.user.email)).into_response()
+    let can_manage_access = admin.is_global_admin || admin.site_role.as_str() == "admin";
+    Html(admin::pages::users::render_list(&rows, None, &cs, &current_user_id, can_manage_access, admin.is_global_admin, admin.is_visiting_foreign_site, &admin.user.email)).into_response()
 }
 
 pub async fn new_user(
@@ -447,11 +448,13 @@ pub async fn delete_user(
             } else {
                 vec![]
             };
+            let can_manage_access = admin.is_global_admin || admin.site_role.as_str() == "admin";
             return Html(admin::pages::users::render_list(
                 &rows,
                 Some($msg),
                 &cs,
                 &current_user_id,
+                can_manage_access,
                 admin.is_global_admin,
                 admin.is_visiting_foreign_site,
                 &admin.user.email,
@@ -522,4 +525,152 @@ async fn fetch_site_options(state: &AppState) -> Vec<SiteOption> {
         .into_iter()
         .map(|s| SiteOption { id: s.id.to_string(), hostname: s.hostname })
         .collect()
+}
+
+// ── Site access management ────────────────────────────────────────────────────
+
+/// GET /admin/users/:id/site-access — manage which sites a user can access.
+/// Accessible to super_admin and site_admin only.
+pub async fn site_access_page(
+    State(state): State<AppState>,
+    admin: AdminUser,
+    Path(user_id): Path<Uuid>,
+) -> impl IntoResponse {
+    let is_site_admin = admin.site_role.as_str() == "admin" && !admin.is_global_admin;
+    if !admin.is_global_admin && !is_site_admin {
+        return Html("<h1>403 Forbidden</h1>".to_string()).into_response();
+    }
+    let cs = state.site_hostname(admin.site_id);
+
+    let target_user = match crate::models::user::get_by_id(&state.db, user_id).await {
+        Ok(u) => u,
+        Err(_) => return Html("<h1>User not found</h1>".to_string()).into_response(),
+    };
+
+    // Super admin cannot be assigned to individual sites.
+    if target_user.role == "super_admin" {
+        return Html("<h1>Super admins have global access and cannot be assigned to individual sites.</h1>".to_string()).into_response();
+    }
+
+    // Current site assignments for the target user.
+    let assignments = crate::models::site_user::list_for_user(&state.db, user_id)
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .map(|(s, role)| admin::pages::users::SiteAssignmentRow {
+            site_id: s.id.to_string(),
+            hostname: s.hostname.clone(),
+            role,
+        })
+        .collect::<Vec<_>>();
+
+    // Available sites for this admin to assign to: all for super_admin, owned for site_admin.
+    let available_sites: Vec<SiteOption> = if admin.is_global_admin {
+        fetch_site_options(&state).await
+    } else {
+        crate::models::site::list_by_owner(&state.db, admin.user.id)
+            .await
+            .unwrap_or_default()
+            .into_iter()
+            .map(|s| SiteOption { id: s.id.to_string(), hostname: s.hostname })
+            .collect()
+    };
+
+    let data = admin::pages::users::SiteAccessData {
+        user_id: user_id.to_string(),
+        display_name: target_user.display_name.clone(),
+        email: target_user.email.clone(),
+        assignments,
+        available_sites,
+    };
+
+    Html(admin::pages::users::render_site_access(
+        &data,
+        None,
+        &cs,
+        admin.is_global_admin,
+        admin.is_visiting_foreign_site,
+        &admin.user.email,
+    )).into_response()
+}
+
+#[derive(Deserialize)]
+pub struct SiteAccessAddForm {
+    pub site_id: String,
+    pub role: String,
+}
+
+/// POST /admin/users/:id/site-access/add — assign a user to a site.
+pub async fn add_site_access(
+    State(state): State<AppState>,
+    admin: AdminUser,
+    Path(user_id): Path<Uuid>,
+    Form(form): Form<SiteAccessAddForm>,
+) -> impl IntoResponse {
+    let is_site_admin = admin.site_role.as_str() == "admin" && !admin.is_global_admin;
+    if !admin.is_global_admin && !is_site_admin {
+        return (axum::http::StatusCode::FORBIDDEN, "Forbidden").into_response();
+    }
+    let Ok(site_uuid) = form.site_id.parse::<Uuid>() else {
+        return Redirect::to(&format!("/admin/users/{}/site-access", user_id)).into_response();
+    };
+
+    // For site_admin: verify they own the target site.
+    if !admin.is_global_admin {
+        let owned = crate::models::site::get_by_id(&state.db, site_uuid).await
+            .ok()
+            .and_then(|s| s.owner_user_id) == Some(admin.user.id);
+        if !owned {
+            return (axum::http::StatusCode::FORBIDDEN, "You do not own that site.").into_response();
+        }
+    }
+
+    // Sanitise role — only non-admin roles can be assigned by this UI.
+    let role = match form.role.as_str() {
+        "editor" | "author" | "subscriber" => form.role.as_str(),
+        _ => "editor",
+    };
+
+    if let Err(e) = crate::models::site_user::add(&state.db, site_uuid, user_id, role, Some(admin.user.id)).await {
+        tracing::warn!("failed to add user {} to site {}: {:?}", user_id, site_uuid, e);
+    }
+
+    Redirect::to(&format!("/admin/users/{}/site-access", user_id)).into_response()
+}
+
+#[derive(Deserialize)]
+pub struct SiteAccessRemoveForm {
+    pub site_id: String,
+}
+
+/// POST /admin/users/:id/site-access/remove — remove a user from a site.
+pub async fn remove_site_access(
+    State(state): State<AppState>,
+    admin: AdminUser,
+    Path(user_id): Path<Uuid>,
+    Form(form): Form<SiteAccessRemoveForm>,
+) -> impl IntoResponse {
+    let is_site_admin = admin.site_role.as_str() == "admin" && !admin.is_global_admin;
+    if !admin.is_global_admin && !is_site_admin {
+        return (axum::http::StatusCode::FORBIDDEN, "Forbidden").into_response();
+    }
+    let Ok(site_uuid) = form.site_id.parse::<Uuid>() else {
+        return Redirect::to(&format!("/admin/users/{}/site-access", user_id)).into_response();
+    };
+
+    // For site_admin: verify they own the target site.
+    if !admin.is_global_admin {
+        let owned = crate::models::site::get_by_id(&state.db, site_uuid).await
+            .ok()
+            .and_then(|s| s.owner_user_id) == Some(admin.user.id);
+        if !owned {
+            return (axum::http::StatusCode::FORBIDDEN, "You do not own that site.").into_response();
+        }
+    }
+
+    if let Err(e) = crate::models::site_user::remove(&state.db, site_uuid, user_id).await {
+        tracing::warn!("failed to remove user {} from site {}: {:?}", user_id, site_uuid, e);
+    }
+
+    Redirect::to(&format!("/admin/users/{}/site-access", user_id)).into_response()
 }

@@ -14,41 +14,61 @@ use admin::pages::sites::{SiteRow, SiteSettingsData};
 use tower_sessions::Session;
 
 /// GET /admin/sites — list sites.
-/// super_admin sees all sites. site_admin sees only sites where they are the owner.
+/// super_admin sees all sites (can manage all).
+/// site_admin sees owned sites (can manage) plus sites they're assigned to (switch only).
+/// editors/authors see only sites they're assigned to (switch only).
 pub async fn list(
     State(state): State<AppState>,
     admin: AdminUser,
 ) -> Html<String> {
     let is_site_admin = admin.site_role.as_str() == "admin" && !admin.is_global_admin;
-    if !admin.is_global_admin && !is_site_admin {
-        return Html("<h1>403 Forbidden</h1>".to_string());
-    }
+    // Require at minimum a logged-in admin user; subscribers/unauthenticated are blocked by AdminUser extractor.
+    // All roles that reach here may view the page.
     let cs = state.site_hostname(admin.site_id);
-    let sites = if admin.is_global_admin {
-        crate::models::site::list(&state.db).await.unwrap_or_else(|e| {
+    let can_create = admin.is_global_admin || is_site_admin;
+
+    // Build site list with per-row manage flag.
+    let mut rows: Vec<SiteRow> = Vec::new();
+
+    if admin.is_global_admin {
+        let sites = crate::models::site::list(&state.db).await.unwrap_or_else(|e| {
             tracing::warn!("failed to list sites: {:?}", e);
             vec![]
-        })
-    } else {
-        // site_admin: show sites they own.
-        crate::models::site::list_by_owner(&state.db, admin.user.id).await.unwrap_or_else(|e| {
-            tracing::warn!("failed to list owned sites for {}: {:?}", admin.user.id, e);
-            vec![]
-        })
-    };
-
-    let mut rows = Vec::with_capacity(sites.len());
-    for s in sites.iter() {
-        let post_count = crate::models::site::post_count(&state.db, s.id).await.unwrap_or(0);
-        rows.push(SiteRow {
-            id: s.id.to_string(),
-            hostname: s.hostname.clone(),
-            post_count,
-            is_default: admin.user.default_site_id == Some(s.id),
         });
+        for s in &sites {
+            let post_count = crate::models::site::post_count(&state.db, s.id).await.unwrap_or(0);
+            rows.push(SiteRow {
+                id: s.id.to_string(),
+                hostname: s.hostname.clone(),
+                post_count,
+                is_default: admin.user.default_site_id == Some(s.id),
+                can_manage: true,
+            });
+        }
+    } else {
+        // Non-global-admin: fetch all sites the user has any role on.
+        let site_roles = crate::models::site_user::list_for_user(&state.db, admin.user.id)
+            .await
+            .unwrap_or_else(|e| {
+                tracing::warn!("failed to list sites for user {}: {:?}", admin.user.id, e);
+                vec![]
+            });
+        for (s, site_role) in &site_roles {
+            let post_count = crate::models::site::post_count(&state.db, s.id).await.unwrap_or(0);
+            // can_manage if they are the owner of this site
+            let can_manage = s.owner_user_id == Some(admin.user.id);
+            rows.push(SiteRow {
+                id: s.id.to_string(),
+                hostname: s.hostname.clone(),
+                post_count,
+                is_default: admin.user.default_site_id == Some(s.id),
+                can_manage,
+            });
+            let _ = site_role; // used for future display
+        }
     }
 
-    Html(admin::pages::sites::render_list(&rows, None, &cs, admin.is_global_admin, admin.is_visiting_foreign_site, &admin.user.email))
+    Html(admin::pages::sites::render_list(&rows, None, &cs, can_create, admin.is_global_admin, admin.is_visiting_foreign_site, &admin.user.email))
 }
 
 /// GET /admin/sites/new — new site form.
