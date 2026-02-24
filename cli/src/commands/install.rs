@@ -144,7 +144,7 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
         sqlx::query(
             "INSERT INTO site_settings (site_id, key, value)
              VALUES ($1, $2, $3)
-             ON CONFLICT ON CONSTRAINT site_settings_site_key_idx DO NOTHING"
+             ON CONFLICT (site_id, key) WHERE site_id IS NOT NULL DO NOTHING"
         )
         .bind(site_id)
         .bind(key)
