@@ -159,7 +159,7 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
     if let Some(uid) = admin_id {
         sqlx::query(
             "INSERT INTO site_users (site_id, user_id, role)
-             VALUES ($1, $2, 'super_admin')
+             VALUES ($1, $2, 'admin')
              ON CONFLICT DO NOTHING"
         )
         .bind(site_id)
