@@ -16,6 +16,9 @@ pub enum UserRole {
     Author,
     #[sqlx(rename = "editor")]
     Editor,
+    /// Owns and administers one or more sites. Accesses admin via site_users role.
+    #[sqlx(rename = "site_admin")]
+    SiteAdmin,
     /// Agency-level super-admin. Unrestricted access to all sites; bypasses site_users.
     #[sqlx(rename = "super_admin")]
     SuperAdmin,
@@ -28,6 +31,7 @@ impl UserRole {
             UserRole::Subscriber => "subscriber",
             UserRole::Author => "author",
             UserRole::Editor => "editor",
+            UserRole::SiteAdmin => "site_admin",
             UserRole::SuperAdmin => "super_admin",
         }
     }
@@ -37,6 +41,7 @@ impl UserRole {
             "subscriber" => Some(UserRole::Subscriber),
             "author" => Some(UserRole::Author),
             "editor" => Some(UserRole::Editor),
+            "site_admin" => Some(UserRole::SiteAdmin),
             "super_admin" => Some(UserRole::SuperAdmin),
             _ => None,
         }

@@ -87,9 +87,9 @@ impl FromRequestParts<AppState> for AdminUser {
             .await
             .map_err(|_| AdminAuthError::NotAuthenticated)?;
 
-        // Super admin, editor, and author roles can access the admin.
+        // Super admin, site_admin, editor, and author roles can access the admin.
         match user.role.as_str() {
-            "super_admin" | "editor" | "author" => {}
+            "super_admin" | "site_admin" | "editor" | "author" => {}
             _ => return Err(AdminAuthError::Forbidden),
         }
 

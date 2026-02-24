@@ -38,33 +38,13 @@ pub async fn list(
             } else {
                 std::collections::HashMap::new()
             };
-        // Fetch IDs of all users who are admin on ANY site — used to label users
-        // not in the current site context as "Site Admin" rather than "editor".
-        let site_admins: std::collections::HashSet<uuid::Uuid> =
-            sqlx::query_scalar::<_, uuid::Uuid>(
-                "SELECT DISTINCT user_id FROM site_users WHERE role = 'admin'"
-            )
-            .fetch_all(&state.db)
-            .await
-            .unwrap_or_default()
-            .into_iter()
-            .collect();
-        users.iter().map(|u| {
-            let role = site_role_map.get(&u.id).cloned().unwrap_or_else(|| {
-                if site_admins.contains(&u.id) {
-                    "site_admin".to_string()
-                } else {
-                    u.role.clone()
-                }
-            });
-            UserRow {
-                id: u.id.to_string(),
-                username: u.username.clone(),
-                email: u.email.clone(),
-                role,
-                display_name: u.display_name.clone(),
-                is_protected: u.is_protected,
-            }
+        users.iter().map(|u| UserRow {
+            id: u.id.to_string(),
+            username: u.username.clone(),
+            email: u.email.clone(),
+            role: site_role_map.get(&u.id).cloned().unwrap_or_else(|| u.role.clone()),
+            display_name: u.display_name.clone(),
+            is_protected: u.is_protected,
         }).collect()
     } else if let Some(site_id) = admin.site_id {
         crate::models::site_user::list_for_site(&state.db, site_id).await.unwrap_or_else(|e| {
@@ -217,10 +197,11 @@ pub async fn save_new(
     } else {
         form.role.as_str()
     };
-    // users_role: what goes into users.role. "admin" is a site_users concept; "super_admin"
-    // is CLI-only. Both map to "editor" in the users table.
+    // users_role: what goes into users.role. "admin" is a site_users concept, stored
+    // as "site_admin" in users.role. "super_admin" is CLI-only.
     let users_role_str = match site_role {
-        "admin" | "super_admin" => "editor",
+        "admin" => "site_admin",
+        "super_admin" => "site_admin",
         other => other,
     };
     let role = parse_role(users_role_str);
@@ -376,13 +357,13 @@ pub async fn save_edit(
 
     // Determine users.role to write:
     // - super_admin targets keep their role (never downgraded via form)
-    // - "admin" is a site_users role concept; map to "editor" in users table
+    // - "admin" is a site_users role concept; map to "site_admin" in users table
     // - "super_admin" cannot be set via form (CLI-only)
     let new_users_role = if is_super_admin_target {
         parse_role("super_admin")
     } else {
         match form.role.as_str() {
-            "admin" | "super_admin" => parse_role("editor"),
+            "admin" | "super_admin" => parse_role("site_admin"),
             other => parse_role(other),
         }
     };
@@ -519,6 +500,7 @@ fn friendly_user_error(e: &crate::errors::AppError) -> String {
 fn parse_role(s: &str) -> UserRole {
     match s {
         "super_admin" => UserRole::SuperAdmin,
+        "site_admin" => UserRole::SiteAdmin,
         "editor" => UserRole::Editor,
         "author" => UserRole::Author,
         _ => UserRole::Subscriber,
