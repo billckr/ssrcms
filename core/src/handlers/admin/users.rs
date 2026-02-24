@@ -38,13 +38,33 @@ pub async fn list(
             } else {
                 std::collections::HashMap::new()
             };
-        users.iter().map(|u| UserRow {
-            id: u.id.to_string(),
-            username: u.username.clone(),
-            email: u.email.clone(),
-            role: site_role_map.get(&u.id).cloned().unwrap_or_else(|| u.role.clone()),
-            display_name: u.display_name.clone(),
-            is_protected: u.is_protected,
+        // Fetch IDs of all users who are admin on ANY site — used to label users
+        // not in the current site context as "Site Admin" rather than "editor".
+        let site_admins: std::collections::HashSet<uuid::Uuid> =
+            sqlx::query_scalar::<_, uuid::Uuid>(
+                "SELECT DISTINCT user_id FROM site_users WHERE role = 'admin'"
+            )
+            .fetch_all(&state.db)
+            .await
+            .unwrap_or_default()
+            .into_iter()
+            .collect();
+        users.iter().map(|u| {
+            let role = site_role_map.get(&u.id).cloned().unwrap_or_else(|| {
+                if site_admins.contains(&u.id) {
+                    "site_admin".to_string()
+                } else {
+                    u.role.clone()
+                }
+            });
+            UserRow {
+                id: u.id.to_string(),
+                username: u.username.clone(),
+                email: u.email.clone(),
+                role,
+                display_name: u.display_name.clone(),
+                is_protected: u.is_protected,
+            }
         }).collect()
     } else if let Some(site_id) = admin.site_id {
         crate::models::site_user::list_for_site(&state.db, site_id).await.unwrap_or_else(|e| {

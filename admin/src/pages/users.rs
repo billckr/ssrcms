@@ -4,11 +4,22 @@
 fn role_display(role: &str) -> &str {
     match role {
         "super_admin" => "Super Admin",
+        "site_admin"  => "Site Admin",
         "admin"       => "Admin",
         "editor"      => "Editor",
         "author"      => "Author",
         "subscriber"  => "Subscriber",
         other         => other,
+    }
+}
+
+/// Map a role value to an extra badge CSS class for colour coding.
+fn role_badge_class(role: &str) -> &str {
+    match role {
+        "super_admin" => "badge-super-admin",
+        "site_admin"  => "badge-site-admin",
+        "admin"       => "badge-admin",
+        _             => "",
     }
 }
 
@@ -63,7 +74,7 @@ pub fn render_list(users: &[UserRow], flash: Option<&str>, current_site: &str, c
               <td><a href="/admin/users/{id}/edit">{display_name}</a></td>
               <td>{username}</td>
               <td>{email}</td>
-              <td><span class="badge">{role}</span></td>
+              <td><span class="badge {badge_class}">{role}</span></td>
               <td class="actions">
                 <a href="/admin/users/{id}/edit" class="icon-btn" title="Edit">
                   <img src="/admin/static/icons/edit.svg" alt="Edit">
@@ -76,6 +87,7 @@ pub fn render_list(users: &[UserRow], flash: Option<&str>, current_site: &str, c
             username = crate::html_escape(&u.username),
             email = crate::html_escape(&u.email),
             role = crate::html_escape(role_display(&u.role)),
+            badge_class = role_badge_class(&u.role),
             delete_btn = delete_btn,
         )
     }).collect::<Vec<_>>().join("\n");
