@@ -129,6 +129,32 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
     .map_err(|e| anyhow::anyhow!("Failed to create initial site: {e}"))?;
     println!("Initial site '{}' created.", domain);
 
+    // Seed default site_settings so the admin panel shows real values on first login.
+    let site_url = format!("http://{domain}");
+    let settings_defaults: &[(&str, &str)] = &[
+        ("site_name",        &domain),
+        ("site_description", ""),
+        ("site_url",         &site_url),
+        ("site_language",    "en-US"),
+        ("active_theme",     "default"),
+        ("posts_per_page",   "10"),
+        ("date_format",      "%B %-d, %Y"),
+    ];
+    for (key, value) in settings_defaults {
+        sqlx::query(
+            "INSERT INTO site_settings (site_id, key, value)
+             VALUES ($1, $2, $3)
+             ON CONFLICT (site_id, key) DO NOTHING"
+        )
+        .bind(site_id)
+        .bind(key)
+        .bind(value)
+        .execute(&pool)
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to seed site_settings: {e}"))?;
+    }
+    println!("Default site settings seeded.");
+
     // Link the admin user to their site in site_users so the switcher works.
     if let Some(uid) = admin_id {
         sqlx::query(
