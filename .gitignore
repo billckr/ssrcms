@@ -35,6 +35,9 @@ logs/
 # Uploads directory (populated at runtime)
 uploads/
 
+# Per-site uploaded themes (runtime data, not source)
+themes/sites/*/
+
 # Tantivy search index (regenerated on startup)
 search-index/
 
