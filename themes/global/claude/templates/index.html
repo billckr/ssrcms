@@ -8,56 +8,83 @@
   <p class="site-description">{{ site.description }}</p>
 </div>
 
-{% if posts | length == 0 %}
-  <p class="no-posts">No posts yet.</p>
-{% else %}
-  <ol class="post-list" reversed>
-    {% for post in posts %}
-      <li class="post-item">
-        <article>
-          <header>
-            {% if post.featured_image %}
-              <a href="{{ post.url }}">
-                <img src="{{ post.featured_image.url }}" alt="{{ post.featured_image.alt_text }}" class="featured-image">
-              </a>
-            {% endif %}
-            <h2 class="post-title">
-              <a href="{{ post.url }}">{{ post.title }}</a>
-            </h2>
-            <div class="post-meta">
-              <time datetime="{{ post.published_at }}">
-                {% if post.published_at %}{{ post.published_at | date_format }}{% endif %}
-              </time>
-              <span class="post-author">by&nbsp;<a href="{{ post.author.url }}">{{ post.author.display_name }}</a></span>
-              {% if post.categories | length > 0 %}
-                <span class="post-categories">
-                  in {% for cat in post.categories %}<a href="{{ cat.url }}">{{ cat.name }}</a>{% if not loop.last %}, {% endif %}{% endfor %}
-                </span>
-              {% endif %}
-              <span class="reading-time">{{ post.reading_time }} min read</span>
-            </div>
-          </header>
-          <div class="post-excerpt">
-            <p>{{ post.excerpt }}</p>
-          </div>
-          <footer>
-            <a href="{{ post.url }}" class="read-more">Read more →</a>
-          </footer>
-        </article>
-      </li>
-    {% endfor %}
-  </ol>
+<div class="home-layout">
+  <div class="home-main">
+    {% if posts | length == 0 %}
+      <p class="no-posts">No posts yet.</p>
+    {% else %}
+      <ol class="post-list" reversed>
+        {% for post in posts %}
+          <li class="post-item">
+            <article>
+              <header>
+                {% if post.featured_image %}
+                  <a href="{{ post.url }}">
+                    <img src="{{ post.featured_image.url }}" alt="{{ post.featured_image.alt_text }}" class="featured-image">
+                  </a>
+                {% endif %}
+                <h2 class="post-title">
+                  <a href="{{ post.url }}">{{ post.title }}</a>
+                </h2>
+                <div class="post-meta">
+                  <time datetime="{{ post.published_at }}">
+                    {% if post.published_at %}{{ post.published_at | date_format }}{% endif %}
+                  </time>
+                  <span class="post-author">by&nbsp;<a href="{{ post.author.url }}">{{ post.author.display_name }}</a></span>
+                  {% if post.categories | length > 0 %}
+                    <span class="post-categories">
+                      in {% for cat in post.categories %}<a href="{{ cat.url }}">{{ cat.name }}</a>{% if not loop.last %}, {% endif %}{% endfor %}
+                    </span>
+                  {% endif %}
+                  <span class="reading-time">{{ post.reading_time }} min read</span>
+                </div>
+              </header>
+              <div class="post-excerpt">
+                <p>{{ post.excerpt }}</p>
+              </div>
+              <footer>
+                <a href="{{ post.url }}" class="read-more">Read more →</a>
+              </footer>
+            </article>
+          </li>
+        {% endfor %}
+      </ol>
 
-  {% if pagination %}
-    <nav class="pagination" aria-label="Page navigation">
-      {% if pagination.prev_url %}
-        <a href="{{ pagination.prev_url }}" class="pagination-prev">← Newer</a>
+      {% if pagination %}
+        <nav class="pagination" aria-label="Page navigation">
+          {% if pagination.prev_url %}
+            <a href="{{ pagination.prev_url }}" class="pagination-prev">← Newer</a>
+          {% endif %}
+          <span class="pagination-info">Page {{ pagination.current_page }} of {{ pagination.total_pages }}</span>
+          {% if pagination.next_url %}
+            <a href="{{ pagination.next_url }}" class="pagination-next">Older →</a>
+          {% endif %}
+        </nav>
       {% endif %}
-      <span class="pagination-info">Page {{ pagination.current_page }} of {{ pagination.total_pages }}</span>
-      {% if pagination.next_url %}
-        <a href="{{ pagination.next_url }}" class="pagination-next">Older →</a>
+    {% endif %}
+  </div>
+
+  <aside class="home-sidebar">
+    <div class="sidebar-widget">
+      <h3 class="sidebar-widget-title">Search</h3>
+      <form method="get" action="/search" class="search-form sidebar-search-form">
+        <input type="text" name="q" placeholder="Search posts..." class="search-input">
+        <button type="submit" class="search-button">Search</button>
+      </form>
+    </div>
+
+    <div class="sidebar-widget">
+      <h3 class="sidebar-widget-title">Tags</h3>
+      {% if tag_cloud | length > 0 %}
+      <div class="tag-cloud">
+        {% for tag in tag_cloud %}
+          <a href="{{ tag.url }}" class="tag">{{ tag.name }}</a>
+        {% endfor %}
+      </div>
+      {% else %}
+      <p class="sidebar-empty">No tags yet.</p>
       {% endif %}
-    </nav>
-  {% endif %}
-{% endif %}
+    </div>
+  </aside>
+</div>
 {% endblock content %}

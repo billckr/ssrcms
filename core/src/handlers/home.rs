@@ -11,6 +11,7 @@ use crate::app_state::AppState;
 use crate::errors::{AppError, Result};
 use crate::middleware::site::CurrentSite;
 use crate::models::post::{self, ListFilter, PostContext, PostStatus, PostType};
+use crate::models::taxonomy::{self, TaxonomyType};
 use crate::templates::context::{
     ContextBuilder, NavContext, PaginationContext, RequestContext, SessionContext, SiteContext,
 };
@@ -51,7 +52,9 @@ async fn render_home(
     site_id: Uuid,
     base_url: &str,
 ) -> Result<String> {
-    let per_page = state.settings.posts_per_page;
+    let per_page = state.get_site_by_id(site_id)
+        .map(|(_, s)| s.posts_per_page)
+        .unwrap_or(state.settings.posts_per_page);
     let offset = (query.page - 1) * per_page;
 
     let total = post::count(&state.db, Some(site_id), Some(PostStatus::Published), Some(PostType::Post)).await?;
@@ -90,9 +93,20 @@ async fn render_home(
     }
     .into_tera_context();
 
+    // Build tag cloud for sidebar
+    let raw_tags = taxonomy::list(&state.db, Some(site_id), TaxonomyType::Tag).await.unwrap_or_default();
+    let mut tag_cloud = Vec::with_capacity(raw_tags.len());
+    for t in &raw_tags {
+        let count = taxonomy::post_count(&state.db, t.id).await.unwrap_or(0);
+        if count > 0 {
+            tag_cloud.push(taxonomy::TermContext::from_taxonomy(t, base_url, count));
+        }
+    }
+
     ctx.insert("posts", &posts);
     ctx.insert("pagination", &pagination);
     ctx.insert("featured_post", &Option::<PostContext>::None);
+    ctx.insert("tag_cloud", &tag_cloud);
 
     // Pre-render hooks
     let hook_outputs = state.templates.render_hooks(

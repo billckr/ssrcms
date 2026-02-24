@@ -550,6 +550,73 @@ a:hover {
   color: white;
 }
 
+/* --- Home Layout (two-column with sidebar) --- */
+
+.home-layout {
+  display: flex;
+  gap: 2.5rem;
+  align-items: flex-start;
+}
+
+.home-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.home-sidebar {
+  width: 260px;
+  flex-shrink: 0;
+}
+
+.sidebar-widget {
+  background: linear-gradient(135deg, var(--orange-pale), white);
+  border-left: 4px solid var(--orange-primary);
+  border-radius: 8px;
+  padding: 1.5rem;
+  margin-top: 1.5rem;
+}
+
+.sidebar-widget:first-child {
+  margin-top: 0;
+}
+
+.sidebar-widget-title {
+  color: var(--orange-dark);
+  font-size: 1rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin: 0 0 1rem 0;
+}
+
+.sidebar-search-form {
+  flex-direction: column;
+  margin-top: 0;
+}
+
+.tag-cloud {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.25rem;
+}
+
+.sidebar-empty {
+  color: var(--text-light);
+  font-size: 0.9rem;
+  font-style: italic;
+  margin: 0;
+}
+
+@media (max-width: 768px) {
+  .home-layout {
+    flex-direction: column;
+  }
+
+  .home-sidebar {
+    width: 100%;
+  }
+}
+
 /* --- No Posts / Empty States --- */
 
 .no-posts {

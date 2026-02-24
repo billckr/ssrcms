@@ -71,5 +71,9 @@ pub async fn save_settings(
         tracing::error!("failed to save setting 'posts_per_page': {:?}", e);
     }
 
+    if let Err(e) = state.reload_site_cache().await {
+        tracing::error!("failed to reload site cache after settings save: {:?}", e);
+    }
+
     Redirect::to("/admin/settings").into_response()
 }
