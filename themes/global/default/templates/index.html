@@ -8,6 +8,23 @@
   <p class="site-description">{{ site.description }}</p>
 </div>
 
+{% if tag_cloud | length > 0 or category_cloud | length > 0 %}
+<div class="taxonomy-clouds">
+  {% if category_cloud | length > 0 %}
+  <div class="cloud-group">
+    <span class="cloud-label">Categories:</span>
+    {% for cat in category_cloud %}<a href="{{ cat.url }}" class="tag">{{ cat.name }}</a>{% endfor %}
+  </div>
+  {% endif %}
+  {% if tag_cloud | length > 0 %}
+  <div class="cloud-group">
+    <span class="cloud-label">Tags:</span>
+    {% for tag in tag_cloud %}<a href="{{ tag.url }}" class="tag">{{ tag.name }}</a>{% endfor %}
+  </div>
+  {% endif %}
+</div>
+{% endif %}
+
 {% if posts | length == 0 %}
   <p class="no-posts">No posts yet.</p>
 {% else %}

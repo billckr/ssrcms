@@ -20,6 +20,10 @@
         {% endfor %}
       </ul>
     </nav>
+    <form method="get" action="/search" class="header-search" role="search">
+      <input type="search" name="q" placeholder="Search…" aria-label="Search posts">
+      <button type="submit">Search</button>
+    </form>
   </header>
 
   <main class="site-main">
