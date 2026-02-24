@@ -34,7 +34,7 @@ impl SearchSchema {
     pub fn build() -> Self {
         let mut builder = Schema::builder();
 
-        let id = builder.add_text_field("id", STORED);
+        let id = builder.add_text_field("id", STRING | STORED);
         let site_id = builder.add_text_field("site_id", STORED);
         let title = builder.add_text_field("title", TEXT | STORED);
         let content = builder.add_text_field("content", TEXT);
