@@ -20,14 +20,29 @@ pub async fn list(
     }
     let cs = state.site_hostname(admin.site_id);
     let rows: Vec<UserRow> = if admin.is_global_admin {
-        crate::models::user::list(&state.db).await.unwrap_or_else(|e| {
+        // For super_admin: fetch all users, but show their role in the current
+        // site context (site_users) when available, else fall back to users.role.
+        let users = crate::models::user::list(&state.db).await.unwrap_or_else(|e| {
             tracing::warn!("failed to list users: {:?}", e);
             vec![]
-        }).iter().map(|u| UserRow {
+        });
+        // Build a site_users map for the current site if one is set.
+        let site_role_map: std::collections::HashMap<uuid::Uuid, String> =
+            if let Some(sid) = admin.site_id {
+                crate::models::site_user::list_for_site(&state.db, sid)
+                    .await
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(|(u, r)| (u.id, r))
+                    .collect()
+            } else {
+                std::collections::HashMap::new()
+            };
+        users.iter().map(|u| UserRow {
             id: u.id.to_string(),
             username: u.username.clone(),
             email: u.email.clone(),
-            role: u.role.clone(),
+            role: site_role_map.get(&u.id).cloned().unwrap_or_else(|| u.role.clone()),
             display_name: u.display_name.clone(),
             is_protected: u.is_protected,
         }).collect()
