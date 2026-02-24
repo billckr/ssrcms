@@ -88,13 +88,9 @@ pub async fn create(
         return Html(admin::pages::sites::render_new(Some("Hostname cannot be empty."), &cs, admin.is_global_admin, &admin.user.email)).into_response();
     }
 
-    let result = if admin.is_global_admin {
-        crate::models::site::create(&state.db, &hostname).await.map(|_| ())
-    } else {
-        crate::models::site::create_with_defaults(&state.db, &hostname, admin.user.id)
-            .await
-            .map(|_| ())
-    };
+    let result = crate::models::site::create_with_defaults(&state.db, &hostname, admin.user.id)
+        .await
+        .map(|_| ());
 
     match result {
         Ok(_) => {
