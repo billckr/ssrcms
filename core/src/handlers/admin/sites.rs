@@ -222,6 +222,20 @@ pub async fn save_site_settings(
 
     match result {
         Ok(_) => {
+            // Keep site_url in sync with the new hostname.
+            // site_url is always derived as http://{hostname} — port/https
+            // overrides are a super_admin concern handled via CLI or direct DB.
+            let derived_url = format!("http://{}", hostname);
+            let _ = sqlx::query(
+                "INSERT INTO site_settings (site_id, key, value)
+                 VALUES ($1, 'site_url', $2)
+                 ON CONFLICT (site_id, key) DO UPDATE SET value = EXCLUDED.value",
+            )
+            .bind(id)
+            .bind(&derived_url)
+            .execute(&state.db)
+            .await;
+
             if let Err(e) = state.reload_site_cache().await {
                 tracing::warn!("site cache reload failed after settings save: {:?}", e);
             }
