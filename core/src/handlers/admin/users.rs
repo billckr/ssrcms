@@ -213,6 +213,16 @@ pub async fn save_new(
                                     if let Err(e) = state.reload_site_cache().await {
                                         tracing::warn!("site cache reload failed: {:?}", e);
                                     }
+                                    // If assigning as admin, claim ownership of the new site.
+                                    if site_role == "admin" {
+                                        let _ = sqlx::query(
+                                            "UPDATE sites SET owner_user_id = $1 WHERE id = $2 AND owner_user_id IS NULL",
+                                        )
+                                        .bind(new_user.id)
+                                        .bind(site.id)
+                                        .execute(&state.db)
+                                        .await;
+                                    }
                                     Some(site.id)
                                 }
                                 Err(e) => {
@@ -232,6 +242,16 @@ pub async fn save_new(
                 if let Some(sid) = site_id {
                     if let Err(e) = crate::models::site_user::add(&state.db, sid, new_user.id, site_role, None).await {
                         tracing::warn!("failed to add user {} to site {}: {:?}", new_user.id, sid, e);
+                    }
+                    // If assigning as admin and the site has no owner yet, claim ownership.
+                    if site_role == "admin" {
+                        let _ = sqlx::query(
+                            "UPDATE sites SET owner_user_id = $1 WHERE id = $2 AND owner_user_id IS NULL",
+                        )
+                        .bind(new_user.id)
+                        .bind(sid)
+                        .execute(&state.db)
+                        .await;
                     }
                 }
             } else {
