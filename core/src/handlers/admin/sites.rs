@@ -44,7 +44,7 @@ pub async fn list(
             id: s.id.to_string(),
             hostname: s.hostname.clone(),
             post_count,
-            is_default: admin.is_global_admin && i == 0,
+            is_default: if admin.is_global_admin { i == 0 } else { s.owner_user_id == Some(admin.user.id) },
         });
     }
 
