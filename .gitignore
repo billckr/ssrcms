@@ -32,6 +32,11 @@ synaptic.pid
 .synaptic.pid
 logs/
 
+# Local deployment and dev artifacts
+*.sql
+Caddyfile
+synaptic-signals.service
+
 # Uploads directory (populated at runtime)
 uploads/
 

@@ -1,0 +1,18 @@
+● Search is fully set up. Here's a complete picture of what's in place:
+
+  Backend (all wired)
+  - Tantivy index (core/src/search/) — 6-field schema: id, site_id, title, content, slug, post_type
+  - /search?q=... route → search::search handler, scoped to the current site via CurrentSite
+  - Incremental indexing — index_post() called on every publish/update in the admin handlers; delete_post() called on trash/delete
+  - Startup rebuild — rebuild_index() runs as a background task on boot, indexes all published posts from the DB
+  - Site isolation — search queries pass site_id to filter results to the current site
+
+  Frontend
+  - search.html template exists in both the default and claude themes — shows a search form, result count, and post list with excerpts
+
+  One thing to be aware of: the index is rebuilt on startup from the DB, but it's in-memory/on-disk per process and not shared across
+  restarts without the rebuild. That's fine — the startup rebuild handles it.
+
+  To test it, visit http://localhost:3000/search?q=yourterm and it should return results. If you've recently added posts via the
+  admin, they'll be in the index immediately (incremental indexing). Older posts will be there after the next app restart (rebuild on
+  boot)
