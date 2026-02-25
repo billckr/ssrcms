@@ -25,7 +25,7 @@ pub fn render_forms_list(forms: &[FormSummaryRow], flash: Option<&str>, ctx: &Pa
     } else {
         forms.iter().map(|f| {
             let unread = if f.unread_count > 0 {
-                format!(r#" <span class="badge-unread">{} new</span>"#, f.unread_count)
+                format!(r#" <span class="badge-unread badge-unread-pulse">{}</span>"#, f.unread_count)
             } else {
                 String::new()
             };

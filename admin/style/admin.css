@@ -78,6 +78,35 @@ a:hover { text-decoration: underline; }
 .badge-super-admin { background: #1e293b; color: #f8fafc; }
 .badge-site-admin  { background: #ede9fe; color: #5b21b6; }
 .badge-admin       { background: #dbeafe; color: #1e40af; }
+.badge-unread {
+  display: inline-flex;
+  align-items: center;
+  gap: .3rem;
+  padding: .15rem .55rem;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .02em;
+  background: #4f46e5;
+  color: #fff;
+  vertical-align: middle;
+  line-height: 1.4;
+  box-shadow: 0 0 0 2px #e0e7ff;
+}
+.badge-unread::before {
+  content: '';
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #a5b4fc;
+  flex-shrink: 0;
+}
+@keyframes badge-pulse {
+  0%, 100% { box-shadow: 0 0 0 2px #e0e7ff; }
+  50%       { box-shadow: 0 0 0 4px #c7d2fe; }
+}
+.badge-unread-pulse { animation: badge-pulse 2s ease-in-out infinite; }
 
 /* Buttons */
 .btn { display: inline-flex; align-items: center; justify-content: center; padding: .4rem .9rem; border-radius: var(--radius); border: 1px solid var(--border); cursor: pointer; font-size: 13px; background: var(--surface); color: var(--text); text-decoration: none; transition: box-shadow .15s, transform .15s; touch-action: manipulation; white-space: nowrap; user-select: none; -webkit-user-select: none; will-change: box-shadow, transform; }
