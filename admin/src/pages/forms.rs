@@ -24,14 +24,9 @@ pub fn render_forms_list(forms: &[FormSummaryRow], flash: Option<&str>, ctx: &Pa
         r#"<tr><td colspan="5" class="empty-state">No form submissions yet.</td></tr>"#.to_string()
     } else {
         forms.iter().map(|f| {
-            let unread = if f.unread_count > 0 {
-                format!(r#" <span class="badge-unread badge-unread-pulse" style="margin-left:.4rem">{}</span>"#, f.unread_count)
-            } else {
-                String::new()
-            };
             format!(
                 r#"<tr>
-  <td><a href="/admin/forms/{name}">{name}</a>{unread}</td>
+  <td><a href="/admin/forms/{name}">{name}</a></td>
   <td>{count}</td>
   <td>{last}</td>
   <td>
@@ -42,7 +37,6 @@ pub fn render_forms_list(forms: &[FormSummaryRow], flash: Option<&str>, ctx: &Pa
                 name = html_escape(&f.form_name),
                 count = f.submission_count,
                 last = html_escape(&f.last_submitted_at),
-                unread = unread,
             )
         }).collect::<Vec<_>>().join("\n")
     };
@@ -93,16 +87,10 @@ pub fn render_form_detail(
                 format!("<td>{}</td>", html_escape(val))
             }).collect::<Vec<_>>().join("");
 
-            let unread_marker = if s.read_at.is_none() {
-                r#" <span class="badge-unread">new</span>"#
-            } else {
-                ""
-            };
-
             format!(
                 r#"<tr>
   {cells}
-  <td>{submitted}{unread}</td>
+  <td>{submitted}</td>
   <td>{ip}</td>
   <td>
     <form method="POST" action="/admin/forms/{fname}/{id}/delete"
@@ -113,7 +101,6 @@ pub fn render_form_detail(
 </tr>"#,
                 cells = cells,
                 submitted = html_escape(&s.submitted_at),
-                unread = unread_marker,
                 ip = html_escape(s.ip_address.as_deref().unwrap_or("—")),
                 fname = html_escape(form_name),
                 id = html_escape(&s.id),
