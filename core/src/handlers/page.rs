@@ -51,7 +51,9 @@ async fn render_page(
         request: RequestContext {
             url: format!("{}{}", base_url, uri.path()),
             path: uri.path().to_string(),
-            query: std::collections::HashMap::new(),
+            query: uri.query()
+                .map(parse_query_string)
+                .unwrap_or_default(),
         },
         session: SessionContext { is_logged_in: false, user: None },
         nav: NavContext::default(),
@@ -77,4 +79,37 @@ async fn render_page(
         .unwrap_or_else(|| "page.html".to_string());
 
     state.templates.render_for_theme(&theme, &template_name, &ctx)
+}
+/// Parse `key=value&key2=value2` query strings into a HashMap.
+/// Percent-decoding is intentionally minimal (+ → space, %XX → char).
+fn parse_query_string(raw: &str) -> std::collections::HashMap<String, String> {
+    raw.split('&')
+        .filter_map(|pair| {
+            let mut parts = pair.splitn(2, '=');
+            let key = parts.next().filter(|k| !k.is_empty())?;
+            let val = parts.next().unwrap_or("");
+            Some((url_decode(key), url_decode(val)))
+        })
+        .collect()
+}
+
+/// Minimal percent-decode: replaces `+` with space and `%XX` hex pairs.
+fn url_decode(s: &str) -> String {
+    let s = s.replace('+', " ");
+    let mut out = String::with_capacity(s.len());
+    let mut chars = s.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c == '%' {
+            let h1 = chars.next();
+            let h2 = chars.next();
+            if let (Some(a), Some(b)) = (h1, h2) {
+                if let Ok(byte) = u8::from_str_radix(&format!("{}{}", a, b), 16) {
+                    out.push(byte as char);
+                    continue;
+                }
+            }
+        }
+        out.push(c);
+    }
+    out
 }

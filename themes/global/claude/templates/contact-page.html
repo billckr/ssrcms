@@ -1,0 +1,165 @@
+{% extends "base.html" %}
+
+{% block title %}{{ page.title }} — {{ site.name }}{% endblock title %}
+
+{% block content %}
+<article class="single-page contact-page">
+  <header class="page-header">
+    <h1 class="page-title">{{ page.title }}</h1>
+  </header>
+
+  {% if page.content %}
+  <div class="page-content">
+    {{ page.content | safe }}
+  </div>
+  {% endif %}
+
+  {% if request.query.submitted %}
+  <div class="contact-success" role="alert">
+    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"
+         fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+         aria-hidden="true">
+      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+      <polyline points="22 4 12 14.01 9 11.01"/>
+    </svg>
+    Thanks! Your message has been sent. We'll be in touch soon.
+  </div>
+  {% else %}
+  <form class="contact-form" method="POST" action="/form/contact">
+    <!-- Honeypot — hidden from real users, bots fill it in -->
+    <div class="contact-honeypot" aria-hidden="true" tabindex="-1">
+      <label for="_hp">Leave this blank</label>
+      <input type="text" id="_hp" name="_honeypot" tabindex="-1" autocomplete="off">
+    </div>
+
+    <div class="contact-field">
+      <label for="cf-name">Your name <span class="contact-required" aria-hidden="true">*</span></label>
+      <input type="text" id="cf-name" name="name" required autocomplete="name"
+             placeholder="Jane Smith">
+    </div>
+
+    <div class="contact-field">
+      <label for="cf-email">Email address <span class="contact-required" aria-hidden="true">*</span></label>
+      <input type="email" id="cf-email" name="email" required autocomplete="email"
+             placeholder="jane@example.com">
+    </div>
+
+    <div class="contact-field">
+      <label for="cf-subject">Subject</label>
+      <input type="text" id="cf-subject" name="subject" placeholder="How can we help?">
+    </div>
+
+    <div class="contact-field">
+      <label for="cf-message">Message <span class="contact-required" aria-hidden="true">*</span></label>
+      <textarea id="cf-message" name="message" rows="6" required
+                placeholder="Write your message here…"></textarea>
+    </div>
+
+    <button type="submit" class="contact-submit">Send message</button>
+  </form>
+  {% endif %}
+</article>
+
+<style>
+/* ── Contact page ── */
+.contact-page { max-width: 640px; }
+
+.contact-form {
+  margin-top: 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.contact-honeypot {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.contact-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.contact-field label {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-text, #1a1a2e);
+}
+
+.contact-required {
+  color: #e63946;
+}
+
+.contact-field input,
+.contact-field textarea {
+  padding: 0.6rem 0.85rem;
+  font-size: 1rem;
+  font-family: inherit;
+  border: 1.5px solid var(--color-border, #d1d5db);
+  border-radius: 6px;
+  background: var(--color-surface, #fff);
+  color: var(--color-text, #1a1a2e);
+  transition: border-color 0.15s, box-shadow 0.15s;
+  outline: none;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.contact-field input:focus,
+.contact-field textarea:focus {
+  border-color: var(--color-primary, #2b6cb0);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary, #2b6cb0) 15%, transparent);
+}
+
+.contact-field textarea {
+  resize: vertical;
+  min-height: 8rem;
+}
+
+.contact-submit {
+  align-self: flex-start;
+  padding: 0.65rem 1.5rem;
+  font-size: 1rem;
+  font-weight: 600;
+  font-family: inherit;
+  background: var(--color-primary, #2b6cb0);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.1s;
+}
+
+.contact-submit:hover {
+  background: var(--color-primary-dark, #1a4a8a);
+}
+
+.contact-submit:active {
+  transform: scale(0.98);
+}
+
+.contact-success {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-top: 1.5rem;
+  padding: 1rem 1.25rem;
+  background: #f0fdf4;
+  border: 1.5px solid #86efac;
+  border-radius: 8px;
+  color: #166534;
+  font-weight: 500;
+}
+
+.contact-success svg {
+  flex-shrink: 0;
+  color: #16a34a;
+}
+</style>
+{% endblock content %}
