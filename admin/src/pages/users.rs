@@ -35,6 +35,9 @@ pub struct UserRow {
     pub role: String,
     pub display_name: String,
     pub is_protected: bool,
+    /// True when the user's global role is super_admin.
+    /// Used to hide the site-access button regardless of site role display.
+    pub is_super_admin: bool,
 }
 
 pub struct UserEdit {
@@ -52,7 +55,7 @@ pub struct UserEdit {
 
 pub fn render_list(users: &[UserRow], flash: Option<&str>, current_site: &str, current_user_id: &str, can_manage_access: bool, is_global_admin: bool, visiting_foreign_site: bool, user_email: &str, can_manage_users: bool) -> String {
     let rows = users.iter().map(|u| {
-        let site_access_btn = if can_manage_access && u.role != "super_admin" {
+        let site_access_btn = if can_manage_access && !u.is_super_admin {
             format!(
                 r#"<a href="/admin/users/{id}/site-access" class="icon-btn" title="Manage site access">
                   <img src="/admin/static/icons/users.svg" alt="Site Access">

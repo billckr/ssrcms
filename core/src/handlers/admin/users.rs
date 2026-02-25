@@ -45,6 +45,7 @@ pub async fn list(
             role: site_role_map.get(&u.id).cloned().unwrap_or_else(|| u.role.clone()),
             display_name: u.display_name.clone(),
             is_protected: u.is_protected,
+            is_super_admin: u.role == "super_admin",
         }).collect()
     } else if let Some(site_id) = admin.site_id {
         crate::models::site_user::list_for_site(&state.db, site_id).await.unwrap_or_else(|e| {
@@ -57,6 +58,7 @@ pub async fn list(
             role: site_role.clone(),
             display_name: u.display_name.clone(),
             is_protected: u.is_protected,
+            is_super_admin: u.role == "super_admin",
         }).collect()
     } else {
         vec![]
@@ -436,6 +438,7 @@ pub async fn delete_user(
                         role: u.role.clone(),
                         display_name: u.display_name.clone(),
                         is_protected: u.is_protected,
+                        is_super_admin: u.role == "super_admin",
                     }).collect()
             } else if let Some(site_id) = admin.site_id {
                 crate::models::site_user::list_for_site(&state.db, site_id).await.unwrap_or_default()
@@ -446,6 +449,7 @@ pub async fn delete_user(
                         role: site_role,
                         display_name: u.display_name.clone(),
                         is_protected: u.is_protected,
+                        is_super_admin: u.role == "super_admin",
                     }).collect()
             } else {
                 vec![]
