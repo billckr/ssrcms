@@ -7,6 +7,7 @@ pub struct FormSummaryRow {
     pub submission_count: i64,
     pub last_submitted_at: String,
     pub unread_count: i64,
+    pub blocked: bool,
 }
 
 pub struct SubmissionRow {
@@ -24,19 +25,43 @@ pub fn render_forms_list(forms: &[FormSummaryRow], flash: Option<&str>, ctx: &Pa
         r#"<tr><td colspan="5" class="empty-state">No form submissions yet.</td></tr>"#.to_string()
     } else {
         forms.iter().map(|f| {
+            let blocked_badge = if f.blocked {
+                r#" <span class="badge badge-danger" title="Not accepting submissions">Blocked</span>"#
+            } else { "" };
+            let block_btn = if f.blocked {
+                format!(
+                    r#"<form method="POST" action="/admin/forms/{}/toggle-block" style="display:inline">
+  <button class="btn btn-sm btn-secondary" type="submit">Unblock</button>
+</form>"#,
+                    html_escape(&f.form_name)
+                )
+            } else {
+                format!(
+                    r#"<form method="POST" action="/admin/forms/{}/toggle-block" style="display:inline"
+      onsubmit="return confirm('Block this form? New submissions will be silently discarded.')">
+  <button class="btn btn-sm btn-danger" type="submit">Block</button>
+</form>"#,
+                    html_escape(&f.form_name)
+                )
+            };
+            let row_class = if f.blocked { " class=\"muted\"" } else { "" };
             format!(
-                r#"<tr>
-  <td><a href="/admin/forms/{name}">{name}</a></td>
+                r#"<tr{row_class}>
+  <td><a href="/admin/forms/{name}">{name}</a>{blocked_badge}</td>
   <td>{count}</td>
   <td>{last}</td>
   <td>
     <a href="/admin/forms/{name}" class="btn btn-sm btn-secondary">View</a>
     <a href="/admin/forms/{name}/export" class="btn btn-sm btn-secondary">CSV</a>
+    {block_btn}
   </td>
 </tr>"#,
+                row_class = row_class,
                 name = html_escape(&f.form_name),
                 count = f.submission_count,
                 last = html_escape(&f.last_submitted_at),
+                blocked_badge = blocked_badge,
+                block_btn = block_btn,
             )
         }).collect::<Vec<_>>().join("\n")
     };

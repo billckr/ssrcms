@@ -42,11 +42,16 @@ pub async fn list_forms(
 
     match form_submission::list_forms(&state.db, site_id).await {
         Ok(summaries) => {
-            let rows: Vec<FormSummaryRow> = summaries.into_iter().map(|s| FormSummaryRow {
-                form_name: s.form_name,
-                submission_count: s.submission_count,
-                last_submitted_at: s.last_submitted_at.format("%Y-%m-%d %H:%M UTC").to_string(),
-                unread_count: s.unread_count,
+            let blocked = form_submission::blocked_names(&state.db, site_id).await;
+            let rows: Vec<FormSummaryRow> = summaries.into_iter().map(|s| {
+                let is_blocked = blocked.contains(&s.form_name);
+                FormSummaryRow {
+                    form_name: s.form_name,
+                    submission_count: s.submission_count,
+                    last_submitted_at: s.last_submitted_at.format("%Y-%m-%d %H:%M UTC").to_string(),
+                    unread_count: s.unread_count,
+                    blocked: is_blocked,
+                }
             }).collect();
             Html(admin::pages::forms::render_forms_list(&rows, None, &ctx)).into_response()
         }
@@ -209,4 +214,22 @@ fn csv_escape(s: &str) -> String {
     } else {
         s.to_string()
     }
+}
+
+// ── block / unblock a form ────────────────────────────────────────────────────
+
+pub async fn toggle_block(
+    State(state): State<AppState>,
+    admin: AdminUser,
+    Path(name): Path<String>,
+) -> Response {
+    if let Err(r) = require_forms_cap(&admin) { return r; }
+    let site_id = match require_site_id(&admin) { Ok(id) => id, Err(r) => return r };
+
+    if form_submission::is_blocked(&state.db, site_id, &name).await {
+        let _ = form_submission::unblock(&state.db, site_id, &name).await;
+    } else {
+        let _ = form_submission::block(&state.db, site_id, &name).await;
+    }
+    Redirect::to("/admin/forms").into_response()
 }

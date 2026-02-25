@@ -124,6 +124,49 @@ pub async fn count_unread(pool: &PgPool, site_id: Uuid) -> Result<i64> {
     Ok(row.0)
 }
 
+/// Check whether a form is currently blocked from accepting submissions.
+pub async fn is_blocked(pool: &PgPool, site_id: Uuid, form_name: &str) -> bool {
+    sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM form_blocks WHERE site_id = $1 AND form_name = $2)",
+    )
+    .bind(site_id)
+    .bind(form_name)
+    .fetch_one(pool)
+    .await
+    .unwrap_or(false)
+}
+
+/// Block a form — future submissions will be silently rejected.
+pub async fn block(pool: &PgPool, site_id: Uuid, form_name: &str) -> Result<()> {
+    sqlx::query(
+        "INSERT INTO form_blocks (site_id, form_name) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+    )
+    .bind(site_id)
+    .bind(form_name)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+/// Unblock a form — resume accepting submissions.
+pub async fn unblock(pool: &PgPool, site_id: Uuid, form_name: &str) -> Result<()> {
+    sqlx::query("DELETE FROM form_blocks WHERE site_id = $1 AND form_name = $2")
+        .bind(site_id)
+        .bind(form_name)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+/// Return all blocked form names for a site.
+pub async fn blocked_names(pool: &PgPool, site_id: Uuid) -> Vec<String> {
+    sqlx::query_scalar("SELECT form_name FROM form_blocks WHERE site_id = $1")
+        .bind(site_id)
+        .fetch_all(pool)
+        .await
+        .unwrap_or_default()
+}
+
 /// Mark all submissions for a form as read.
 pub async fn mark_all_read(pool: &PgPool, site_id: Uuid, form_name: &str) -> Result<()> {
     sqlx::query(

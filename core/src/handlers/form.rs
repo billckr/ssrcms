@@ -16,7 +16,7 @@ use axum::{
 
 use crate::app_state::AppState;
 use crate::middleware::site::CurrentSite;
-use crate::models::form_submission::{create, CreateFormSubmission};
+use crate::models::form_submission::{self, create, CreateFormSubmission};
 
 /// `POST /form/{name}` — store a form submission and redirect.
 pub async fn submit(
@@ -31,6 +31,16 @@ pub async fn submit(
         .into_iter()
         .filter(|(k, _)| !k.starts_with('_'))
         .collect();
+
+    // If this form has been administratively blocked, redirect with ?blocked=1
+    if form_submission::is_blocked(&state.db, current_site.site.id, &name).await {
+        let referer = headers
+            .get(axum::http::header::REFERER)
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("/");
+        let base = referer.split('?').next().unwrap_or(referer);
+        return Redirect::to(&format!("{}?blocked=1", base));
+    }
 
     // Skip storing empty submissions (all fields blank after stripping)
     let is_empty = data.values().all(|v| v.trim().is_empty());

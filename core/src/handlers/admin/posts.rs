@@ -503,7 +503,13 @@ fn scan_templates(state: &AppState, site_id: Option<Uuid>) -> Vec<String> {
         return vec![];
     }
 
-    // Walk recursively, collect all .html files except base.html
+    // Walk recursively, collect all .html files except reserved theme templates.
+    // Standard theme templates (index, archive, single, search, 404, page, base, partials/*)
+    // require Tera context variables that the page renderer does not supply, so they must
+    // not appear as selectable page template overrides.
+    const EXCLUDED: &[&str] = &[
+        "base", "page", "index", "single", "archive", "search", "404",
+    ];
     let mut results = Vec::new();
     fn walk(dir: &std::path::Path, base: &std::path::Path, results: &mut Vec<String>) {
         let Ok(entries) = std::fs::read_dir(dir) else { return };
@@ -514,11 +520,11 @@ fn scan_templates(state: &AppState, site_id: Option<Uuid>) -> Vec<String> {
             } else if path.extension().and_then(|e| e.to_str()) == Some("html") {
                 if let Ok(rel) = path.strip_prefix(base) {
                     let s = rel.to_string_lossy();
-                    // Strip .html extension
                     let without_ext = s.trim_end_matches(".html").to_string();
-                    // Skip base.html (layout) and the top-level defaults
-                    if without_ext != "base" {
-                        results.push(without_ext.replace('\\', "/"));
+                    let normalized = without_ext.replace('\\', "/");
+                    // Skip reserved templates and anything inside partials/.
+                    if !EXCLUDED.contains(&normalized.as_str()) && !normalized.starts_with("partials/") {
+                        results.push(normalized);
                     }
                 }
             }

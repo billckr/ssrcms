@@ -120,6 +120,7 @@ pub fn build(
         .route("/admin/forms/{name}/{id}/delete", post(admin_forms::delete_submission))
         .route("/admin/forms/{name}/delete-all", post(admin_forms::delete_all))
         .route("/admin/forms/{name}/export", get(admin_forms::export_csv))
+        .route("/admin/forms/{name}/toggle-block", post(admin_forms::toggle_block))
     // ── Static files ───────────────────────────────────────────────────
         .nest_service("/uploads", uploads_service)
         .route("/theme/static/{*path}", get(theme_static::serve))
