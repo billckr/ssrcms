@@ -26,7 +26,8 @@ pub async fn settings(
         date_format: s.date_format.clone(),
     };
     let cs = state.site_hostname(admin.site_id);
-    Html(admin::pages::settings::render(&data, None, &cs, admin.is_global_admin, admin.is_visiting_foreign_site, &admin.user.email, admin.is_global_admin || admin.site_role.as_str() == "admin"))
+    let ctx = super::page_ctx(&admin, &cs);
+    Html(admin::pages::settings::render(&data, None, &ctx))
 }
 
 #[derive(Deserialize)]

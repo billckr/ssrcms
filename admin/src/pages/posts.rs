@@ -30,7 +30,7 @@ pub struct TermOption {
     pub name: String,
 }
 
-pub fn render_list(posts: &[PostRow], post_type: &str, flash: Option<&str>, current_site: &str, is_global_admin: bool, visiting_foreign_site: bool, user_email: &str, can_manage_users: bool) -> String {
+pub fn render_list(posts: &[PostRow], post_type: &str, flash: Option<&str>, ctx: &crate::PageContext) -> String {
     let title = if post_type == "page" { "Pages" } else { "Posts" };
     let new_label = if post_type == "page" { "New Page" } else { "New Post" };
     let new_href = if post_type == "page" { "/admin/pages/new" } else { "/admin/posts/new" };
@@ -42,10 +42,10 @@ pub fn render_list(posts: &[PostRow], post_type: &str, flash: Option<&str>, curr
         } else {
             format!("/blog/{}", p.slug)
         };
-        let view_href = if current_site.is_empty() {
+        let view_href = if ctx.current_site.is_empty() {
             path
         } else {
-            format!("//{}{}", current_site, path)
+            format!("//{}{}", ctx.current_site, path)
         };
         format!(
             r#"<tr>
@@ -87,10 +87,10 @@ pub fn render_list(posts: &[PostRow], post_type: &str, flash: Option<&str>, curr
     );
 
     let path = if post_type == "page" { "/admin/pages" } else { "/admin/posts" };
-    crate::admin_page(title, path, flash, &content, current_site, is_global_admin, visiting_foreign_site, user_email, can_manage_users)
+    crate::admin_page(title, path, flash, &content, ctx)
 }
 
-pub fn render_editor(post: &PostEdit, flash: Option<&str>, current_site: &str, is_global_admin: bool, visiting_foreign_site: bool, user_email: &str, can_manage_users: bool) -> String {
+pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageContext) -> String {
     let is_new = post.id.is_none();
     let title = if is_new {
         if post.post_type == "page" { "New Page".to_string() } else { "New Post".to_string() }
@@ -251,7 +251,7 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, current_site: &str, i
     );
 
     let path = if post.post_type == "page" { "/admin/pages" } else { "/admin/posts" };
-    crate::admin_page(&title, path, flash, &content, current_site, is_global_admin, visiting_foreign_site, user_email, can_manage_users)
+    crate::admin_page(&title, path, flash, &content, ctx)
 }
 
 #[cfg(test)]

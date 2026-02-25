@@ -23,7 +23,7 @@ pub async fn dashboard(
         &state.db, site_id, None, Some(crate::models::post::PostType::Page)
     ).await.unwrap_or_else(|e| { tracing::warn!("dashboard pages count error: {:?}", e); 0 });
 
-    let total_users = if admin.is_global_admin {
+    let total_users = if admin.caps.is_global_admin {
         crate::models::user::count(&state.db).await
             .unwrap_or_else(|e| { tracing::warn!("dashboard users count error: {:?}", e); 0 })
     } else if let Some(sid) = admin.site_id {
@@ -35,6 +35,8 @@ pub async fn dashboard(
 
     let cs = state.site_hostname(site_id);
 
+    let ctx = super::page_ctx(&admin, &cs);
+
     let data = DashboardData {
         published_posts,
         draft_posts,
@@ -42,5 +44,5 @@ pub async fn dashboard(
         total_users,
     };
 
-    Html(admin::pages::dashboard::render(&data, None, &cs, admin.is_global_admin, admin.is_visiting_foreign_site, &admin.user.email, admin.is_global_admin || admin.site_role.as_str() == "admin"))
+    Html(admin::pages::dashboard::render(&data, None, &ctx))
 }

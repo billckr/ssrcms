@@ -21,16 +21,15 @@ pub async fn list(
     State(state): State<AppState>,
     admin: AdminUser,
 ) -> Html<String> {
-    let is_site_admin = admin.site_role.as_str() == "admin" && !admin.is_global_admin;
     // Require at minimum a logged-in admin user; subscribers/unauthenticated are blocked by AdminUser extractor.
     // All roles that reach here may view the page.
     let cs = state.site_hostname(admin.site_id);
-    let can_create = admin.is_global_admin || is_site_admin;
+    let can_create = admin.caps.can_manage_sites;
 
     // Build site list with per-row manage flag.
     let mut rows: Vec<SiteRow> = Vec::new();
 
-    if admin.is_global_admin {
+    if admin.caps.is_global_admin {
         let sites = crate::models::site::list(&state.db).await.unwrap_or_else(|e| {
             tracing::warn!("failed to list sites: {:?}", e);
             vec![]
@@ -68,7 +67,8 @@ pub async fn list(
         }
     }
 
-    Html(admin::pages::sites::render_list(&rows, None, &cs, can_create, admin.is_global_admin, admin.is_visiting_foreign_site, &admin.user.email, admin.is_global_admin || admin.site_role.as_str() == "admin"))
+    let ctx = super::page_ctx(&admin, &cs);
+    Html(admin::pages::sites::render_list(&rows, None, can_create, &ctx))
 }
 
 /// GET /admin/sites/new — new site form.
@@ -77,12 +77,12 @@ pub async fn new_site(
     State(state): State<AppState>,
     admin: AdminUser,
 ) -> Html<String> {
-    let is_site_admin = admin.site_role.as_str() == "admin" && !admin.is_global_admin;
-    if !admin.is_global_admin && !is_site_admin {
+    if !admin.caps.can_manage_sites {
         return Html("<h1>403 Forbidden</h1>".to_string());
     }
     let cs = state.site_hostname(admin.site_id);
-    Html(admin::pages::sites::render_new(None, &cs, admin.is_global_admin, admin.is_visiting_foreign_site, &admin.user.email, admin.is_global_admin || admin.site_role.as_str() == "admin"))
+    let ctx = super::page_ctx(&admin, &cs);
+    Html(admin::pages::sites::render_new(None, &ctx))
 }
 
 #[derive(Deserialize)]
@@ -98,14 +98,14 @@ pub async fn create(
     admin: AdminUser,
     Form(form): Form<NewSiteForm>,
 ) -> impl IntoResponse {
-    let is_site_admin = admin.site_role.as_str() == "admin" && !admin.is_global_admin;
-    if !admin.is_global_admin && !is_site_admin {
+    if !admin.caps.can_manage_sites {
         return (axum::http::StatusCode::FORBIDDEN, "Forbidden").into_response();
     }
     let cs = state.site_hostname(admin.site_id);
+    let ctx = super::page_ctx(&admin, &cs);
     let hostname = form.hostname.trim().to_lowercase();
     if hostname.is_empty() {
-        return Html(admin::pages::sites::render_new(Some("Hostname cannot be empty."), &cs, admin.is_global_admin, admin.is_visiting_foreign_site, &admin.user.email, admin.is_global_admin || admin.site_role.as_str() == "admin")).into_response();
+        return Html(admin::pages::sites::render_new(Some("Hostname cannot be empty."), &ctx)).into_response();
     }
 
     let result = crate::models::site::create_with_defaults(&state.db, &hostname, admin.user.id)
@@ -125,7 +125,7 @@ pub async fn create(
             } else {
                 format!("Failed to create site: {e}")
             };
-            Html(admin::pages::sites::render_new(Some(&msg), &cs, admin.is_global_admin, admin.is_visiting_foreign_site, &admin.user.email, admin.is_global_admin || admin.site_role.as_str() == "admin")).into_response()
+            Html(admin::pages::sites::render_new(Some(&msg), &ctx)).into_response()
         }
     }
 }
@@ -145,7 +145,7 @@ pub async fn switch(
 ) -> impl IntoResponse {
     if let Ok(uuid) = form.site_id.parse::<Uuid>() {
         // For site_admin: verify they actually have a role on the target site.
-        let allowed = if admin.is_global_admin {
+        let allowed = if admin.caps.is_global_admin {
             true
         } else {
             crate::models::site_user::get_role(&state.db, uuid, admin.user.id)
@@ -175,14 +175,15 @@ pub async fn site_settings(
         Err(_) => return Redirect::to("/admin/sites").into_response(),
     };
     let is_owner = site.owner_user_id == Some(admin.user.id);
-    if !admin.is_global_admin && !is_owner {
+    if !admin.caps.is_global_admin && !is_owner {
         return (axum::http::StatusCode::FORBIDDEN, "Forbidden").into_response();
     }
+    let ctx = super::page_ctx(&admin, &cs);
     let data = SiteSettingsData {
         id: site.id.to_string(),
         hostname: site.hostname.clone(),
     };
-    Html(admin::pages::sites::render_settings(&data, None, &cs, admin.is_global_admin, admin.is_visiting_foreign_site, &admin.user.email, admin.is_global_admin || admin.site_role.as_str() == "admin")).into_response()
+    Html(admin::pages::sites::render_settings(&data, None, &ctx)).into_response()
 }
 
 #[derive(Deserialize)]
@@ -202,14 +203,15 @@ pub async fn save_site_settings(
         Err(_) => return Redirect::to("/admin/sites").into_response(),
     };
     let is_owner = site.owner_user_id == Some(admin.user.id);
-    if !admin.is_global_admin && !is_owner {
+    if !admin.caps.is_global_admin && !is_owner {
         return (axum::http::StatusCode::FORBIDDEN, "Forbidden").into_response();
     }
     let cs = state.site_hostname(admin.site_id);
+    let ctx = super::page_ctx(&admin, &cs);
     let hostname = form.hostname.trim().to_lowercase();
     if hostname.is_empty() {
         let data = SiteSettingsData { id: id.to_string(), hostname: String::new() };
-        return Html(admin::pages::sites::render_settings(&data, Some("Hostname cannot be empty."), &cs, admin.is_global_admin, admin.is_visiting_foreign_site, &admin.user.email, admin.is_global_admin || admin.site_role.as_str() == "admin")).into_response();
+        return Html(admin::pages::sites::render_settings(&data, Some("Hostname cannot be empty."), &ctx)).into_response();
     }
 
     let result = sqlx::query(
@@ -248,7 +250,7 @@ pub async fn save_site_settings(
                 format!("Failed to save: {e}")
             };
             let data = SiteSettingsData { id: id.to_string(), hostname };
-            Html(admin::pages::sites::render_settings(&data, Some(&msg), &cs, admin.is_global_admin, admin.is_visiting_foreign_site, &admin.user.email, admin.is_global_admin || admin.site_role.as_str() == "admin")).into_response()
+            Html(admin::pages::sites::render_settings(&data, Some(&msg), &ctx)).into_response()
         }
     }
 }
@@ -259,7 +261,7 @@ pub async fn delete(
     admin: AdminUser,
     Path(id): Path<Uuid>,
 ) -> impl IntoResponse {
-    if !admin.is_global_admin {
+    if !admin.caps.is_global_admin {
         return (axum::http::StatusCode::FORBIDDEN, "Forbidden").into_response();
     }
     if let Err(e) = crate::models::site::delete(&state.db, id).await {

@@ -7,7 +7,7 @@ pub struct TermItem {
     pub post_count: i64,
 }
 
-pub fn render(terms: &[TermItem], taxonomy: &str, flash: Option<&str>, current_site: &str, is_global_admin: bool, visiting_foreign_site: bool, user_email: &str, can_manage_users: bool) -> String {
+pub fn render(terms: &[TermItem], taxonomy: &str, flash: Option<&str>, ctx: &crate::PageContext) -> String {
     let title = if taxonomy == "category" { "Categories" } else { "Tags" };
     let path = if taxonomy == "category" { "/admin/categories" } else { "/admin/tags" };
 
@@ -68,5 +68,5 @@ pub fn render(terms: &[TermItem], taxonomy: &str, flash: Option<&str>, current_s
         title_s = if taxonomy == "category" { "Category" } else { "Tag" },
     );
 
-    crate::admin_page(title, path, flash, &content, current_site, is_global_admin, visiting_foreign_site, user_email, can_manage_users)
+    crate::admin_page(title, path, flash, &content, ctx)
 }

@@ -16,13 +16,13 @@ pub struct ThemeInfo {
     pub in_use_by: usize,
 }
 
-pub fn render_with_flash(themes: &[ThemeInfo], flash: Option<&str>, current_site: &str, is_global_admin: bool, visiting_foreign_site: bool, user_email: &str, can_manage_users: bool) -> String {
+pub fn render_with_flash(themes: &[ThemeInfo], flash: Option<&str>, ctx: &crate::PageContext) -> String {
     let cards: String = if themes.is_empty() {
         r#"<div class="empty-state">
             <p>No themes found. Add a theme directory to <code>themes/</code> and restart the server.</p>
         </div>"#.to_string()
     } else {
-        themes.iter().map(|t| render_card(t, is_global_admin)).collect()
+        themes.iter().map(|t| render_card(t, ctx)).collect()
     };
 
     let content = format!(
@@ -40,14 +40,14 @@ pub fn render_with_flash(themes: &[ThemeInfo], flash: Option<&str>, current_site
 </div>"#
     );
 
-    admin_page("Appearance", "/admin/appearance", flash, &content, current_site, is_global_admin, visiting_foreign_site, user_email, can_manage_users)
+    admin_page("Appearance", "/admin/appearance", flash, &content, ctx)
 }
 
-pub fn render(themes: &[ThemeInfo], current_site: &str, is_global_admin: bool, visiting_foreign_site: bool, user_email: &str, can_manage_users: bool) -> String {
-    render_with_flash(themes, None, current_site, is_global_admin, visiting_foreign_site, user_email, can_manage_users)
+pub fn render(themes: &[ThemeInfo], ctx: &crate::PageContext) -> String {
+    render_with_flash(themes, None, ctx)
 }
 
-fn render_card(t: &ThemeInfo, is_global_admin: bool) -> String {
+fn render_card(t: &ThemeInfo, ctx: &crate::PageContext) -> String {
     let active_class = if t.active { " active" } else { "" };
 
     let screenshot_html = if t.has_screenshot {
@@ -109,7 +109,7 @@ fn render_card(t: &ThemeInfo, is_global_admin: bool) -> String {
         version = crate::html_escape(&t.version),
         source_badge = {
             let source_label = if t.source == "global" { "global" } else { "site" };
-            let in_use_badge = if is_global_admin && t.source == "global" && t.in_use_by > 0 {
+            let in_use_badge = if ctx.is_global_admin && t.source == "global" && t.in_use_by > 0 {
                 format!(
                     r#" <span class="badge badge-in-use" title="Active on {n} site(s) — cannot delete">used by {n} site{s}</span>"#,
                     n = t.in_use_by,

@@ -22,7 +22,8 @@ pub async fn list(
         alt_text: if m.alt_text.is_empty() { None } else { Some(m.alt_text.clone()) },
     }).collect();
     let cs = state.site_hostname(admin.site_id);
-    Html(admin::pages::media::render_list(&items, None, &cs, admin.is_global_admin, admin.is_visiting_foreign_site, &admin.user.email, admin.is_global_admin || admin.site_role.as_str() == "admin"))
+    let ctx = super::page_ctx(&admin, &cs);
+    Html(admin::pages::media::render_list(&items, None, &ctx))
 }
 
 pub async fn delete(
@@ -33,7 +34,7 @@ pub async fn delete(
     match crate::models::media::get_by_id(&state.db, id).await {
         Ok(media) => {
             // Enforce site ownership: non-global-admin cannot delete another site's media.
-            if !admin.is_global_admin && media.site_id != admin.site_id {
+            if !admin.caps.is_global_admin && media.site_id != admin.site_id {
                 tracing::warn!(
                     "media delete forbidden: user {} tried to delete media {} (site {:?}) not belonging to their site {:?}",
                     admin.user.id, id, media.site_id, admin.site_id

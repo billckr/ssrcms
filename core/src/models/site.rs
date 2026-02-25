@@ -147,7 +147,7 @@ pub async fn delete(pool: &PgPool, id: Uuid) -> Result<()> {
 /// Count published posts for a site (used in site listing).
 pub async fn post_count(pool: &PgPool, site_id: Uuid) -> Result<i64> {
     let count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM posts WHERE site_id = $1",
+        "SELECT COUNT(*) FROM posts WHERE site_id = $1 AND post_type = 'post'",
     )
     .bind(site_id)
     .fetch_one(pool)

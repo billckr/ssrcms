@@ -279,7 +279,7 @@ async fn list(database_url: Option<String>) -> anyhow::Result<()> {
 
     let rows: Vec<(Uuid, String, i64)> = sqlx::query_as(
         r#"SELECT s.id, s.hostname,
-              (SELECT COUNT(*) FROM posts p WHERE p.site_id = s.id) AS post_count
+              (SELECT COUNT(*) FROM posts p WHERE p.site_id = s.id AND p.post_type = 'post') AS post_count
            FROM sites s
            ORDER BY s.created_at"#
     )

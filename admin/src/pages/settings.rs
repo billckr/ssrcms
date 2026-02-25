@@ -8,13 +8,13 @@ pub struct SettingsData {
     pub date_format: String,
 }
 
-pub fn render(data: &SettingsData, flash: Option<&str>, current_site: &str, is_global_admin: bool, visiting_foreign_site: bool, user_email: &str, can_manage_users: bool) -> String {
-    let site_context_note = if current_site.is_empty() {
+pub fn render(data: &SettingsData, flash: Option<&str>, ctx: &crate::PageContext) -> String {
+    let site_context_note = if ctx.current_site.is_empty() {
         String::new()
     } else {
         format!(
             r#"<p class="form-context-note">You are editing settings for: <strong>{}</strong></p>"#,
-            crate::html_escape(current_site)
+            crate::html_escape(&ctx.current_site)
         )
     };
     let content = format!(
@@ -51,5 +51,5 @@ pub fn render(data: &SettingsData, flash: Option<&str>, current_site: &str, is_g
         date_format = crate::html_escape(&data.date_format),
     );
 
-    crate::admin_page("Site Settings", "/admin/settings", flash, &content, current_site, is_global_admin, visiting_foreign_site, user_email, can_manage_users)
+    crate::admin_page("Site Settings", "/admin/settings", flash, &content, ctx)
 }

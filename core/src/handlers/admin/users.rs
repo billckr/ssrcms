@@ -15,11 +15,11 @@ pub async fn list(
     State(state): State<AppState>,
     admin: AdminUser,
 ) -> impl IntoResponse {
-    if admin.site_role.as_str() != "admin" && !admin.is_global_admin {
+    if !admin.caps.can_manage_users {
         return Html("<h1>403 Forbidden</h1>".to_string()).into_response();
     }
     let cs = state.site_hostname(admin.site_id);
-    let rows: Vec<UserRow> = if admin.is_global_admin {
+    let rows: Vec<UserRow> = if admin.caps.is_global_admin {
         // For super_admin: fetch all users, but show their role in the current
         // site context (site_users) when available, else fall back to users.role.
         let users = crate::models::user::list(&state.db).await.unwrap_or_else(|e| {
@@ -51,32 +51,34 @@ pub async fn list(
         crate::models::site_user::list_for_site(&state.db, site_id).await.unwrap_or_else(|e| {
             tracing::warn!("failed to list site users: {:?}", e);
             vec![]
-        }).iter().map(|(u, site_role)| UserRow {
+        }).into_iter().filter(|(u, _)| u.role != "super_admin").map(|(u, site_role)| UserRow {
             id: u.id.to_string(),
             username: u.username.clone(),
             email: u.email.clone(),
             role: site_role.clone(),
             display_name: u.display_name.clone(),
             is_protected: u.is_protected,
-            is_super_admin: u.role == "super_admin",
+            is_super_admin: false,
         }).collect()
     } else {
         vec![]
     };
     let current_user_id = admin.user.id.to_string();
-    let can_manage_access = admin.is_global_admin || admin.site_role.as_str() == "admin";
-    Html(admin::pages::users::render_list(&rows, None, &cs, &current_user_id, can_manage_access, admin.is_global_admin, admin.is_visiting_foreign_site, &admin.user.email, admin.is_global_admin || admin.site_role.as_str() == "admin")).into_response()
+    let can_manage_access = admin.caps.can_manage_users;
+    let ctx = super::page_ctx(&admin, &cs);
+    Html(admin::pages::users::render_list(&rows, None, &current_user_id, can_manage_access, &ctx)).into_response()
 }
 
 pub async fn new_user(
     State(state): State<AppState>,
     admin: AdminUser,
 ) -> impl IntoResponse {
-    if admin.site_role.as_str() != "admin" && !admin.is_global_admin {
+    if !admin.caps.can_manage_users {
         return Html("<h1>403 Forbidden</h1>".to_string()).into_response();
     }
     let cs = state.site_hostname(admin.site_id);
-    let sites = if admin.is_global_admin {
+    let ctx = super::page_ctx(&admin, &cs);
+    let sites = if admin.caps.is_global_admin {
         fetch_site_options(&state).await
     } else {
         vec![]
@@ -91,7 +93,7 @@ pub async fn new_user(
         sites,
         is_super_admin_target: false,
     };
-    Html(admin::pages::users::render_editor(&edit, None, &cs, admin.is_global_admin, admin.is_visiting_foreign_site, &admin.user.email, admin.is_global_admin || admin.site_role.as_str() == "admin")).into_response()
+    Html(admin::pages::users::render_editor(&edit, None, &ctx)).into_response()
 }
 
 pub async fn edit_user(
@@ -100,9 +102,10 @@ pub async fn edit_user(
     Path(id): Path<Uuid>,
 ) -> impl IntoResponse {
     let cs = state.site_hostname(admin.site_id);
+    let ctx = super::page_ctx(&admin, &cs);
 
     // Site isolation: non-global admins may only edit users on their site.
-    if !admin.is_global_admin {
+    if !admin.caps.is_global_admin {
         let allowed = match admin.site_id {
             Some(sid) => crate::models::site_user::get_role(&state.db, sid, id)
                 .await.ok().flatten().is_some(),
@@ -120,6 +123,11 @@ pub async fn edit_user(
             return Redirect::to("/admin/users").into_response();
         }
     };
+
+    // Site admins may not edit super_admin accounts.
+    if !admin.caps.is_global_admin && user.role == "super_admin" {
+        return Redirect::to("/admin/users").into_response();
+    }
 
     let is_super_admin_target = user.role.as_str() == "super_admin";
 
@@ -143,7 +151,7 @@ pub async fn edit_user(
         sites: vec![],
         is_super_admin_target,
     };
-    Html(admin::pages::users::render_editor(&edit, None, &cs, admin.is_global_admin, admin.is_visiting_foreign_site, &admin.user.email, admin.is_global_admin || admin.site_role.as_str() == "admin")).into_response()
+    Html(admin::pages::users::render_editor(&edit, None, &ctx)).into_response()
 }
 
 #[derive(Deserialize)]
@@ -165,14 +173,15 @@ pub async fn save_new(
     admin: AdminUser,
     Form(form): Form<UserForm>,
 ) -> impl IntoResponse {
-    if admin.site_role.as_str() != "admin" && !admin.is_global_admin {
+    if !admin.caps.can_manage_users {
         return (axum::http::StatusCode::FORBIDDEN, "Forbidden").into_response();
     }
     let cs = state.site_hostname(admin.site_id);
+    let ctx = super::page_ctx(&admin, &cs);
     let password = match form.password.as_deref().filter(|p| !p.is_empty()) {
         Some(p) => p.to_string(),
         None => {
-            let sites = if admin.is_global_admin { fetch_site_options(&state).await } else { vec![] };
+            let sites = if admin.caps.is_global_admin { fetch_site_options(&state).await } else { vec![] };
             let edit = UserEdit {
                 id: None,
                 username: form.username,
@@ -186,18 +195,14 @@ pub async fn save_new(
             return Html(admin::pages::users::render_editor(
                 &edit,
                 Some("Password is required for new users."),
-                &cs,
-                admin.is_global_admin,
-                admin.is_visiting_foreign_site,
-                &admin.user.email,
-                admin.is_global_admin || admin.site_role.as_str() == "admin",
+                &ctx,
             )).into_response();
         }
     };
 
     // site_role: what goes into site_users.role (admin/editor/author/subscriber).
     // Site admins cannot assign super_admin; cap to editor.
-    let site_role = if !admin.is_global_admin && form.role == "super_admin" {
+    let site_role = if !admin.caps.is_global_admin && form.role == "super_admin" {
         "editor"
     } else {
         form.role.as_str()
@@ -220,7 +225,7 @@ pub async fn save_new(
 
     match crate::models::user::create(&state.db, &create).await {
         Ok(new_user) => {
-            if admin.is_global_admin {
+            if admin.caps.is_global_admin {
                 // Resolve target site: create new or use existing.
                 let site_id = match form.site_assignment.as_deref() {
                     Some("new") => {
@@ -293,7 +298,7 @@ pub async fn save_new(
         }
         Err(e) => {
             tracing::error!("create user error: {:?}", e);
-            let sites = if admin.is_global_admin { fetch_site_options(&state).await } else { vec![] };
+            let sites = if admin.caps.is_global_admin { fetch_site_options(&state).await } else { vec![] };
             let edit = UserEdit {
                 id: None,
                 username: form.username,
@@ -305,7 +310,7 @@ pub async fn save_new(
                 is_super_admin_target: false,
             };
             let msg = friendly_user_error(&e);
-            Html(admin::pages::users::render_editor(&edit, Some(&msg), &cs, admin.is_global_admin, admin.is_visiting_foreign_site, &admin.user.email, admin.is_global_admin || admin.site_role.as_str() == "admin")).into_response()
+            Html(admin::pages::users::render_editor(&edit, Some(&msg), &ctx)).into_response()
         }
     }
 }
@@ -316,13 +321,14 @@ pub async fn save_edit(
     Path(id): Path<Uuid>,
     Form(form): Form<UserForm>,
 ) -> impl IntoResponse {
-    if admin.site_role.as_str() != "admin" && !admin.is_global_admin {
+    if !admin.caps.can_manage_users {
         return (axum::http::StatusCode::FORBIDDEN, "Forbidden").into_response();
     }
     let cs = state.site_hostname(admin.site_id);
+    let ctx = super::page_ctx(&admin, &cs);
 
     // Site isolation: non-global admins may only edit users on their site.
-    if !admin.is_global_admin {
+    if !admin.caps.is_global_admin {
         let allowed = match admin.site_id {
             Some(sid) => crate::models::site_user::get_role(&state.db, sid, id)
                 .await.ok().flatten().is_some(),
@@ -337,6 +343,11 @@ pub async fn save_edit(
     let target_role = crate::models::user::get_by_id(&state.db, id).await
         .map(|u| u.role.clone()).unwrap_or_default();
     let is_super_admin_target = target_role == "super_admin";
+
+    // Site admins may not edit super_admin accounts.
+    if !admin.caps.is_global_admin && is_super_admin_target {
+        return (axum::http::StatusCode::FORBIDDEN, "Forbidden").into_response();
+    }
 
     let new_password_hash = if let Some(pw) = form.password.as_deref().filter(|p| !p.is_empty()) {
         match crate::models::user::hash_password(pw) {
@@ -356,11 +367,7 @@ pub async fn save_edit(
                 return Html(admin::pages::users::render_editor(
                     &edit,
                     Some("Failed to process password. Please try again."),
-                    &cs,
-                    admin.is_global_admin,
-                    admin.is_visiting_foreign_site,
-                    &admin.user.email,
-                    admin.is_global_admin || admin.site_role.as_str() == "admin",
+                    &ctx,
                 )).into_response();
             }
         }
@@ -413,7 +420,7 @@ pub async fn save_edit(
                 is_super_admin_target,
             };
             let msg = friendly_user_error(&e);
-            Html(admin::pages::users::render_editor(&edit, Some(&msg), &cs, admin.is_global_admin, admin.is_visiting_foreign_site, &admin.user.email, admin.is_global_admin || admin.site_role.as_str() == "admin")).into_response()
+            Html(admin::pages::users::render_editor(&edit, Some(&msg), &ctx)).into_response()
         }
     }
 }
@@ -425,11 +432,12 @@ pub async fn delete_user(
 ) -> impl IntoResponse {
     let cs = state.site_hostname(admin.site_id);
     let current_user_id = admin.user.id.to_string();
+    let ctx = super::page_ctx(&admin, &cs);
 
     macro_rules! deny {
         ($msg:expr) => {{
             tracing::warn!("delete_user denied for target={} actor={}: {}", id, admin.user.id, $msg);
-            let rows: Vec<UserRow> = if admin.is_global_admin {
+            let rows: Vec<UserRow> = if admin.caps.is_global_admin {
                 crate::models::user::list(&state.db).await.unwrap_or_default()
                     .iter().map(|u| UserRow {
                         id: u.id.to_string(),
@@ -442,29 +450,25 @@ pub async fn delete_user(
                     }).collect()
             } else if let Some(site_id) = admin.site_id {
                 crate::models::site_user::list_for_site(&state.db, site_id).await.unwrap_or_default()
-                    .into_iter().map(|(u, site_role)| UserRow {
+                    .into_iter().filter(|(u, _)| u.role != "super_admin").map(|(u, site_role)| UserRow {
                         id: u.id.to_string(),
                         username: u.username.clone(),
                         email: u.email.clone(),
                         role: site_role,
                         display_name: u.display_name.clone(),
                         is_protected: u.is_protected,
-                        is_super_admin: u.role == "super_admin",
+                        is_super_admin: false,
                     }).collect()
             } else {
                 vec![]
             };
-            let can_manage_access = admin.is_global_admin || admin.site_role.as_str() == "admin";
+            let can_manage_access = admin.caps.can_manage_users;
             return Html(admin::pages::users::render_list(
                 &rows,
                 Some($msg),
-                &cs,
                 &current_user_id,
                 can_manage_access,
-                admin.is_global_admin,
-                admin.is_visiting_foreign_site,
-                &admin.user.email,
-                admin.is_global_admin || admin.site_role.as_str() == "admin",
+                &ctx,
             )).into_response();
         }};
     }
@@ -484,7 +488,7 @@ pub async fn delete_user(
 
     // Guard 3: only a global admin may delete another global admin.
     if let Ok(ref t) = target {
-        if t.role == "super_admin" && !admin.is_global_admin {
+        if t.role == "super_admin" && !admin.caps.is_global_admin {
             deny!("Only a global admin can delete another global admin account.");
         }
     }
@@ -549,11 +553,11 @@ pub async fn site_access_page(
     Path(user_id): Path<Uuid>,
     axum::extract::Query(query): axum::extract::Query<SiteAccessQuery>,
 ) -> impl IntoResponse {
-    let is_site_admin = admin.site_role.as_str() == "admin" && !admin.is_global_admin;
-    if !admin.is_global_admin && !is_site_admin {
+    if !admin.caps.can_manage_users {
         return Html("<h1>403 Forbidden</h1>".to_string()).into_response();
     }
     let cs = state.site_hostname(admin.site_id);
+    let ctx = super::page_ctx(&admin, &cs);
 
     let target_user = match crate::models::user::get_by_id(&state.db, user_id).await {
         Ok(u) => u,
@@ -578,7 +582,7 @@ pub async fn site_access_page(
         .collect::<Vec<_>>();
 
     // Available sites for this admin to assign to: all for super_admin, owned for site_admin.
-    let available_sites: Vec<SiteOption> = if admin.is_global_admin {
+    let available_sites: Vec<SiteOption> = if admin.caps.is_global_admin {
         fetch_site_options(&state).await
     } else {
         crate::models::site::list_by_owner(&state.db, admin.user.id)
@@ -605,11 +609,7 @@ pub async fn site_access_page(
     Html(admin::pages::users::render_site_access(
         &data,
         flash,
-        &cs,
-        admin.is_global_admin,
-        admin.is_visiting_foreign_site,
-        &admin.user.email,
-        admin.is_global_admin || admin.site_role.as_str() == "admin",
+        &ctx,
     )).into_response()
 }
 
@@ -626,8 +626,7 @@ pub async fn add_site_access(
     Path(user_id): Path<Uuid>,
     Form(form): Form<SiteAccessAddForm>,
 ) -> impl IntoResponse {
-    let is_site_admin = admin.site_role.as_str() == "admin" && !admin.is_global_admin;
-    if !admin.is_global_admin && !is_site_admin {
+    if !admin.caps.can_manage_users {
         return (axum::http::StatusCode::FORBIDDEN, "Forbidden").into_response();
     }
     let Ok(site_uuid) = form.site_id.parse::<Uuid>() else {
@@ -635,7 +634,7 @@ pub async fn add_site_access(
     };
 
     // For site_admin: verify they own the target site.
-    if !admin.is_global_admin {
+    if !admin.caps.is_global_admin {
         let owned = crate::models::site::get_by_id(&state.db, site_uuid).await
             .ok()
             .and_then(|s| s.owner_user_id) == Some(admin.user.id);
@@ -647,7 +646,7 @@ pub async fn add_site_access(
     // Sanitise role.
     // site_admin may only be assigned by a global_admin and only if the site has no owner yet.
     let role = match form.role.as_str() {
-        "site_admin" if admin.is_global_admin => {
+        "site_admin" if admin.caps.is_global_admin => {
             // Enforce one site_admin per site.
             let site = crate::models::site::get_by_id(&state.db, site_uuid).await
                 .map_err(|_| ()).ok();
@@ -701,8 +700,7 @@ pub async fn remove_site_access(
     Path(user_id): Path<Uuid>,
     Form(form): Form<SiteAccessRemoveForm>,
 ) -> impl IntoResponse {
-    let is_site_admin = admin.site_role.as_str() == "admin" && !admin.is_global_admin;
-    if !admin.is_global_admin && !is_site_admin {
+    if !admin.caps.can_manage_users {
         return (axum::http::StatusCode::FORBIDDEN, "Forbidden").into_response();
     }
     let Ok(site_uuid) = form.site_id.parse::<Uuid>() else {
@@ -710,7 +708,7 @@ pub async fn remove_site_access(
     };
 
     // For site_admin: verify they own the target site.
-    if !admin.is_global_admin {
+    if !admin.caps.is_global_admin {
         let owned = crate::models::site::get_by_id(&state.db, site_uuid).await
             .ok()
             .and_then(|s| s.owner_user_id) == Some(admin.user.id);

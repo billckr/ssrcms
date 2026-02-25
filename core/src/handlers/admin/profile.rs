@@ -14,13 +14,14 @@ pub async fn view(
     admin: AdminUser,
 ) -> Html<String> {
     let cs = state.site_hostname(admin.site_id);
+    let ctx = super::page_ctx(&admin, &cs);
     let profile = ProfileForm {
         username: admin.user.username.clone(),
         email: admin.user.email.clone(),
         display_name: admin.user.display_name.clone(),
         bio: admin.user.bio.clone(),
     };
-    Html(admin::pages::profile::render_profile(&profile, None, &cs, admin.is_global_admin, admin.is_visiting_foreign_site, &admin.user.email, admin.is_global_admin || admin.site_role.as_str() == "admin"))
+    Html(admin::pages::profile::render_profile(&profile, None, &ctx))
 }
 
 #[derive(Deserialize)]
@@ -58,24 +59,18 @@ pub async fn update_profile(
         bio: bio.clone().unwrap_or_default(),
     };
 
+    // Build ctx; on success reflect the newly saved email in the sidebar.
+    let mut ctx = super::page_ctx(&admin, &cs);
+
     match crate::models::user::update(&state.db, admin.user.id, &update).await {
-        Ok(_) => Html(admin::pages::profile::render_profile(
-            &profile,
-            Some("Profile updated successfully!"),
-            &cs,
-            admin.is_global_admin,
-            admin.is_visiting_foreign_site,
-            &email,
-            admin.is_global_admin || admin.site_role.as_str() == "admin",
-        )),
+        Ok(_) => {
+            ctx.user_email = email;
+            Html(admin::pages::profile::render_profile(&profile, Some("Profile updated successfully!"), &ctx))
+        }
         Err(e) => Html(admin::pages::profile::render_profile(
             &profile,
             Some(&format!("Error updating profile: {}", e)),
-            &cs,
-            admin.is_global_admin,
-            admin.is_visiting_foreign_site,
-            &email,
-            admin.is_global_admin || admin.site_role.as_str() == "admin",
+            &ctx,
         )),
     }
 }
@@ -109,6 +104,7 @@ pub async fn change_password(
     Form(form): Form<ChangePasswordForm>,
 ) -> impl IntoResponse {
     let cs = state.site_hostname(admin.site_id);
+    let ctx = super::page_ctx(&admin, &cs);
     let profile = ProfileForm {
         username: admin.user.username.clone(),
         email: admin.user.email.clone(),
@@ -118,43 +114,25 @@ pub async fn change_password(
 
     if form.new_password != form.confirm_password {
         return Html(admin::pages::profile::render_profile(
-            &profile,
-            Some("New passwords do not match."),
-            &cs,
-            admin.is_global_admin,
-            admin.is_visiting_foreign_site,
-            &admin.user.email,
-            admin.is_global_admin || admin.site_role.as_str() == "admin",
+            &profile, Some("New passwords do not match."), &ctx,
         ));
     }
 
     if !admin.user.verify_password(&form.current_password) {
         return Html(admin::pages::profile::render_profile(
-            &profile,
-            Some("Current password is incorrect."),
-            &cs,
-            admin.is_global_admin,
-            admin.is_visiting_foreign_site,
-            &admin.user.email,
-            admin.is_global_admin || admin.site_role.as_str() == "admin",
+            &profile, Some("Current password is incorrect."), &ctx,
         ));
     }
 
     if let Err(e) = validate_password_requirements(&form.new_password) {
-        return Html(admin::pages::profile::render_profile(&profile, Some(e), &cs, admin.is_global_admin, admin.is_visiting_foreign_site, &admin.user.email, admin.is_global_admin || admin.site_role.as_str() == "admin"));
+        return Html(admin::pages::profile::render_profile(&profile, Some(e), &ctx));
     }
 
     let new_password_hash = match crate::models::user::hash_password(&form.new_password) {
         Ok(h) => h,
         Err(_) => {
             return Html(admin::pages::profile::render_profile(
-                &profile,
-                Some("Password hashing error. Please try again."),
-                &cs,
-                admin.is_global_admin,
-                admin.is_visiting_foreign_site,
-                &admin.user.email,
-                admin.is_global_admin || admin.site_role.as_str() == "admin",
+                &profile, Some("Password hashing error. Please try again."), &ctx,
             ));
         }
     };
@@ -171,22 +149,10 @@ pub async fn change_password(
 
     match crate::models::user::update(&state.db, admin.user.id, &update).await {
         Ok(_) => Html(admin::pages::profile::render_profile(
-            &profile,
-            Some("Password changed successfully!"),
-            &cs,
-            admin.is_global_admin,
-            admin.is_visiting_foreign_site,
-            &admin.user.email,
-            admin.is_global_admin || admin.site_role.as_str() == "admin",
+            &profile, Some("Password changed successfully!"), &ctx,
         )),
         Err(e) => Html(admin::pages::profile::render_profile(
-            &profile,
-            Some(&format!("Error changing password: {}", e)),
-            &cs,
-            admin.is_global_admin,
-            admin.is_visiting_foreign_site,
-            &admin.user.email,
-            admin.is_global_admin || admin.site_role.as_str() == "admin",
+            &profile, Some(&format!("Error changing password: {}", e)), &ctx,
         )),
     }
 }

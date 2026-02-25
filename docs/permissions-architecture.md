@@ -1,147 +1,124 @@
-# Permissions Architecture — Current State & Future Direction
+# Permissions Architecture
 
-## The Problem With the Current Approach
-
-The admin UI is built around a single shell function, `admin_page()`, that renders the nav sidebar, header, flash message, and page content in one call. Every page render function accepts `is_global_admin: bool` and later `can_manage_users: bool` as parameters.
-
-This means:
-
-- Every render function signature carries auth flags it does not own.
-- Adding a new permission requires updating `admin_page()`, every render function signature, and every handler call site — often 20–30 files.
-- The presentation layer is making decisions that belong at the boundary.
-- The compiler enforces threading but not correctness — nothing stops a handler passing the wrong value.
-
-The `can_manage_users` change was a concrete example: one boolean flag required changes across 21 files and was mechanical enough to need sed and perl to be viable.
+**Status: `AdminCaps` refactor complete** (all handlers migrated, `cargo check --workspace` passes).
 
 ---
 
-## What the Architecture Should Be
+## Current Architecture
 
-### Core idea: derive capabilities once at the boundary
+### Boundary: `AdminCaps` derived once in the extractor
 
-When a user's request is authenticated, compute a `Capabilities` struct from their role and site assignment in the middleware extractor. Everything downstream receives that struct — it does not need to re-derive anything from raw role strings.
+`core/src/middleware/admin_auth.rs` defines `AdminCaps`, computed from `global_role` and `site_role` at the moment a request is authenticated. Nothing downstream re-evaluates role strings.
 
 ```rust
-/// Derived once in AdminUser extractor. Never recomputed downstream.
+#[derive(Debug, Clone)]
 pub struct AdminCaps {
-    pub can_manage_users:    bool,
-    pub can_manage_sites:    bool,
-    pub can_manage_plugins:  bool,
-    pub can_manage_settings: bool,
-    pub can_create_content:  bool,
-    pub can_publish_content: bool,
+    pub is_global_admin:       bool,
+    pub visiting_foreign_site: bool,
+    pub can_manage_users:      bool,
+    pub can_manage_sites:      bool,
+    pub can_manage_plugins:    bool,
+    pub can_manage_settings:   bool,
+    pub can_manage_content:    bool,
+    pub can_manage_appearance: bool,
 }
 
 impl AdminCaps {
-    pub fn from_user(user: &User, site_role: &str, is_global_admin: bool) -> Self {
+    pub fn from_roles(global_role: &str, site_role: &str, visiting_foreign: bool) -> Self {
+        let is_global_admin = global_role == "super_admin";
         let is_admin = is_global_admin || site_role == "admin";
         Self {
-            can_manage_users:    is_admin,
-            can_manage_sites:    is_admin,
-            can_manage_plugins:  is_admin,
-            can_manage_settings: is_admin,
-            can_create_content:  true,
-            can_publish_content: is_admin || site_role == "editor",
+            is_global_admin,
+            visiting_foreign_site: visiting_foreign,
+            can_manage_users:      is_admin,
+            can_manage_sites:      is_admin,
+            can_manage_plugins:    is_admin,
+            can_manage_settings:   is_admin,
+            can_manage_content:    true,
+            can_manage_appearance: is_admin,
         }
     }
 }
 ```
 
-`AdminUser` grows one field: `pub caps: AdminCaps`. The extractor fills it once. No handler needs to re-evaluate role strings.
+`AdminUser.caps` is the only downstream source of capability truth.
 
-### Shell knows about capabilities directly
+### Shell: `PageContext` carries flattened caps to the presentation layer
 
-```rust
-// admin_page takes one caps struct — not a growing list of booleans
-pub fn admin_page(title: &str, content: &str, ctx: &PageContext) -> String
-```
+`admin/src/lib.rs` defines `PageContext` as a flat struct of primitives (to avoid a circular crate dependency — `admin` cannot import from `core`).
 
 ```rust
-pub struct PageContext<'a> {
-    pub current_path:          &'a str,
-    pub current_site:          &'a str,
-    pub user_email:            &'a str,
-    pub flash:                 Option<&'a str>,
-    pub caps:                  &'a AdminCaps,
+pub struct PageContext {
+    pub current_site:          String,
+    pub user_email:            String,
+    pub is_global_admin:       bool,
     pub visiting_foreign_site: bool,
+    pub can_manage_users:      bool,
+    pub can_manage_sites:      bool,
+    pub can_manage_plugins:    bool,
+    pub can_manage_settings:   bool,
+    pub can_manage_content:    bool,
+    pub can_manage_appearance: bool,
 }
 ```
 
-Adding a new permission is: one field on `AdminCaps`, one line in the nav table. Zero other file changes.
+`admin_page(title, current_path, flash, content, ctx: &PageContext)` is the single shell entry point. All render functions accept `ctx: &PageContext` instead of individual boolean parameters.
 
-### Nav is data, not code
+### Handler pattern
+
+Every handler follows this pattern:
 
 ```rust
-struct NavItem {
-    href:         &'static str,
-    label:        &'static str,
-    required_cap: fn(&AdminCaps) -> bool,
+let cs = state.site_hostname(admin.site_id);
+let ctx = super::page_ctx(&admin, &cs);       // fills PageContext from AdminCaps
+// ... build page data ...
+Html(admin::pages::foo::render_x(&data, flash, &ctx))
+```
+
+`page_ctx()` in `core/src/handlers/admin/mod.rs` is the bridge that translates `AdminUser` → `PageContext`.
+
+### Capability checks in handlers
+
+Handlers gate access using `admin.caps.*`:
+
+```rust
+if !admin.caps.can_manage_users {
+    return (StatusCode::FORBIDDEN, "Forbidden").into_response();
 }
-
-static NAV: &[NavItem] = &[
-    NavItem { href: "/admin",            label: "Dashboard",  required_cap: |_| true },
-    NavItem { href: "/admin/posts",      label: "Posts",      required_cap: |_| true },
-    NavItem { href: "/admin/pages",      label: "Pages",      required_cap: |_| true },
-    NavItem { href: "/admin/media",      label: "Media",      required_cap: |_| true },
-    NavItem { href: "/admin/categories", label: "Categories", required_cap: |_| true },
-    NavItem { href: "/admin/tags",       label: "Tags",       required_cap: |_| true },
-    NavItem { href: "/admin/users",      label: "Users",      required_cap: |c| c.can_manage_users },
-    NavItem { href: "/admin/plugins",    label: "Plugins",    required_cap: |c| c.can_manage_plugins },
-    NavItem { href: "/admin/appearance", label: "Appearance", required_cap: |_| true },
-    NavItem { href: "/admin/settings",   label: "Settings",   required_cap: |c| c.can_manage_settings },
-    NavItem { href: "/admin/sites",      label: "Sites",      required_cap: |_| true },
-];
 ```
 
-The render loop filters automatically. Adding a new restricted nav item is one line.
+Not `admin.site_role.as_str() == "admin" || admin.is_global_admin`. That derivation lives exclusively in `AdminCaps::from_roles`.
 
-### Content renderers become pure
+---
 
-```rust
-// Before: auth flags mixed into presentation
-pub fn render_list(
-    users: &[UserRow],
-    flash: Option<&str>,
-    current_site: &str,
-    current_user_id: &str,
-    can_manage_access: bool,
-    is_global_admin: bool,
-    visiting_foreign_site: bool,
-    user_email: &str,
-    can_manage_users: bool,
-) -> String
+## What Is Not Yet Done
 
-// After: renderer only knows about its data
-pub fn render_list(
-    users: &[UserRow],
-    current_user_id: &str,
-    can_manage_access: bool,
-    ctx: &PageContext,
-) -> String
-```
+- **Nav is still code, not data.** The nav sidebar in `admin_page()` is still rendered with inline `if ctx.can_manage_*` conditionals rather than a static `NAV` table. This is the next incremental improvement when a new nav item is needed.
+- **`can_manage_content` is unused as a gate.** Content creation is open to all authenticated admin users; no handler yet checks `can_manage_content`. This is intentional for now (authors/editors are all in the admin).
+- **WASM plugin capability layer.** When the WASM plugin tier is built, plugins will receive a capability token derived from the same `AdminCaps` model rather than making a separate auth decision.
 
-The shell parameters collapse to a single `ctx` reference. Render functions own their data parameters and nothing else.
+---
+
+## Adding a New Permission
+
+1. Add a field to `AdminCaps` in `admin_auth.rs` with its derivation logic in `from_roles`.
+2. Add the same field to `PageContext` in `admin/src/lib.rs`.
+3. Forward the field in `page_ctx()` in `handlers/admin/mod.rs`.
+4. Use `admin.caps.your_new_cap` in handlers that need to gate on it.
+5. Use `ctx.your_new_cap` in render functions that need to adjust the UI.
+
+That is the complete list — no other files need touching.
 
 ---
 
 ## Philosophy
 
-**Boundary is where identity becomes capability.** The moment a request is authenticated, translate "who is this person" into "what can this person do." Downstream code only asks capability questions — it never inspects role strings.
+**Boundary is where identity becomes capability.** The moment a request is authenticated, translate "who is this person" into "what can this person do." Downstream code asks only capability questions — it never inspects role strings.
 
-**Presentation does not make access decisions.** `is_global_admin` leaking into a render function means the render function is doing access control. That is the wrong layer. Handlers enforce access (return 403 or not). Render functions only express what the UI looks like given a known set of capabilities.
+**Presentation does not make access decisions.** Handlers enforce access (return 403 or not). Render functions only express what the UI looks like given a known set of capabilities.
 
-**Stable interfaces absorb change.** A `PageContext` struct with a `caps` field absorbs any number of new permissions without changing function signatures. A boolean parameter list forces signature changes on every addition.
+**Stable interfaces absorb change.** A `PageContext` struct absorbs any number of new permissions without changing function signatures. A growing boolean parameter list forces signature changes across every call site on every addition.
 
-**Principle of least knowledge.** A function that renders a posts list does not need to know whether the current user is a global admin. It needs to know whether to show a "Publish" button. Those are different questions, and the further upstream you answer them the cleaner everything downstream stays.
 
----
 
-## When to Refactor
 
-This is not urgent while the role model is still settling. The right time is:
-
-1. The role/capability model is considered stable.
-2. Before adding a third or fourth boolean-gated nav item.
-3. As a single focused PR — not incrementally, because half-migrated state is worse than either extreme.
-
-The refactor is mechanical and safe: purely additive changes to structs, replacement of argument lists, no logic changes. It is a good candidate for a day's work once the time is right.

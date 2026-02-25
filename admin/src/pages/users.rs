@@ -53,7 +53,7 @@ pub struct UserEdit {
     pub is_super_admin_target: bool,
 }
 
-pub fn render_list(users: &[UserRow], flash: Option<&str>, current_site: &str, current_user_id: &str, can_manage_access: bool, is_global_admin: bool, visiting_foreign_site: bool, user_email: &str, can_manage_users: bool) -> String {
+pub fn render_list(users: &[UserRow], flash: Option<&str>, current_user_id: &str, can_manage_access: bool, ctx: &crate::PageContext) -> String {
     let rows = users.iter().map(|u| {
         let site_access_btn = if can_manage_access && !u.is_super_admin {
             format!(
@@ -116,10 +116,10 @@ pub fn render_list(users: &[UserRow], flash: Option<&str>, current_site: &str, c
         rows = rows,
     );
 
-    crate::admin_page("Users", "/admin/users", flash, &content, current_site, is_global_admin, visiting_foreign_site, user_email, can_manage_users)
+    crate::admin_page("Users", "/admin/users", flash, &content, ctx)
 }
 
-pub fn render_editor(user: &UserEdit, flash: Option<&str>, current_site: &str, is_global_admin: bool, visiting_foreign_site: bool, user_email: &str, can_manage_users: bool) -> String {
+pub fn render_editor(user: &UserEdit, flash: Option<&str>, ctx: &crate::PageContext) -> String {
     let title = if user.id.is_none() { "New User" } else { "Edit User" };
     let action = match &user.id {
         Some(id) => format!("/admin/users/{}/edit", id),
@@ -136,7 +136,7 @@ pub fn render_editor(user: &UserEdit, flash: Option<&str>, current_site: &str, i
   <input type="hidden" name="role" value="super_admin">
 </div>"#.to_string()
     } else {
-        let roles: &[(&str, &str)] = if is_global_admin {
+        let roles: &[(&str, &str)] = if ctx.is_global_admin {
             &[
                 ("admin",       "Site Admin"),
                 ("editor",      "Editor"),
@@ -166,7 +166,7 @@ pub fn render_editor(user: &UserEdit, flash: Option<&str>, current_site: &str, i
     };
 
     // Site-assignment section — only for global admins creating a new user.
-    let site_section = if user.id.is_none() && is_global_admin {
+    let site_section = if user.id.is_none() && ctx.is_global_admin {
         let site_opts = user.sites.iter().map(|s| {
             format!(
                 "<option value=\"{}\">{}</option>",
@@ -243,7 +243,7 @@ pub fn render_editor(user: &UserEdit, flash: Option<&str>, current_site: &str, i
         password_hint = password_hint,
     );
 
-    crate::admin_page(title, "/admin/users", flash, &content, current_site, is_global_admin, visiting_foreign_site, user_email, can_manage_users)
+    crate::admin_page(title, "/admin/users", flash, &content, ctx)
 }
 
 // ── Site access management ──────────────────────────────────────────────────
@@ -267,11 +267,7 @@ pub struct SiteAccessData {
 pub fn render_site_access(
     data: &SiteAccessData,
     flash: Option<&str>,
-    current_site: &str,
-    is_global_admin: bool,
-    visiting_foreign_site: bool,
-    user_email: &str,
-    can_manage_users: bool,
+    ctx: &crate::PageContext,
 ) -> String {
     let assignment_rows = if data.assignments.is_empty() {
         "<tr><td colspan=\"3\"><em>No site assignments yet.</em></td></tr>".to_string()
@@ -335,7 +331,7 @@ pub fn render_site_access(
             user_id        = crate::html_escape(&data.user_id),
             display_name   = crate::html_escape(&data.display_name),
             site_opts      = site_options,
-            site_admin_opt = if is_global_admin {
+            site_admin_opt = if ctx.is_global_admin {
                 r#"<option value="site_admin">Site Admin (owner)</option>"#
             } else {
                 ""
@@ -365,11 +361,7 @@ pub fn render_site_access(
         "/admin/users",
         flash,
         &content,
-        current_site,
-        is_global_admin,
-        visiting_foreign_site,
-        user_email,
-        can_manage_users,
+        ctx,
     )
 }
 
