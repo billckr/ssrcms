@@ -55,8 +55,15 @@
                 placeholder="Write your message here…"></textarea>
     </div>
 
-    <button type="submit" class="contact-submit">Send message</button>
+    <button type="submit" class="contact-submit" id="contact-submit-btn">Send message</button>
   </form>
+  <script>
+    document.querySelector('.contact-form').addEventListener('submit', function() {
+      var btn = document.getElementById('contact-submit-btn');
+      btn.disabled = true;
+      btn.textContent = 'Sending…';
+    });
+  </script>
   {% endif %}
 </article>
 
