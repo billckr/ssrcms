@@ -3,26 +3,30 @@
 pub struct SettingsData {
     pub site_name: String,
     pub site_description: String,
-    pub base_url: String,
     pub language: String,
     pub posts_per_page: i64,
     pub date_format: String,
 }
 
 pub fn render(data: &SettingsData, flash: Option<&str>, current_site: &str, is_global_admin: bool, visiting_foreign_site: bool, user_email: &str, can_manage_users: bool) -> String {
+    let site_context_note = if current_site.is_empty() {
+        String::new()
+    } else {
+        format!(
+            r#"<p class="form-context-note">You are editing settings for: <strong>{}</strong></p>"#,
+            crate::html_escape(current_site)
+        )
+    };
     let content = format!(
-        r#"<form method="POST" action="/admin/settings">
+        r#"{site_context_note}<form method="POST" action="/admin/settings">
   <div class="form-group">
     <label for="site_name">Site Name</label>
     <input type="text" id="site_name" name="site_name" value="{site_name}" required>
+    <small>The display name shown in the browser tab, header, and footer.</small>
   </div>
   <div class="form-group">
     <label for="site_description">Site Description</label>
     <textarea id="site_description" name="site_description" rows="3">{site_description}</textarea>
-  </div>
-  <div class="form-group">
-    <label for="base_url">Base URL</label>
-    <input type="url" id="base_url" name="base_url" value="{base_url}" required>
   </div>
   <div class="form-group">
     <label for="language">Language</label>
@@ -39,9 +43,9 @@ pub fn render(data: &SettingsData, flash: Option<&str>, current_site: &str, is_g
   </div>
   <button type="submit" class="btn btn-primary">Save Settings</button>
 </form>"#,
+        site_context_note = site_context_note,
         site_name = crate::html_escape(&data.site_name),
         site_description = crate::html_escape(&data.site_description),
-        base_url = crate::html_escape(&data.base_url),
         language = crate::html_escape(&data.language),
         posts_per_page = data.posts_per_page,
         date_format = crate::html_escape(&data.date_format),

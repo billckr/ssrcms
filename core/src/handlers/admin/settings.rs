@@ -21,7 +21,6 @@ pub async fn settings(
     let data = SettingsData {
         site_name: s.site_name.clone(),
         site_description: s.site_description.clone(),
-        base_url: s.base_url.clone(),
         language: s.language.clone(),
         posts_per_page: s.posts_per_page,
         date_format: s.date_format.clone(),
@@ -34,7 +33,6 @@ pub async fn settings(
 pub struct SettingsForm {
     pub site_name: String,
     pub site_description: String,
-    pub base_url: String,
     pub language: String,
     pub posts_per_page: i64,
     pub date_format: String,
@@ -56,7 +54,6 @@ pub async fn save_settings(
     let settings = [
         ("site_name", form.site_name.as_str()),
         ("site_description", form.site_description.as_str()),
-        ("base_url", form.base_url.as_str()),
         ("language", form.language.as_str()),
         ("date_format", form.date_format.as_str()),
     ];

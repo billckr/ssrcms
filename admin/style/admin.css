@@ -112,6 +112,7 @@ a:hover { text-decoration: underline; }
 .form-group textarea { width: 100%; padding: .45rem .75rem; border: 1px solid var(--border); border-radius: var(--radius); font-size: 14px; }
 .form-group textarea { resize: vertical; }
 .form-group small { display: block; color: var(--muted); margin-top: .25rem; font-size: 12px; }
+.form-context-note { font-size: 13px; color: var(--muted); margin-bottom: 1.25rem; padding: .5rem .75rem; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
 .form-section { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem; margin-bottom: 1rem; }
 .form-section h3 { font-size: 13px; font-weight: 600; margin-bottom: .75rem; }
 .checkbox-group { display: flex; flex-direction: column; gap: .35rem; font-size: 13px; max-height: 200px; overflow-y: auto; }
