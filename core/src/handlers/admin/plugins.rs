@@ -1,4 +1,4 @@
-use axum::{extract::State, response::Html};
+use axum::{extract::State, http::StatusCode, response::{Html, IntoResponse}};
 
 use crate::app_state::AppState;
 use crate::middleware::admin_auth::AdminUser;
@@ -7,7 +7,10 @@ use admin::pages::plugins::{PluginRow, render};
 pub async fn list(
     State(state): State<AppState>,
     admin: AdminUser,
-) -> Html<String> {
+) -> impl IntoResponse {
+    if !admin.caps.can_manage_plugins {
+        return (StatusCode::FORBIDDEN, Html("<h1>403 Forbidden</h1>".to_string())).into_response();
+    }
     let cs = state.site_hostname(admin.site_id);
     let rows: Vec<PluginRow> = state.loaded_plugins.iter().map(|m| {
         let mut hooks: Vec<(String, String)> = m.hooks
@@ -34,5 +37,6 @@ pub async fn list(
         }
     }).collect();
 
-    Html(render(&rows, &cs, admin.is_global_admin, &admin.user.email))
+    let ctx = super::page_ctx(&admin, &cs);
+    Html(render(&rows, &ctx)).into_response()
 }

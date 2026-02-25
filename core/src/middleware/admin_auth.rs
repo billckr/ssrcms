@@ -20,6 +20,51 @@ pub const SESSION_USER_ID_KEY: &str = "admin_user_id";
 /// Session key where the currently selected site UUID is stored.
 pub const SESSION_CURRENT_SITE_KEY: &str = "current_site_id";
 
+/// Capabilities derived once at the authentication boundary.
+/// Computed from global role + site role; passed downstream — never recomputed.
+#[derive(Debug, Clone)]
+pub struct AdminCaps {
+    /// Agency-level super-admin with unrestricted cross-site access.
+    pub is_global_admin: bool,
+    /// Super-admin viewing a site they do not own.
+    pub visiting_foreign_site: bool,
+    /// Can view, create, edit, and delete users.
+    pub can_manage_users: bool,
+    /// Can create new sites and edit site-level settings.
+    pub can_manage_sites: bool,
+    /// Can activate, configure, and remove plugins.
+    pub can_manage_plugins: bool,
+    /// Can edit site settings (name, description, etc.).
+    pub can_manage_settings: bool,
+    /// Can create, edit, publish, and delete content.
+    pub can_manage_content: bool,
+    /// Can manage themes (appearance).
+    pub can_manage_appearance: bool,
+    /// Can create, edit, and delete categories and tags.
+    pub can_manage_taxonomies: bool,
+}
+
+impl AdminCaps {
+    /// Derive capabilities from the user's global role, their role on the current
+    /// site, and whether a super-admin is visiting a foreign site.
+    pub fn from_roles(global_role: &str, site_role: &str, visiting_foreign: bool) -> Self {
+        let is_global_admin = global_role == "super_admin";
+        let is_admin = is_global_admin || site_role == "admin";
+        let is_editor_or_above = is_admin || site_role == "editor";
+        Self {
+            is_global_admin,
+            visiting_foreign_site: visiting_foreign,
+            can_manage_users: is_admin,
+            can_manage_sites: is_admin,
+            can_manage_plugins: is_admin,
+            can_manage_settings: is_admin,
+            can_manage_content: true,
+            can_manage_appearance: is_admin,
+            can_manage_taxonomies: is_editor_or_above,
+        }
+    }
+}
+
 /// An authenticated admin user extracted from the session.
 /// Add this as a parameter to any admin handler to require authentication.
 pub struct AdminUser {
@@ -28,9 +73,10 @@ pub struct AdminUser {
     /// (single-site backward-compatibility mode).
     pub site_id: Option<Uuid>,
     /// The user's role on the current site, or their global role as fallback.
+    /// Still needed for business logic (e.g. creating site_users rows).
     pub site_role: String,
-    /// True when `users.role = 'super_admin'` — unrestricted access to all sites.
-    pub is_global_admin: bool,
+    /// Derived capabilities — use these for all permission checks.
+    pub caps: AdminCaps,
 }
 
 pub enum AdminAuthError {
@@ -137,10 +183,31 @@ impl FromRequestParts<AppState> for AdminUser {
             // 2a. Global admin — prefer the site matching the request's Host header
             //     so that logging in from bckr.local lands on the bckr.local site.
             //     Falls back to the first site in the DB for direct/localhost access.
-            let host_site_id = request_hostname
+            //
+            // NOTE: resolve_site() uses the in-memory cache which can be stale after
+            // a `dev reset`. We validate the cached result against the DB; on failure
+            // we reload the cache so the next resolve attempt returns current data.
+            let cached_site_id = request_hostname
                 .as_deref()
                 .and_then(|h| state.resolve_site(h))
                 .map(|(s, _)| s.id);
+
+            let host_site_id = match cached_site_id {
+                Some(id) => {
+                    match crate::models::site::get_by_id(&state.db, id).await {
+                        Ok(_) => Some(id),
+                        Err(_) => {
+                            // Cache is stale (e.g. after dev reset) — reload and retry.
+                            let _ = state.reload_site_cache().await;
+                            request_hostname
+                                .as_deref()
+                                .and_then(|h| state.resolve_site(h))
+                                .map(|(s, _)| s.id)
+                        }
+                    }
+                }
+                None => None,
+            };
 
             let resolved = if host_site_id.is_some() {
                 host_site_id
@@ -182,6 +249,22 @@ impl FromRequestParts<AppState> for AdminUser {
             user.role.clone()
         };
 
-        Ok(AdminUser { user, site_id, site_role, is_global_admin })
+        // Determine if super_admin is browsing a site they don't own.
+        let is_visiting_foreign_site = if is_global_admin {
+            if let Some(sid) = site_id {
+                match crate::models::site::get_by_id(&state.db, sid).await {
+                    Ok(site) => site.owner_user_id != Some(user.id),
+                    Err(_) => false,
+                }
+            } else {
+                false
+            }
+        } else {
+            false
+        };
+
+        let caps = AdminCaps::from_roles(&user.role, &site_role, is_visiting_foreign_site);
+
+        Ok(AdminUser { user, site_id, site_role, caps })
     }
 }

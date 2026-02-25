@@ -4,15 +4,49 @@ pub mod pages;
 /// The admin CSS, inlined into every page.
 const ADMIN_CSS: &str = include_str!("../style/admin.css");
 
+/// Context passed to every admin page shell and render function.
+/// Built once per handler from `AdminUser`; passed by reference — never recomputed.
+#[derive(Debug, Clone)]
+pub struct PageContext {
+    pub current_site: String,
+    pub user_email: String,
+    /// Agency-level super-admin with unrestricted cross-site access.
+    pub is_global_admin: bool,
+    /// Super-admin viewing a site they do not own.
+    pub visiting_foreign_site: bool,
+    /// Can view, create, edit, and delete users.
+    pub can_manage_users: bool,
+    /// Can create new sites and edit site-level settings.
+    pub can_manage_sites: bool,
+    /// Can activate, configure, and remove plugins.
+    pub can_manage_plugins: bool,
+    /// Can edit site settings (name, description, etc.).
+    pub can_manage_settings: bool,
+    /// Can create, edit, publish, and delete content.
+    pub can_manage_content: bool,
+    /// Can manage themes (appearance).
+    pub can_manage_appearance: bool,
+    /// Can create, edit, and delete categories and tags.
+    pub can_manage_taxonomies: bool,
+}
+
 /// Wrap a rendered content HTML string in the full admin page shell.
 /// The sidebar nav, head, and body wrapper are all here.
-pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content: &str, current_site: &str, is_global_admin: bool, user_email: &str) -> String {
-    let site_indicator = if current_site.is_empty() {
+pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content: &str, ctx: &PageContext) -> String {
+    let visiting_badge = if ctx.visiting_foreign_site && !ctx.current_site.is_empty() {
+        format!(
+            r#"<span class="badge-visiting">Super Admin → {}</span>"#,
+            html_escape(&ctx.current_site)
+        )
+    } else {
+        String::new()
+    };
+    let site_indicator = if ctx.current_site.is_empty() {
         String::new()
     } else {
         format!(
             r#"<a href="/admin/sites" class="site-indicator">{}</a>"#,
-            html_escape(current_site)
+            html_escape(&ctx.current_site)
         )
     };
     let flash_html = match flash {
@@ -82,6 +116,7 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
           <span></span><span></span><span></span>
         </button>
         <h1>{title}</h1>
+        {visiting_badge}
         {site_indicator}
       </header>
       {flash_html}
@@ -109,17 +144,18 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
         posts = nav_link("/admin/posts", "Posts"),
         pages = nav_link("/admin/pages", "Pages"),
         media = nav_link("/admin/media", "Media"),
-        cats = nav_link("/admin/categories", "Categories"),
-        tags = nav_link("/admin/tags", "Tags"),
-        users = nav_link("/admin/users", "Users"),
-        plugins = nav_link("/admin/plugins", "Plugins"),
-        appearance = nav_link("/admin/appearance", "Appearance"),
-        settings = nav_link("/admin/settings", "Settings"),
-        sites = if is_global_admin { nav_link("/admin/sites", "Sites") } else { String::new() },
+        cats = if ctx.can_manage_taxonomies { nav_link("/admin/categories", "Categories") } else { String::new() },
+        tags = if ctx.can_manage_taxonomies { nav_link("/admin/tags", "Tags") } else { String::new() },
+        users = if ctx.can_manage_users { nav_link("/admin/users", "Users") } else { String::new() },
+        plugins = if ctx.can_manage_plugins { nav_link("/admin/plugins", "Plugins") } else { String::new() },
+        appearance = if ctx.can_manage_appearance { nav_link("/admin/appearance", "Appearance") } else { String::new() },
+        settings = if ctx.can_manage_settings { nav_link("/admin/settings", "Settings") } else { String::new() },
+        sites = nav_link("/admin/sites", "Sites"),
         flash_html = flash_html,
         content = content,
+        visiting_badge = visiting_badge,
         site_indicator = site_indicator,
-        user_email = html_escape(user_email),
+        user_email = html_escape(&ctx.user_email),
     )
 }
 

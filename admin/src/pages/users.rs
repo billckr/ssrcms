@@ -35,6 +35,9 @@ pub struct UserRow {
     pub role: String,
     pub display_name: String,
     pub is_protected: bool,
+    /// True when the user's global role is super_admin.
+    /// Used to hide the site-access button regardless of site role display.
+    pub is_super_admin: bool,
 }
 
 pub struct UserEdit {
@@ -50,21 +53,31 @@ pub struct UserEdit {
     pub is_super_admin_target: bool,
 }
 
-pub fn render_list(users: &[UserRow], flash: Option<&str>, current_site: &str, current_user_id: &str, is_global_admin: bool, user_email: &str) -> String {
+pub fn render_list(users: &[UserRow], flash: Option<&str>, current_user_id: &str, can_manage_access: bool, ctx: &crate::PageContext) -> String {
     let rows = users.iter().map(|u| {
+        let site_access_btn = if can_manage_access && !u.is_super_admin {
+            format!(
+                r#"<a href="/admin/users/{id}/site-access" class="icon-btn" title="Manage site access">
+                  <img src="/admin/static/icons/users.svg" alt="Site Access">
+                </a>"#,
+                id = crate::html_escape(&u.id),
+            )
+        } else {
+            String::new()
+        };
         let delete_btn = if u.id != current_user_id && !u.is_protected {
             let warn_msg = format!(
                 "Delete user \\u2018{}\\u2019? This will permanently delete all their posts and pages. This cannot be undone.",
                 u.display_name.replace('\'', "\\'"),
             );
             format!(
-                r#"<form method="POST" action="/admin/users/{id}/delete" style="display:inline" onsubmit="return confirm('{warn_msg}')">
+                r#"<form method="POST" action="/admin/users/{id}/delete" style="display:inline" data-confirm="{warn_msg}" onsubmit="return confirm(this.dataset.confirm)">
                   <button class="icon-btn icon-danger" title="Delete user" type="submit">
                     <img src="/admin/static/icons/delete.svg" alt="Delete">
                   </button>
                 </form>"#,
                 id = crate::html_escape(&u.id),
-                warn_msg = warn_msg,
+                warn_msg = crate::html_escape(&warn_msg),
             )
         } else {
             String::new()
@@ -79,6 +92,7 @@ pub fn render_list(users: &[UserRow], flash: Option<&str>, current_site: &str, c
                 <a href="/admin/users/{id}/edit" class="icon-btn" title="Edit">
                   <img src="/admin/static/icons/edit.svg" alt="Edit">
                 </a>
+                {site_access_btn}
                 {delete_btn}
               </td>
             </tr>"#,
@@ -88,6 +102,7 @@ pub fn render_list(users: &[UserRow], flash: Option<&str>, current_site: &str, c
             email = crate::html_escape(&u.email),
             role = crate::html_escape(role_display(&u.role)),
             badge_class = role_badge_class(&u.role),
+            site_access_btn = site_access_btn,
             delete_btn = delete_btn,
         )
     }).collect::<Vec<_>>().join("\n");
@@ -101,10 +116,10 @@ pub fn render_list(users: &[UserRow], flash: Option<&str>, current_site: &str, c
         rows = rows,
     );
 
-    crate::admin_page("Users", "/admin/users", flash, &content, current_site, is_global_admin, user_email)
+    crate::admin_page("Users", "/admin/users", flash, &content, ctx)
 }
 
-pub fn render_editor(user: &UserEdit, flash: Option<&str>, current_site: &str, is_global_admin: bool, user_email: &str) -> String {
+pub fn render_editor(user: &UserEdit, flash: Option<&str>, ctx: &crate::PageContext) -> String {
     let title = if user.id.is_none() { "New User" } else { "Edit User" };
     let action = match &user.id {
         Some(id) => format!("/admin/users/{}/edit", id),
@@ -121,7 +136,7 @@ pub fn render_editor(user: &UserEdit, flash: Option<&str>, current_site: &str, i
   <input type="hidden" name="role" value="super_admin">
 </div>"#.to_string()
     } else {
-        let roles: &[(&str, &str)] = if is_global_admin {
+        let roles: &[(&str, &str)] = if ctx.is_global_admin {
             &[
                 ("admin",       "Site Admin"),
                 ("editor",      "Editor"),
@@ -151,7 +166,7 @@ pub fn render_editor(user: &UserEdit, flash: Option<&str>, current_site: &str, i
     };
 
     // Site-assignment section — only for global admins creating a new user.
-    let site_section = if user.id.is_none() && is_global_admin {
+    let site_section = if user.id.is_none() && ctx.is_global_admin {
         let site_opts = user.sites.iter().map(|s| {
             format!(
                 "<option value=\"{}\">{}</option>",
@@ -228,5 +243,124 @@ pub fn render_editor(user: &UserEdit, flash: Option<&str>, current_site: &str, i
         password_hint = password_hint,
     );
 
-    crate::admin_page(title, "/admin/users", flash, &content, current_site, is_global_admin, user_email)
+    crate::admin_page(title, "/admin/users", flash, &content, ctx)
 }
+
+// ── Site access management ──────────────────────────────────────────────────
+
+pub struct SiteAssignmentRow {
+    pub site_id: String,
+    pub hostname: String,
+    pub role: String,
+}
+
+pub struct SiteAccessData {
+    pub user_id: String,
+    pub display_name: String,
+    pub email: String,
+    /// Current site assignments for this user.
+    pub assignments: Vec<SiteAssignmentRow>,
+    /// Sites the acting admin can assign this user to (their owned/managed sites).
+    pub available_sites: Vec<SiteOption>,
+}
+
+pub fn render_site_access(
+    data: &SiteAccessData,
+    flash: Option<&str>,
+    ctx: &crate::PageContext,
+) -> String {
+    let assignment_rows = if data.assignments.is_empty() {
+        "<tr><td colspan=\"3\"><em>No site assignments yet.</em></td></tr>".to_string()
+    } else {
+        data.assignments.iter().map(|a| {
+            format!(
+                r#"<tr>
+                  <td>{hostname}</td>
+                  <td><span class="badge">{role}</span></td>
+                  <td class="actions">
+                    <form method="post" action="/admin/users/{user_id}/site-access/remove" style="display:inline"
+                          data-confirm="Remove {hostname} from site access?" onsubmit="return confirm(this.dataset.confirm)">
+                      <input type="hidden" name="site_id" value="{site_id}">
+                      <button type="submit" class="icon-btn icon-danger" title="Remove from site">
+                        <img src="/admin/static/icons/trash-2.svg" alt="Remove">
+                      </button>
+                    </form>
+                  </td>
+                </tr>"#,
+                user_id   = crate::html_escape(&data.user_id),
+                site_id   = crate::html_escape(&a.site_id),
+                hostname  = crate::html_escape(&a.hostname),
+                role      = crate::html_escape(role_display(&a.role)),
+            )
+        }).collect::<Vec<_>>().join("\n")
+    };
+
+    let site_options = data.available_sites.iter().map(|s| {
+        format!(
+            r#"<option value="{}">{}</option>"#,
+            crate::html_escape(&s.id),
+            crate::html_escape(&s.hostname),
+        )
+    }).collect::<Vec<_>>().join("\n");
+
+    let add_form = if data.available_sites.is_empty() {
+        "<p><em>No sites available to assign.</em></p>".to_string()
+    } else {
+        format!(
+            r#"<form method="post" action="/admin/users/{user_id}/site-access/add"
+  data-username="{display_name}"
+  onsubmit="if(this.querySelector('[name=role]').value==='site_admin'){{var s=this.querySelector('[name=site_id] option:checked').text;return confirm('WARNING: You are about to assign \'' + this.dataset.username + '\' as Site Admin (owner) of \'' + s + '\'.\n\nThis grants full ownership of that site and changes their global role to site_admin.\n\nAre you sure?');}}"
+  style="display:flex;gap:0.75rem;align-items:flex-end;flex-wrap:wrap;margin-top:1.5rem">
+  <div class="form-group" style="margin:0;flex:1;min-width:160px">
+    <label>Site</label>
+    <select name="site_id" style="width:100%">{site_opts}</select>
+  </div>
+  <div class="form-group" style="margin:0;flex:1;min-width:140px">
+    <label>Role</label>
+    <select name="role" style="width:100%">
+      {site_admin_opt}
+      <option value="editor">Editor</option>
+      <option value="author">Author</option>
+    </select>
+  </div>
+  <div class="form-group" style="margin:0">
+    <button type="submit" class="btn btn-primary">Assign</button>
+  </div>
+</form>"#,
+            user_id        = crate::html_escape(&data.user_id),
+            display_name   = crate::html_escape(&data.display_name),
+            site_opts      = site_options,
+            site_admin_opt = if ctx.is_global_admin {
+                r#"<option value="site_admin">Site Admin (owner)</option>"#
+            } else {
+                ""
+            },
+        )
+    };
+
+    let content = format!(
+        r#"<p><a href="/admin/users">&larr; Back to Users</a></p>
+<h2 style="margin-bottom:0.25rem">{display_name}</h2>
+<p style="margin-top:0;color:var(--muted)">{email}</p>
+<h3>Current Site Access</h3>
+<table class="data-table">
+  <thead><tr><th>Site</th><th>Role</th><th>Actions</th></tr></thead>
+  <tbody>{rows}</tbody>
+</table>
+<h3>Add to a Site</h3>
+{add_form}"#,
+        display_name = crate::html_escape(&data.display_name),
+        email        = crate::html_escape(&data.email),
+        rows         = assignment_rows,
+        add_form     = add_form,
+    );
+
+    crate::admin_page(
+        &format!("Site Access — {}", data.display_name),
+        "/admin/users",
+        flash,
+        &content,
+        ctx,
+    )
+}
+

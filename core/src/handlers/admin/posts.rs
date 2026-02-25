@@ -23,7 +23,9 @@ pub async fn list(
     Query(q): Query<PostsQuery>,
 ) -> Html<String> {
     let cs = state.site_hostname(admin.site_id);
-    list_type(state, "post", q.page, admin.site_id, cs, admin.is_global_admin, admin.user.email.clone()).await
+    let ctx = super::page_ctx(&admin, &cs);
+    let author_filter = if admin.site_role == "author" { Some(admin.user.id) } else { None };
+    list_type(state, "post", q.page, admin.site_id, author_filter, ctx).await
 }
 
 pub async fn list_pages(
@@ -32,10 +34,12 @@ pub async fn list_pages(
     Query(q): Query<PostsQuery>,
 ) -> Html<String> {
     let cs = state.site_hostname(admin.site_id);
-    list_type(state, "page", q.page, admin.site_id, cs, admin.is_global_admin, admin.user.email.clone()).await
+    let ctx = super::page_ctx(&admin, &cs);
+    let author_filter = if admin.site_role == "author" { Some(admin.user.id) } else { None };
+    list_type(state, "page", q.page, admin.site_id, author_filter, ctx).await
 }
 
-async fn list_type(state: AppState, post_type: &str, page: Option<i64>, site_id: Option<Uuid>, current_site: String, is_global_admin: bool, user_email: String) -> Html<String> {
+async fn list_type(state: AppState, post_type: &str, page: Option<i64>, site_id: Option<Uuid>, author_id: Option<Uuid>, ctx: admin::PageContext) -> Html<String> {
     let per_page = 20i64;
     let page = page.unwrap_or(1).max(1);
     let offset = (page - 1) * per_page;
@@ -44,6 +48,7 @@ async fn list_type(state: AppState, post_type: &str, page: Option<i64>, site_id:
         site_id,
         status: None,
         post_type: Some(if post_type == "page" { PostType::Page } else { PostType::Post }),
+        author_id,
         limit: per_page,
         offset,
         ..Default::default()
@@ -75,7 +80,7 @@ async fn list_type(state: AppState, post_type: &str, page: Option<i64>, site_id:
         });
     }
 
-    Html(admin::pages::posts::render_list(&rows, post_type, None, &current_site, is_global_admin, &user_email))
+    Html(admin::pages::posts::render_list(&rows, post_type, None, &ctx))
 }
 
 pub async fn new_post(
@@ -83,7 +88,8 @@ pub async fn new_post(
     admin: AdminUser,
 ) -> Html<String> {
     let cs = state.site_hostname(admin.site_id);
-    new_post_type(state, "post", admin.site_id, cs, admin.is_global_admin, admin.user.email.clone()).await
+    let ctx = super::page_ctx(&admin, &cs);
+    new_post_type(state, "post", admin.site_id, ctx).await
 }
 
 pub async fn new_page(
@@ -91,10 +97,11 @@ pub async fn new_page(
     admin: AdminUser,
 ) -> Html<String> {
     let cs = state.site_hostname(admin.site_id);
-    new_post_type(state, "page", admin.site_id, cs, admin.is_global_admin, admin.user.email.clone()).await
+    let ctx = super::page_ctx(&admin, &cs);
+    new_post_type(state, "page", admin.site_id, ctx).await
 }
 
-async fn new_post_type(state: AppState, post_type: &str, site_id: Option<Uuid>, current_site: String, is_global_admin: bool, user_email: String) -> Html<String> {
+async fn new_post_type(state: AppState, post_type: &str, site_id: Option<Uuid>, ctx: admin::PageContext) -> Html<String> {
     let (categories, tags) = fetch_term_options(&state, site_id).await;
     let edit = PostEdit {
         id: None,
@@ -110,7 +117,7 @@ async fn new_post_type(state: AppState, post_type: &str, site_id: Option<Uuid>, 
         selected_categories: vec![],
         selected_tags: vec![],
     };
-    Html(admin::pages::posts::render_editor(&edit, None, &current_site, is_global_admin, &user_email))
+    Html(admin::pages::posts::render_editor(&edit, None, &ctx))
 }
 
 pub async fn edit_post(
@@ -119,7 +126,8 @@ pub async fn edit_post(
     Path(id): Path<Uuid>,
 ) -> impl IntoResponse {
     let cs = state.site_hostname(admin.site_id);
-    edit_post_type(state, id, admin.site_id, cs, admin.is_global_admin, admin.user.email.clone()).await
+    let ctx = super::page_ctx(&admin, &cs);
+    edit_post_type(state, id, admin.site_id, admin.site_role == "author", admin.user.id, ctx).await
 }
 
 pub async fn edit_page(
@@ -128,10 +136,11 @@ pub async fn edit_page(
     Path(id): Path<Uuid>,
 ) -> impl IntoResponse {
     let cs = state.site_hostname(admin.site_id);
-    edit_post_type(state, id, admin.site_id, cs, admin.is_global_admin, admin.user.email.clone()).await
+    let ctx = super::page_ctx(&admin, &cs);
+    edit_post_type(state, id, admin.site_id, admin.site_role == "author", admin.user.id, ctx).await
 }
 
-async fn edit_post_type(state: AppState, id: Uuid, site_id: Option<Uuid>, current_site: String, is_global_admin: bool, user_email: String) -> impl IntoResponse {
+async fn edit_post_type(state: AppState, id: Uuid, site_id: Option<Uuid>, is_author: bool, user_id: Uuid, ctx: admin::PageContext) -> impl IntoResponse {
     let post = match crate::models::post::get_by_id(&state.db, id).await {
         Ok(p) => p,
         Err(e) => {
@@ -141,8 +150,20 @@ async fn edit_post_type(state: AppState, id: Uuid, site_id: Option<Uuid>, curren
     };
 
     // Site isolation: non-global admins may only edit posts that belong to their site.
-    if !is_global_admin && post.site_id != site_id {
+    if !ctx.is_global_admin && post.site_id != site_id {
         return Redirect::to("/admin/posts").into_response();
+    }
+
+    // Author restriction: authors can only edit their own unpublished content.
+    if is_author {
+        if post.author_id != user_id {
+            let redirect = if post.post_type == "page" { "/admin/pages" } else { "/admin/posts" };
+            return Redirect::to(redirect).into_response();
+        }
+        if post.status == "published" {
+            let redirect = if post.post_type == "page" { "/admin/pages" } else { "/admin/posts" };
+            return Redirect::to(redirect).into_response();
+        }
     }
 
     let (categories, tags) = fetch_term_options(&state, site_id).await;
@@ -175,7 +196,7 @@ async fn edit_post_type(state: AppState, id: Uuid, site_id: Option<Uuid>, curren
         selected_tags,
     };
 
-    Html(admin::pages::posts::render_editor(&edit, None, &current_site, is_global_admin, &user_email)).into_response()
+    Html(admin::pages::posts::render_editor(&edit, None, &ctx)).into_response()
 }
 
 /// HTML forms send repeated keys for multiple checkboxes, but only a bare
@@ -262,6 +283,7 @@ pub async fn save_new(
         Err(e) => {
             tracing::error!("create post error: {:?}", e);
             let cs = state.site_hostname(admin.site_id);
+            let ctx = super::page_ctx(&admin, &cs);
             let (categories, tags) = fetch_term_options(&state, admin.site_id).await;
             let edit = PostEdit {
                 id: None,
@@ -278,7 +300,7 @@ pub async fn save_new(
                 selected_tags: form.tags,
             };
             let msg = friendly_save_error(&e);
-            Html(admin::pages::posts::render_editor(&edit, Some(&msg), &cs, admin.is_global_admin, &admin.user.email)).into_response()
+            Html(admin::pages::posts::render_editor(&edit, Some(&msg), &ctx)).into_response()
         }
     }
 }
@@ -289,14 +311,26 @@ pub async fn save_edit(
     Path(id): Path<Uuid>,
     Form(form): Form<PostForm>,
 ) -> impl IntoResponse {
+    let redirect = if form.post_type == "page" { "/admin/pages" } else { "/admin/posts" };
     // Site isolation: verify the post belongs to the admin's site before updating.
-    if !admin.is_global_admin {
-        let belongs = crate::models::post::get_by_id(&state.db, id).await
-            .map(|p| p.site_id == admin.site_id)
-            .unwrap_or(false);
-        if !belongs {
-            let redirect = if form.post_type == "page" { "/admin/pages" } else { "/admin/posts" };
-            return Redirect::to(redirect).into_response();
+    if !admin.caps.is_global_admin {
+        let post = crate::models::post::get_by_id(&state.db, id).await;
+        match post {
+            Ok(p) => {
+                if p.site_id != admin.site_id {
+                    return Redirect::to(redirect).into_response();
+                }
+                // Author restriction: authors can only edit their own unpublished posts.
+                if admin.site_role == "author" {
+                    if p.author_id != admin.user.id {
+                        return Redirect::to(redirect).into_response();
+                    }
+                    if p.status == "published" {
+                        return Redirect::to(redirect).into_response();
+                    }
+                }
+            }
+            Err(_) => return Redirect::to(redirect).into_response(),
         }
     }
 
@@ -328,6 +362,7 @@ pub async fn save_edit(
         Err(e) => {
             tracing::error!("update post {} error: {:?}", id, e);
             let cs = state.site_hostname(admin.site_id);
+            let ctx = super::page_ctx(&admin, &cs);
             let (categories, tags) = fetch_term_options(&state, admin.site_id).await;
             let post_terms = crate::models::taxonomy::for_post(&state.db, id).await.unwrap_or_else(|_| vec![]);
             let selected_categories: Vec<String> = post_terms.iter()
@@ -353,7 +388,7 @@ pub async fn save_edit(
                 selected_tags,
             };
             let msg = friendly_save_error(&e);
-            Html(admin::pages::posts::render_editor(&edit, Some(&msg), &cs, admin.is_global_admin, &admin.user.email)).into_response()
+            Html(admin::pages::posts::render_editor(&edit, Some(&msg), &ctx)).into_response()
         }
     }
 }
@@ -363,12 +398,20 @@ pub async fn delete_post(
     admin: AdminUser,
     Path(id): Path<Uuid>,
 ) -> impl IntoResponse {
-    if !admin.is_global_admin {
-        let belongs = crate::models::post::get_by_id(&state.db, id).await
-            .map(|p| p.site_id == admin.site_id)
-            .unwrap_or(false);
-        if !belongs {
-            return Redirect::to("/admin/posts").into_response();
+    if !admin.caps.is_global_admin {
+        match crate::models::post::get_by_id(&state.db, id).await {
+            Ok(p) => {
+                if p.site_id != admin.site_id {
+                    return Redirect::to("/admin/posts").into_response();
+                }
+                if admin.site_role == "author" && p.author_id != admin.user.id {
+                    return Redirect::to("/admin/posts").into_response();
+                }
+                if admin.site_role == "author" && p.status == "published" {
+                    return Redirect::to("/admin/posts").into_response();
+                }
+            }
+            Err(_) => return Redirect::to("/admin/posts").into_response(),
         }
     }
     if let Err(e) = crate::models::post::delete(&state.db, id).await {
@@ -383,12 +426,20 @@ pub async fn delete_page(
     admin: AdminUser,
     Path(id): Path<Uuid>,
 ) -> impl IntoResponse {
-    if !admin.is_global_admin {
-        let belongs = crate::models::post::get_by_id(&state.db, id).await
-            .map(|p| p.site_id == admin.site_id)
-            .unwrap_or(false);
-        if !belongs {
-            return Redirect::to("/admin/pages").into_response();
+    if !admin.caps.is_global_admin {
+        match crate::models::post::get_by_id(&state.db, id).await {
+            Ok(p) => {
+                if p.site_id != admin.site_id {
+                    return Redirect::to("/admin/pages").into_response();
+                }
+                if admin.site_role == "author" && p.author_id != admin.user.id {
+                    return Redirect::to("/admin/pages").into_response();
+                }
+                if admin.site_role == "author" && p.status == "published" {
+                    return Redirect::to("/admin/pages").into_response();
+                }
+            }
+            Err(_) => return Redirect::to("/admin/pages").into_response(),
         }
     }
     if let Err(e) = crate::models::post::delete(&state.db, id).await {

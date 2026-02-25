@@ -1,5 +1,6 @@
 use axum::{
     extract::State,
+    http::StatusCode,
     response::{Html, IntoResponse, Redirect},
     Form,
 };
@@ -12,7 +13,10 @@ use admin::pages::settings::SettingsData;
 pub async fn settings(
     State(state): State<AppState>,
     admin: AdminUser,
-) -> Html<String> {
+) -> impl IntoResponse {
+    if !admin.caps.can_manage_settings {
+        return (StatusCode::FORBIDDEN, Html("<h1>403 Forbidden</h1>".to_string())).into_response();
+    }
     // If the admin is scoped to a site, show that site's settings; otherwise use global fallback.
     let s = admin.site_id
         .and_then(|sid| state.get_site_by_id(sid))
@@ -21,20 +25,19 @@ pub async fn settings(
     let data = SettingsData {
         site_name: s.site_name.clone(),
         site_description: s.site_description.clone(),
-        base_url: s.base_url.clone(),
         language: s.language.clone(),
         posts_per_page: s.posts_per_page,
         date_format: s.date_format.clone(),
     };
     let cs = state.site_hostname(admin.site_id);
-    Html(admin::pages::settings::render(&data, None, &cs, admin.is_global_admin, &admin.user.email))
+    let ctx = super::page_ctx(&admin, &cs);
+    Html(admin::pages::settings::render(&data, None, &ctx)).into_response()
 }
 
 #[derive(Deserialize)]
 pub struct SettingsForm {
     pub site_name: String,
     pub site_description: String,
-    pub base_url: String,
     pub language: String,
     pub posts_per_page: i64,
     pub date_format: String,
@@ -45,6 +48,9 @@ pub async fn save_settings(
     admin: AdminUser,
     Form(form): Form<SettingsForm>,
 ) -> impl IntoResponse {
+    if !admin.caps.can_manage_settings {
+        return (StatusCode::FORBIDDEN, "Forbidden").into_response();
+    }
     let site_id = match admin.site_id {
         Some(id) => id,
         None => {
@@ -56,7 +62,6 @@ pub async fn save_settings(
     let settings = [
         ("site_name", form.site_name.as_str()),
         ("site_description", form.site_description.as_str()),
-        ("base_url", form.base_url.as_str()),
         ("language", form.language.as_str()),
         ("date_format", form.date_format.as_str()),
     ];

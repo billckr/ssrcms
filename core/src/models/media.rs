@@ -121,12 +121,15 @@ pub async fn delete(pool: &PgPool, id: Uuid) -> Result<()> {
     Ok(())
 }
 
-pub async fn list(pool: &PgPool, site_id: Option<Uuid>, limit: i64, offset: i64) -> Result<Vec<Media>> {
+pub async fn list(pool: &PgPool, site_id: Option<Uuid>, uploaded_by: Option<Uuid>, limit: i64, offset: i64) -> Result<Vec<Media>> {
     let items = sqlx::query_as::<_, Media>(
-        "SELECT * FROM media WHERE ($1::uuid IS NULL OR site_id = $1) \
-         ORDER BY created_at DESC LIMIT $2 OFFSET $3",
+        "SELECT * FROM media \
+         WHERE ($1::uuid IS NULL OR site_id = $1) \
+           AND ($2::uuid IS NULL OR uploaded_by = $2) \
+         ORDER BY created_at DESC LIMIT $3 OFFSET $4",
     )
     .bind(site_id)
+    .bind(uploaded_by)
     .bind(limit)
     .bind(offset)
     .fetch_all(pool)

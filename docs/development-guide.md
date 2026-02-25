@@ -271,6 +271,44 @@ Run `update-cli` whenever you change anything under `cli/src/`. Examples of chan
 | Fix a bug in the installer | Wrong path written to Caddyfile |
 | Add a subcommand | Adding `plugin enable` / `plugin disable` |
 
+### Fresh dev reset workflow
+
+Use this sequence when you want a completely clean slate (wipes all data, re-runs the installer):
+
+```bash
+# 1. If CLI source has changed since last install, reinstall it first
+./app.sh update-cli
+
+# 2. Wipe all data rows (keeps schema and migration history)
+synaptic-cli dev reset --force
+
+# 3. Re-run the installer
+#    - Domain: bckr.local (or your dev domain)
+#    - Port: 3000 (or whatever Axum listens on)
+#    ⚠ The port you enter here becomes part of site_url (e.g. http://bckr.local:3000)
+#      so post/page links resolve correctly. Don't leave it blank.
+synaptic-cli install
+
+# 4. Rebuild and restart the server (flushes the in-memory site cache)
+./app.sh rebuild
+```
+
+> **Why `./app.sh rebuild` is required after reset:** The server keeps an
+> in-memory site cache populated at startup. After a `dev reset` the old
+> site UUIDs are deleted from the DB but still live in the cache. `rebuild`
+> restarts the server which repopulates the cache from the fresh DB state.
+
+> **Changing site_url after install:** If you need to change `site_url` without
+> a full reset (e.g. to add a port or switch to https), use a direct DB query:
+> ```bash
+> psql postgres://synaptic:password@localhost:5432/synaptic_signals \
+>   -c "UPDATE site_settings SET value = 'http://bckr.local:3000' WHERE key = 'site_url';"
+> ```
+> Then restart the server. A `synaptic-cli set-site-url` command (password-gated
+> like `dev reset`) is planned for the future.
+
+---
+
 ### What does NOT need update-cli
 
 | Changed | Action needed |

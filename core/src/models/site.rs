@@ -88,6 +88,15 @@ pub async fn create_with_defaults(
     .execute(&mut *tx)
     .await?;
 
+    // Set owner's default_site_id if they don't have one yet.
+    sqlx::query(
+        "UPDATE users SET default_site_id = $1, updated_at = NOW() WHERE id = $2 AND default_site_id IS NULL",
+    )
+    .bind(site.id)
+    .bind(owner_user_id)
+    .execute(&mut *tx)
+    .await?;
+
     tx.commit().await?;
     Ok(site)
 }
@@ -138,7 +147,7 @@ pub async fn delete(pool: &PgPool, id: Uuid) -> Result<()> {
 /// Count published posts for a site (used in site listing).
 pub async fn post_count(pool: &PgPool, site_id: Uuid) -> Result<i64> {
     let count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM posts WHERE site_id = $1",
+        "SELECT COUNT(*) FROM posts WHERE site_id = $1 AND post_type = 'post'",
     )
     .bind(site_id)
     .fetch_one(pool)

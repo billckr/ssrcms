@@ -10,7 +10,8 @@ pub async fn list(
     State(state): State<AppState>,
     admin: AdminUser,
 ) -> Html<String> {
-    let raw = crate::models::media::list(&state.db, admin.site_id, 200, 0).await.unwrap_or_else(|e| {
+    let uploaded_by = if admin.site_role == "author" { Some(admin.user.id) } else { None };
+    let raw = crate::models::media::list(&state.db, admin.site_id, uploaded_by, 200, 0).await.unwrap_or_else(|e| {
         tracing::warn!("failed to list media: {:?}", e);
         vec![]
     });
@@ -22,7 +23,8 @@ pub async fn list(
         alt_text: if m.alt_text.is_empty() { None } else { Some(m.alt_text.clone()) },
     }).collect();
     let cs = state.site_hostname(admin.site_id);
-    Html(admin::pages::media::render_list(&items, None, &cs, admin.is_global_admin, &admin.user.email))
+    let ctx = super::page_ctx(&admin, &cs);
+    Html(admin::pages::media::render_list(&items, None, &ctx))
 }
 
 pub async fn delete(
@@ -33,10 +35,18 @@ pub async fn delete(
     match crate::models::media::get_by_id(&state.db, id).await {
         Ok(media) => {
             // Enforce site ownership: non-global-admin cannot delete another site's media.
-            if !admin.is_global_admin && media.site_id != admin.site_id {
+            if !admin.caps.is_global_admin && media.site_id != admin.site_id {
                 tracing::warn!(
                     "media delete forbidden: user {} tried to delete media {} (site {:?}) not belonging to their site {:?}",
                     admin.user.id, id, media.site_id, admin.site_id
+                );
+                return (axum::http::StatusCode::FORBIDDEN, "Forbidden").into_response();
+            }
+            // Author restriction: authors can only delete their own uploads.
+            if admin.site_role == "author" && media.uploaded_by != admin.user.id {
+                tracing::warn!(
+                    "media delete forbidden: author {} tried to delete media {} uploaded by {}",
+                    admin.user.id, id, media.uploaded_by
                 );
                 return (axum::http::StatusCode::FORBIDDEN, "Forbidden").into_response();
             }

@@ -92,6 +92,7 @@ struct UserWithSiteRole {
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
     deleted_at: Option<DateTime<Utc>>,
+    default_site_id: Option<Uuid>,
     site_role: String,
 }
 
@@ -102,7 +103,7 @@ pub async fn list_for_site(pool: &PgPool, site_id: Uuid) -> Result<Vec<(User, St
         r#"
         SELECT u.id, u.username, u.email, u.display_name, u.password_hash, u.bio,
                u.avatar_media_id, u.role, u.is_active, u.is_protected,
-               u.created_at, u.updated_at, u.deleted_at,
+               u.created_at, u.updated_at, u.deleted_at, u.default_site_id,
                su.role as site_role
         FROM users u
         JOIN site_users su ON su.user_id = u.id
@@ -132,6 +133,7 @@ pub async fn list_for_site(pool: &PgPool, site_id: Uuid) -> Result<Vec<(User, St
                 created_at: r.created_at,
                 updated_at: r.updated_at,
                 deleted_at: r.deleted_at,
+                default_site_id: r.default_site_id,
             };
             (user, r.site_role)
         })

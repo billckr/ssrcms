@@ -14,41 +14,61 @@ use admin::pages::sites::{SiteRow, SiteSettingsData};
 use tower_sessions::Session;
 
 /// GET /admin/sites — list sites.
-/// super_admin sees all sites. site_admin sees only sites where they are the owner.
+/// super_admin sees all sites (can manage all).
+/// site_admin sees owned sites (can manage) plus sites they're assigned to (switch only).
+/// editors/authors see only sites they're assigned to (switch only).
 pub async fn list(
     State(state): State<AppState>,
     admin: AdminUser,
 ) -> Html<String> {
-    let is_site_admin = admin.site_role.as_str() == "admin" && !admin.is_global_admin;
-    if !admin.is_global_admin && !is_site_admin {
-        return Html("<h1>403 Forbidden</h1>".to_string());
-    }
+    // Require at minimum a logged-in admin user; subscribers/unauthenticated are blocked by AdminUser extractor.
+    // All roles that reach here may view the page.
     let cs = state.site_hostname(admin.site_id);
-    let sites = if admin.is_global_admin {
-        crate::models::site::list(&state.db).await.unwrap_or_else(|e| {
+    let can_create = admin.caps.can_manage_sites;
+
+    // Build site list with per-row manage flag.
+    let mut rows: Vec<SiteRow> = Vec::new();
+
+    if admin.caps.is_global_admin {
+        let sites = crate::models::site::list(&state.db).await.unwrap_or_else(|e| {
             tracing::warn!("failed to list sites: {:?}", e);
             vec![]
-        })
-    } else {
-        // site_admin: show sites they own.
-        crate::models::site::list_by_owner(&state.db, admin.user.id).await.unwrap_or_else(|e| {
-            tracing::warn!("failed to list owned sites for {}: {:?}", admin.user.id, e);
-            vec![]
-        })
-    };
-
-    let mut rows = Vec::with_capacity(sites.len());
-    for (i, s) in sites.iter().enumerate() {
-        let post_count = crate::models::site::post_count(&state.db, s.id).await.unwrap_or(0);
-        rows.push(SiteRow {
-            id: s.id.to_string(),
-            hostname: s.hostname.clone(),
-            post_count,
-            is_default: admin.is_global_admin && i == 0,
         });
+        for s in &sites {
+            let post_count = crate::models::site::post_count(&state.db, s.id).await.unwrap_or(0);
+            rows.push(SiteRow {
+                id: s.id.to_string(),
+                hostname: s.hostname.clone(),
+                post_count,
+                is_default: admin.user.default_site_id == Some(s.id),
+                can_manage: true,
+            });
+        }
+    } else {
+        // Non-global-admin: fetch all sites the user has any role on.
+        let site_roles = crate::models::site_user::list_for_user(&state.db, admin.user.id)
+            .await
+            .unwrap_or_else(|e| {
+                tracing::warn!("failed to list sites for user {}: {:?}", admin.user.id, e);
+                vec![]
+            });
+        for (s, site_role) in &site_roles {
+            let post_count = crate::models::site::post_count(&state.db, s.id).await.unwrap_or(0);
+            // can_manage if they are the owner of this site
+            let can_manage = s.owner_user_id == Some(admin.user.id);
+            rows.push(SiteRow {
+                id: s.id.to_string(),
+                hostname: s.hostname.clone(),
+                post_count,
+                is_default: admin.user.default_site_id == Some(s.id),
+                can_manage,
+            });
+            let _ = site_role; // used for future display
+        }
     }
 
-    Html(admin::pages::sites::render_list(&rows, None, &cs, admin.is_global_admin, &admin.user.email))
+    let ctx = super::page_ctx(&admin, &cs);
+    Html(admin::pages::sites::render_list(&rows, None, can_create, &ctx))
 }
 
 /// GET /admin/sites/new — new site form.
@@ -57,12 +77,12 @@ pub async fn new_site(
     State(state): State<AppState>,
     admin: AdminUser,
 ) -> Html<String> {
-    let is_site_admin = admin.site_role.as_str() == "admin" && !admin.is_global_admin;
-    if !admin.is_global_admin && !is_site_admin {
+    if !admin.caps.can_manage_sites {
         return Html("<h1>403 Forbidden</h1>".to_string());
     }
     let cs = state.site_hostname(admin.site_id);
-    Html(admin::pages::sites::render_new(None, &cs, admin.is_global_admin, &admin.user.email))
+    let ctx = super::page_ctx(&admin, &cs);
+    Html(admin::pages::sites::render_new(None, &ctx))
 }
 
 #[derive(Deserialize)]
@@ -78,14 +98,14 @@ pub async fn create(
     admin: AdminUser,
     Form(form): Form<NewSiteForm>,
 ) -> impl IntoResponse {
-    let is_site_admin = admin.site_role.as_str() == "admin" && !admin.is_global_admin;
-    if !admin.is_global_admin && !is_site_admin {
+    if !admin.caps.can_manage_sites {
         return (axum::http::StatusCode::FORBIDDEN, "Forbidden").into_response();
     }
     let cs = state.site_hostname(admin.site_id);
+    let ctx = super::page_ctx(&admin, &cs);
     let hostname = form.hostname.trim().to_lowercase();
     if hostname.is_empty() {
-        return Html(admin::pages::sites::render_new(Some("Hostname cannot be empty."), &cs, admin.is_global_admin, &admin.user.email)).into_response();
+        return Html(admin::pages::sites::render_new(Some("Hostname cannot be empty."), &ctx)).into_response();
     }
 
     let result = crate::models::site::create_with_defaults(&state.db, &hostname, admin.user.id)
@@ -105,7 +125,7 @@ pub async fn create(
             } else {
                 format!("Failed to create site: {e}")
             };
-            Html(admin::pages::sites::render_new(Some(&msg), &cs, admin.is_global_admin, &admin.user.email)).into_response()
+            Html(admin::pages::sites::render_new(Some(&msg), &ctx)).into_response()
         }
     }
 }
@@ -125,7 +145,7 @@ pub async fn switch(
 ) -> impl IntoResponse {
     if let Ok(uuid) = form.site_id.parse::<Uuid>() {
         // For site_admin: verify they actually have a role on the target site.
-        let allowed = if admin.is_global_admin {
+        let allowed = if admin.caps.is_global_admin {
             true
         } else {
             crate::models::site_user::get_role(&state.db, uuid, admin.user.id)
@@ -149,20 +169,21 @@ pub async fn site_settings(
     admin: AdminUser,
     Path(id): Path<Uuid>,
 ) -> impl IntoResponse {
-    if !admin.is_global_admin {
+    let cs = state.site_hostname(admin.site_id);
+    let site = match crate::models::site::get_by_id(&state.db, id).await {
+        Ok(s) => s,
+        Err(_) => return Redirect::to("/admin/sites").into_response(),
+    };
+    let is_owner = site.owner_user_id == Some(admin.user.id);
+    if !admin.caps.is_global_admin && !is_owner {
         return (axum::http::StatusCode::FORBIDDEN, "Forbidden").into_response();
     }
-    let cs = state.site_hostname(admin.site_id);
-    match crate::models::site::get_by_id(&state.db, id).await {
-        Ok(site) => {
-            let data = SiteSettingsData {
-                id: site.id.to_string(),
-                hostname: site.hostname.clone(),
-            };
-            Html(admin::pages::sites::render_settings(&data, None, &cs, true, &admin.user.email)).into_response()
-        }
-        Err(_) => Redirect::to("/admin/sites").into_response(),
-    }
+    let ctx = super::page_ctx(&admin, &cs);
+    let data = SiteSettingsData {
+        id: site.id.to_string(),
+        hostname: site.hostname.clone(),
+    };
+    Html(admin::pages::sites::render_settings(&data, None, &ctx)).into_response()
 }
 
 #[derive(Deserialize)]
@@ -177,14 +198,20 @@ pub async fn save_site_settings(
     Path(id): Path<Uuid>,
     Form(form): Form<SiteSettingsForm>,
 ) -> impl IntoResponse {
-    if !admin.is_global_admin {
+    let site = match crate::models::site::get_by_id(&state.db, id).await {
+        Ok(s) => s,
+        Err(_) => return Redirect::to("/admin/sites").into_response(),
+    };
+    let is_owner = site.owner_user_id == Some(admin.user.id);
+    if !admin.caps.is_global_admin && !is_owner {
         return (axum::http::StatusCode::FORBIDDEN, "Forbidden").into_response();
     }
     let cs = state.site_hostname(admin.site_id);
+    let ctx = super::page_ctx(&admin, &cs);
     let hostname = form.hostname.trim().to_lowercase();
     if hostname.is_empty() {
         let data = SiteSettingsData { id: id.to_string(), hostname: String::new() };
-        return Html(admin::pages::sites::render_settings(&data, Some("Hostname cannot be empty."), &cs, true, &admin.user.email)).into_response();
+        return Html(admin::pages::sites::render_settings(&data, Some("Hostname cannot be empty."), &ctx)).into_response();
     }
 
     let result = sqlx::query(
@@ -197,6 +224,20 @@ pub async fn save_site_settings(
 
     match result {
         Ok(_) => {
+            // Keep site_url in sync with the new hostname.
+            // site_url is always derived as http://{hostname} — port/https
+            // overrides are a super_admin concern handled via CLI or direct DB.
+            let derived_url = format!("http://{}", hostname);
+            let _ = sqlx::query(
+                "INSERT INTO site_settings (site_id, key, value)
+                 VALUES ($1, 'site_url', $2)
+                 ON CONFLICT (site_id, key) DO UPDATE SET value = EXCLUDED.value",
+            )
+            .bind(id)
+            .bind(&derived_url)
+            .execute(&state.db)
+            .await;
+
             if let Err(e) = state.reload_site_cache().await {
                 tracing::warn!("site cache reload failed after settings save: {:?}", e);
             }
@@ -209,7 +250,7 @@ pub async fn save_site_settings(
                 format!("Failed to save: {e}")
             };
             let data = SiteSettingsData { id: id.to_string(), hostname };
-            Html(admin::pages::sites::render_settings(&data, Some(&msg), &cs, true, &admin.user.email)).into_response()
+            Html(admin::pages::sites::render_settings(&data, Some(&msg), &ctx)).into_response()
         }
     }
 }
@@ -220,7 +261,7 @@ pub async fn delete(
     admin: AdminUser,
     Path(id): Path<Uuid>,
 ) -> impl IntoResponse {
-    if !admin.is_global_admin {
+    if !admin.caps.is_global_admin {
         return (axum::http::StatusCode::FORBIDDEN, "Forbidden").into_response();
     }
     if let Err(e) = crate::models::site::delete(&state.db, id).await {

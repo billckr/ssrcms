@@ -7,7 +7,7 @@ pub struct DashboardData {
     pub total_users: i64,
 }
 
-pub fn render(data: &DashboardData, flash: Option<&str>, current_site: &str, is_global_admin: bool, user_email: &str) -> String {
+pub fn render(data: &DashboardData, flash: Option<&str>, ctx: &crate::PageContext) -> String {
     let content = format!(
         r#"<div class="stats-grid">
   <div class="stat-card">
@@ -34,5 +34,5 @@ pub fn render(data: &DashboardData, flash: Option<&str>, current_site: &str, is_
         total_users = data.total_users,
     );
 
-    crate::admin_page("Dashboard", "/admin", flash, &content, current_site, is_global_admin, user_email)
+    crate::admin_page("Dashboard", "/admin", flash, &content, ctx)
 }
