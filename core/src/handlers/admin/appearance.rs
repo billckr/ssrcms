@@ -609,6 +609,8 @@ fn walk_dir_inner(base: &FsPath, current: &FsPath, out: &mut Vec<String>) {
             walk_dir_inner(base, &path, out);
         } else {
             if name_str.ends_with(".bak") { continue; }
+            if name_str == "screenshot.png" { continue; }
+            if name_str == "theme.toml" { continue; }
             if let Ok(rel) = path.strip_prefix(base) {
                 out.push(rel.to_string_lossy().replace('\\', "/"));
             }
