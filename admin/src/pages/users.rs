@@ -311,7 +311,10 @@ pub fn render_site_access(
         "<p><em>No sites available to assign.</em></p>".to_string()
     } else {
         format!(
-            r#"<form method="post" action="/admin/users/{user_id}/site-access/add" style="display:flex;gap:0.75rem;align-items:flex-end;flex-wrap:wrap;margin-top:1.5rem">
+            r#"<form method="post" action="/admin/users/{user_id}/site-access/add"
+  data-username="{display_name}"
+  onsubmit="if(this.querySelector('[name=role]').value==='site_admin'){{var s=this.querySelector('[name=site_id] option:checked').text;return confirm('WARNING: You are about to assign \'' + this.dataset.username + '\' as Site Admin (owner) of \'' + s + '\'.\n\nThis grants full ownership of that site and changes their global role to site_admin.\n\nAre you sure?');}}"
+  style="display:flex;gap:0.75rem;align-items:flex-end;flex-wrap:wrap;margin-top:1.5rem">
   <div class="form-group" style="margin:0;flex:1;min-width:160px">
     <label>Site</label>
     <select name="site_id" style="width:100%">{site_opts}</select>
@@ -330,6 +333,7 @@ pub fn render_site_access(
   </div>
 </form>"#,
             user_id        = crate::html_escape(&data.user_id),
+            display_name   = crate::html_escape(&data.display_name),
             site_opts      = site_options,
             site_admin_opt = if is_global_admin {
                 r#"<option value="site_admin">Site Admin (owner)</option>"#
