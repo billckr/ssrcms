@@ -47,6 +47,105 @@ pub fn render(themes: &[ThemeInfo], ctx: &crate::PageContext) -> String {
     render_with_flash(themes, None, ctx)
 }
 
+// ── Theme file editor ─────────────────────────────────────────────────────────
+
+pub struct EditorFile {
+    pub rel_path: String,
+    pub is_selected: bool,
+    pub has_backup: bool,
+}
+
+pub fn render_theme_editor(
+    theme_name: &str,
+    files: &[EditorFile],
+    selected: Option<&str>,
+    content: &str,
+    has_backup: bool,
+    flash: Option<&str>,
+    ctx: &crate::PageContext,
+) -> String {
+    let theme_esc = crate::html_escape(theme_name);
+
+    let file_tree: String = files.iter().map(|f| {
+        let active_class = if f.is_selected { " class=\"editor-file-active\"" } else { "" };
+        let bak_dot = if f.has_backup {
+            r#" <span class="editor-bak-dot" title="Original backup exists">●</span>"#
+        } else { "" };
+        format!(
+            r#"<li><a href="/admin/appearance/editor/{theme}?file={file_enc}"{active}>{file_name}{bak}</a></li>"#,
+            theme = theme_esc,
+            file_enc = crate::html_escape(&f.rel_path),
+            active = active_class,
+            file_name = crate::html_escape(&f.rel_path),
+            bak = bak_dot,
+        )
+    }).collect::<Vec<_>>().join("\n");
+
+    let editor_panel = if let Some(rel) = selected {
+        let rel_esc = crate::html_escape(rel);
+        let content_esc = crate::html_escape(content);
+        let restore_btn = if has_backup {
+            format!(
+                r#"<form method="POST" action="/admin/appearance/editor/{theme}/restore" style="display:inline"
+    onsubmit="return confirm('Restore original backup? Your current edits will be overwritten.')">
+  <input type="hidden" name="file" value="{file}">
+  <button type="submit" class="btn btn-sm btn-secondary">Restore original</button>
+</form>"#,
+                theme = theme_esc,
+                file = rel_esc,
+            )
+        } else { String::new() };
+        format!(
+            r#"<div class="editor-toolbar">
+  <span class="editor-filename">{file}</span>
+  {restore}
+  <a href="/admin/appearance" class="btn btn-sm btn-secondary" style="margin-left:auto">&#8592; Back to themes</a>
+</div>
+<form method="POST" action="/admin/appearance/editor/{theme}/save">
+  <input type="hidden" name="file" value="{file}">
+  <textarea id="editor-area" name="content" class="editor-textarea" spellcheck="false">{content}</textarea>
+  <div class="editor-footer">
+    <button type="submit" class="btn btn-primary">Save file</button>
+    {restore2}
+  </div>
+</form>"#,
+            file = rel_esc,
+            theme = theme_esc,
+            content = content_esc,
+            restore = restore_btn.clone(),
+            restore2 = restore_btn,
+        )
+    } else {
+        format!(
+            r#"<div class="editor-empty">
+  <p>Select a file from the left panel to edit it.</p>
+  <a href="/admin/appearance" class="btn btn-secondary">&#8592; Back to themes</a>
+</div>"#
+        )
+    };
+
+    let content_html = format!(
+        r#"<div class="editor-layout">
+  <div class="editor-sidebar">
+    <div class="editor-sidebar-title">Theme: {theme}</div>
+    <ul class="editor-file-list">{tree}</ul>
+  </div>
+  <div class="editor-main">{panel}</div>
+</div>"#,
+        theme = theme_esc,
+        tree = file_tree,
+        panel = editor_panel,
+    );
+
+    admin_page(
+        &format!("Edit Theme: {}", crate::html_escape(theme_name)),
+        "/admin/appearance",
+        flash,
+        &content_html,
+        ctx,
+    )
+}
+
 fn render_card(t: &ThemeInfo, ctx: &crate::PageContext) -> String {
     let active_class = if t.active { " active" } else { "" };
 
@@ -75,6 +174,11 @@ fn render_card(t: &ThemeInfo, ctx: &crate::PageContext) -> String {
         )
     };
 
+    let edit_html = format!(
+        r#"<a href="/admin/appearance/editor/{}" class="btn btn-sm btn-secondary">Edit files</a>"#,
+        crate::html_escape(&t.name)
+    );
+
     let delete_html = if t.can_delete {
         format!(
             r#"<form method="post" action="/admin/appearance/delete" style="display:inline;"
@@ -100,7 +204,7 @@ fn render_card(t: &ThemeInfo, ctx: &crate::PageContext) -> String {
   <p class="theme-description">{desc}</p>
   <p class="theme-author">by {author}</p>
   <div class="theme-actions">
-    {activate}{delete}
+    {activate}{edit}{delete}
   </div>
 </div>"#,
         active = active_class,
@@ -123,6 +227,7 @@ fn render_card(t: &ThemeInfo, ctx: &crate::PageContext) -> String {
         desc = crate::html_escape(&t.description),
         author = crate::html_escape(&t.author),
         activate = activate_html,
+        edit = edit_html,
         delete = delete_html,
     )
 }

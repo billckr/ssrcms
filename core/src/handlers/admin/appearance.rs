@@ -1,6 +1,6 @@
 use axum::{
     body::Body,
-    extract::{Multipart, Path, State, Form},
+    extract::{Multipart, Path, Query, State, Form},
     http::{header, StatusCode},
     response::{Html, IntoResponse, Redirect, Response},
 };
@@ -525,7 +525,263 @@ fn tempdir_in(dir: &str) -> Result<String, String> {
         .map(|s| s.to_string())
         .ok_or("Temp path is not valid UTF-8.".to_string())
 }
+// ── Theme file editor ────────────────────────────────────────────────────────
 
+#[derive(Deserialize)]
+pub struct EditorQuery {
+    pub file: Option<String>,
+    pub saved: Option<String>,
+    pub restored: Option<String>,
+}
+
+#[derive(Deserialize)]
+pub struct SaveFileForm {
+    pub file: String,
+    pub content: String,
+}
+
+#[derive(Deserialize)]
+pub struct RestoreFileForm {
+    pub file: String,
+}
+
+/// Encode a string for use as a URL query-parameter value.
+fn url_encode_param(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for b in s.bytes() {
+        match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'/' => out.push(b as char),
+            b => out.push_str(&format!("%{:02X}", b)),
+        }
+    }
+    out
+}
+
+/// Find the filesystem path of a named theme (global or site-scoped).
+fn resolve_theme_dir(themes_dir: &str, theme_name: &str, site_id: Option<Uuid>) -> Option<PathBuf> {
+    if theme_name.is_empty() || theme_name.contains("..") || theme_name.contains('/') || theme_name.contains('\\') {
+        return None;
+    }
+    let global = FsPath::new(themes_dir).join("global").join(theme_name);
+    if global.is_dir() { return Some(global); }
+    if let Some(id) = site_id {
+        let site = FsPath::new(themes_dir).join("sites").join(id.to_string()).join(theme_name);
+        if site.is_dir() { return Some(site); }
+    }
+    None
+}
+
+/// Resolve a relative file path within a theme dir, guarding against traversal.
+fn resolve_file_in_theme(theme_dir: &FsPath, rel_path: &str) -> Option<PathBuf> {
+    if rel_path.contains('\0') || rel_path.is_empty() { return None; }
+    let canonical_theme = theme_dir.canonicalize().ok()?;
+    let canonical_file = theme_dir.join(rel_path).canonicalize().ok()?;
+    if !canonical_file.starts_with(&canonical_theme) { return None; }
+    if !canonical_file.is_file() { return None; }
+    Some(canonical_file)
+}
+
+/// Build the `.bak` path for a given absolute file path.
+fn bak_path_for(abs: &FsPath) -> PathBuf {
+    let mut p = abs.to_path_buf();
+    let mut name = p.file_name().unwrap_or_default().to_os_string();
+    name.push(".bak");
+    p.set_file_name(name);
+    p
+}
+
+/// Walk theme dir, returning relative paths (excluding `.bak` and hidden entries).
+fn walk_theme_files(theme_dir: &FsPath) -> Vec<String> {
+    let mut files = Vec::new();
+    walk_dir_inner(theme_dir, theme_dir, &mut files);
+    files.sort();
+    files
+}
+
+fn walk_dir_inner(base: &FsPath, current: &FsPath, out: &mut Vec<String>) {
+    let Ok(entries) = fs::read_dir(current) else { return; };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let name = entry.file_name();
+        let name_str = name.to_string_lossy();
+        if name_str.starts_with('.') { continue; }
+        if path.is_dir() {
+            walk_dir_inner(base, &path, out);
+        } else {
+            if name_str.ends_with(".bak") { continue; }
+            if let Ok(rel) = path.strip_prefix(base) {
+                out.push(rel.to_string_lossy().replace('\\', "/"));
+            }
+        }
+    }
+}
+
+pub async fn edit_file(
+    State(state): State<AppState>,
+    admin: AdminUser,
+    Path(theme): Path<String>,
+    Query(q): Query<EditorQuery>,
+) -> Response {
+    if !admin.caps.can_manage_appearance {
+        return (StatusCode::FORBIDDEN, Html("<h1>403 Forbidden</h1>".to_string())).into_response();
+    }
+    let cs = state.site_hostname(admin.site_id);
+    let ctx = super::page_ctx_full(&state, &admin, &cs).await;
+
+    let Some(theme_dir) = resolve_theme_dir(&state.config.themes_dir, &theme, admin.site_id) else {
+        return render_appearance_list(&state, Some("Theme not found."), &ctx, admin.site_id)
+            .await.into_response();
+    };
+
+    let files = walk_theme_files(&theme_dir);
+
+    let status_flash: Option<&str> = if q.saved.is_some() {
+        Some("File saved.")
+    } else if q.restored.is_some() {
+        Some("File restored from backup.")
+    } else {
+        None
+    };
+
+    let (selected_rel, content, has_backup, file_err) = if let Some(ref rel) = q.file {
+        if rel.contains('\0') || rel.contains("..") {
+            (None, String::new(), false, Some("Invalid file path."))
+        } else {
+            match resolve_file_in_theme(&theme_dir, rel) {
+                Some(abs) => {
+                    let has_bak = bak_path_for(&abs).exists();
+                    match fs::read_to_string(&abs) {
+                        Ok(c) => (Some(rel.clone()), c, has_bak, None),
+                        Err(_) => (Some(rel.clone()), String::new(), has_bak,
+                            Some("Could not read file (may be binary)."))
+                    }
+                }
+                None => (Some(rel.clone()), String::new(), false, Some("File not found.")),
+            }
+        }
+    } else {
+        (None, String::new(), false, None)
+    };
+
+    let effective_flash = file_err.or(status_flash);
+
+    let editor_files: Vec<admin::pages::appearance::EditorFile> = files.iter().map(|f| {
+        let has_bak = bak_path_for(&theme_dir.join(f)).exists();
+        admin::pages::appearance::EditorFile {
+            rel_path: f.clone(),
+            is_selected: selected_rel.as_deref() == Some(f.as_str()),
+            has_backup: has_bak,
+        }
+    }).collect();
+
+    Html(admin::pages::appearance::render_theme_editor(
+        &theme,
+        &editor_files,
+        selected_rel.as_deref(),
+        &content,
+        has_backup,
+        effective_flash,
+        &ctx,
+    )).into_response()
+}
+
+pub async fn save_file(
+    State(state): State<AppState>,
+    admin: AdminUser,
+    Path(theme): Path<String>,
+    Form(form): Form<SaveFileForm>,
+) -> Response {
+    if !admin.caps.can_manage_appearance {
+        return (StatusCode::FORBIDDEN, "Forbidden").into_response();
+    }
+    let cs = state.site_hostname(admin.site_id);
+    let ctx = super::page_ctx_full(&state, &admin, &cs).await;
+
+    let Some(theme_dir) = resolve_theme_dir(&state.config.themes_dir, &theme, admin.site_id) else {
+        return render_appearance_list(&state, Some("Theme not found."), &ctx, admin.site_id)
+            .await.into_response();
+    };
+
+    let redirect_base = format!(
+        "/admin/appearance/editor/{}?file={}",
+        url_encode_param(&theme), url_encode_param(&form.file)
+    );
+
+    let Some(abs_path) = resolve_file_in_theme(&theme_dir, &form.file) else {
+        return Redirect::to(&redirect_base).into_response();
+    };
+
+    let bak = bak_path_for(&abs_path);
+    if !bak.exists() {
+        if let Err(e) = fs::copy(&abs_path, &bak) {
+            tracing::warn!("theme editor: backup failed for {:?}: {e}", abs_path);
+        }
+    }
+
+    if let Err(e) = fs::write(&abs_path, form.content.as_bytes()) {
+        tracing::error!("theme editor: write failed for {:?}: {e}", abs_path);
+        return Redirect::to(&redirect_base).into_response();
+    }
+
+    if form.file.ends_with(".html") {
+        let active = state.active_theme.read().unwrap().clone();
+        if active == theme {
+            if let Err(e) = state.templates.switch_theme(&theme) {
+                tracing::warn!("theme editor: Tera reload after save failed: {e}");
+            }
+        }
+    }
+
+    Redirect::to(&format!("{}&saved=1", redirect_base)).into_response()
+}
+
+pub async fn restore_file(
+    State(state): State<AppState>,
+    admin: AdminUser,
+    Path(theme): Path<String>,
+    Form(form): Form<RestoreFileForm>,
+) -> Response {
+    if !admin.caps.can_manage_appearance {
+        return (StatusCode::FORBIDDEN, "Forbidden").into_response();
+    }
+    let cs = state.site_hostname(admin.site_id);
+    let ctx = super::page_ctx_full(&state, &admin, &cs).await;
+
+    let Some(theme_dir) = resolve_theme_dir(&state.config.themes_dir, &theme, admin.site_id) else {
+        return render_appearance_list(&state, Some("Theme not found."), &ctx, admin.site_id)
+            .await.into_response();
+    };
+
+    let redirect_base = format!(
+        "/admin/appearance/editor/{}?file={}",
+        url_encode_param(&theme), url_encode_param(&form.file)
+    );
+
+    let Some(abs_path) = resolve_file_in_theme(&theme_dir, &form.file) else {
+        return Redirect::to(&redirect_base).into_response();
+    };
+
+    let bak = bak_path_for(&abs_path);
+    if !bak.exists() {
+        return Redirect::to(&redirect_base).into_response();
+    }
+
+    if let Err(e) = fs::copy(&bak, &abs_path) {
+        tracing::error!("theme editor: restore failed for {:?}: {e}", abs_path);
+        return Redirect::to(&redirect_base).into_response();
+    }
+
+    if form.file.ends_with(".html") {
+        let active = state.active_theme.read().unwrap().clone();
+        if active == theme {
+            if let Err(e) = state.templates.switch_theme(&theme) {
+                tracing::warn!("theme editor: Tera reload after restore failed: {e}");
+            }
+        }
+    }
+
+    Redirect::to(&format!("{}&restored=1", redirect_base)).into_response()
+}
 // ── Shared list renderer ───────────────────────────────────────────────────────
 
 async fn render_appearance_list(
