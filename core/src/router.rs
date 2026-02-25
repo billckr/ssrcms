@@ -12,8 +12,8 @@ use tower_sessions::SessionManagerLayer;
 use tower_sessions_sqlx_store::PostgresStore;
 
 use crate::app_state::AppState;
-use crate::handlers::{archive, auth, home, metrics as metrics_handler, page, plugin_route, post as post_handler, search, theme_static};
-use crate::handlers::admin::{appearance, dashboard, media, plugins, posts, profile, settings, sites as admin_sites, taxonomy, upload, users};
+use crate::handlers::{archive, auth, form as form_handler, home, metrics as metrics_handler, page, plugin_route, post as post_handler, search, theme_static};
+use crate::handlers::admin::{appearance, dashboard, forms as admin_forms, media, plugins, posts, profile, settings, sites as admin_sites, taxonomy, upload, users};
 
 /// Tower middleware that records per-request HTTP metrics.
 async fn track_http_metrics(req: Request, next: Next) -> Response {
@@ -59,6 +59,8 @@ pub fn build(
         .route("/tag/{slug}", get(archive::tag_archive))
         .route("/author/{username}", get(archive::author_archive))
         .route("/search", get(search::search))
+        // ── Public form submissions ────────────────────────────────────────
+        .route("/form/{name}", post(form_handler::submit))
         // ── Admin auth ─────────────────────────────────────────────────────
         .route("/admin/login", get(auth::login_form).post(auth::login_post))
         .route("/admin/logout", get(auth::logout))
@@ -112,6 +114,12 @@ pub fn build(
         .route("/admin/sites/switch", post(admin_sites::switch))
         .route("/admin/sites/{id}/settings", get(admin_sites::site_settings).post(admin_sites::save_site_settings))
         .route("/admin/sites/{id}/delete", post(admin_sites::delete))
+        // ── Admin forms ────────────────────────────────────────────────────
+        .route("/admin/forms", get(admin_forms::list_forms))
+        .route("/admin/forms/{name}", get(admin_forms::view_form))
+        .route("/admin/forms/{name}/{id}/delete", post(admin_forms::delete_submission))
+        .route("/admin/forms/{name}/delete-all", post(admin_forms::delete_all))
+        .route("/admin/forms/{name}/export", get(admin_forms::export_csv))
     // ── Static files ───────────────────────────────────────────────────
         .nest_service("/uploads", uploads_service)
         .route("/theme/static/{*path}", get(theme_static::serve))

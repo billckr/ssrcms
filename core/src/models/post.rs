@@ -60,6 +60,7 @@ pub struct Post {
     pub featured_image_id: Option<Uuid>,
     pub published_at: Option<DateTime<Utc>>,
     pub scheduled_at: Option<DateTime<Utc>>,
+    pub template: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -165,6 +166,7 @@ pub struct CreatePost {
     pub author_id: Uuid,
     pub featured_image_id: Option<Uuid>,
     pub published_at: Option<DateTime<Utc>>,
+    pub template: Option<String>,
 }
 
 /// Data for updating an existing post.
@@ -178,6 +180,7 @@ pub struct UpdatePost {
     pub status: Option<PostStatus>,
     pub featured_image_id: Option<Uuid>,
     pub published_at: Option<DateTime<Utc>>,
+    pub template: Option<String>,
 }
 
 /// Strip all HTML tags, returning plain text content.
@@ -404,8 +407,8 @@ pub async fn create(pool: &PgPool, data: &CreatePost) -> Result<Post> {
     let post = sqlx::query_as::<_, Post>(
         r#"
         INSERT INTO posts (site_id, title, slug, content, content_format, excerpt, status,
-                           post_type, author_id, featured_image_id, published_at)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                           post_type, author_id, featured_image_id, published_at, template)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
         RETURNING *
         "#,
     )
@@ -420,6 +423,7 @@ pub async fn create(pool: &PgPool, data: &CreatePost) -> Result<Post> {
     .bind(data.author_id)
     .bind(data.featured_image_id)
     .bind(data.published_at)
+    .bind(data.template.as_deref())
     .fetch_one(pool)
     .await?;
 
@@ -656,8 +660,8 @@ pub async fn update(pool: &PgPool, id: Uuid, data: &UpdatePost) -> Result<Post> 
         r#"
         UPDATE posts
         SET title = $1, slug = $2, content = $3, content_format = $4, excerpt = $5,
-            status = $6, featured_image_id = $7, published_at = $8, updated_at = NOW()
-        WHERE id = $9
+            status = $6, featured_image_id = $7, published_at = $8, template = $9, updated_at = NOW()
+        WHERE id = $10
         RETURNING *
         "#,
     )
@@ -669,6 +673,7 @@ pub async fn update(pool: &PgPool, id: Uuid, data: &UpdatePost) -> Result<Post> 
     .bind(&new_status)
     .bind(new_image)
     .bind(new_published_at)
+    .bind(data.template.as_deref())
     .bind(id)
     .fetch_one(pool)
     .await?;

@@ -103,6 +103,7 @@ pub async fn new_page(
 
 async fn new_post_type(state: AppState, post_type: &str, site_id: Option<Uuid>, ctx: admin::PageContext) -> Html<String> {
     let (categories, tags) = fetch_term_options(&state, site_id).await;
+    let available_templates = if post_type == "page" { scan_templates(&state, site_id) } else { vec![] };
     let edit = PostEdit {
         id: None,
         title: String::new(),
@@ -116,6 +117,8 @@ async fn new_post_type(state: AppState, post_type: &str, site_id: Option<Uuid>, 
         tags,
         selected_categories: vec![],
         selected_tags: vec![],
+        template: None,
+        available_templates,
     };
     Html(admin::pages::posts::render_editor(&edit, None, &ctx))
 }
@@ -167,6 +170,7 @@ async fn edit_post_type(state: AppState, id: Uuid, site_id: Option<Uuid>, is_aut
     }
 
     let (categories, tags) = fetch_term_options(&state, site_id).await;
+    let available_templates = if post.post_type == "page" { scan_templates(&state, site_id) } else { vec![] };
 
     let post_terms = crate::models::taxonomy::for_post(&state.db, id).await.unwrap_or_else(|e| {
         tracing::warn!("failed to fetch terms for post {}: {:?}", id, e);
@@ -194,6 +198,8 @@ async fn edit_post_type(state: AppState, id: Uuid, site_id: Option<Uuid>, is_aut
         tags,
         selected_categories,
         selected_tags,
+        template: post.template.clone(),
+        available_templates,
     };
 
     Html(admin::pages::posts::render_editor(&edit, None, &ctx)).into_response()
@@ -242,6 +248,7 @@ pub struct PostForm {
     pub status: String,
     pub post_type: String,
     pub published_at: Option<String>,
+    pub template: Option<String>,
     #[serde(default, deserialize_with = "deserialize_string_or_vec")]
     pub categories: Vec<String>,
     #[serde(default, deserialize_with = "deserialize_string_or_vec")]
@@ -269,6 +276,7 @@ pub async fn save_new(
         author_id: admin.user.id,
         featured_image_id: None,
         published_at,
+        template: form.template.clone().filter(|s| !s.is_empty()),
     };
 
     match crate::models::post::create(&state.db, &create).await {
@@ -293,11 +301,13 @@ pub async fn save_new(
                 excerpt: form.excerpt.unwrap_or_default(),
                 status: form.status,
                 published_at: form.published_at,
-                post_type: form.post_type,
+                post_type: form.post_type.clone(),
                 categories,
                 tags,
                 selected_categories: form.categories,
                 selected_tags: form.tags,
+                template: form.template.clone().filter(|s| !s.is_empty()),
+                available_templates: if form.post_type == "page" { scan_templates(&state, admin.site_id) } else { vec![] },
             };
             let msg = friendly_save_error(&e);
             Html(admin::pages::posts::render_editor(&edit, Some(&msg), &ctx)).into_response()
@@ -346,6 +356,7 @@ pub async fn save_edit(
         status: Some(status),
         featured_image_id: None,
         published_at,
+        template: form.template.clone().filter(|s| !s.is_empty()),
     };
 
     match crate::models::post::update(&state.db, id, &update).await {
@@ -381,11 +392,13 @@ pub async fn save_edit(
                 excerpt: form.excerpt.unwrap_or_default(),
                 status: form.status,
                 published_at: form.published_at,
-                post_type: form.post_type,
+                post_type: form.post_type.clone(),
                 categories,
                 tags,
                 selected_categories,
                 selected_tags,
+                template: form.template.clone().filter(|s| !s.is_empty()),
+                available_templates: if form.post_type == "page" { scan_templates(&state, admin.site_id) } else { vec![] },
             };
             let msg = friendly_save_error(&e);
             Html(admin::pages::posts::render_editor(&edit, Some(&msg), &ctx)).into_response()
@@ -463,6 +476,57 @@ async fn fetch_term_options(state: &AppState, site_id: Option<Uuid>) -> (Vec<Ter
     let cat_opts = cats.iter().map(|t| TermOption { id: t.id.to_string(), name: t.name.clone() }).collect();
     let tag_opts = tags.iter().map(|t| TermOption { id: t.id.to_string(), name: t.name.clone() }).collect();
     (cat_opts, tag_opts)
+}
+
+/// Scan the active theme's templates/ directory for available templates.
+/// Returns paths relative to templates/ without the .html extension,
+/// e.g. ["forms/contact", "forms/newsletter", "landing"].
+/// Excludes base.html (layout file, not a standalone template).
+fn scan_templates(state: &AppState, site_id: Option<Uuid>) -> Vec<String> {
+    let theme = state.active_theme_for_site(site_id);
+    let themes_dir = &state.config.themes_dir;
+
+    // Check site-specific theme dir first, then global.
+    let theme_dir = if let Some(sid) = site_id {
+        let site_path = std::path::Path::new(themes_dir).join("sites").join(sid.to_string()).join(&theme);
+        if site_path.is_dir() {
+            site_path
+        } else {
+            std::path::Path::new(themes_dir).join("global").join(&theme)
+        }
+    } else {
+        std::path::Path::new(themes_dir).join("global").join(&theme)
+    };
+
+    let templates_dir = theme_dir.join("templates");
+    if !templates_dir.is_dir() {
+        return vec![];
+    }
+
+    // Walk recursively, collect all .html files except base.html
+    let mut results = Vec::new();
+    fn walk(dir: &std::path::Path, base: &std::path::Path, results: &mut Vec<String>) {
+        let Ok(entries) = std::fs::read_dir(dir) else { return };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                walk(&path, base, results);
+            } else if path.extension().and_then(|e| e.to_str()) == Some("html") {
+                if let Ok(rel) = path.strip_prefix(base) {
+                    let s = rel.to_string_lossy();
+                    // Strip .html extension
+                    let without_ext = s.trim_end_matches(".html").to_string();
+                    // Skip base.html (layout) and the top-level defaults
+                    if without_ext != "base" {
+                        results.push(without_ext.replace('\\', "/"));
+                    }
+                }
+            }
+        }
+    }
+    walk(&templates_dir, &templates_dir, &mut results);
+    results.sort();
+    results
 }
 
 async fn save_post_terms(state: &AppState, post_id: Uuid, category_ids: &[String], tag_ids: &[String]) {

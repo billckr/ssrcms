@@ -42,6 +42,8 @@ pub struct AdminCaps {
     pub can_manage_appearance: bool,
     /// Can create, edit, and delete categories and tags.
     pub can_manage_taxonomies: bool,
+    /// Can view, export, and delete form submissions.
+    pub can_manage_forms: bool,
 }
 
 impl AdminCaps {
@@ -61,6 +63,7 @@ impl AdminCaps {
             can_manage_content: true,
             can_manage_appearance: is_admin,
             can_manage_taxonomies: is_editor_or_above,
+            can_manage_forms: is_admin,
         }
     }
 }

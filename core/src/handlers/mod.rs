@@ -1,6 +1,7 @@
 pub mod admin;
 pub mod archive;
 pub mod auth;
+pub mod form;
 pub mod home;
 pub mod metrics;
 pub mod page;

@@ -68,5 +68,13 @@ async fn render_page(
     );
     crate::templates::context::ContextBuilder::add_hook_outputs(&mut ctx, &hook_outputs);
 
-    state.templates.render_for_theme(&theme, "page.html", &ctx)
+    // Use the page-specific template if set, otherwise fall back to page.html
+    let template_name = post_record
+        .template
+        .as_deref()
+        .filter(|t| !t.is_empty())
+        .map(|t| format!("{}.html", t))
+        .unwrap_or_else(|| "page.html".to_string());
+
+    state.templates.render_for_theme(&theme, &template_name, &ctx)
 }

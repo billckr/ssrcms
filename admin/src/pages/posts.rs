@@ -23,6 +23,10 @@ pub struct PostEdit {
     pub tags: Vec<TermOption>,
     pub selected_categories: Vec<String>,
     pub selected_tags: Vec<String>,
+    /// Current template override (e.g. "forms/contact"). None = default.
+    pub template: Option<String>,
+    /// Templates available in the active theme (relative paths without .html).
+    pub available_templates: Vec<String>,
 }
 
 pub struct TermOption {
@@ -150,6 +154,26 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
         String::new()
     };
 
+    let template_section = if post.post_type == "page" && !post.available_templates.is_empty() {
+        let opts = std::iter::once(("".to_string(), "Default (page.html)".to_string()))
+            .chain(post.available_templates.iter().map(|t| (t.clone(), t.clone())))
+            .map(|(val, label)| {
+                let selected = if post.template.as_deref().unwrap_or("") == val { " selected" } else { "" };
+                format!(r#"<option value="{val}"{selected}>{label}</option>"#,
+                    val = crate::html_escape(&val),
+                    label = crate::html_escape(&label),
+                    selected = selected)
+            })
+            .collect::<Vec<_>>().join("");
+        format!(r#"<div class="form-group">
+          <label for="template">Template</label>
+          <select id="template" name="template">{opts}</select>
+          <small>Templates in the active theme's templates/ directory.</small>
+        </div>"#, opts = opts)
+    } else {
+        String::new()
+    };
+
     let categories_section = if post.post_type != "page" {
         format!(r#"<div class="form-section">
           <h3>Categories</h3>
@@ -203,6 +227,7 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
         <input type="hidden" name="post_type" value="{post_type}">
         <button type="submit" class="btn btn-primary">Save</button>
       </div>
+      {template_section}
       {categories_section}
     </div>
   </div>
@@ -247,6 +272,7 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
         status_options = status_options,
         published_at = crate::html_escape(&published_at),
         post_type = crate::html_escape(&post.post_type),
+        template_section = template_section,
         categories_section = categories_section,
     );
 

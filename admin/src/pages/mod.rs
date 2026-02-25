@@ -1,5 +1,6 @@
 pub mod appearance;
 pub mod dashboard;
+pub mod forms;
 pub mod login;
 pub mod media;
 pub mod plugins;
