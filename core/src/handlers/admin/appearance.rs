@@ -737,7 +737,7 @@ pub async fn save_file(
     }
 
     if form.file.ends_with(".html") {
-        let active = state.active_theme.read().unwrap().clone();
+        let active = state.active_theme_for_site(admin.site_id);
         if active == theme {
             if let Err(e) = state.templates.switch_theme(&theme) {
                 tracing::warn!("theme editor: Tera reload after save failed: {e}");
@@ -784,8 +784,12 @@ pub async fn restore_file(
         return Redirect::to(&redirect_base).into_response();
     }
 
+    if let Err(e) = fs::remove_file(&bak) {
+        tracing::warn!("theme editor: could not delete backup {:?} after restore: {e}", bak);
+    }
+
     if form.file.ends_with(".html") {
-        let active = state.active_theme.read().unwrap().clone();
+        let active = state.active_theme_for_site(admin.site_id);
         if active == theme {
             if let Err(e) = state.templates.switch_theme(&theme) {
                 tracing::warn!("theme editor: Tera reload after restore failed: {e}");

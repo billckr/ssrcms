@@ -126,14 +126,14 @@ pub fn render_theme_editor(
   <span class="editor-filename">{file}</span>
   {restore}
 </div>
-<form method="POST" action="/admin/appearance/editor/{theme}/save" class="editor-form">
+<form method="POST" action="/admin/appearance/editor/{theme}/save" class="editor-form" id="save-form">
   <input type="hidden" name="file" value="{file}">
   <textarea name="content" class="editor-textarea" spellcheck="false" autocorrect="off" autocapitalize="off">{content}</textarea>
-  <div class="editor-actions">
-    <button type="submit" class="btn btn-primary">Save file</button>
-    {restore2}
-  </div>
-</form>"#,
+</form>
+<div class="editor-actions">
+  <button type="submit" form="save-form" class="btn btn-primary">Save file</button>
+  {restore2}
+</div>"#,
             file     = rel_esc,
             theme    = theme_esc,
             content  = content_esc,
