@@ -23,7 +23,7 @@ pub async fn list(
         alt_text: if m.alt_text.is_empty() { None } else { Some(m.alt_text.clone()) },
     }).collect();
     let cs = state.site_hostname(admin.site_id);
-    let ctx = super::page_ctx(&admin, &cs);
+    let ctx = super::page_ctx_full(&state, &admin, &cs).await;
     Html(admin::pages::media::render_list(&items, None, &ctx))
 }
 

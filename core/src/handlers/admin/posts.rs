@@ -23,7 +23,7 @@ pub async fn list(
     Query(q): Query<PostsQuery>,
 ) -> Html<String> {
     let cs = state.site_hostname(admin.site_id);
-    let ctx = super::page_ctx(&admin, &cs);
+    let ctx = super::page_ctx_full(&state, &admin, &cs).await;
     let author_filter = if admin.site_role == "author" { Some(admin.user.id) } else { None };
     list_type(state, "post", q.page, admin.site_id, author_filter, ctx).await
 }
@@ -34,7 +34,7 @@ pub async fn list_pages(
     Query(q): Query<PostsQuery>,
 ) -> Html<String> {
     let cs = state.site_hostname(admin.site_id);
-    let ctx = super::page_ctx(&admin, &cs);
+    let ctx = super::page_ctx_full(&state, &admin, &cs).await;
     let author_filter = if admin.site_role == "author" { Some(admin.user.id) } else { None };
     list_type(state, "page", q.page, admin.site_id, author_filter, ctx).await
 }
@@ -88,7 +88,7 @@ pub async fn new_post(
     admin: AdminUser,
 ) -> Html<String> {
     let cs = state.site_hostname(admin.site_id);
-    let ctx = super::page_ctx(&admin, &cs);
+    let ctx = super::page_ctx_full(&state, &admin, &cs).await;
     new_post_type(state, "post", admin.site_id, ctx).await
 }
 
@@ -97,7 +97,7 @@ pub async fn new_page(
     admin: AdminUser,
 ) -> Html<String> {
     let cs = state.site_hostname(admin.site_id);
-    let ctx = super::page_ctx(&admin, &cs);
+    let ctx = super::page_ctx_full(&state, &admin, &cs).await;
     new_post_type(state, "page", admin.site_id, ctx).await
 }
 
@@ -129,7 +129,7 @@ pub async fn edit_post(
     Path(id): Path<Uuid>,
 ) -> impl IntoResponse {
     let cs = state.site_hostname(admin.site_id);
-    let ctx = super::page_ctx(&admin, &cs);
+    let ctx = super::page_ctx_full(&state, &admin, &cs).await;
     edit_post_type(state, id, admin.site_id, admin.site_role == "author", admin.user.id, ctx).await
 }
 
@@ -139,7 +139,7 @@ pub async fn edit_page(
     Path(id): Path<Uuid>,
 ) -> impl IntoResponse {
     let cs = state.site_hostname(admin.site_id);
-    let ctx = super::page_ctx(&admin, &cs);
+    let ctx = super::page_ctx_full(&state, &admin, &cs).await;
     edit_post_type(state, id, admin.site_id, admin.site_role == "author", admin.user.id, ctx).await
 }
 
@@ -291,7 +291,7 @@ pub async fn save_new(
         Err(e) => {
             tracing::error!("create post error: {:?}", e);
             let cs = state.site_hostname(admin.site_id);
-            let ctx = super::page_ctx(&admin, &cs);
+            let ctx = super::page_ctx_full(&state, &admin, &cs).await;
             let (categories, tags) = fetch_term_options(&state, admin.site_id).await;
             let edit = PostEdit {
                 id: None,
@@ -373,7 +373,7 @@ pub async fn save_edit(
         Err(e) => {
             tracing::error!("update post {} error: {:?}", id, e);
             let cs = state.site_hostname(admin.site_id);
-            let ctx = super::page_ctx(&admin, &cs);
+            let ctx = super::page_ctx_full(&state, &admin, &cs).await;
             let (categories, tags) = fetch_term_options(&state, admin.site_id).await;
             let post_terms = crate::models::taxonomy::for_post(&state.db, id).await.unwrap_or_else(|_| vec![]);
             let selected_categories: Vec<String> = post_terms.iter()

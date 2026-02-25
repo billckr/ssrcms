@@ -113,6 +113,17 @@ pub async fn delete_all(pool: &PgPool, site_id: Uuid, form_name: &str) -> Result
     Ok(())
 }
 
+/// Count unread submissions for a site across all forms.
+pub async fn count_unread(pool: &PgPool, site_id: Uuid) -> Result<i64> {
+    let row: (i64,) = sqlx::query_as(
+        "SELECT COUNT(*) FROM form_submissions WHERE site_id = $1 AND read_at IS NULL",
+    )
+    .bind(site_id)
+    .fetch_one(pool)
+    .await?;
+    Ok(row.0)
+}
+
 /// Mark all submissions for a form as read.
 pub async fn mark_all_read(pool: &PgPool, site_id: Uuid, form_name: &str) -> Result<()> {
     sqlx::query(

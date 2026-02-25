@@ -35,7 +35,7 @@ pub async fn dashboard(
 
     let cs = state.site_hostname(site_id);
 
-    let ctx = super::page_ctx(&admin, &cs);
+    let ctx = super::page_ctx_full(&state, &admin, &cs).await;
 
     let data = DashboardData {
         published_posts,

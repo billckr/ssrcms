@@ -30,7 +30,7 @@ pub async fn settings(
         date_format: s.date_format.clone(),
     };
     let cs = state.site_hostname(admin.site_id);
-    let ctx = super::page_ctx(&admin, &cs);
+    let ctx = super::page_ctx_full(&state, &admin, &cs).await;
     Html(admin::pages::settings::render(&data, None, &ctx)).into_response()
 }
 

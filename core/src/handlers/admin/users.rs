@@ -65,7 +65,7 @@ pub async fn list(
     };
     let current_user_id = admin.user.id.to_string();
     let can_manage_access = admin.caps.can_manage_users;
-    let ctx = super::page_ctx(&admin, &cs);
+    let ctx = super::page_ctx_full(&state, &admin, &cs).await;
     Html(admin::pages::users::render_list(&rows, None, &current_user_id, can_manage_access, &ctx)).into_response()
 }
 
@@ -77,7 +77,7 @@ pub async fn new_user(
         return Html("<h1>403 Forbidden</h1>".to_string()).into_response();
     }
     let cs = state.site_hostname(admin.site_id);
-    let ctx = super::page_ctx(&admin, &cs);
+    let ctx = super::page_ctx_full(&state, &admin, &cs).await;
     let sites = if admin.caps.is_global_admin {
         fetch_site_options(&state).await
     } else {
@@ -102,7 +102,7 @@ pub async fn edit_user(
     Path(id): Path<Uuid>,
 ) -> impl IntoResponse {
     let cs = state.site_hostname(admin.site_id);
-    let ctx = super::page_ctx(&admin, &cs);
+    let ctx = super::page_ctx_full(&state, &admin, &cs).await;
 
     // Site isolation: non-global admins may only edit users on their site.
     if !admin.caps.is_global_admin {
@@ -177,7 +177,7 @@ pub async fn save_new(
         return (axum::http::StatusCode::FORBIDDEN, "Forbidden").into_response();
     }
     let cs = state.site_hostname(admin.site_id);
-    let ctx = super::page_ctx(&admin, &cs);
+    let ctx = super::page_ctx_full(&state, &admin, &cs).await;
     let password = match form.password.as_deref().filter(|p| !p.is_empty()) {
         Some(p) => p.to_string(),
         None => {
@@ -325,7 +325,7 @@ pub async fn save_edit(
         return (axum::http::StatusCode::FORBIDDEN, "Forbidden").into_response();
     }
     let cs = state.site_hostname(admin.site_id);
-    let ctx = super::page_ctx(&admin, &cs);
+    let ctx = super::page_ctx_full(&state, &admin, &cs).await;
 
     // Site isolation: non-global admins may only edit users on their site.
     if !admin.caps.is_global_admin {
@@ -432,7 +432,7 @@ pub async fn delete_user(
 ) -> impl IntoResponse {
     let cs = state.site_hostname(admin.site_id);
     let current_user_id = admin.user.id.to_string();
-    let ctx = super::page_ctx(&admin, &cs);
+    let ctx = super::page_ctx_full(&state, &admin, &cs).await;
 
     macro_rules! deny {
         ($msg:expr) => {{
@@ -557,7 +557,7 @@ pub async fn site_access_page(
         return Html("<h1>403 Forbidden</h1>".to_string()).into_response();
     }
     let cs = state.site_hostname(admin.site_id);
-    let ctx = super::page_ctx(&admin, &cs);
+    let ctx = super::page_ctx_full(&state, &admin, &cs).await;
 
     let target_user = match crate::models::user::get_by_id(&state.db, user_id).await {
         Ok(u) => u,

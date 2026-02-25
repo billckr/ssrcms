@@ -30,6 +30,8 @@ pub struct PageContext {
     pub can_manage_taxonomies: bool,
     /// Can view, export, and delete form submissions.
     pub can_manage_forms: bool,
+    /// Number of unread form submissions across all forms on this site.
+    pub unread_forms_count: i64,
 }
 
 /// Wrap a rendered content HTML string in the full admin page shell.
@@ -150,7 +152,21 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
         cats = if ctx.can_manage_taxonomies { nav_link("/admin/categories", "Categories") } else { String::new() },
         tags = if ctx.can_manage_taxonomies { nav_link("/admin/tags", "Tags") } else { String::new() },
         users = if ctx.can_manage_users { nav_link("/admin/users", "Users") } else { String::new() },
-        forms = if ctx.can_manage_forms { nav_link("/admin/forms", "Forms") } else { String::new() },
+        forms = if ctx.can_manage_forms {
+            let badge = if ctx.unread_forms_count > 0 {
+                format!(
+                    r#" <span class="badge-unread" style="margin-left:.4rem;font-size:10px;padding:.1rem .45rem;box-shadow:none">{}</span>"#,
+                    ctx.unread_forms_count
+                )
+            } else {
+                String::new()
+            };
+            let active = if current_path.starts_with("/admin/forms") { " class=\"active\"" } else { "" };
+            format!(r#"<li><a href="/admin/forms"{}>{}</a></li>"#,
+                active,
+                format!("Forms{}", badge)
+            )
+        } else { String::new() },
         plugins = if ctx.can_manage_plugins { nav_link("/admin/plugins", "Plugins") } else { String::new() },
         appearance = if ctx.can_manage_appearance { nav_link("/admin/appearance", "Appearance") } else { String::new() },
         settings = if ctx.can_manage_settings { nav_link("/admin/settings", "Settings") } else { String::new() },

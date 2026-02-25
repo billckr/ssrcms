@@ -37,6 +37,6 @@ pub async fn list(
         }
     }).collect();
 
-    let ctx = super::page_ctx(&admin, &cs);
+    let ctx = super::page_ctx_full(&state, &admin, &cs).await;
     Html(render(&rows, &ctx)).into_response()
 }

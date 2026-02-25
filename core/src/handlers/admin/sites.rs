@@ -67,7 +67,7 @@ pub async fn list(
         }
     }
 
-    let ctx = super::page_ctx(&admin, &cs);
+    let ctx = super::page_ctx_full(&state, &admin, &cs).await;
     Html(admin::pages::sites::render_list(&rows, None, can_create, &ctx))
 }
 
@@ -81,7 +81,7 @@ pub async fn new_site(
         return Html("<h1>403 Forbidden</h1>".to_string());
     }
     let cs = state.site_hostname(admin.site_id);
-    let ctx = super::page_ctx(&admin, &cs);
+    let ctx = super::page_ctx_full(&state, &admin, &cs).await;
     Html(admin::pages::sites::render_new(None, &ctx))
 }
 
@@ -102,7 +102,7 @@ pub async fn create(
         return (axum::http::StatusCode::FORBIDDEN, "Forbidden").into_response();
     }
     let cs = state.site_hostname(admin.site_id);
-    let ctx = super::page_ctx(&admin, &cs);
+    let ctx = super::page_ctx_full(&state, &admin, &cs).await;
     let hostname = form.hostname.trim().to_lowercase();
     if hostname.is_empty() {
         return Html(admin::pages::sites::render_new(Some("Hostname cannot be empty."), &ctx)).into_response();
@@ -178,7 +178,7 @@ pub async fn site_settings(
     if !admin.caps.is_global_admin && !is_owner {
         return (axum::http::StatusCode::FORBIDDEN, "Forbidden").into_response();
     }
-    let ctx = super::page_ctx(&admin, &cs);
+    let ctx = super::page_ctx_full(&state, &admin, &cs).await;
     let data = SiteSettingsData {
         id: site.id.to_string(),
         hostname: site.hostname.clone(),
@@ -207,7 +207,7 @@ pub async fn save_site_settings(
         return (axum::http::StatusCode::FORBIDDEN, "Forbidden").into_response();
     }
     let cs = state.site_hostname(admin.site_id);
-    let ctx = super::page_ctx(&admin, &cs);
+    let ctx = super::page_ctx_full(&state, &admin, &cs).await;
     let hostname = form.hostname.trim().to_lowercase();
     if hostname.is_empty() {
         let data = SiteSettingsData { id: id.to_string(), hostname: String::new() };

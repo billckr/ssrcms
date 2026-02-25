@@ -36,7 +36,7 @@ pub async fn list(
         return (StatusCode::FORBIDDEN, Html("<h1>403 Forbidden</h1>".to_string())).into_response();
     }
     let cs = state.site_hostname(admin.site_id);
-    let ctx = super::page_ctx(&admin, &cs);
+    let ctx = super::page_ctx_full(&state, &admin, &cs).await;
     render_appearance_list(&state, None, &ctx, admin.site_id).await.into_response()
 }
 
@@ -58,7 +58,7 @@ pub async fn activate(
     let themes_dir = &state.config.themes_dir;
     let cs = state.site_hostname(admin.site_id);
 
-    let ctx = super::page_ctx(&admin, &cs);
+    let ctx = super::page_ctx_full(&state, &admin, &cs).await;
 
     // Reject obviously invalid names before any filesystem access.
     if form.theme.contains("..") || form.theme.contains('/') || form.theme.contains('\\') {
@@ -142,7 +142,7 @@ pub async fn delete(
     }
     let cs = state.site_hostname(admin.site_id);
 
-    let ctx = super::page_ctx(&admin, &cs);
+    let ctx = super::page_ctx_full(&state, &admin, &cs).await;
 
     macro_rules! err {
         ($msg:expr) => {
@@ -302,7 +302,7 @@ pub async fn upload_theme(
         return (StatusCode::FORBIDDEN, "Forbidden").into_response();
     }
     let cs = state.site_hostname(admin.site_id);
-    let ctx = super::page_ctx(&admin, &cs);
+    let ctx = super::page_ctx_full(&state, &admin, &cs).await;
     // Collect the zip bytes from the multipart field named "file".
     let mut zip_bytes: Option<Vec<u8>> = None;
     while let Ok(Some(field)) = multipart.next_field().await {

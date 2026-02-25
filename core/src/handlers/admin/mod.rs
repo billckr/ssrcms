@@ -1,7 +1,8 @@
 use crate::middleware::admin_auth::AdminUser;
+use crate::app_state::AppState;
 
-/// Build a [`admin::PageContext`] from an authenticated admin user and the current site name.
-/// Call this once at the top of each handler; pass `&ctx` to every render function.
+/// Build a [`admin::PageContext`] synchronously (unread count defaults to 0).
+/// Prefer `page_ctx_full` in async handlers to include the live unread badge count.
 pub fn page_ctx(admin: &AdminUser, current_site: &str) -> admin::PageContext {
     admin::PageContext {
         current_site: current_site.to_string(),
@@ -16,7 +17,22 @@ pub fn page_ctx(admin: &AdminUser, current_site: &str) -> admin::PageContext {
         can_manage_appearance: admin.caps.can_manage_appearance,
         can_manage_taxonomies: admin.caps.can_manage_taxonomies,
         can_manage_forms: admin.caps.can_manage_forms,
+        unread_forms_count: 0,
     }
+}
+
+/// Build a [`admin::PageContext`] with a live unread form submissions count.
+/// Use this in all standard async admin handlers.
+pub async fn page_ctx_full(state: &AppState, admin: &AdminUser, current_site: &str) -> admin::PageContext {
+    let mut ctx = page_ctx(admin, current_site);
+    if admin.caps.can_manage_forms {
+        if let Some(site_id) = admin.site_id {
+            ctx.unread_forms_count = crate::models::form_submission::count_unread(&state.db, site_id)
+                .await
+                .unwrap_or(0);
+        }
+    }
+    ctx
 }
 
 pub mod appearance;

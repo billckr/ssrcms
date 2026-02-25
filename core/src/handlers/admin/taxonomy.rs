@@ -20,7 +20,7 @@ pub async fn categories(
         return (StatusCode::FORBIDDEN, Html("<h1>403 Forbidden</h1>".to_string())).into_response();
     }
     let cs = state.site_hostname(admin.site_id);
-    let ctx = super::page_ctx(&admin, &cs);
+    let ctx = super::page_ctx_full(&state, &admin, &cs).await;
     list_terms(state, "category", admin.site_id, ctx).await.into_response()
 }
 
@@ -32,7 +32,7 @@ pub async fn tags(
         return (StatusCode::FORBIDDEN, Html("<h1>403 Forbidden</h1>".to_string())).into_response();
     }
     let cs = state.site_hostname(admin.site_id);
-    let ctx = super::page_ctx(&admin, &cs);
+    let ctx = super::page_ctx_full(&state, &admin, &cs).await;
     list_terms(state, "tag", admin.site_id, ctx).await.into_response()
 }
 
@@ -87,7 +87,7 @@ pub async fn create(
             items.push(TermItem { id: t.id.to_string(), name: t.name.clone(), slug: t.slug.clone(), post_count: count });
         }
         let cs = state.site_hostname(admin.site_id);
-        let ctx = super::page_ctx(&admin, &cs);
+        let ctx = super::page_ctx_full(&state, &admin, &cs).await;
         return Html(admin::pages::taxonomy::render(&items, &form.taxonomy, Some("Slug must be lowercase letters, numbers, and hyphens only — no spaces."), &ctx)).into_response();
     }
     let create = CreateTaxonomy {
@@ -114,7 +114,7 @@ pub async fn create(
             format!("Failed to create {}. Please try again.", form.taxonomy)
         };
         let cs = state.site_hostname(admin.site_id);
-        let ctx = super::page_ctx(&admin, &cs);
+        let ctx = super::page_ctx_full(&state, &admin, &cs).await;
         return Html(admin::pages::taxonomy::render(&items, &form.taxonomy, Some(&msg), &ctx)).into_response();
     }
     Redirect::to(redirect).into_response()

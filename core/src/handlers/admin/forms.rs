@@ -38,7 +38,7 @@ pub async fn list_forms(
     let site_id = match require_site_id(&admin) { Ok(id) => id, Err(r) => return r };
 
     let cs = state.site_hostname(admin.site_id);
-    let ctx = super::page_ctx(&admin, &cs);
+    let ctx = super::page_ctx_full(&state, &admin, &cs).await;
 
     match form_submission::list_forms(&state.db, site_id).await {
         Ok(summaries) => {
@@ -68,7 +68,7 @@ pub async fn view_form(
     let site_id = match require_site_id(&admin) { Ok(id) => id, Err(r) => return r };
 
     let cs = state.site_hostname(admin.site_id);
-    let ctx = super::page_ctx(&admin, &cs);
+    let ctx = super::page_ctx_full(&state, &admin, &cs).await;
 
     // Mark as read in the background (fire-and-forget; errors are non-fatal)
     let _ = form_submission::mark_all_read(&state.db, site_id, &name).await;

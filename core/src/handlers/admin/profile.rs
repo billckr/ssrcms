@@ -14,7 +14,7 @@ pub async fn view(
     admin: AdminUser,
 ) -> Html<String> {
     let cs = state.site_hostname(admin.site_id);
-    let ctx = super::page_ctx(&admin, &cs);
+    let ctx = super::page_ctx_full(&state, &admin, &cs).await;
     let profile = ProfileForm {
         username: admin.user.username.clone(),
         email: admin.user.email.clone(),
@@ -60,7 +60,7 @@ pub async fn update_profile(
     };
 
     // Build ctx; on success reflect the newly saved email in the sidebar.
-    let mut ctx = super::page_ctx(&admin, &cs);
+    let mut ctx = super::page_ctx_full(&state, &admin, &cs).await;
 
     match crate::models::user::update(&state.db, admin.user.id, &update).await {
         Ok(_) => {
@@ -104,7 +104,7 @@ pub async fn change_password(
     Form(form): Form<ChangePasswordForm>,
 ) -> impl IntoResponse {
     let cs = state.site_hostname(admin.site_id);
-    let ctx = super::page_ctx(&admin, &cs);
+    let ctx = super::page_ctx_full(&state, &admin, &cs).await;
     let profile = ProfileForm {
         username: admin.user.username.clone(),
         email: admin.user.email.clone(),
