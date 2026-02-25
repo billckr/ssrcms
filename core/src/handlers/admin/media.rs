@@ -10,7 +10,8 @@ pub async fn list(
     State(state): State<AppState>,
     admin: AdminUser,
 ) -> Html<String> {
-    let raw = crate::models::media::list(&state.db, admin.site_id, 200, 0).await.unwrap_or_else(|e| {
+    let uploaded_by = if admin.site_role == "author" { Some(admin.user.id) } else { None };
+    let raw = crate::models::media::list(&state.db, admin.site_id, uploaded_by, 200, 0).await.unwrap_or_else(|e| {
         tracing::warn!("failed to list media: {:?}", e);
         vec![]
     });
@@ -38,6 +39,14 @@ pub async fn delete(
                 tracing::warn!(
                     "media delete forbidden: user {} tried to delete media {} (site {:?}) not belonging to their site {:?}",
                     admin.user.id, id, media.site_id, admin.site_id
+                );
+                return (axum::http::StatusCode::FORBIDDEN, "Forbidden").into_response();
+            }
+            // Author restriction: authors can only delete their own uploads.
+            if admin.site_role == "author" && media.uploaded_by != admin.user.id {
+                tracing::warn!(
+                    "media delete forbidden: author {} tried to delete media {} uploaded by {}",
+                    admin.user.id, id, media.uploaded_by
                 );
                 return (axum::http::StatusCode::FORBIDDEN, "Forbidden").into_response();
             }

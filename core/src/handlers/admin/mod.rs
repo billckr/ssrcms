@@ -14,6 +14,7 @@ pub fn page_ctx(admin: &AdminUser, current_site: &str) -> admin::PageContext {
         can_manage_settings: admin.caps.can_manage_settings,
         can_manage_content: admin.caps.can_manage_content,
         can_manage_appearance: admin.caps.can_manage_appearance,
+        can_manage_taxonomies: admin.caps.can_manage_taxonomies,
     }
 }
 

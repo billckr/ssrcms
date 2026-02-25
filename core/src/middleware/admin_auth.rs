@@ -40,6 +40,8 @@ pub struct AdminCaps {
     pub can_manage_content: bool,
     /// Can manage themes (appearance).
     pub can_manage_appearance: bool,
+    /// Can create, edit, and delete categories and tags.
+    pub can_manage_taxonomies: bool,
 }
 
 impl AdminCaps {
@@ -48,6 +50,7 @@ impl AdminCaps {
     pub fn from_roles(global_role: &str, site_role: &str, visiting_foreign: bool) -> Self {
         let is_global_admin = global_role == "super_admin";
         let is_admin = is_global_admin || site_role == "admin";
+        let is_editor_or_above = is_admin || site_role == "editor";
         Self {
             is_global_admin,
             visiting_foreign_site: visiting_foreign,
@@ -57,6 +60,7 @@ impl AdminCaps {
             can_manage_settings: is_admin,
             can_manage_content: true,
             can_manage_appearance: is_admin,
+            can_manage_taxonomies: is_editor_or_above,
         }
     }
 }

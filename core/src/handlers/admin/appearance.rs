@@ -31,10 +31,13 @@ const MAX_ZIP_BYTES: usize = 50 * 1024 * 1024;
 pub async fn list(
     State(state): State<AppState>,
     admin: AdminUser,
-) -> Html<String> {
+) -> impl IntoResponse {
+    if !admin.caps.can_manage_appearance {
+        return (StatusCode::FORBIDDEN, Html("<h1>403 Forbidden</h1>".to_string())).into_response();
+    }
     let cs = state.site_hostname(admin.site_id);
     let ctx = super::page_ctx(&admin, &cs);
-    render_appearance_list(&state, None, &ctx, admin.site_id).await
+    render_appearance_list(&state, None, &ctx, admin.site_id).await.into_response()
 }
 
 // ── Activate ──────────────────────────────────────────────────────────────────
@@ -49,6 +52,9 @@ pub async fn activate(
     admin: AdminUser,
     Form(form): Form<ActivateForm>,
 ) -> impl IntoResponse {
+    if !admin.caps.can_manage_appearance {
+        return (StatusCode::FORBIDDEN, "Forbidden").into_response();
+    }
     let themes_dir = &state.config.themes_dir;
     let cs = state.site_hostname(admin.site_id);
 
@@ -131,6 +137,9 @@ pub async fn delete(
     admin: AdminUser,
     Form(form): Form<DeleteForm>,
 ) -> impl IntoResponse {
+    if !admin.caps.can_manage_appearance {
+        return (StatusCode::FORBIDDEN, "Forbidden").into_response();
+    }
     let cs = state.site_hostname(admin.site_id);
 
     let ctx = super::page_ctx(&admin, &cs);
@@ -289,6 +298,9 @@ pub async fn upload_theme(
     admin: AdminUser,
     mut multipart: Multipart,
 ) -> impl IntoResponse {
+    if !admin.caps.can_manage_appearance {
+        return (StatusCode::FORBIDDEN, "Forbidden").into_response();
+    }
     let cs = state.site_hostname(admin.site_id);
     let ctx = super::page_ctx(&admin, &cs);
     // Collect the zip bytes from the multipart field named "file".

@@ -1,5 +1,6 @@
 use axum::{
     extract::{Path, State},
+    http::StatusCode,
     response::{Html, IntoResponse, Redirect},
     Form,
 };
@@ -14,19 +15,25 @@ use admin::pages::taxonomy::TermItem;
 pub async fn categories(
     State(state): State<AppState>,
     admin: AdminUser,
-) -> Html<String> {
+) -> impl IntoResponse {
+    if !admin.caps.can_manage_taxonomies {
+        return (StatusCode::FORBIDDEN, Html("<h1>403 Forbidden</h1>".to_string())).into_response();
+    }
     let cs = state.site_hostname(admin.site_id);
     let ctx = super::page_ctx(&admin, &cs);
-    list_terms(state, "category", admin.site_id, ctx).await
+    list_terms(state, "category", admin.site_id, ctx).await.into_response()
 }
 
 pub async fn tags(
     State(state): State<AppState>,
     admin: AdminUser,
-) -> Html<String> {
+) -> impl IntoResponse {
+    if !admin.caps.can_manage_taxonomies {
+        return (StatusCode::FORBIDDEN, Html("<h1>403 Forbidden</h1>".to_string())).into_response();
+    }
     let cs = state.site_hostname(admin.site_id);
     let ctx = super::page_ctx(&admin, &cs);
-    list_terms(state, "tag", admin.site_id, ctx).await
+    list_terms(state, "tag", admin.site_id, ctx).await.into_response()
 }
 
 async fn list_terms(state: AppState, taxonomy: &str, site_id: Option<Uuid>, ctx: admin::PageContext) -> Html<String> {
@@ -63,6 +70,9 @@ pub async fn create(
     admin: AdminUser,
     Form(form): Form<TermForm>,
 ) -> impl IntoResponse {
+    if !admin.caps.can_manage_taxonomies {
+        return (StatusCode::FORBIDDEN, "Forbidden").into_response();
+    }
     let tax_type = if form.taxonomy == "category" { TaxonomyType::Category } else { TaxonomyType::Tag };
     let slug = form.slug
         .filter(|s| !s.is_empty())
@@ -115,6 +125,9 @@ pub async fn delete_category(
     admin: AdminUser,
     Path(id): Path<Uuid>,
 ) -> impl IntoResponse {
+    if !admin.caps.can_manage_taxonomies {
+        return (StatusCode::FORBIDDEN, "Forbidden").into_response();
+    }
     if !admin.caps.is_global_admin {
         let belongs = crate::models::taxonomy::get_by_id(&state.db, id).await
             .map(|t| t.site_id == admin.site_id)
@@ -134,6 +147,9 @@ pub async fn delete_tag(
     admin: AdminUser,
     Path(id): Path<Uuid>,
 ) -> impl IntoResponse {
+    if !admin.caps.can_manage_taxonomies {
+        return (StatusCode::FORBIDDEN, "Forbidden").into_response();
+    }
     if !admin.caps.is_global_admin {
         let belongs = crate::models::taxonomy::get_by_id(&state.db, id).await
             .map(|t| t.site_id == admin.site_id)

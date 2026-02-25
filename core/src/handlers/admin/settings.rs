@@ -1,5 +1,6 @@
 use axum::{
     extract::State,
+    http::StatusCode,
     response::{Html, IntoResponse, Redirect},
     Form,
 };
@@ -12,7 +13,10 @@ use admin::pages::settings::SettingsData;
 pub async fn settings(
     State(state): State<AppState>,
     admin: AdminUser,
-) -> Html<String> {
+) -> impl IntoResponse {
+    if !admin.caps.can_manage_settings {
+        return (StatusCode::FORBIDDEN, Html("<h1>403 Forbidden</h1>".to_string())).into_response();
+    }
     // If the admin is scoped to a site, show that site's settings; otherwise use global fallback.
     let s = admin.site_id
         .and_then(|sid| state.get_site_by_id(sid))
@@ -27,7 +31,7 @@ pub async fn settings(
     };
     let cs = state.site_hostname(admin.site_id);
     let ctx = super::page_ctx(&admin, &cs);
-    Html(admin::pages::settings::render(&data, None, &ctx))
+    Html(admin::pages::settings::render(&data, None, &ctx)).into_response()
 }
 
 #[derive(Deserialize)]
@@ -44,6 +48,9 @@ pub async fn save_settings(
     admin: AdminUser,
     Form(form): Form<SettingsForm>,
 ) -> impl IntoResponse {
+    if !admin.caps.can_manage_settings {
+        return (StatusCode::FORBIDDEN, "Forbidden").into_response();
+    }
     let site_id = match admin.site_id {
         Some(id) => id,
         None => {

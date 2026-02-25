@@ -321,7 +321,6 @@ pub fn render_site_access(
       {site_admin_opt}
       <option value="editor">Editor</option>
       <option value="author">Author</option>
-      <option value="subscriber">Subscriber</option>
     </select>
   </div>
   <div class="form-group" style="margin:0">

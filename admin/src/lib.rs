@@ -26,6 +26,8 @@ pub struct PageContext {
     pub can_manage_content: bool,
     /// Can manage themes (appearance).
     pub can_manage_appearance: bool,
+    /// Can create, edit, and delete categories and tags.
+    pub can_manage_taxonomies: bool,
 }
 
 /// Wrap a rendered content HTML string in the full admin page shell.
@@ -142,12 +144,12 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
         posts = nav_link("/admin/posts", "Posts"),
         pages = nav_link("/admin/pages", "Pages"),
         media = nav_link("/admin/media", "Media"),
-        cats = nav_link("/admin/categories", "Categories"),
-        tags = nav_link("/admin/tags", "Tags"),
+        cats = if ctx.can_manage_taxonomies { nav_link("/admin/categories", "Categories") } else { String::new() },
+        tags = if ctx.can_manage_taxonomies { nav_link("/admin/tags", "Tags") } else { String::new() },
         users = if ctx.can_manage_users { nav_link("/admin/users", "Users") } else { String::new() },
-        plugins = nav_link("/admin/plugins", "Plugins"),
-        appearance = nav_link("/admin/appearance", "Appearance"),
-        settings = nav_link("/admin/settings", "Settings"),
+        plugins = if ctx.can_manage_plugins { nav_link("/admin/plugins", "Plugins") } else { String::new() },
+        appearance = if ctx.can_manage_appearance { nav_link("/admin/appearance", "Appearance") } else { String::new() },
+        settings = if ctx.can_manage_settings { nav_link("/admin/settings", "Settings") } else { String::new() },
         sites = nav_link("/admin/sites", "Sites"),
         flash_html = flash_html,
         content = content,
