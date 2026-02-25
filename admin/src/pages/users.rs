@@ -319,6 +319,7 @@ pub fn render_site_access(
   <div class="form-group" style="margin:0;flex:1;min-width:140px">
     <label>Role</label>
     <select name="role" style="width:100%">
+      {site_admin_opt}
       <option value="editor">Editor</option>
       <option value="author">Author</option>
       <option value="subscriber">Subscriber</option>
@@ -328,8 +329,13 @@ pub fn render_site_access(
     <button type="submit" class="btn btn-primary">Assign</button>
   </div>
 </form>"#,
-            user_id   = crate::html_escape(&data.user_id),
-            site_opts = site_options,
+            user_id        = crate::html_escape(&data.user_id),
+            site_opts      = site_options,
+            site_admin_opt = if is_global_admin {
+                r#"<option value="site_admin">Site Admin (owner)</option>"#
+            } else {
+                ""
+            },
         )
     };
 

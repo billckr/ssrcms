@@ -536,12 +536,18 @@ async fn fetch_site_options(state: &AppState) -> Vec<SiteOption> {
 
 // ── Site access management ────────────────────────────────────────────────────
 
+#[derive(Deserialize, Default)]
+pub struct SiteAccessQuery {
+    pub error: Option<String>,
+}
+
 /// GET /admin/users/:id/site-access — manage which sites a user can access.
 /// Accessible to super_admin and site_admin only.
 pub async fn site_access_page(
     State(state): State<AppState>,
     admin: AdminUser,
     Path(user_id): Path<Uuid>,
+    axum::extract::Query(query): axum::extract::Query<SiteAccessQuery>,
 ) -> impl IntoResponse {
     let is_site_admin = admin.site_role.as_str() == "admin" && !admin.is_global_admin;
     if !admin.is_global_admin && !is_site_admin {
@@ -591,9 +597,14 @@ pub async fn site_access_page(
         available_sites,
     };
 
+    let flash = match query.error.as_deref() {
+        Some("site_admin_exists") => Some("This site already has a Site Admin. Remove the existing Site Admin first."),
+        _ => None,
+    };
+
     Html(admin::pages::users::render_site_access(
         &data,
-        None,
+        flash,
         &cs,
         admin.is_global_admin,
         admin.is_visiting_foreign_site,
@@ -633,14 +644,46 @@ pub async fn add_site_access(
         }
     }
 
-    // Sanitise role — only non-admin roles can be assigned by this UI.
+    // Sanitise role.
+    // site_admin may only be assigned by a global_admin and only if the site has no owner yet.
     let role = match form.role.as_str() {
+        "site_admin" if admin.is_global_admin => {
+            // Enforce one site_admin per site.
+            let site = crate::models::site::get_by_id(&state.db, site_uuid).await
+                .map_err(|_| ()).ok();
+            if site.as_ref().and_then(|s| s.owner_user_id).is_some() {
+                // Flash error back to the page.
+                return Redirect::to(&format!(
+                    "/admin/users/{}/site-access?error=site_admin_exists", user_id
+                )).into_response();
+            }
+            // Update owner_user_id on the site and promote user's global role.
+            let _ = sqlx::query(
+                "UPDATE sites SET owner_user_id = $1, updated_at = NOW() WHERE id = $2"
+            )
+            .bind(user_id)
+            .bind(site_uuid)
+            .execute(&state.db)
+            .await;
+            let _ = sqlx::query(
+                "UPDATE users SET role = 'site_admin' WHERE id = $1 AND role NOT IN ('super_admin', 'site_admin')"
+            )
+            .bind(user_id)
+            .execute(&state.db)
+            .await;
+            "admin" // site_users role for a site_admin is 'admin'
+        }
         "editor" | "author" | "subscriber" => form.role.as_str(),
         _ => "editor",
     };
 
     if let Err(e) = crate::models::site_user::add(&state.db, site_uuid, user_id, role, Some(admin.user.id)).await {
         tracing::warn!("failed to add user {} to site {}: {:?}", user_id, site_uuid, e);
+    }
+
+    // Reload cache so ownership change is immediately reflected.
+    if let Err(e) = state.reload_site_cache().await {
+        tracing::warn!("site cache reload failed after site-access add: {:?}", e);
     }
 
     Redirect::to(&format!("/admin/users/{}/site-access", user_id)).into_response()
@@ -678,6 +721,20 @@ pub async fn remove_site_access(
 
     if let Err(e) = crate::models::site_user::remove(&state.db, site_uuid, user_id).await {
         tracing::warn!("failed to remove user {} from site {}: {:?}", user_id, site_uuid, e);
+    }
+
+    // If this user was the site owner, clear owner_user_id so the site
+    // can have a new site_admin assigned.
+    let _ = sqlx::query(
+        "UPDATE sites SET owner_user_id = NULL, updated_at = NOW() WHERE id = $1 AND owner_user_id = $2"
+    )
+    .bind(site_uuid)
+    .bind(user_id)
+    .execute(&state.db)
+    .await;
+
+    if let Err(e) = state.reload_site_cache().await {
+        tracing::warn!("site cache reload failed after site-access remove: {:?}", e);
     }
 
     Redirect::to(&format!("/admin/users/{}/site-access", user_id)).into_response()
