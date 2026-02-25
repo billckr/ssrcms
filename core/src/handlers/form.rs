@@ -55,6 +55,14 @@ pub async fn submit(
         }
     }
 
-    // Always redirect — prevents form re-submit on refresh
-    Redirect::to(&format!("?submitted=1"))
+    // Redirect back to the page that submitted the form, appending ?submitted=1.
+    // Fall back to "/" if the Referer header is missing or unparseable.
+    let referer = headers
+        .get(axum::http::header::REFERER)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("/");
+
+    // Strip any existing query string from the referer before appending ours.
+    let base = referer.split('?').next().unwrap_or(referer);
+    Redirect::to(&format!("{}?submitted=1", base))
 }
