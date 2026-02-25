@@ -257,12 +257,26 @@ pub(crate) async fn build_site_context(state: &AppState, site_id: Option<Uuid>, 
     let page_count =
         post::count(&state.db, site_id, Some(PostStatus::Published), Some(PostType::Page)).await?;
 
+    // Use per-site settings from the cache when a site_id is available,
+    // falling back to global settings for single-site / unconfigured installs.
+    let settings;
+    let s: &crate::app_state::SiteSettings = if let Some(sid) = site_id {
+        if let Some((_, per_site)) = state.get_site_by_id(sid) {
+            settings = per_site;
+            &settings
+        } else {
+            &state.settings
+        }
+    } else {
+        &state.settings
+    };
+
     Ok(SiteContext {
-        name: state.settings.site_name.clone(),
-        description: state.settings.site_description.clone(),
+        name: s.site_name.clone(),
+        description: s.site_description.clone(),
         url: base_url.to_string(),
-        language: state.settings.language.clone(),
-        theme: state.settings.active_theme.clone(),
+        language: s.language.clone(),
+        theme: s.active_theme.clone(),
         post_count,
         page_count,
     })
