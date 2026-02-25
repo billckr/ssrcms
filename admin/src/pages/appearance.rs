@@ -78,11 +78,11 @@ fn render_card(t: &ThemeInfo, is_global_admin: bool) -> String {
     let delete_html = if t.can_delete {
         format!(
             r#"<form method="post" action="/admin/appearance/delete" style="display:inline;"
-    onsubmit="return confirm('Delete theme \'{name}\'? This cannot be undone.');">
+                data-confirm="Delete theme &quot;{name}&quot;? This cannot be undone." onsubmit="return confirm(this.dataset.confirm)">
     <input type="hidden" name="theme" value="{name_escaped}">
     <button type="submit" class="btn btn-danger">Delete</button>
 </form>"#,
-            name = t.name.replace('\'', "\\'"),
+            name = crate::html_escape(&t.name),
             name_escaped = crate::html_escape(&t.name),
         )
     } else {

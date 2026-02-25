@@ -71,13 +71,13 @@ pub fn render_list(users: &[UserRow], flash: Option<&str>, current_site: &str, c
                 u.display_name.replace('\'', "\\'"),
             );
             format!(
-                r#"<form method="POST" action="/admin/users/{id}/delete" style="display:inline" onsubmit="return confirm('{warn_msg}')">
+                r#"<form method="POST" action="/admin/users/{id}/delete" style="display:inline" data-confirm="{warn_msg}" onsubmit="return confirm(this.dataset.confirm)">
                   <button class="icon-btn icon-danger" title="Delete user" type="submit">
                     <img src="/admin/static/icons/delete.svg" alt="Delete">
                   </button>
                 </form>"#,
                 id = crate::html_escape(&u.id),
-                warn_msg = warn_msg,
+                warn_msg = crate::html_escape(&warn_msg),
             )
         } else {
             String::new()
@@ -283,7 +283,7 @@ pub fn render_site_access(
                   <td><span class="badge">{role}</span></td>
                   <td class="actions">
                     <form method="post" action="/admin/users/{user_id}/site-access/remove" style="display:inline"
-                          onsubmit="return confirm('Remove {hostname_esc} from site {hostname_esc}?')">
+                          data-confirm="Remove {hostname} from site access?" onsubmit="return confirm(this.dataset.confirm)">
                       <input type="hidden" name="site_id" value="{site_id}">
                       <button type="submit" class="icon-btn icon-danger" title="Remove from site">
                         <img src="/admin/static/icons/trash-2.svg" alt="Remove">
@@ -294,7 +294,6 @@ pub fn render_site_access(
                 user_id   = crate::html_escape(&data.user_id),
                 site_id   = crate::html_escape(&a.site_id),
                 hostname  = crate::html_escape(&a.hostname),
-                hostname_esc = crate::html_escape(&a.hostname).replace('\'', "\\'"),
                 role      = crate::html_escape(role_display(&a.role)),
             )
         }).collect::<Vec<_>>().join("\n")

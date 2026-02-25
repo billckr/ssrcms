@@ -31,13 +31,13 @@ pub fn render_list(
                 );
                 format!(
                     r#"<form method="post" action="/admin/sites/{id}/delete" style="display:inline"
-                          onsubmit="return confirm('{confirm_msg}')">
+                          data-confirm="{confirm_msg}" onsubmit="return confirm(this.dataset.confirm)">
                       <button type="submit" class="icon-btn icon-danger" title="Delete site">
                         <img src="/admin/static/icons/trash-2.svg" alt="Delete">
                       </button>
                     </form>"#,
                     id = crate::html_escape(&s.id),
-                    confirm_msg = confirm_msg,
+                    confirm_msg = crate::html_escape(&confirm_msg),
                 )
             };
             format!(
