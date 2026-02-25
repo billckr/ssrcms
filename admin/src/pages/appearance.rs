@@ -66,75 +66,88 @@ pub fn render_theme_editor(
 ) -> String {
     let theme_esc = crate::html_escape(theme_name);
 
-    let file_tree: String = files.iter().map(|f| {
-        let active_class = if f.is_selected { " class=\"editor-file-active\"" } else { "" };
-        let bak_dot = if f.has_backup {
-            r#" <span class="editor-bak-dot" title="Original backup exists">●</span>"#
-        } else { "" };
-        format!(
-            r#"<li><a href="/admin/appearance/editor/{theme}?file={file_enc}"{active}>{file_name}{bak}</a></li>"#,
-            theme = theme_esc,
-            file_enc = crate::html_escape(&f.rel_path),
-            active = active_class,
-            file_name = crate::html_escape(&f.rel_path),
-            bak = bak_dot,
-        )
-    }).collect::<Vec<_>>().join("\n");
+    // Build <select> options — files with a backup get a ★ marker
+    let options: String = {
+        let mut o = format!(r#"<option value="">— select a file —</option>"#);
+        for f in files {
+            let sel = if f.is_selected { " selected" } else { "" };
+            let marker = if f.has_backup { " ★" } else { "" };
+            o.push_str(&format!(
+                r#"<option value="{val}"{sel}>{label}</option>"#,
+                val   = crate::html_escape(&f.rel_path),
+                sel   = sel,
+                label = crate::html_escape(&format!("{}{}", &f.rel_path, marker)),
+            ));
+        }
+        o
+    };
 
-    let editor_panel = if let Some(rel) = selected {
-        let rel_esc = crate::html_escape(rel);
+    let file_picker = format!(
+        r#"<form method="GET" action="/admin/appearance/editor/{theme}" style="display:contents;">
+  <select name="file" class="editor-file-select" onchange="this.form.submit()"
+          aria-label="Select theme file" title="Navigate to file">
+    {options}
+  </select>
+</form>"#,
+        theme = theme_esc,
+        options = options,
+    );
+
+    // Top toolbar — always visible
+    let toolbar = format!(
+        r#"<div class="editor-topbar">
+  <a href="/admin/appearance" class="btn btn-sm btn-secondary">&#8592; Themes</a>
+  {picker}
+</div>"#,
+        picker = file_picker,
+    );
+
+    // Editor body — shown only when a file is selected
+    let body = if let Some(rel) = selected {
+        let rel_esc  = crate::html_escape(rel);
         let content_esc = crate::html_escape(content);
+
         let restore_btn = if has_backup {
             format!(
-                r#"<form method="POST" action="/admin/appearance/editor/{theme}/restore" style="display:inline"
-    onsubmit="return confirm('Restore original backup? Your current edits will be overwritten.')">
+                r#"<form method="POST" action="/admin/appearance/editor/{theme}/restore" style="display:contents"
+     onsubmit="return confirm('Restore the original backup? Your current edits will be overwritten.')">
   <input type="hidden" name="file" value="{file}">
   <button type="submit" class="btn btn-sm btn-secondary">Restore original</button>
 </form>"#,
                 theme = theme_esc,
-                file = rel_esc,
+                file  = rel_esc,
             )
-        } else { String::new() };
+        } else {
+            String::new()
+        };
+
         format!(
-            r#"<div class="editor-toolbar">
+            r#"<div class="editor-meta">
   <span class="editor-filename">{file}</span>
   {restore}
-  <a href="/admin/appearance" class="btn btn-sm btn-secondary" style="margin-left:auto">&#8592; Back to themes</a>
 </div>
-<form method="POST" action="/admin/appearance/editor/{theme}/save">
+<form method="POST" action="/admin/appearance/editor/{theme}/save" class="editor-form">
   <input type="hidden" name="file" value="{file}">
-  <textarea id="editor-area" name="content" class="editor-textarea" spellcheck="false">{content}</textarea>
-  <div class="editor-footer">
+  <textarea name="content" class="editor-textarea" spellcheck="false" autocorrect="off" autocapitalize="off">{content}</textarea>
+  <div class="editor-actions">
     <button type="submit" class="btn btn-primary">Save file</button>
     {restore2}
   </div>
 </form>"#,
-            file = rel_esc,
-            theme = theme_esc,
-            content = content_esc,
-            restore = restore_btn.clone(),
+            file     = rel_esc,
+            theme    = theme_esc,
+            content  = content_esc,
+            restore  = restore_btn.clone(),
             restore2 = restore_btn,
         )
     } else {
-        format!(
-            r#"<div class="editor-empty">
-  <p>Select a file from the left panel to edit it.</p>
-  <a href="/admin/appearance" class="btn btn-secondary">&#8592; Back to themes</a>
-</div>"#
-        )
+        r#"<div class="editor-hint">Select a file above to start editing.</div>"#.to_string()
     };
 
     let content_html = format!(
-        r#"<div class="editor-layout">
-  <div class="editor-sidebar">
-    <div class="editor-sidebar-title">Theme: {theme}</div>
-    <ul class="editor-file-list">{tree}</ul>
-  </div>
-  <div class="editor-main">{panel}</div>
-</div>"#,
-        theme = theme_esc,
-        tree = file_tree,
-        panel = editor_panel,
+        r#"<div class="editor-wrap">{toolbar}{body}</div>"#,
+        toolbar = toolbar,
+        body    = body,
     );
 
     admin_page(

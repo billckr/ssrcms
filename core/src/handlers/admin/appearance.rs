@@ -644,22 +644,35 @@ pub async fn edit_file(
     };
 
     let (selected_rel, content, has_backup, file_err) = if let Some(ref rel) = q.file {
+        tracing::debug!(theme = %theme, file = %rel, "editor: load file");
         if rel.contains('\0') || rel.contains("..") {
+            tracing::warn!(theme = %theme, file = %rel, "editor: rejected path traversal attempt");
             (None, String::new(), false, Some("Invalid file path."))
         } else {
             match resolve_file_in_theme(&theme_dir, rel) {
                 Some(abs) => {
                     let has_bak = bak_path_for(&abs).exists();
+                    tracing::debug!(theme = %theme, file = %rel, abs = ?abs, has_bak, "editor: resolved file");
                     match fs::read_to_string(&abs) {
-                        Ok(c) => (Some(rel.clone()), c, has_bak, None),
-                        Err(_) => (Some(rel.clone()), String::new(), has_bak,
-                            Some("Could not read file (may be binary)."))
+                        Ok(c) => {
+                            tracing::debug!(theme = %theme, file = %rel, bytes = c.len(), "editor: file read ok");
+                            (Some(rel.clone()), c, has_bak, None)
+                        }
+                        Err(e) => {
+                            tracing::warn!(theme = %theme, file = %rel, err = %e, "editor: read_to_string failed");
+                            (Some(rel.clone()), String::new(), has_bak,
+                                Some("Could not read file (may be binary)."))
+                        }
                     }
                 }
-                None => (Some(rel.clone()), String::new(), false, Some("File not found.")),
+                None => {
+                    tracing::warn!(theme = %theme, file = %rel, "editor: resolve_file_in_theme returned None");
+                    (Some(rel.clone()), String::new(), false, Some("File not found."))
+                },
             }
         }
     } else {
+        tracing::debug!(theme = %theme, "editor: no file selected, showing picker");
         (None, String::new(), false, None)
     };
 
