@@ -37,8 +37,8 @@ pub fn render_list(
                 )
             };
             format!(
-                r#"<a href="/admin/sites/{id}/settings" class="icon-btn" title="Site settings">
-                  <img src="/admin/static/icons/edit.svg" alt="Settings">
+                r#"<a href="/admin/sites/{id}/settings" class="icon-btn" title="Change Hostname">
+                  <img src="/admin/static/icons/edit.svg" alt="Change Hostname">
                 </a>
                 {delete}"#,
                 id = crate::html_escape(&s.id),
@@ -94,32 +94,23 @@ pub struct SiteSettingsData {
 }
 
 pub fn render_settings(data: &SiteSettingsData, flash: Option<&str>, ctx: &crate::PageContext) -> String {
-    let confirm_msg = format!(
-        "Delete site '{}'? This will permanently delete all its content, media records, settings, and user assignments. This cannot be undone.",
-        data.hostname
-    );
     let content = format!(
         r#"<form method="post" action="/admin/sites/{id}/settings" class="edit-form">
   <div class="form-group">
     <label for="hostname">Hostname</label>
     <input type="text" id="hostname" name="hostname" value="{hostname}" required>
-    <small>The domain this site responds to (e.g. example.com)</small>
+    <small>Change the hostname of {hostname}.</small>
   </div>
   <div class="form-actions">
     <button type="submit" class="btn btn-primary">Save</button>
     <a href="/admin/sites" class="btn btn-secondary">Cancel</a>
   </div>
-</form>
-<hr style="margin:2rem 0">
-<form method="post" action="/admin/sites/{id}/delete" data-confirm="{confirm_msg}" onsubmit="return confirm(this.dataset.confirm)">
-  <button type="submit" class="btn btn-danger">Delete This Site</button>
 </form>"#,
         id = crate::html_escape(&data.id),
         hostname = crate::html_escape(&data.hostname),
-        confirm_msg = crate::html_escape(&confirm_msg),
     );
 
-    crate::admin_page("Site Settings", "/admin/sites", flash, &content, ctx)
+    crate::admin_page("Edit Hostname", "/admin/sites", flash, &content, ctx)
 }
 
 pub fn render_new(flash: Option<&str>, ctx: &crate::PageContext) -> String {

@@ -114,6 +114,13 @@ pub async fn create(
 
     match result {
         Ok(_) => {
+            tracing::info!(
+                user_id = %admin.user.id,
+                user_email = %admin.user.email,
+                role = if admin.caps.is_global_admin { "super_admin" } else { "site_admin" },
+                hostname = %hostname,
+                "site created",
+            );
             if let Err(e) = state.reload_site_cache().await {
                 tracing::warn!("site cache reload failed after create: {:?}", e);
             }
@@ -256,17 +263,38 @@ pub async fn save_site_settings(
 }
 
 /// POST /admin/sites/{id}/delete — delete a site.
+/// super_admin can delete any site.
+/// site_admin (owner) can delete their own site unless it is their default site.
 pub async fn delete(
     State(state): State<AppState>,
     admin: AdminUser,
     Path(id): Path<Uuid>,
 ) -> impl IntoResponse {
-    if !admin.caps.is_global_admin {
+    // Fetch site to verify ownership and default status.
+    let site = match crate::models::site::get_by_id(&state.db, id).await {
+        Ok(s) => s,
+        Err(_) => return Redirect::to("/admin/sites").into_response(),
+    };
+
+    let is_owner = site.owner_user_id == Some(admin.user.id);
+    let is_default = admin.user.default_site_id == Some(id);
+    let allowed = admin.caps.is_global_admin || (is_owner && !is_default);
+
+    if !allowed {
         return (axum::http::StatusCode::FORBIDDEN, "Forbidden").into_response();
     }
+
     if let Err(e) = crate::models::site::delete(&state.db, id).await {
         tracing::error!("failed to delete site {}: {:?}", id, e);
     } else {
+        tracing::info!(
+            user_id = %admin.user.id,
+            user_email = %admin.user.email,
+            role = if admin.caps.is_global_admin { "super_admin" } else { "site_admin" },
+            site_id = %id,
+            hostname = %site.hostname,
+            "site deleted",
+        );
         // Remove the site's theme directory so no orphaned dirs accumulate.
         let site_theme_dir = std::path::Path::new(&state.config.themes_dir)
             .join("sites")
