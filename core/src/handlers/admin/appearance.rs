@@ -539,6 +539,7 @@ pub struct EditorQuery {
     pub file: Option<String>,
     pub saved: Option<String>,
     pub restored: Option<String>,
+    pub error: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -644,10 +645,12 @@ pub async fn edit_file(
 
     let files = walk_theme_files(&theme_dir);
 
-    let status_flash: Option<&str> = if q.saved.is_some() {
-        Some("File saved.")
+    let status_flash: Option<String> = if q.saved.is_some() {
+        Some("File saved.".to_string())
     } else if q.restored.is_some() {
-        Some("File restored from backup.")
+        Some("File restored from backup.".to_string())
+    } else if let Some(ref e) = q.error {
+        Some(format!("Template syntax error — file not saved. {}", e))
     } else {
         None
     };
@@ -685,7 +688,7 @@ pub async fn edit_file(
         (None, String::new(), false, None)
     };
 
-    let effective_flash = file_err.or(status_flash);
+    let effective_flash: Option<String> = file_err.map(|s| s.to_string()).or(status_flash);
 
     let editor_files: Vec<admin::pages::appearance::EditorFile> = files.iter().map(|f| {
         let has_bak = bak_path_for(&theme_dir.join(f)).exists();
@@ -702,7 +705,7 @@ pub async fn edit_file(
         selected_rel.as_deref(),
         &content,
         has_backup,
-        effective_flash,
+        effective_flash.as_deref(),
         &ctx,
     )).into_response()
 }
@@ -732,6 +735,18 @@ pub async fn save_file(
     let Some(abs_path) = resolve_file_in_theme(&theme_dir, &form.file) else {
         return Redirect::to(&redirect_base).into_response();
     };
+
+    // Validate Tera syntax before touching disk — reject HTML files that won't parse.
+    if form.file.ends_with(".html") {
+        let mut test_tera = tera::Tera::default();
+        if let Err(e) = test_tera.add_raw_template("__validate__", &form.content) {
+            // Strip ANSI colour codes Tera sometimes adds to error messages.
+            let msg = e.to_string();
+            let clean: String = msg.chars().filter(|c| c.is_ascii() && (*c >= ' ' || *c == '\n')).collect();
+            let encoded = url_encode_param(clean.trim());
+            return Redirect::to(&format!("{}&error={}", redirect_base, encoded)).into_response();
+        }
+    }
 
     let bak = bak_path_for(&abs_path);
     if !bak.exists() {

@@ -16,12 +16,19 @@ pub enum ThemeAction {
         #[arg(long, default_value = "synaptic.pid")]
         pid_file: String,
     },
+    /// Reload the active theme's templates from disk without restarting (sends SIGUSR1)
+    Reload {
+        /// Path to the server PID file
+        #[arg(long, default_value = "synaptic.pid")]
+        pid_file: String,
+    },
 }
 
 pub async fn run(action: ThemeAction) -> anyhow::Result<()> {
     match action {
         ThemeAction::List => list(),
         ThemeAction::Activate { name, database_url, pid_file } => activate(name, database_url, pid_file).await,
+        ThemeAction::Reload { pid_file } => { signal_reload(&pid_file, "current"); Ok(()) },
     }
 }
 

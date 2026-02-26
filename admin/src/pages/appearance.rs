@@ -133,6 +133,11 @@ pub fn render_theme_editor(
 <div class="editor-actions">
   <button type="submit" form="save-form" class="btn btn-primary">Save file</button>
   {restore2}
+</div>
+<div class="editor-comment-hint">
+  <strong>Tera comments:</strong> <code>&#123;# comment #&#125;</code> — use inside <code>&#123;% block %&#125;</code> tags only.
+  <code>&#123;% extends %&#125;</code> must be the very first line of the file — nothing (not even a comment) may appear before it.
+  CSS/HTML comments (<code>&lt;!-- --&gt;</code>, <code>/* */</code>) outside of blocks will also break parsing.
 </div>"#,
             file     = rel_esc,
             theme    = theme_esc,

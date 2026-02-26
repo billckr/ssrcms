@@ -127,7 +127,7 @@ a:hover {
 
 .archive-header {
   background: linear-gradient(135deg, var(--orange-pale), white);
-  padding: 1.5rem 2rem;
+  padding: 3rem 2rem;
   border-left: 4px solid var(--orange-primary);
   margin-bottom: 2rem;
   border-radius: 8px;
@@ -267,12 +267,7 @@ a:hover {
 }
 
 .post-content p {
-  margin-bottom: 0.25rem;
-}
-/* Quill emits <p><br></p> for blank lines — shrink them to act like a half-line gap */
-.post-content p:has(> br:only-child) {
-  line-height: 0.8;
-  margin: 0;
+  margin-bottom: 1.5rem;
 }
 
 .post-content h2,
@@ -283,45 +278,6 @@ a:hover {
 .post-content a {
   color: var(--orange-primary);
   font-weight: 500;
-}
-
-.post-content blockquote {
-  border-left: 4px solid var(--orange-primary);
-  margin: 1.5rem 0;
-  padding: 0.5rem 1.25rem;
-  background: var(--orange-pale);
-  color: var(--text-light);
-  font-style: italic;
-  border-radius: 0 4px 4px 0;
-}
-
-.post-content blockquote p {
-  margin: 0;
-}
-
-.post-content pre,
-.page-content pre {
-  background: #f8f6f3;
-  border-left: 4px solid var(--orange-primary);
-  border-top: 1px solid var(--border-color);
-  border-right: 1px solid var(--border-color);
-  border-bottom: 1px solid var(--border-color);
-  border-radius: 0 6px 6px 0;
-  padding: 1rem 1.25rem;
-  overflow-x: auto;
-  font-size: 0.9rem;
-  margin: 1.5rem 0;
-  box-shadow: 2px 2px 8px rgba(255, 107, 53, 0.06);
-}
-
-.post-content ul,
-.post-content ol {
-  padding-left: 1.75rem;
-  margin: 1rem 0;
-}
-
-.post-content li {
-  margin-bottom: 0.4rem;
 }
 
 .post-tags {
@@ -594,6 +550,62 @@ a:hover {
   color: white;
 }
 
+/* --- No Posts / Empty States --- */
+
+.no-posts {
+  background-color: var(--orange-pale);
+  border-left: 4px solid var(--orange-primary);
+  padding: 2rem;
+  border-radius: 4px;
+  color: var(--text-light);
+  font-style: italic;
+}
+
+/* --- Responsive --- */
+
+@media (max-width: 768px) {
+  .site-nav {
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .nav-links {
+    flex-direction: column;
+    gap: 0.5rem;
+    width: 100%;
+  }
+
+  .nav-links a {
+    display: block;
+    padding: 0.75rem;
+  }
+
+  h1 { font-size: 2rem; }
+  h2 { font-size: 1.5rem; }
+
+  .site-main {
+    padding: 1.5rem 1rem;
+  }
+
+  .post-nav {
+    grid-template-columns: 1fr;
+  }
+
+  .post-meta {
+    gap: 1rem;
+    font-size: 0.85rem;
+  }
+
+  .pagination {
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .search-form {
+    flex-direction: column;
+  }
+}
+
 /* --- Home Layout (two-column with sidebar) --- */
 
 .home-layout {
@@ -658,61 +670,5 @@ a:hover {
 
   .home-sidebar {
     width: 100%;
-  }
-}
-
-/* --- No Posts / Empty States --- */
-
-.no-posts {
-  background-color: var(--orange-pale);
-  border-left: 4px solid var(--orange-primary);
-  padding: 2rem;
-  border-radius: 4px;
-  color: var(--text-light);
-  font-style: italic;
-}
-
-/* --- Responsive --- */
-
-@media (max-width: 768px) {
-  .site-nav {
-    flex-direction: column;
-    gap: 1rem;
-  }
-
-  .nav-links {
-    flex-direction: column;
-    gap: 0.5rem;
-    width: 100%;
-  }
-
-  .nav-links a {
-    display: block;
-    padding: 0.75rem;
-  }
-
-  h1 { font-size: 2rem; }
-  h2 { font-size: 1.5rem; }
-
-  .site-main {
-    padding: 1.5rem 1rem;
-  }
-
-  .post-nav {
-    grid-template-columns: 1fr;
-  }
-
-  .post-meta {
-    gap: 1rem;
-    font-size: 0.85rem;
-  }
-
-  .pagination {
-    flex-direction: column;
-    gap: 0.75rem;
-  }
-
-  .search-form {
-    flex-direction: column;
   }
 }
