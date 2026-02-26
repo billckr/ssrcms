@@ -34,11 +34,12 @@ pub struct TermOption {
     pub name: String,
 }
 
-pub fn render_list(posts: &[PostRow], post_type: &str, flash: Option<&str>, ctx: &crate::PageContext) -> String {
+pub fn render_list(posts: &[PostRow], post_type: &str, page: i64, total_pages: i64, flash: Option<&str>, ctx: &crate::PageContext) -> String {
     let title = if post_type == "page" { "Pages" } else { "Posts" };
     let new_label = if post_type == "page" { "New Page" } else { "New Post" };
     let new_href = if post_type == "page" { "/admin/pages/new" } else { "/admin/posts/new" };
     let edit_prefix = if post_type == "page" { "/admin/pages" } else { "/admin/posts" };
+    let base_path = if post_type == "page" { "/admin/pages" } else { "/admin/posts" };
 
     let rows = posts.iter().map(|p| {
         let path = if p.post_type == "page" {
@@ -81,13 +82,41 @@ pub fn render_list(posts: &[PostRow], post_type: &str, flash: Option<&str>, ctx:
         )
     }).collect::<Vec<_>>().join("\n");
 
+    let pagination = if total_pages > 1 {
+        let prev = if page > 1 {
+            format!(r#"<a href="{}?page={}" class="page-btn">&laquo; Prev</a>"#, base_path, page - 1)
+        } else {
+            r#"<span class="page-btn page-btn-disabled">&laquo; Prev</span>"#.to_string()
+        };
+        let next = if page < total_pages {
+            format!(r#"<a href="{}?page={}" class="page-btn">Next &raquo;</a>"#, base_path, page + 1)
+        } else {
+            r#"<span class="page-btn page-btn-disabled">Next &raquo;</span>"#.to_string()
+        };
+        // Show up to 7 page number links centred around the current page.
+        let start = (page - 3).max(1);
+        let end = (page + 3).min(total_pages);
+        let mut nums = String::new();
+        for p in start..=end {
+            if p == page {
+                nums.push_str(&format!(r#"<span class="page-btn page-btn-active">{}</span>"#, p));
+            } else {
+                nums.push_str(&format!(r#"<a href="{}?page={}" class="page-btn">{}</a>"#, base_path, p, p));
+            }
+        }
+        format!(r#"<div class="pagination">{prev}{nums}{next}</div>"#)
+    } else {
+        String::new()
+    };
+
     let content = format!(
         r#"<p style="margin-bottom:1rem"><a href="{new_href}" class="btn btn-primary">{new_label}</a></p>
 <table class="data-table">
   <thead><tr><th>Title</th><th>Status</th><th>Author</th><th>Published</th><th>Actions</th></tr></thead>
   <tbody>{rows}</tbody>
-</table>"#,
-        new_href = new_href, new_label = new_label, rows = rows,
+</table>
+{pagination}"#,
+        new_href = new_href, new_label = new_label, rows = rows, pagination = pagination,
     );
 
     let path = if post_type == "page" { "/admin/pages" } else { "/admin/posts" };
@@ -316,22 +345,22 @@ mod tests {
 
     #[test]
     fn post_view_link_uses_blog_prefix() {
-        let html = render_list(&[make_row("post", "my-post")], "post", None, &make_ctx());
+        let html = render_list(&[make_row("post", "my-post")], "post", 1, 1, None, &make_ctx());
         assert!(html.contains("href=\"/blog/my-post\""), "post view href should be /blog/{{slug}}");
         assert!(html.contains("target=\"_blank\""), "view link should open in new tab");
     }
 
     #[test]
     fn page_view_link_uses_root_prefix() {
-        let html = render_list(&[make_row("page", "about")], "page", None, &make_ctx());
+        let html = render_list(&[make_row("page", "about")], "page", 1, 1, None, &make_ctx());
         assert!(html.contains("href=\"/about\""), "page view href should be /{{slug}}");
         assert!(html.contains("target=\"_blank\""), "view link should open in new tab");
     }
 
     #[test]
     fn view_icon_present_in_both_post_and_page_lists() {
-        let post_html = render_list(&[make_row("post", "hello")], "post", None, &make_ctx());
-        let page_html = render_list(&[make_row("page", "hello")], "page", None, &make_ctx());
+        let post_html = render_list(&[make_row("post", "hello")], "post", 1, 1, None, &make_ctx());
+        let page_html = render_list(&[make_row("page", "hello")], "page", 1, 1, None, &make_ctx());
         assert!(post_html.contains("eye.svg"), "post list should include eye icon");
         assert!(page_html.contains("eye.svg"), "page list should include eye icon");
     }

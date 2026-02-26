@@ -44,6 +44,22 @@ async fn list_type(state: AppState, post_type: &str, page: Option<i64>, site_id:
     let page = page.unwrap_or(1).max(1);
     let offset = (page - 1) * per_page;
 
+    // Count uses the same site_id + author_id filters so per-user totals are accurate.
+    let total: i64 = sqlx::query_scalar(
+        r#"SELECT COUNT(*) FROM posts
+           WHERE ($1::uuid IS NULL OR site_id = $1)
+             AND post_type = $2
+             AND ($3::uuid IS NULL OR author_id = $3)"#,
+    )
+    .bind(site_id)
+    .bind(post_type)
+    .bind(author_id)
+    .fetch_one(&state.db)
+    .await
+    .unwrap_or(0);
+
+    let total_pages = ((total + per_page - 1) / per_page).max(1);
+
     let filter = ListFilter {
         site_id,
         status: None,
@@ -80,7 +96,7 @@ async fn list_type(state: AppState, post_type: &str, page: Option<i64>, site_id:
         });
     }
 
-    Html(admin::pages::posts::render_list(&rows, post_type, None, &ctx))
+    Html(admin::pages::posts::render_list(&rows, post_type, page, total_pages, None, &ctx))
 }
 
 pub async fn new_post(

@@ -40,6 +40,7 @@ a:hover { text-decoration: underline; }
 .admin-sidebar ul li a:hover, .admin-sidebar ul li a.active { color: #f8fafc; background: #334155; text-decoration: none; }
 .sidebar-footer { padding: 1rem 1.25rem; border-top: 1px solid #334155; }
 .sidebar-footer a { color: #94a3b8; font-size: 13px; }
+.sidebar-footer a:first-child { color: #f8fafc; font-weight: 700; }
 
 .admin-main { margin-left: var(--sidebar-w); flex: 1; display: flex; flex-direction: column; min-width: 0; height: 100vh; overflow-y: auto; }
 .admin-header { background: var(--surface); border-bottom: 1px solid var(--border); padding: .75rem 1.5rem; display: flex; align-items: center; gap: 1rem; }
@@ -67,6 +68,13 @@ a:hover { text-decoration: underline; }
 .data-table td { padding: .6rem 1rem; border-bottom: 1px solid var(--border); }
 .data-table tr:last-child td { border-bottom: none; }
 .data-table .actions { display: flex; gap: .5rem; align-items: center; }
+
+/* Pagination */
+.pagination { display: flex; gap: .35rem; align-items: center; margin-top: 1.25rem; flex-wrap: wrap; }
+.page-btn { display: inline-block; padding: .3rem .65rem; border-radius: var(--radius); font-size: 13px; font-weight: 500; border: 1px solid var(--border); background: var(--surface); color: var(--text); text-decoration: none; line-height: 1.4; }
+.page-btn:hover { background: #f1f5f9; border-color: #94a3b8; }
+.page-btn-active { background: var(--primary); border-color: var(--primary); color: #fff; pointer-events: none; }
+.page-btn-disabled { color: var(--muted); pointer-events: none; opacity: .5; }
 
 /* Badges */
 .badge { display: inline-block; padding: .1rem .4rem; border-radius: 3px; font-size: 11px; font-weight: 600; background: #e2e8f0; color: var(--muted); }
