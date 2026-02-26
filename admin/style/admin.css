@@ -44,8 +44,8 @@ a:hover { text-decoration: underline; }
 .admin-main { margin-left: var(--sidebar-w); flex: 1; display: flex; flex-direction: column; min-width: 0; height: 100vh; overflow-y: auto; }
 .admin-header { background: var(--surface); border-bottom: 1px solid var(--border); padding: .75rem 1.5rem; display: flex; align-items: center; gap: 1rem; }
 .admin-header h1 { font-size: 1.1rem; font-weight: 600; flex: 1; }
-.site-indicator { margin-left: auto; font-size: .8rem; color: var(--muted); text-decoration: none; border: 1px solid var(--border); border-radius: 4px; padding: .2rem .6rem; white-space: nowrap; }
-.site-indicator:hover { color: var(--accent); border-color: var(--accent); }
+.site-indicator { margin-left: auto; font-size: .8rem; font-weight: 700; color: #111827; background: #e2e8f0; text-decoration: none; border: 1px solid #e2e8f0; border-radius: 4px; padding: .2rem .6rem; white-space: nowrap; }
+.site-indicator:hover { background: #cbd5e1; border-color: #cbd5e1; color: #111827; }
 .badge-visiting { margin-left: auto; font-size: .78rem; font-weight: 600; background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; border-radius: 4px; padding: .2rem .6rem; white-space: nowrap; }
 .admin-content { padding: 1.5rem; }
 
