@@ -266,8 +266,21 @@ pub async fn delete(
     }
     if let Err(e) = crate::models::site::delete(&state.db, id).await {
         tracing::error!("failed to delete site {}: {:?}", id, e);
-    } else if let Err(e) = state.reload_site_cache().await {
-        tracing::warn!("site cache reload failed after delete: {:?}", e);
+    } else {
+        // Remove the site's theme directory so no orphaned dirs accumulate.
+        let site_theme_dir = std::path::Path::new(&state.config.themes_dir)
+            .join("sites")
+            .join(id.to_string());
+        if site_theme_dir.exists() {
+            if let Err(e) = std::fs::remove_dir_all(&site_theme_dir) {
+                tracing::warn!("failed to remove theme dir for site {}: {:?}", id, e);
+            } else {
+                tracing::info!("removed theme dir for deleted site {}", id);
+            }
+        }
+        if let Err(e) = state.reload_site_cache().await {
+            tracing::warn!("site cache reload failed after delete: {:?}", e);
+        }
     }
     Redirect::to("/admin/sites").into_response()
 }

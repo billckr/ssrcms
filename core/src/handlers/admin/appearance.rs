@@ -493,20 +493,27 @@ fn extract_and_install_theme(zip_bytes: &[u8], target_dir: &str) -> Result<Strin
 
 /// Find the top-level directory prefix inside a zip where theme.toml lives.
 /// Returns an empty string if theme.toml is at the root.
+///
+/// Prefers a root-level theme.toml over one nested inside a subdirectory —
+/// this prevents a stale nested copy of an old theme from being used when the
+/// zip contains both a root theme.toml and a subdirectory with its own toml.
 fn find_theme_prefix(archive: &mut zip::ZipArchive<std::io::Cursor<&[u8]>>) -> Result<String, String> {
+    let mut nested: Option<String> = None;
     for i in 0..archive.len() {
         let entry = archive.by_index(i)
             .map_err(|e| format!("Failed to read zip: {}", e))?;
-        let name = entry.name();
+        let name = entry.name().to_string();
         if name == "theme.toml" {
+            // Root-level wins immediately.
             return Ok(String::new());
         }
-        if name.ends_with("/theme.toml") {
-            let prefix = &name[..name.len() - "theme.toml".len()];
-            return Ok(prefix.to_string());
+        // Only record the shallowest nested theme.toml (one level deep).
+        if name.ends_with("/theme.toml") && name.matches('/').count() == 1 && nested.is_none() {
+            let prefix = name[..name.len() - "theme.toml".len()].to_string();
+            nested = Some(prefix);
         }
     }
-    Err("theme.toml not found in zip. Is this a valid Synaptic Signals theme?".to_string())
+    nested.ok_or("theme.toml not found in zip. Is this a valid Synaptic Signals theme?".to_string())
 }
 
 /// Create a uniquely-named temporary directory inside themes_dir.
@@ -811,7 +818,10 @@ async fn render_appearance_list(
 ) -> Html<String> {
     let themes_dir = &state.config.themes_dir;
 
-    // Step 11 fix: scope the active_theme query by site_id.
+    // Scope the active_theme query by site_id.
+    // When site_id is None (super_admin with no site selected) we use an empty string
+    // so no global theme is incorrectly marked "active" — deletability is determined
+    // solely by in_use == 0 in that case.
     let active_theme_from_db: String = if let Some(sid) = site_id {
         sqlx::query_scalar(
             "SELECT value FROM site_settings WHERE site_id = $1 AND key = 'active_theme'",
@@ -825,7 +835,7 @@ async fn render_appearance_list(
         })
         .unwrap_or_else(|| "default".to_string())
     } else {
-        "default".to_string()
+        String::new()
     };
 
     let global_dir = FsPath::new(themes_dir).join("global");
@@ -855,10 +865,12 @@ async fn render_appearance_list(
         let in_use = usage_counts.get(&theme.name).copied().unwrap_or(0);
         theme.in_use_by = if theme.source == "global" { in_use } else { 0 };
         theme.can_delete = if theme.source == "global" {
-            // Super admin only; not active anywhere.
-            ctx.is_global_admin && !theme.active && in_use == 0
+            // Super admin only; not in use on any site.
+            // in_use == 0 already guarantees it isn't active anywhere, so we
+            // don't need a separate !theme.active check here.
+            ctx.is_global_admin && in_use == 0
         } else {
-            // Site theme: either admin type can delete, as long as it's not active.
+            // Site theme: deletable as long as it isn't the currently active theme.
             !theme.active
         };
     }
