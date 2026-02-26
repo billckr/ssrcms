@@ -54,6 +54,7 @@ async fn make_test_post(pool: &sqlx::PgPool, author_id: uuid::Uuid, status: Post
         author_id,
         featured_image_id: None,
         published_at: Some(chrono::Utc::now()),
+        template: None,
     })
     .await
     .expect("failed to create test post")
@@ -99,6 +100,7 @@ async fn test_post_update() {
         status: Some(PostStatus::Published),
         featured_image_id: None,
         published_at: None,
+        template: None,
     })
     .await
     .expect("update should succeed");
@@ -285,6 +287,7 @@ async fn test_user_delete_cascades_posts() {
         author_id: author.id,
         featured_image_id: None,
         published_at: None,
+        template: None,
     })
     .await
     .expect("post create should succeed");
@@ -302,6 +305,7 @@ async fn test_user_delete_cascades_posts() {
         author_id: author.id,
         featured_image_id: None,
         published_at: None,
+        template: None,
     })
     .await
     .expect("page create should succeed");

@@ -60,6 +60,7 @@ async fn test_single_post_renders_html() {
         author_id: author.id,
         featured_image_id: None,
         published_at: Some(chrono::Utc::now()),
+        template: None,
     })
     .await
     .expect("failed to create test post");

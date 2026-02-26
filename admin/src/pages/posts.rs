@@ -296,24 +296,42 @@ mod tests {
         }
     }
 
+    fn make_ctx() -> crate::PageContext {
+        crate::PageContext {
+            current_site: String::new(),
+            user_email: "test@example.com".to_string(),
+            is_global_admin: false,
+            visiting_foreign_site: false,
+            can_manage_users: false,
+            can_manage_sites: false,
+            can_manage_plugins: false,
+            can_manage_settings: false,
+            can_manage_content: true,
+            can_manage_appearance: false,
+            can_manage_taxonomies: false,
+            can_manage_forms: false,
+            unread_forms_count: 0,
+        }
+    }
+
     #[test]
     fn post_view_link_uses_blog_prefix() {
-        let html = render_list(&[make_row("post", "my-post")], "post", None, "", false, "");
+        let html = render_list(&[make_row("post", "my-post")], "post", None, &make_ctx());
         assert!(html.contains("href=\"/blog/my-post\""), "post view href should be /blog/{{slug}}");
         assert!(html.contains("target=\"_blank\""), "view link should open in new tab");
     }
 
     #[test]
     fn page_view_link_uses_root_prefix() {
-        let html = render_list(&[make_row("page", "about")], "page", None, "", false, "");
+        let html = render_list(&[make_row("page", "about")], "page", None, &make_ctx());
         assert!(html.contains("href=\"/about\""), "page view href should be /{{slug}}");
         assert!(html.contains("target=\"_blank\""), "view link should open in new tab");
     }
 
     #[test]
     fn view_icon_present_in_both_post_and_page_lists() {
-        let post_html = render_list(&[make_row("post", "hello")], "post", None, "", false, "");
-        let page_html = render_list(&[make_row("page", "hello")], "page", None, "", false, "");
+        let post_html = render_list(&[make_row("post", "hello")], "post", None, &make_ctx());
+        let page_html = render_list(&[make_row("page", "hello")], "page", None, &make_ctx());
         assert!(post_html.contains("eye.svg"), "post list should include eye icon");
         assert!(page_html.contains("eye.svg"), "page list should include eye icon");
     }

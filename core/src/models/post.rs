@@ -224,6 +224,8 @@ mod tests {
             is_protected: false,
             created_at: Utc::now(),
             updated_at: Utc::now(),
+            deleted_at: None,
+            default_site_id: None,
         }
     }
 
@@ -242,6 +244,7 @@ mod tests {
             featured_image_id: None,
             published_at: Some(Utc::now()),
             scheduled_at: None,
+            template: None,
             created_at: Utc::now(),
             updated_at: Utc::now(),
         }
