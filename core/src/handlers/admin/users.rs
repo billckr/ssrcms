@@ -507,6 +507,7 @@ pub async fn delete_user(
 
     if let Err(e) = crate::models::user::delete_and_reassign(&state.db, id, admin.user.id).await {
         tracing::error!("delete user {} error: {:?}", id, e);
+        deny!("Failed to delete user. Please try again.");
     }
     Redirect::to("/admin/users").into_response()
 }
