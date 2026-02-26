@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+
+{% block title %}{{ post.title }} — {{ site.name }}{% endblock title %}
+
+{% block content %}
+<article class="single-post">
+  <header class="post-header">
+    {% if post.featured_image %}
+      <img src="{{ post.featured_image.url }}" alt="{{ post.featured_image.alt_text }}" class="featured-image">
+    {% endif %}
+    <h1 class="post-title">{{ post.title }}</h1>
+    <div class="post-meta">
+      <time datetime="{{ post.published_at }}">
+        {% if post.published_at %}{{ post.published_at | date_format }}{% endif %}
+      </time>
+      <span class="post-author">by&nbsp;<a href="{{ post.author.url }}">{{ post.author.display_name }}</a></span>
+      {% if post.categories | length > 0 %}
+        <span class="post-categories">
+          in {% for cat in post.categories %}<a href="{{ cat.url }}">{{ cat.name }}</a>{% if not loop.last %}, {% endif %}{% endfor %}
+        </span>
+      {% endif %}
+      <span class="reading-time">{{ post.reading_time }} min read</span>
+    </div>
+  </header>
+
+  <div class="post-content">
+    {{ post.content | safe }}
+  </div>
+
+  {% if post.tags | length > 0 %}
+    <footer class="post-tags">
+      <span>Tags:</span>
+      {% for tag in post.tags %}
+        <a href="{{ tag.url }}" class="tag">{{ tag.name }}</a>
+      {% endfor %}
+    </footer>
+  {% endif %}
+</article>
+
+{% if prev_post or next_post %}
+  <nav class="post-nav" aria-label="Post navigation">
+    {% if prev_post %}
+      <div class="post-nav-prev">
+        <span>← Previous</span>
+        <a href="{{ prev_post.url }}">{{ prev_post.title }}</a>
+      </div>
+    {% endif %}
+    {% if next_post %}
+      <div class="post-nav-next">
+        <span>Next →</span>
+        <a href="{{ next_post.url }}">{{ next_post.title }}</a>
+      </div>
+    {% endif %}
+  </nav>
+{% endif %}
+
+{% if related_posts | length > 0 %}
+  <section class="related-posts">
+    <h2>Related posts</h2>
+    <ul>
+      {% for rp in related_posts %}
+        <li><a href="{{ rp.url }}">{{ rp.title }}</a></li>
+      {% endfor %}
+    </ul>
+  </section>
+{% endif %}
+{% endblock content %}
