@@ -1,7 +1,7 @@
 # Synaptic Signals — Theme Authoring Guide
 
 > **API version:** 1
-> **Last updated:** 2026-02-22
+> **Last updated:** 2026-02-27
 
 ---
 
@@ -19,8 +19,12 @@
 10. [Pagination](#10-pagination)
 11. [Navigation Menus](#11-navigation-menus)
 12. [Static Assets](#12-static-assets)
-13. [Testing Your Theme](#13-testing-your-theme)
-14. [Theme Authoring Checklist](#14-theme-authoring-checklist)
+13. [Admin Appearance UI](#13-admin-appearance-ui)
+14. [Creating a Theme in the Admin UI](#14-creating-a-theme-in-the-admin-ui)
+15. [Admin Theme Editor](#15-admin-theme-editor)
+16. [Multi-site Theme Management](#16-multi-site-theme-management)
+17. [Testing Your Theme](#17-testing-your-theme)
+18. [Theme Authoring Checklist](#18-theme-authoring-checklist)
 
 ---
 
@@ -201,7 +205,7 @@ The `pagination` variable from the global context is populated on this page when
 
 ### 5.3 single.html
 
-Rendered for individual blog posts (URL pattern: `/posts/<slug>`).
+Rendered for individual blog posts (URL pattern: `/blog/<slug>`).
 
 **Additional context beyond global:**
 
@@ -216,7 +220,7 @@ Rendered for individual blog posts (URL pattern: `/posts/<slug>`).
 
 ### 5.4 page.html
 
-Rendered for static pages (URL pattern: `/pages/<slug>`). A "page" in Synaptic Signals is a post with `post_type = "page"` — content that is not part of the chronological post stream, like an About or Contact page.
+Rendered for static pages (URL pattern: `/<slug>`). A "page" in Synaptic Signals is a post with `post_type = "page"` — content that is not part of the chronological post stream, like an About or Contact page. Pages are served at the root slug (e.g. `/about`, `/contact`) rather than under a `/pages/` prefix.
 
 **Additional context beyond global:**
 
@@ -925,15 +929,266 @@ Synaptic Signals does not include a CSS preprocessor, bundler, or minifier. If y
 
 ---
 
-## 13. Testing Your Theme
+## 13. Admin Appearance UI
+
+The **Appearance** page (`/admin/appearance`) is the starting point for all theme management. It lists themes in two views toggled by a dropdown in the toolbar.
+
+### Toolbar
+
+```
+[ My Themes ▾ ]   [ + Create Theme ]
+```
+
+The dropdown and the Create Theme button both appear only for users with the `can_manage_appearance` permission (site admins and super admins).
+
+### My Themes view (default)
+
+Shows only themes stored in your site's own theme folder (`themes/sites/<site_id>/`). These are themes you have created or imported from the global library.
+
+Actions available on each card:
+
+| Button | What it does |
+|--------|-------------|
+| **Activate** | Makes this theme live for your site immediately |
+| **Active** (disabled) | Shown on the currently active theme |
+| **Edit files** | Opens the in-browser theme editor for this theme |
+| **Delete** | Permanently deletes the theme (not available for the active theme) |
+
+### Global Themes view (`?filter=global`)
+
+Shows themes stored in `themes/global/` — shared themes available to all sites. Think of this as a theme library.
+
+Actions available on each card in this view:
+
+| Button | What it does |
+|--------|-------------|
+| **Get Theme** | Copies the global theme to your site folder and takes you to My Themes |
+| **In My Themes** (badge) | You already have a copy; no action needed — go to My Themes to activate or edit it |
+
+No editing, activating, or deleting happens from the Global Themes view. All work on a theme happens after you have your own copy in My Themes.
+
+Super admins see full controls (Activate, Edit files, Delete) on both views because they own global themes directly.
+
+### Uploading a theme
+
+A zip upload section appears at the bottom of the Appearance page. Upload a `.zip` file containing a valid theme. The zip may contain theme files at the root or inside a single top-level folder — both layouts are accepted. The CMS validates the structure and rejects the upload with an error message if any required file is missing. On success the theme appears in the relevant theme list immediately.
+
+---
+
+## 14. Creating a Theme in the Admin UI
+
+The **+ Create Theme** button on the Appearance toolbar scaffolds a new theme with all required files so you can start editing immediately — no file uploads or command-line steps required.
+
+### Accessing the form
+
+Click **+ Create Theme** on `/admin/appearance`. The form requires the `can_manage_appearance` permission; a direct GET to `/admin/appearance/create` returns 403 if you lack it.
+
+### Form fields
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| **Theme name** | Yes | Becomes the directory name and the `name` in `theme.toml`. Letters, numbers, hyphens, and underscores only. No slashes, backslashes, or leading dots. Maximum 64 characters. |
+| **Description** | No | One-line description shown in the theme card. |
+| **Author** | No | Your name, shown in the theme card. |
+
+If a theme with the same name already exists, the form re-renders with an error — names must be unique.
+
+### Where the theme is created
+
+| Role | Theme location |
+|------|----------------|
+| Super admin | `themes/global/<name>/` |
+| Site admin | `themes/sites/<site_id>/<name>/` |
+
+### Scaffold files
+
+The CMS creates the following files immediately:
+
+```
+<name>/
+  theme.toml
+  templates/
+    base.html
+    index.html
+    single.html
+    page.html
+    archive.html
+    search.html
+    404.html
+    contact-page.html      ← ready-to-use contact form template
+    newsletter.html        ← ready-to-use newsletter signup template
+  static/
+    style.css              ← starter stylesheet with commented sections
+```
+
+All seven required templates are included as minimal, working Tera files that extend `base.html`. `contact-page.html` and `newsletter.html` are optional pre-built templates for common page types — they post to the `/form/contact` and `/form/newsletter` endpoints respectively. The starter `style.css` contains commented placeholder sections for you to fill in.
+
+After the theme is created you are redirected directly into the theme editor with the file list open.
+
+---
+
+## 15. Admin Theme Editor
+
+The in-browser editor at `/admin/appearance/editor/<theme>` lets you view and edit theme files without leaving the admin. Changes take effect immediately for all visitors — no server restart is required.
+
+### Accessing the editor
+
+Click **Edit files** on any theme card in the **My Themes** view. You can also navigate directly to `/admin/appearance/editor/<theme-name>`.
+
+The editor toolbar shows:
+
+```
+[ ← Themes ]  [ select a file ▾ ]  [ + New file ]
+```
+
+### Selecting a file
+
+Use the file dropdown to choose which file to open. Files that have been edited (and therefore have a backup of the original) are marked with a **★** symbol. Selecting a file from the dropdown submits the form automatically via `onchange`.
+
+### Editing and saving
+
+The file content appears in a plain-text `<textarea>`. After making changes click **Save file**. The CMS:
+
+1. Saves your edits to the file.
+2. If this is the **first time** you have saved the file, copies the original content to `<filename>.bak` beside the template file. This backup is kept indefinitely so you can restore it at any time.
+3. Shows an **"Edited: \<date\>"** timestamp next to the filename.
+
+The backup is created only once (on first save). Subsequent saves overwrite the file but do not overwrite the backup. This means you can always restore the original content from when you first touched the file.
+
+### Restoring the original
+
+When a file has a backup (★ marker), a **Restore original** button appears next to the filename and in the action bar. Clicking it replaces the current file contents with the backup. You are prompted to confirm before the restore happens. After restoring, the ★ marker and "Edited:" timestamp remain — the backup file is preserved even after a restore, so you could restore again if needed.
+
+> **Note on mtime-based timestamps:** The "Edited:" date is read from the filesystem modification time of the backup file (`.bak`), not from the CMS database. If you restore the original, the mtime of the `.bak` file is unchanged, so the displayed date still reflects when you first edited the file — not when the restore happened. This is intentional; it shows when you last made a substantive change to the file.
+
+### Creating new files
+
+Click **+ New file** in the editor toolbar to reveal an inline form:
+
+```
+[ filename input ]  [ .html ▾ ]  [ Create ]  [ Cancel ]
+```
+
+Enter a filename (without the extension) and choose the file type. The extension determines where the file is stored:
+
+| Extension | Stored in | Served at |
+|-----------|-----------|-----------|
+| `.html` | `templates/<filename>.html` | Rendered by Tera (not served directly) |
+| `.css` | `static/<filename>.css` | `/theme/static/<filename>.css` |
+| `.js` | `static/<filename>.js` | `/theme/static/<filename>.js` |
+
+You can include a subfolder in the name. For example, entering `partials/header` with `.html` creates `templates/partials/header.html`. Parent directories are created automatically.
+
+**Validation rules:**
+
+- No `..` path traversal sequences.
+- No leading slash.
+- Maximum 100 characters.
+- The resulting path must stay within the theme's own directory.
+
+After creation the editor opens the new file automatically.
+
+### Deleting files
+
+A **Delete file** button appears in the editor for every file except the seven required templates. Required templates cannot be deleted:
+
+```
+templates/base.html    templates/search.html
+templates/index.html   templates/404.html
+templates/single.html
+templates/page.html
+templates/archive.html
+```
+
+Clicking **Delete file** prompts for confirmation. The corresponding `.bak` backup file (if one exists) is also deleted.
+
+### Read-only mode for global themes
+
+When a site admin opens the editor for a theme from `themes/global/`, the editor is **read-only**:
+
+- A notice banner reads: *"Global theme — read only. This is a shared global theme. Activate it to get your own editable copy."*
+- The `<textarea>` has the `readonly` attribute.
+- Save, Restore, Delete, and New file controls are hidden.
+
+To edit a global theme, go back to Appearance, switch to **Global Themes**, and click **Get Theme** to copy it to your site folder. Then open the copy from **My Themes** to edit it.
+
+Super admins can always edit global themes directly.
+
+### Critical Tera rules to remember while editing
+
+These rules are enforced by the Tera parser — violating them produces a 500 error when the template is rendered.
+
+1. **`{% extends %}` must be the very first line.** Nothing — not even a blank line or a comment — may appear before it. If you see a 500 error after saving, check this first.
+
+2. **`{# comment #}` must appear inside a `{% block %}` tag.** Tera comments placed between the `{% extends %}` line and the first `{% block %}` cause a parse error. `<!-- HTML comments -->` and `/* CSS comments */` outside of blocks also cause parse errors in templates that extend `base.html`.
+
+3. **`| safe` applies only to CMS-produced HTML.** Use `{{ post.content | safe }}` for post body HTML and `{{ hook(...) | safe }}` for hook output. Never apply `| safe` to user-supplied fields like `post.title`, `post.excerpt`, `archive_term.name`, or any `post.meta.*` value.
+
+---
+
+## 16. Multi-site Theme Management
+
+In a multi-site installation, themes are either **global** (shared across all sites, stored in `themes/global/`) or **site-specific** (private to one site, stored in `themes/sites/<site_id>/`).
+
+### The separation of concerns
+
+| Global themes | Site themes |
+|---------------|-------------|
+| Created or uploaded by super admins | Created by any site admin (or copied from global) |
+| Visible to all sites | Visible only to the owning site |
+| Cannot be edited by site admins | Fully editable by the owning site admin |
+| Shared — changes affect all sites that use them | Isolated — changes only affect your site |
+
+### Getting a global theme (site admins)
+
+When you browse the **Global Themes** view, each theme card shows one of two states:
+
+- **Get Theme** — click to copy the theme to your site folder. You are immediately taken to **My Themes** where the copy now appears. No activation happens automatically; you choose when to activate it.
+- **In My Themes** — you already have a copy. Switch to My Themes to activate or edit it.
+
+The copy is entirely independent of the original. Changes made by the super admin to the global theme after you have taken a copy do not affect your version.
+
+### Activating a theme (site admins)
+
+Activation is always done from the **My Themes** view using the **Activate** button. This sets the active theme in the database for your site and hot-reloads the template engine — no server restart is required.
+
+> **Why you can only activate from My Themes:** activating a theme means your site will serve its files. You should only activate themes you own and can edit. If something goes wrong you need to be able to open the editor and fix it. Global themes are read-only to site admins, which is why the workflow requires copying first.
+
+### Auto-copy on activate
+
+If a site admin somehow triggers an activate on a global theme (e.g. via the activate form directly), the CMS silently copies the global theme to the site folder first, then activates the copy. The site admin always ends up with an editable site-specific copy as the active theme.
+
+### Super admin theme management
+
+Super admins are not bound by the site theme workflow:
+
+- They see full controls (Activate, Edit files, Delete) on all themes in both views.
+- They create themes in `themes/global/` by default (the Create Theme form targets global for super admins).
+- They can edit global themes directly in the editor without needing a site copy.
+- A global theme cannot be deleted if it is currently active on any site (the admin shows an amber "used by N sites" badge on the theme card).
+
+### Theme deletion rules
+
+| Scenario | Can delete? |
+|----------|-------------|
+| Site theme that is not active | Yes (site admin or super admin) |
+| Site theme that is currently active | No — deactivate first by switching to another theme |
+| Global theme with zero sites using it | Yes (super admin only) |
+| Global theme active on one or more sites | No — shown with "used by N sites" badge |
+
+---
+
+## 17. Testing Your Theme
 
 ### Installing a theme
 
-There are two ways to install a theme:
+There are three ways to install a theme:
 
-**Zip upload (recommended)** — Go to **Appearance** (`/admin/appearance`), scroll to the Upload Theme section, and upload a `.zip` file containing your theme. The zip may place theme files at the root or inside a single top-level folder — both layouts are accepted. The CMS will validate the structure and reject the upload with an error message if anything is missing. On success the theme appears in the theme list immediately. Uploading a zip whose `theme.toml` names an already-installed theme replaces it in place.
+**Create in the admin (recommended for new themes)** — Click **+ Create Theme** on the Appearance page. The CMS scaffolds all required files and drops you straight into the editor. See Section 14 for details.
 
-**Manual installation** — Copy your theme directory into `themes/global/` (for a theme available to all sites) or `themes/sites/<site_id>/` (for a site-specific theme). The theme will appear in the Appearance list on next server restart.
+**Zip upload** — Go to **Appearance** (`/admin/appearance`), scroll to the Upload Theme section, and upload a `.zip` file containing your theme. The zip may place theme files at the root or inside a single top-level folder — both layouts are accepted. The CMS validates the structure and rejects the upload with an error message if anything is missing. On success the theme appears in the theme list immediately. Uploading a zip whose `theme.toml` names an already-installed theme replaces it in place.
+
+**Manual installation** — Copy your theme directory into `themes/global/` (for a theme available to all sites) or `themes/sites/<site_id>/` (for a site-specific theme). The theme appears in the Appearance list on next server restart.
 
 ### Verify the theme loads
 
@@ -946,9 +1201,9 @@ Each required template has a distinct URL pattern. Visit each one to confirm it 
 | Template | URL to visit |
 |----------|-------------|
 | `base.html` + `index.html` | `/` |
-| `single.html` | Any published post URL |
-| `page.html` | Any published page URL |
-| `archive.html` | Any category, tag, or author archive URL |
+| `single.html` | `/blog/<slug>` — any published post |
+| `page.html` | `/<slug>` — any published page (e.g. `/about`) |
+| `archive.html` | `/category/<slug>`, `/tag/<slug>`, or `/author/<username>` |
 | `search.html` | `/search` (no query) and `/search?q=test` |
 | `404.html` | Any URL that does not exist |
 
@@ -997,7 +1252,7 @@ Run your rendered output through the W3C HTML validator or a local equivalent. C
 
 ---
 
-## 14. Theme Authoring Checklist
+## 18. Theme Authoring Checklist
 
 Use this checklist before publishing or deploying a theme.
 
@@ -1026,8 +1281,11 @@ Use this checklist before publishing or deploying a theme.
 ### Template inheritance
 
 - [ ] Every template except `base.html` starts with `{% extends "base.html" %}`.
+- [ ] `{% extends "base.html" %}` is the **very first line** of each child template — no blank lines, comments, or whitespace before it.
 - [ ] Every child template defines `{% block content %}`.
 - [ ] No child template defines blocks that are not declared in `base.html`.
+- [ ] `{# Tera comments #}` only appear **inside** `{% block %}` tags, not between `{% extends %}` and the first block.
+- [ ] HTML comments (`<!-- -->`) and CSS comments (`/* */`) only appear inside block tags in child templates.
 
 ### Hook points
 
@@ -1082,6 +1340,13 @@ Use this checklist before publishing or deploying a theme.
 - [ ] Multiple `<nav>` elements have distinct `aria-label` attributes.
 - [ ] `<time>` elements carry a `datetime="{{ post.published_at }}"` attribute alongside the formatted display text.
 
+### In-browser editor (if editing via admin UI)
+
+- [ ] After saving, the page still renders without a 500 error.
+- [ ] If a 500 appears after editing a child template, verify `{% extends "base.html" %}` is on line 1 with nothing before it.
+- [ ] Comments outside blocks have been removed or moved inside a `{% block %}` tag.
+- [ ] `| safe` is not applied to any field you did not verify is CMS-produced HTML.
+
 ---
 
-*Synaptic Signals Theme Authoring Guide — API v1 — last updated 2026-02-22*
+*Synaptic Signals Theme Authoring Guide — API v1 — last updated 2026-02-27*
