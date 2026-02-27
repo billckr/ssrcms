@@ -26,6 +26,11 @@ fn role_badge_class(role: &str) -> &str {
 pub struct SiteOption {
     pub id: String,
     pub hostname: String,
+    /// UUID of the current non-super_admin site owner, if one exists.
+    /// Used to drive the displacement modal on the site access page.
+    pub existing_admin_id: Option<String>,
+    /// Display name of the existing site admin (for the modal message).
+    pub existing_admin_name: Option<String>,
 }
 
 pub struct UserRow {
@@ -296,10 +301,14 @@ pub fn render_site_access(
     };
 
     let site_options = data.available_sites.iter().map(|s| {
+        let existing_id   = s.existing_admin_id.as_deref().unwrap_or("");
+        let existing_name = s.existing_admin_name.as_deref().unwrap_or("");
         format!(
-            r#"<option value="{}">{}</option>"#,
-            crate::html_escape(&s.id),
-            crate::html_escape(&s.hostname),
+            r#"<option value="{id}" data-existing-admin-id="{eid}" data-existing-admin-name="{ename}">{hostname}</option>"#,
+            id       = crate::html_escape(&s.id),
+            hostname = crate::html_escape(&s.hostname),
+            eid      = crate::html_escape(existing_id),
+            ename    = crate::html_escape(existing_name),
         )
     }).collect::<Vec<_>>().join("\n");
 
@@ -307,17 +316,16 @@ pub fn render_site_access(
         "<p><em>No sites available to assign.</em></p>".to_string()
     } else {
         format!(
-            r#"<form method="post" action="/admin/users/{user_id}/site-access/add"
-  data-username="{display_name}"
-  onsubmit="if(this.querySelector('[name=role]').value==='site_admin'){{var s=this.querySelector('[name=site_id] option:checked').text;return confirm('WARNING: You are about to assign \'' + this.dataset.username + '\' as Site Admin (owner) of \'' + s + '\'.\n\nThis grants full ownership of that site and changes their global role to site_admin.\n\nAre you sure?');}}"
+            r#"<form id="site-access-form" method="post" action="/admin/users/{user_id}/site-access/add"
   style="display:flex;gap:0.75rem;align-items:flex-end;flex-wrap:wrap;margin-top:1.5rem">
+  <input type="hidden" name="displaced_action" id="displaced-action-field" value="">
   <div class="form-group" style="margin:0;flex:1;min-width:160px">
     <label>Site</label>
-    <select name="site_id" style="width:100%">{site_opts}</select>
+    <select name="site_id" id="site-select" style="width:100%">{site_opts}</select>
   </div>
   <div class="form-group" style="margin:0;flex:1;min-width:140px">
     <label>Role</label>
-    <select name="role" style="width:100%">
+    <select name="role" id="role-select" style="width:100%">
       {site_admin_opt}
       <option value="editor">Editor</option>
       <option value="author">Author</option>
@@ -326,10 +334,82 @@ pub fn render_site_access(
   <div class="form-group" style="margin:0">
     <button type="submit" class="btn btn-primary">Assign</button>
   </div>
-</form>"#,
+</form>
+
+<!-- Displacement confirmation modal -->
+<div id="displace-modal" style="display:none;position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,0.5);align-items:center;justify-content:center">
+  <div style="background:#fff;border-radius:8px;padding:2rem;max-width:480px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,0.18)">
+    <h3 style="margin-top:0;color:var(--danger,#dc2626)">Replace Site Admin?</h3>
+    <p id="displace-msg" style="margin-bottom:1.5rem"></p>
+    <p style="font-size:0.9rem;color:var(--muted)">Their posts and media will remain attributed to them. Choose what happens to their site access:</p>
+    <div style="display:flex;flex-direction:column;gap:0.75rem;margin:1.25rem 0">
+      <label style="display:flex;align-items:flex-start;gap:0.6rem;cursor:pointer;padding:0.75rem;border:1.5px solid var(--border,#e5e7eb);border-radius:6px">
+        <input type="radio" name="displace_choice" value="remove" style="margin-top:0.2rem;flex-shrink:0" checked>
+        <span><strong>Remove from site</strong><br><span style="font-size:0.875rem;color:var(--muted)">They lose all access immediately. Recommended if you no longer trust them.</span></span>
+      </label>
+      <label style="display:flex;align-items:flex-start;gap:0.6rem;cursor:pointer;padding:0.75rem;border:1.5px solid var(--border,#e5e7eb);border-radius:6px">
+        <input type="radio" name="displace_choice" value="demote_author" style="margin-top:0.2rem;flex-shrink:0">
+        <span><strong>Demote to Author</strong><br><span style="font-size:0.875rem;color:var(--muted)">They keep read and write access to their own posts only.</span></span>
+      </label>
+    </div>
+    <div style="display:flex;justify-content:flex-end;gap:0.75rem;margin-top:1.5rem">
+      <button type="button" id="displace-cancel" class="btn btn-secondary">Cancel</button>
+      <button type="button" id="displace-confirm" class="btn btn-danger">Confirm &amp; Assign</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function() {{
+  var form     = document.getElementById('site-access-form');
+  var modal    = document.getElementById('displace-modal');
+  var msgEl    = document.getElementById('displace-msg');
+  var actionFld= document.getElementById('displaced-action-field');
+  var cancelBtn= document.getElementById('displace-cancel');
+  var confirmBtn=document.getElementById('displace-confirm');
+  var roleSelect = document.getElementById('role-select');
+  var siteSelect = document.getElementById('site-select');
+
+  form.addEventListener('submit', function(e) {{
+    if (roleSelect.value !== 'site_admin') return; // no modal needed
+    var opt = siteSelect.options[siteSelect.selectedIndex];
+    var existingId   = opt.dataset.existingAdminId   || '';
+    var existingName = opt.dataset.existingAdminName || '';
+    if (!existingId) return; // no existing site admin — proceed normally
+    e.preventDefault();
+    var siteName = opt.text;
+    msgEl.innerHTML = '<strong>' + escHtml(existingName) + '</strong> is currently the Site Admin for <strong>' + escHtml(siteName) + '</strong>. Assigning <strong>{assignee}</strong> will replace them.';
+    modal.style.display = 'flex';
+  }});
+
+  cancelBtn.addEventListener('click', function() {{
+    modal.style.display = 'none';
+    actionFld.value = '';
+  }});
+
+  confirmBtn.addEventListener('click', function() {{
+    var choice = document.querySelector('input[name="displace_choice"]:checked');
+    actionFld.value = choice ? choice.value : 'remove';
+    modal.style.display = 'none';
+    form.submit();
+  }});
+
+  // Close on backdrop click.
+  modal.addEventListener('click', function(e) {{
+    if (e.target === modal) {{
+      modal.style.display = 'none';
+      actionFld.value = '';
+    }}
+  }});
+
+  function escHtml(s) {{
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }}
+}})();
+</script>"#,
             user_id        = crate::html_escape(&data.user_id),
-            display_name   = crate::html_escape(&data.display_name),
             site_opts      = site_options,
+            assignee       = crate::html_escape(&data.display_name),
             site_admin_opt = if ctx.is_global_admin {
                 r#"<option value="site_admin">Site Admin (owner)</option>"#
             } else {

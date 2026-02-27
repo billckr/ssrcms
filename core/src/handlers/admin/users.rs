@@ -534,10 +534,33 @@ fn parse_role(s: &str) -> UserRole {
 }
 
 async fn fetch_site_options(state: &AppState) -> Vec<SiteOption> {
-    crate::models::site::list(&state.db).await
-        .unwrap_or_else(|e| { tracing::warn!("failed to list sites for user form: {:?}", e); vec![] })
-        .into_iter()
-        .map(|s| SiteOption { id: s.id.to_string(), hostname: s.hostname })
+    // Left-join with users to surface any existing non-super_admin site owner.
+    // If owner_user_id points to a super_admin we treat the site as having no
+    // dedicated site admin yet (the slot is open for a real site_admin).
+    let rows: Vec<(uuid::Uuid, String, Option<uuid::Uuid>, Option<String>)> = sqlx::query_as(
+        r#"
+        SELECT s.id, s.hostname,
+               u.id            AS owner_id,
+               u.display_name  AS owner_name
+        FROM   sites s
+        LEFT JOIN users u
+               ON u.id = s.owner_user_id
+              AND u.role != 'super_admin'
+              AND u.deleted_at IS NULL
+        ORDER BY s.created_at ASC
+        "#,
+    )
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_else(|e| { tracing::warn!("failed to list sites for user form: {:?}", e); vec![] });
+
+    rows.into_iter()
+        .map(|(id, hostname, owner_id, owner_name)| SiteOption {
+            id: id.to_string(),
+            hostname,
+            existing_admin_id:   owner_id.map(|uid| uid.to_string()),
+            existing_admin_name: owner_name,
+        })
         .collect()
 }
 
@@ -592,7 +615,13 @@ pub async fn site_access_page(
             .await
             .unwrap_or_default()
             .into_iter()
-            .map(|s| SiteOption { id: s.id.to_string(), hostname: s.hostname })
+            .map(|s| SiteOption {
+                id: s.id.to_string(),
+                hostname: s.hostname,
+                // site_admin can't assign the site_admin role so the modal never fires.
+                existing_admin_id:   None,
+                existing_admin_name: None,
+            })
             .collect()
     };
 
@@ -620,6 +649,9 @@ pub async fn site_access_page(
 pub struct SiteAccessAddForm {
     pub site_id: String,
     pub role: String,
+    /// "remove" or "demote_author" — sent by the displacement modal when
+    /// the target site already has a non-super_admin site admin.
+    pub displaced_action: Option<String>,
 }
 
 /// POST /admin/users/:id/site-access/add — assign a user to a site.
@@ -650,16 +682,55 @@ pub async fn add_site_access(
     // site_admin may only be assigned by a global_admin and only if the site has no owner yet.
     let role = match form.role.as_str() {
         "site_admin" if admin.caps.is_global_admin => {
-            // Enforce one site_admin per site.
-            let site = crate::models::site::get_by_id(&state.db, site_uuid).await
-                .map_err(|_| ()).ok();
-            if site.as_ref().and_then(|s| s.owner_user_id).is_some() {
-                // Flash error back to the page.
-                return Redirect::to(&format!(
-                    "/admin/users/{}/site-access?error=site_admin_exists", user_id
-                )).into_response();
+            // Check if site already has a non-super_admin owner.
+            let existing_owner: Option<uuid::Uuid> = sqlx::query_scalar(
+                r#"SELECT s.owner_user_id
+                   FROM sites s
+                   JOIN users u ON u.id = s.owner_user_id
+                   WHERE s.id = $1
+                     AND u.role != 'super_admin'
+                     AND u.deleted_at IS NULL"#,
+            )
+            .bind(site_uuid)
+            .fetch_optional(&state.db)
+            .await
+            .ok()
+            .flatten();
+
+            if let Some(old_owner_id) = existing_owner {
+                // An existing site admin must be displaced. Require the modal action.
+                match form.displaced_action.as_deref() {
+                    Some("remove") => {
+                        // Remove displaced admin from this site entirely.
+                        let _ = crate::models::site_user::remove(&state.db, site_uuid, old_owner_id).await;
+                    }
+                    Some("demote_author") => {
+                        // Demote displaced admin to author on this site.
+                        let _ = sqlx::query(
+                            "UPDATE site_users SET role = 'author' WHERE site_id = $1 AND user_id = $2"
+                        )
+                        .bind(site_uuid)
+                        .bind(old_owner_id)
+                        .execute(&state.db)
+                        .await;
+                    }
+                    _ => {
+                        // Modal was bypassed somehow — refuse.
+                        return Redirect::to(&format!(
+                            "/admin/users/{}/site-access?error=site_admin_exists", user_id
+                        )).into_response();
+                    }
+                }
+                // Clear the old owner so it can be reassigned below.
+                let _ = sqlx::query(
+                    "UPDATE sites SET owner_user_id = NULL, updated_at = NOW() WHERE id = $1"
+                )
+                .bind(site_uuid)
+                .execute(&state.db)
+                .await;
             }
-            // Update owner_user_id on the site and promote user's global role.
+
+            // Set the new owner and promote user's global role.
             let _ = sqlx::query(
                 "UPDATE sites SET owner_user_id = $1, updated_at = NOW() WHERE id = $2"
             )
