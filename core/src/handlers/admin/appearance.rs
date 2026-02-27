@@ -28,16 +28,24 @@ const REQUIRED_TEMPLATES: &[&str] = &[
 /// Maximum permitted zip upload size: 50 MB.
 const MAX_ZIP_BYTES: usize = 50 * 1024 * 1024;
 
+#[derive(Deserialize, Default)]
+pub struct AppearanceQuery {
+    #[serde(default)]
+    pub filter: Option<String>,
+}
+
 pub async fn list(
     State(state): State<AppState>,
     admin: AdminUser,
+    Query(q): Query<AppearanceQuery>,
 ) -> impl IntoResponse {
     if !admin.caps.can_manage_appearance {
         return (StatusCode::FORBIDDEN, Html("<h1>403 Forbidden</h1>".to_string())).into_response();
     }
     let cs = state.site_hostname(admin.site_id);
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
-    render_appearance_list(&state, None, &ctx, admin.site_id).await.into_response()
+    let filter = q.filter.as_deref().unwrap_or("my");
+    render_appearance_list(&state, None, &ctx, admin.site_id, filter).await.into_response()
 }
 
 // ── Activate ──────────────────────────────────────────────────────────────────
@@ -62,7 +70,7 @@ pub async fn activate(
 
     // Reject obviously invalid names before any filesystem access.
     if form.theme.contains("..") || form.theme.contains('/') || form.theme.contains('\\') {
-        return render_appearance_list(&state, Some("Invalid theme name."), &ctx, admin.site_id).await.into_response();
+        return render_appearance_list(&state, Some("Invalid theme name."), &ctx, admin.site_id, "my").await.into_response();
     }
 
     let global_dir = FsPath::new(themes_dir).join("global");
@@ -76,17 +84,17 @@ pub async fn activate(
             sd.join(&form.theme)
         } else {
             tracing::warn!("theme activation failed: theme '{}' not found in global or site dirs", form.theme);
-            return render_appearance_list(&state, Some("Theme not found."), &ctx, admin.site_id).await.into_response();
+            return render_appearance_list(&state, Some("Theme not found."), &ctx, admin.site_id, "my").await.into_response();
         }
     } else {
         tracing::warn!("theme activation failed: theme '{}' not found", form.theme);
-        return render_appearance_list(&state, Some("Theme not found."), &ctx, admin.site_id).await.into_response();
+        return render_appearance_list(&state, Some("Theme not found."), &ctx, admin.site_id, "my").await.into_response();
     };
 
     // Path traversal guard: theme must stay within global/ or sites/<id>/.
     let canonical_theme = match theme_path.canonicalize() {
         Ok(p) => p,
-        Err(_) => return render_appearance_list(&state, Some("Theme not found."), &ctx, admin.site_id).await.into_response(),
+        Err(_) => return render_appearance_list(&state, Some("Theme not found."), &ctx, admin.site_id, "my").await.into_response(),
     };
     let canonical_global = global_dir.canonicalize().unwrap_or_default();
     let canonical_site = site_dir
@@ -95,25 +103,49 @@ pub async fn activate(
         .unwrap_or_default();
     if !canonical_theme.starts_with(&canonical_global) && !canonical_theme.starts_with(&canonical_site) {
         tracing::warn!("activate path traversal attempt: theme_name={:?}", form.theme);
-        return render_appearance_list(&state, Some("Theme not found."), &ctx, admin.site_id).await.into_response();
+        return render_appearance_list(&state, Some("Theme not found."), &ctx, admin.site_id, "my").await.into_response();
     }
 
     let site_id = match admin.site_id {
         Some(id) => id,
         None => {
             tracing::warn!("theme activate: no site selected, cannot save per-site setting");
-            return render_appearance_list(&state, Some("No site selected. Run 'synaptic-cli site init' first."), &ctx, admin.site_id).await.into_response();
+            return render_appearance_list(&state, Some("No site selected. Run 'synaptic-cli site init' first."), &ctx, admin.site_id, "my").await.into_response();
         }
     };
 
+    // If a site admin is activating a global theme, copy it to their site dir
+    // first so they get their own editable version. Skip if a site copy already exists.
+    if !admin.caps.is_global_admin && canonical_theme.starts_with(&canonical_global) {
+        let site_copy = FsPath::new(themes_dir)
+            .join("sites")
+            .join(site_id.to_string())
+            .join(&form.theme);
+        if !site_copy.exists() {
+            let src = canonical_theme.clone();
+            let dst = site_copy.clone();
+            match tokio::task::spawn_blocking(move || copy_dir_all(&src, &dst)).await {
+                Ok(Ok(())) => tracing::info!("auto-copied global theme '{}' to site {}", form.theme, site_id),
+                Ok(Err(e)) => {
+                    tracing::error!("activate: failed to copy theme '{}' to site dir: {}", form.theme, e);
+                    return render_appearance_list(&state, Some("Failed to copy theme to your site. Please try again."), &ctx, admin.site_id, "my").await.into_response();
+                }
+                Err(e) => {
+                    tracing::error!("activate: copy task panicked: {:?}", e);
+                    return render_appearance_list(&state, Some("Failed to copy theme to your site. Please try again."), &ctx, admin.site_id, "my").await.into_response();
+                }
+            }
+        }
+    }
+
     if let Err(e) = set_site_setting(&state.db, site_id, "active_theme", &form.theme).await {
         tracing::error!("failed to save active_theme to DB: {:?}", e);
-        return render_appearance_list(&state, Some("Failed to activate theme. Please try again."), &ctx, admin.site_id).await.into_response();
+        return render_appearance_list(&state, Some("Failed to activate theme. Please try again."), &ctx, admin.site_id, "my").await.into_response();
     }
 
     if let Err(e) = state.templates.switch_theme(&form.theme) {
         tracing::error!("failed to switch theme to '{}': {:?}", form.theme, e);
-        return render_appearance_list(&state, Some("Theme files could not be loaded. Please try again."), &ctx, admin.site_id).await.into_response();
+        return render_appearance_list(&state, Some("Theme files could not be loaded. Please try again."), &ctx, admin.site_id, "my").await.into_response();
     }
 
     *state.active_theme.write().unwrap() = form.theme.clone();
@@ -146,7 +178,7 @@ pub async fn delete(
 
     macro_rules! err {
         ($msg:expr) => {
-            return render_appearance_list(&state, Some($msg), &ctx, admin.site_id)
+            return render_appearance_list(&state, Some($msg), &ctx, admin.site_id, "my")
                 .await
                 .into_response()
         };
@@ -243,7 +275,7 @@ pub async fn delete(
     }
 
     tracing::info!("theme '{}' deleted by {}", form.theme, if admin.caps.is_global_admin { "super_admin" } else { "site_admin" });
-    render_appearance_list(&state, Some(&format!("Theme '{}' deleted.", form.theme)), &ctx, admin.site_id)
+    render_appearance_list(&state, Some(&format!("Theme '{}' deleted.", form.theme)), &ctx, admin.site_id, "my")
         .await
         .into_response()
 }
@@ -310,13 +342,13 @@ pub async fn upload_theme(
             match field.bytes().await {
                 Ok(b) if b.len() <= MAX_ZIP_BYTES => zip_bytes = Some(b.to_vec()),
                 Ok(_) => {
-                    return render_appearance_list(&state, Some("Upload too large. Maximum size is 50 MB."), &ctx, admin.site_id)
+                    return render_appearance_list(&state, Some("Upload too large. Maximum size is 50 MB."), &ctx, admin.site_id, "my")
                         .await
                         .into_response();
                 }
                 Err(e) => {
                     tracing::error!("failed to read theme zip field: {:?}", e);
-                    return render_appearance_list(&state, Some("Failed to read uploaded file. Please try again."), &ctx, admin.site_id)
+                    return render_appearance_list(&state, Some("Failed to read uploaded file. Please try again."), &ctx, admin.site_id, "my")
                         .await
                         .into_response();
                 }
@@ -326,7 +358,7 @@ pub async fn upload_theme(
 
     let zip_bytes = match zip_bytes {
         Some(b) => b,
-        None => return render_appearance_list(&state, Some("No file received."), &ctx, admin.site_id).await.into_response(),
+        None => return render_appearance_list(&state, Some("No file received."), &ctx, admin.site_id, "my").await.into_response(),
     };
 
     // Route the upload to the correct subdirectory.
@@ -337,7 +369,7 @@ pub async fn upload_theme(
     } else if let Some(sid) = admin.site_id {
         format!("{}/sites/{}", themes_parent, sid)
     } else {
-        return render_appearance_list(&state, Some("No site selected. Cannot install theme."), &ctx, admin.site_id)
+        return render_appearance_list(&state, Some("No site selected. Cannot install theme."), &ctx, admin.site_id, "my")
             .await
             .into_response();
     };
@@ -345,7 +377,7 @@ pub async fn upload_theme(
     // Ensure target directory exists.
     if let Err(e) = std::fs::create_dir_all(&target_dir) {
         tracing::error!("failed to create theme target dir '{}': {}", target_dir, e);
-        return render_appearance_list(&state, Some("Failed to prepare theme directory."), &ctx, admin.site_id)
+        return render_appearance_list(&state, Some("Failed to prepare theme directory."), &ctx, admin.site_id, "my")
             .await
             .into_response();
     }
@@ -364,23 +396,23 @@ pub async fn upload_theme(
             let active = state.active_theme.read().unwrap().clone();
             if let Err(e) = state.templates.switch_theme(&active) {
                 tracing::error!("theme '{}' installed but Tera reload of '{}' failed: {:?}", theme_name, active, e);
-                return render_appearance_list(&state, Some("Theme installed but could not be reloaded. Please restart the server."), &ctx, admin.site_id)
+                return render_appearance_list(&state, Some("Theme installed but could not be reloaded. Please restart the server."), &ctx, admin.site_id, "my")
                     .await
                     .into_response();
             }
             tracing::info!("reloaded active theme '{}' after installing '{}'", active, theme_name);
 
-            render_appearance_list(&state, Some(&format!("Theme '{}' installed successfully.", theme_name)), &ctx, admin.site_id)
+            render_appearance_list(&state, Some(&format!("Theme '{}' installed successfully.", theme_name)), &ctx, admin.site_id, "my")
                 .await
                 .into_response()
         }
         Ok(Err(msg)) => {
             tracing::warn!("theme upload rejected: {}", msg);
-            render_appearance_list(&state, Some(&msg), &ctx, admin.site_id).await.into_response()
+            render_appearance_list(&state, Some("Installation failed. Please try again."), &ctx, admin.site_id, "my").await.into_response()
         }
         Err(e) => {
             tracing::error!("theme upload task panicked: {:?}", e);
-            render_appearance_list(&state, Some("Installation failed. Please try again."), &ctx, admin.site_id)
+            render_appearance_list(&state, Some("Installation failed. Please try again."), &ctx, admin.site_id, "my")
                 .await
                 .into_response()
         }
@@ -1218,8 +1250,8 @@ pub async fn new_file(
     let cs = state.site_hostname(admin.site_id);
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
 
-    let Some(theme_dir) = resolve_theme_dir(&state.config.themes_dir, &theme, admin.site_id) else {
-        return render_appearance_list(&state, Some("Theme not found."), &ctx, admin.site_id)
+    let Some(theme_dir) = resolve_theme_dir(&state.config.themes_dir, &theme, admin.site_id, !admin.caps.is_global_admin) else {
+        return render_appearance_list(&state, Some("Theme not found."), &ctx, admin.site_id, "my")
             .await.into_response();
     };
 
@@ -1235,9 +1267,13 @@ pub async fn new_file(
             }
         }).collect();
         Html(admin::pages::appearance::render_theme_editor(
-            &theme, &editor_files, None, "", false, Some(msg), &ctx,
+            &theme, &editor_files, None, "", false, Some(msg), &ctx, false,
         )).into_response()
     };
+
+    if !admin.caps.is_global_admin && is_in_global_dir(&theme_dir, &state.config.themes_dir) {
+        return editor_err("Global themes cannot be modified. Copy this theme to your site first.");
+    }
 
     // name = bare name the user typed (e.g. "partials/header" or "custom")
     // ext  = dropdown selection: ".html", ".css", or ".js"
@@ -1294,6 +1330,86 @@ pub async fn new_file(
     )).into_response()
 }
 
+// ── Get Theme (copy global → site, no activation) ─────────────────────────────
+
+#[derive(Deserialize)]
+pub struct GetThemeForm {
+    pub theme: String,
+}
+
+pub async fn get_theme(
+    State(state): State<AppState>,
+    admin: AdminUser,
+    Form(form): Form<GetThemeForm>,
+) -> impl IntoResponse {
+    if !admin.caps.can_manage_appearance {
+        return (StatusCode::FORBIDDEN, "Forbidden").into_response();
+    }
+
+    // Super admins own global themes directly — nothing to copy.
+    if admin.caps.is_global_admin {
+        return Redirect::to("/admin/appearance?filter=my").into_response();
+    }
+
+    let name = form.theme.trim().to_string();
+    if name.is_empty() || name.contains("..") || name.contains('/') || name.contains('\\') {
+        let cs = state.site_hostname(admin.site_id);
+        let ctx = super::page_ctx_full(&state, &admin, &cs).await;
+        return render_appearance_list(&state, Some("Invalid theme name."), &ctx, admin.site_id, "global")
+            .await.into_response();
+    }
+
+    let themes_dir = &state.config.themes_dir;
+    let source = FsPath::new(themes_dir).join("global").join(&name);
+    if !source.is_dir() {
+        let cs = state.site_hostname(admin.site_id);
+        let ctx = super::page_ctx_full(&state, &admin, &cs).await;
+        return render_appearance_list(&state, Some("Global theme not found."), &ctx, admin.site_id, "global")
+            .await.into_response();
+    }
+
+    let site_id = match admin.site_id {
+        Some(id) => id,
+        None => {
+            let cs = state.site_hostname(admin.site_id);
+            let ctx = super::page_ctx_full(&state, &admin, &cs).await;
+            return render_appearance_list(
+                &state, Some("No site selected. Run 'synaptic-cli site init' first."),
+                &ctx, admin.site_id, "global",
+            ).await.into_response();
+        }
+    };
+
+    let dest = FsPath::new(themes_dir).join("sites").join(site_id.to_string()).join(&name);
+    if dest.exists() {
+        // Already copied — just send them to their themes.
+        return Redirect::to("/admin/appearance?filter=my").into_response();
+    }
+
+    let source_owned = source.to_path_buf();
+    let dest_owned = dest.to_path_buf();
+    match tokio::task::spawn_blocking(move || copy_dir_all(&source_owned, &dest_owned)).await {
+        Ok(Ok(())) => {
+            tracing::info!("get_theme: copied global theme '{}' to site {}", name, site_id);
+            Redirect::to("/admin/appearance?filter=my").into_response()
+        }
+        Ok(Err(e)) => {
+            tracing::error!("get_theme: copy failed for '{}': {}", name, e);
+            let cs = state.site_hostname(admin.site_id);
+            let ctx = super::page_ctx_full(&state, &admin, &cs).await;
+            render_appearance_list(&state, Some("Failed to get theme. Please try again."), &ctx, admin.site_id, "global")
+                .await.into_response()
+        }
+        Err(e) => {
+            tracing::error!("get_theme: task panicked: {:?}", e);
+            let cs = state.site_hostname(admin.site_id);
+            let ctx = super::page_ctx_full(&state, &admin, &cs).await;
+            render_appearance_list(&state, Some("Failed to get theme. Please try again."), &ctx, admin.site_id, "global")
+                .await.into_response()
+        }
+    }
+}
+
 // ── Theme file editor ────────────────────────────────────────────────────────
 
 #[derive(Deserialize)]
@@ -1344,17 +1460,34 @@ fn url_encode_param(s: &str) -> String {
 }
 
 /// Find the filesystem path of a named theme (global or site-scoped).
-fn resolve_theme_dir(themes_dir: &str, theme_name: &str, site_id: Option<Uuid>) -> Option<PathBuf> {
+///
+/// When `prefer_site` is true (site admins), the site-scoped copy is returned
+/// first so that a copied global theme is editable by its owner. When false
+/// (super admins), the global directory takes priority.
+fn resolve_theme_dir(themes_dir: &str, theme_name: &str, site_id: Option<Uuid>, prefer_site: bool) -> Option<PathBuf> {
     if theme_name.is_empty() || theme_name.contains("..") || theme_name.contains('/') || theme_name.contains('\\') {
         return None;
     }
     let global = FsPath::new(themes_dir).join("global").join(theme_name);
-    if global.is_dir() { return Some(global); }
-    if let Some(id) = site_id {
-        let site = FsPath::new(themes_dir).join("sites").join(id.to_string()).join(theme_name);
-        if site.is_dir() { return Some(site); }
+    let site = site_id.map(|id| FsPath::new(themes_dir).join("sites").join(id.to_string()).join(theme_name));
+
+    if prefer_site {
+        if let Some(ref s) = site { if s.is_dir() { return Some(s.clone()); } }
+        if global.is_dir() { return Some(global); }
+    } else {
+        if global.is_dir() { return Some(global); }
+        if let Some(s) = site { if s.is_dir() { return Some(s); } }
     }
     None
+}
+
+/// Returns true when `path` lives inside the global themes directory.
+fn is_in_global_dir(path: &FsPath, themes_dir: &str) -> bool {
+    let global_dir = FsPath::new(themes_dir).join("global");
+    match (path.canonicalize(), global_dir.canonicalize()) {
+        (Ok(p), Ok(g)) => p.starts_with(g),
+        _ => false,
+    }
 }
 
 /// Resolve a relative file path within a theme dir, guarding against traversal.
@@ -1416,10 +1549,12 @@ pub async fn edit_file(
     let cs = state.site_hostname(admin.site_id);
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
 
-    let Some(theme_dir) = resolve_theme_dir(&state.config.themes_dir, &theme, admin.site_id) else {
-        return render_appearance_list(&state, Some("Theme not found."), &ctx, admin.site_id)
+    let Some(theme_dir) = resolve_theme_dir(&state.config.themes_dir, &theme, admin.site_id, !admin.caps.is_global_admin) else {
+        return render_appearance_list(&state, Some("Theme not found."), &ctx, admin.site_id, "my")
             .await.into_response();
     };
+
+    let is_readonly = !admin.caps.is_global_admin && is_in_global_dir(&theme_dir, &state.config.themes_dir);
 
     let files = walk_theme_files(&theme_dir);
 
@@ -1512,6 +1647,7 @@ pub async fn edit_file(
         has_backup,
         effective_flash.as_deref(),
         &ctx,
+        is_readonly,
     )).into_response()
 }
 
@@ -1527,10 +1663,14 @@ pub async fn save_file(
     let cs = state.site_hostname(admin.site_id);
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
 
-    let Some(theme_dir) = resolve_theme_dir(&state.config.themes_dir, &theme, admin.site_id) else {
-        return render_appearance_list(&state, Some("Theme not found."), &ctx, admin.site_id)
+    let Some(theme_dir) = resolve_theme_dir(&state.config.themes_dir, &theme, admin.site_id, !admin.caps.is_global_admin) else {
+        return render_appearance_list(&state, Some("Theme not found."), &ctx, admin.site_id, "my")
             .await.into_response();
     };
+
+    if !admin.caps.is_global_admin && is_in_global_dir(&theme_dir, &state.config.themes_dir) {
+        return Redirect::to(&format!("/admin/appearance/editor/{}", url_encode_param(&theme))).into_response();
+    }
 
     let redirect_base = format!(
         "/admin/appearance/editor/{}?file={}",
@@ -1594,10 +1734,14 @@ pub async fn restore_file(
     let cs = state.site_hostname(admin.site_id);
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
 
-    let Some(theme_dir) = resolve_theme_dir(&state.config.themes_dir, &theme, admin.site_id) else {
-        return render_appearance_list(&state, Some("Theme not found."), &ctx, admin.site_id)
+    let Some(theme_dir) = resolve_theme_dir(&state.config.themes_dir, &theme, admin.site_id, !admin.caps.is_global_admin) else {
+        return render_appearance_list(&state, Some("Theme not found."), &ctx, admin.site_id, "my")
             .await.into_response();
     };
+
+    if !admin.caps.is_global_admin && is_in_global_dir(&theme_dir, &state.config.themes_dir) {
+        return Redirect::to(&format!("/admin/appearance/editor/{}", url_encode_param(&theme))).into_response();
+    }
 
     let redirect_base = format!(
         "/admin/appearance/editor/{}?file={}",
@@ -1652,8 +1796,8 @@ pub async fn delete_file(
     let cs = state.site_hostname(admin.site_id);
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
 
-    let Some(theme_dir) = resolve_theme_dir(&state.config.themes_dir, &theme, admin.site_id) else {
-        return render_appearance_list(&state, Some("Theme not found."), &ctx, admin.site_id)
+    let Some(theme_dir) = resolve_theme_dir(&state.config.themes_dir, &theme, admin.site_id, !admin.caps.is_global_admin) else {
+        return render_appearance_list(&state, Some("Theme not found."), &ctx, admin.site_id, "my")
             .await.into_response();
     };
 
@@ -1671,7 +1815,7 @@ pub async fn delete_file(
         }).collect();
         return Html(admin::pages::appearance::render_theme_editor(
             &theme, &editor_files, Some(&rel), "", false,
-            Some("Required theme templates cannot be deleted."), &ctx,
+            Some("Required theme templates cannot be deleted."), &ctx, false,
         )).into_response();
     }
 
@@ -1687,7 +1831,7 @@ pub async fn delete_file(
         }).collect();
         return Html(admin::pages::appearance::render_theme_editor(
             &theme, &editor_files, None, "", false,
-            Some("File not found."), &ctx,
+            Some("File not found."), &ctx, false,
         )).into_response();
     };
 
@@ -1712,12 +1856,27 @@ pub async fn delete_file(
         }).collect();
         return Html(admin::pages::appearance::render_theme_editor(
             &theme, &editor_files, Some(&rel), "", false,
-            Some("Failed to delete file. Please try again."), &ctx,
+            Some("Failed to delete file. Please try again."), &ctx, false,
         )).into_response();
     }
 
     tracing::info!("theme file deleted: theme={} file={}", theme, rel);
     Redirect::to(&format!("/admin/appearance/editor/{}", url_encode_param(&theme))).into_response()
+}
+
+/// Recursively copy a directory tree from `src` to `dst`.
+fn copy_dir_all(src: &FsPath, dst: &FsPath) -> std::io::Result<()> {
+    fs::create_dir_all(dst)?;
+    for entry in fs::read_dir(src)? {
+        let entry = entry?;
+        let ty = entry.file_type()?;
+        if ty.is_dir() {
+            copy_dir_all(&entry.path(), &dst.join(entry.file_name()))?;
+        } else {
+            fs::copy(entry.path(), dst.join(entry.file_name()))?;
+        }
+    }
+    Ok(())
 }
 
 // ── Shared list renderer ───────────────────────────────────────────────────────
@@ -1727,6 +1886,7 @@ async fn render_appearance_list(
     flash: Option<&str>,
     ctx: &admin::PageContext,
     site_id: Option<Uuid>,
+    filter: &str,
 ) -> Html<String> {
     let themes_dir = &state.config.themes_dir;
 
@@ -1787,13 +1947,37 @@ async fn render_appearance_list(
         };
     }
 
+    // For the global filter view, mark which themes the user already has a site copy of.
+    if filter == "global" && !ctx.is_global_admin {
+        if let Some(sid) = site_id {
+            let site_dir = FsPath::new(themes_dir).join("sites").join(sid.to_string());
+            for theme in &mut themes {
+                if theme.source == "global" {
+                    theme.has_site_copy = site_dir.join(&theme.name).is_dir();
+                }
+            }
+        }
+    }
+
+    // Apply filter. Super admins always see everything (global themes are their domain).
+    // Site admins see their own themes (source=="site") by default, or global themes
+    // when explicitly requesting filter=global.
+    let mut themes: Vec<ThemeInfo> = if ctx.is_global_admin {
+        themes
+    } else if filter == "global" {
+        themes.into_iter().filter(|t| t.source == "global").collect()
+    } else {
+        // "my" — site themes only
+        themes.into_iter().filter(|t| t.source == "site").collect()
+    };
+
     themes.sort_by(|a, b| match (a.active, b.active) {
         (true, false) => std::cmp::Ordering::Less,
         (false, true) => std::cmp::Ordering::Greater,
         _ => a.name.cmp(&b.name),
     });
 
-    Html(render_with_flash(&themes, flash, ctx))
+    Html(render_with_flash(&themes, flash, ctx, filter))
 }
 
 /// Scan a theme directory and append found themes to `themes`.
@@ -1829,8 +2013,9 @@ fn scan_theme_dir(dir: &FsPath, active_theme: &str, source: &str, themes: &mut V
                         active: name == active_theme,
                         has_screenshot,
                         source: source.to_string(),
-                        can_delete: false, // computed after scanning in render_appearance_list
-                        in_use_by: 0,      // computed after scanning in render_appearance_list
+                        can_delete: false,    // computed after scanning in render_appearance_list
+                        in_use_by: 0,         // computed after scanning in render_appearance_list
+                        has_site_copy: false, // computed below for global filter view
                     });
                 }
             }

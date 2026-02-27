@@ -14,27 +14,45 @@ pub struct ThemeInfo {
     pub can_delete: bool,
     /// Number of sites currently using this theme (global themes only).
     pub in_use_by: usize,
+    /// True when a site copy of this global theme already exists in the site's theme folder.
+    /// Only meaningful in the global filter view; always false for site themes.
+    pub has_site_copy: bool,
 }
 
-pub fn render_with_flash(themes: &[ThemeInfo], flash: Option<&str>, ctx: &crate::PageContext) -> String {
+pub fn render_with_flash(themes: &[ThemeInfo], flash: Option<&str>, ctx: &crate::PageContext, filter: &str) -> String {
     let cards: String = if themes.is_empty() {
         r#"<div class="empty-state">
-            <p>No themes found. Add a theme directory to <code>themes/</code> and restart the server.</p>
+            <p>No themes found.</p>
         </div>"#.to_string()
     } else {
-        themes.iter().map(|t| render_card(t, ctx)).collect()
+        themes.iter().map(|t| render_card(t, ctx, filter)).collect()
     };
 
-    let create_btn = if ctx.can_manage_appearance {
-        r#"<div class="appearance-header" style="margin-bottom:1rem;">
+    let sel_my     = if filter != "global" { " selected" } else { "" };
+    let sel_global = if filter == "global"  { " selected" } else { "" };
+
+    // For super admins the filter is a no-op (they always see all themes), but we
+    // still render the dropdown so the UI is consistent.
+    let toolbar = if ctx.can_manage_appearance {
+        format!(
+            r#"<div class="appearance-toolbar">
+  <form method="GET" action="/admin/appearance" style="display:contents">
+    <select name="filter" class="appearance-filter-select" onchange="this.form.submit()" aria-label="Theme filter">
+      <option value="my"{sel_my}>My Themes</option>
+      <option value="global"{sel_global}>Global Themes</option>
+    </select>
+  </form>
   <a href="/admin/appearance/create" class="btn btn-primary">+ Create Theme</a>
-</div>"#
+</div>"#,
+            sel_my = sel_my,
+            sel_global = sel_global,
+        )
     } else {
-        ""
+        String::new()
     };
 
     let content = format!(
-        r#"{create_btn}<div class="theme-list">{cards}</div>
+        r#"{toolbar}<div class="theme-list">{cards}</div>
 <div class="theme-upload-section">
   <h2>Upload Theme</h2>
   <p class="muted">Upload a <code>.zip</code> file containing a valid theme. The zip must include <code>theme.toml</code> and all required templates.</p>
@@ -78,7 +96,7 @@ pub fn render_create_theme_form(flash: Option<&str>, ctx: &crate::PageContext) -
 }
 
 pub fn render(themes: &[ThemeInfo], ctx: &crate::PageContext) -> String {
-    render_with_flash(themes, None, ctx)
+    render_with_flash(themes, None, ctx, "my")
 }
 
 // ── Theme file editor ─────────────────────────────────────────────────────────
@@ -99,6 +117,7 @@ pub fn render_theme_editor(
     has_backup: bool,
     flash: Option<&str>,
     ctx: &crate::PageContext,
+    is_readonly: bool,
 ) -> String {
     let theme_esc = crate::html_escape(theme_name);
 
@@ -129,7 +148,7 @@ pub fn render_theme_editor(
         options = options,
     );
 
-    let new_file_form = if ctx.can_manage_appearance {
+    let new_file_form = if ctx.can_manage_appearance && !is_readonly {
         format!(
             r#"<button type="button" class="btn btn-sm btn-secondary"
         onclick="document.getElementById('new-file-form').style.display='flex'">+ New file</button>
@@ -164,6 +183,16 @@ pub fn render_theme_editor(
         picker = file_picker,
         new_file_form = new_file_form,
     );
+
+    // Read-only notice shown when a site admin views a global theme.
+    let readonly_notice = if is_readonly {
+        r#"<div class="editor-notice editor-notice--warning">
+  <strong>Global theme — read only.</strong>
+  This is a shared global theme. Activate it to get your own editable copy.
+</div>"#.to_string()
+    } else {
+        String::new()
+    };
 
     // Editor body — shown only when a file is selected
     let body = if let Some(rel) = selected {
@@ -204,8 +233,17 @@ pub fn render_theme_editor(
             String::new()
         };
 
+        // In readonly mode suppress all write actions.
+        let (restore_btn, delete_btn) = if is_readonly {
+            (String::new(), String::new())
+        } else {
+            (restore_btn, delete_btn)
+        };
+
         let del_btn = delete_btn.clone();
         let del_btn2 = delete_btn;
+        let ro = if is_readonly { " readonly" } else { "" };
+        let save_btn = if is_readonly { "" } else { r#"<button type="submit" form="save-form" class="btn btn-primary">Save file</button>"# };
         let edited_at = if has_backup {
             files.iter()
                 .find(|f| f.rel_path == rel)
@@ -223,10 +261,10 @@ pub fn render_theme_editor(
 </div>
 <form method="POST" action="/admin/appearance/editor/{theme}/save" class="editor-form" id="save-form">
   <input type="hidden" name="file" value="{file}">
-  <textarea name="content" class="editor-textarea" spellcheck="false" autocorrect="off" autocapitalize="off">{content}</textarea>
+  <textarea name="content" class="editor-textarea" spellcheck="false" autocorrect="off" autocapitalize="off"{ro}>{content}</textarea>
 </form>
 <div class="editor-actions">
-  <button type="submit" form="save-form" class="btn btn-primary">Save file</button>
+  {save_btn}
   {restore2}
   {del_btn2}
 </div>
@@ -246,9 +284,10 @@ pub fn render_theme_editor(
     };
 
     let content_html = format!(
-        r#"<div class="editor-wrap">{toolbar}{body}</div>"#,
-        toolbar = toolbar,
-        body    = body,
+        r#"<div class="editor-wrap">{toolbar}{readonly_notice}{body}</div>"#,
+        toolbar         = toolbar,
+        readonly_notice = readonly_notice,
+        body            = body,
     );
 
     admin_page(
@@ -260,48 +299,102 @@ pub fn render_theme_editor(
     )
 }
 
-fn render_card(t: &ThemeInfo, ctx: &crate::PageContext) -> String {
-    let active_class = if t.active { " active" } else { "" };
+fn render_card(t: &ThemeInfo, ctx: &crate::PageContext, filter: &str) -> String {
+    let name_esc = crate::html_escape(&t.name);
 
     let screenshot_html = if t.has_screenshot {
         format!(
-            r#"<div class="theme-screenshot"><img src="/admin/theme-screenshot/{}" alt="{} preview"></div>"#,
-            crate::html_escape(&t.name),
-            crate::html_escape(&t.name),
+            r#"<div class="theme-screenshot"><img src="/admin/theme-screenshot/{name}" alt="{name} preview"></div>"#,
+            name = name_esc,
         )
     } else {
         format!(
-            r#"<div class="theme-screenshot theme-screenshot-placeholder"><span>{}</span></div>"#,
-            crate::html_escape(&t.name),
+            r#"<div class="theme-screenshot theme-screenshot-placeholder"><span>{name}</span></div>"#,
+            name = name_esc,
         )
     };
+
+    let header = format!(
+        r#"<div class="theme-card-header">
+    <span class="theme-name">{name}</span>
+    <span class="badge">{version}</span>
+  </div>
+  <p class="theme-description">{desc}</p>
+  <p class="theme-author">by {author}</p>"#,
+        name    = name_esc,
+        version = crate::html_escape(&t.version),
+        desc    = crate::html_escape(&t.description),
+        author  = crate::html_escape(&t.author),
+    );
+
+    // ── Global library view ───────────────────────────────────────────────────
+    // Super admins see full controls everywhere; site admins in the global view
+    // can only "Get Theme" (copy to their site folder). No edit, activate, delete.
+    if filter == "global" && !ctx.is_global_admin {
+        let action_html = if t.has_site_copy {
+            r#"<span class="badge badge-in-use">In My Themes</span>"#.to_string()
+        } else {
+            format!(
+                r#"<form method="post" action="/admin/appearance/get-theme" style="display:inline;">
+    <input type="hidden" name="theme" value="{name}">
+    <button type="submit" class="btn btn-primary">Get Theme</button>
+</form>"#,
+                name = name_esc,
+            )
+        };
+
+        return format!(
+            r#"<div class="theme-card">
+  {screenshot}
+  {header}
+  <div class="theme-actions">{action}</div>
+</div>"#,
+            screenshot = screenshot_html,
+            header     = header,
+            action     = action_html,
+        );
+    }
+
+    // ── My Themes view (and super admin everywhere) ───────────────────────────
+    let active_class = if t.active { " active" } else { "" };
 
     let activate_html = if t.active {
         r#"<button class="btn btn-secondary" disabled>Active</button>"#.to_string()
     } else {
         format!(
             r#"<form method="post" action="/admin/appearance/activate" style="display:inline;">
-    <input type="hidden" name="theme" value="{}">
+    <input type="hidden" name="theme" value="{name}">
     <button type="submit" class="btn btn-primary">Activate</button>
 </form>"#,
-            crate::html_escape(&t.name)
+            name = name_esc,
         )
     };
 
     let edit_html = format!(
-        r#"<a href="/admin/appearance/editor/{}" class="btn btn-sm btn-secondary">Edit files</a>"#,
-        crate::html_escape(&t.name)
+        r#"<a href="/admin/appearance/editor/{name}" class="btn btn-sm btn-secondary">Edit files</a>"#,
+        name = name_esc,
     );
 
     let delete_html = if t.can_delete {
+        let confirm_msg = format!("Delete theme &quot;{}&quot;? This cannot be undone.", name_esc);
         format!(
             r#"<form method="post" action="/admin/appearance/delete" style="display:inline;"
-                data-confirm="Delete theme &quot;{name}&quot;? This cannot be undone." onsubmit="return confirm(this.dataset.confirm)">
-    <input type="hidden" name="theme" value="{name_escaped}">
+                data-confirm="{confirm}" onsubmit="return confirm(this.dataset.confirm)">
+    <input type="hidden" name="theme" value="{name}">
     <button type="submit" class="btn btn-danger">Delete</button>
 </form>"#,
-            name = crate::html_escape(&t.name),
-            name_escaped = crate::html_escape(&t.name),
+            confirm = confirm_msg,
+            name    = name_esc,
+        )
+    } else {
+        String::new()
+    };
+
+    let in_use_badge = if ctx.is_global_admin && t.source == "global" && t.in_use_by > 0 {
+        format!(
+            r#" <span class="badge badge-in-use" title="Active on {n} site(s) — cannot delete">used by {n} site{s}</span>"#,
+            n = t.in_use_by,
+            s = if t.in_use_by == 1 { "" } else { "s" },
         )
     } else {
         String::new()
@@ -310,38 +403,18 @@ fn render_card(t: &ThemeInfo, ctx: &crate::PageContext) -> String {
     format!(
         r#"<div class="theme-card{active}">
   {screenshot}
-  <div class="theme-card-header">
-    <span class="theme-name">{name}</span>
-    <span class="badge">{version}</span>
-    {source_badge}
-  </div>
-  <p class="theme-description">{desc}</p>
-  <p class="theme-author">by {author}</p>
+  {header}
+  {in_use_badge}
   <div class="theme-actions">
     {activate}{edit}{delete}
   </div>
 </div>"#,
-        active = active_class,
-        screenshot = screenshot_html,
-        name = crate::html_escape(&t.name),
-        version = crate::html_escape(&t.version),
-        source_badge = {
-            let source_label = if t.source == "global" { "global" } else { "site" };
-            let in_use_badge = if ctx.is_global_admin && t.source == "global" && t.in_use_by > 0 {
-                format!(
-                    r#" <span class="badge badge-in-use" title="Active on {n} site(s) — cannot delete">used by {n} site{s}</span>"#,
-                    n = t.in_use_by,
-                    s = if t.in_use_by == 1 { "" } else { "s" },
-                )
-            } else {
-                String::new()
-            };
-            format!(r#"<span class="badge">{source_label}</span>{in_use_badge}"#)
-        },
-        desc = crate::html_escape(&t.description),
-        author = crate::html_escape(&t.author),
-        activate = activate_html,
-        edit = edit_html,
-        delete = delete_html,
+        active       = active_class,
+        screenshot   = screenshot_html,
+        header       = header,
+        in_use_badge = in_use_badge,
+        activate     = activate_html,
+        edit         = edit_html,
+        delete       = delete_html,
     )
 }

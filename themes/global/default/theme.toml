@@ -1,6 +1,0 @@
-[theme]
-name        = "default"
-version     = "1.0.0"
-api_version = "1"
-description = "Minimal default theme. Correct by design; style it yourself."
-author      = "Synaptic Signals"
