@@ -478,6 +478,56 @@ pub async fn delete_page(
     Redirect::to("/admin/pages").into_response()
 }
 
+#[derive(Deserialize)]
+pub struct BulkDeleteForm {
+    #[serde(default)]
+    pub ids: String, // comma-separated UUIDs
+}
+
+pub async fn bulk_delete_posts(
+    State(state): State<AppState>,
+    admin: AdminUser,
+    Form(form): Form<BulkDeleteForm>,
+) -> impl IntoResponse {
+    let ids: Vec<String> = form.ids.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect();
+    bulk_delete_type(state, admin, ids, "/admin/posts").await
+}
+
+pub async fn bulk_delete_pages(
+    State(state): State<AppState>,
+    admin: AdminUser,
+    Form(form): Form<BulkDeleteForm>,
+) -> impl IntoResponse {
+    let ids: Vec<String> = form.ids.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect();
+    bulk_delete_type(state, admin, ids, "/admin/pages").await
+}
+
+async fn bulk_delete_type(state: AppState, admin: AdminUser, ids: Vec<String>, redirect: &str) -> impl IntoResponse {
+    for raw_id in &ids {
+        let id = match raw_id.parse::<Uuid>() {
+            Ok(u) => u,
+            Err(_) => continue,
+        };
+        // Apply same per-post permission checks as single delete.
+        if !admin.caps.is_global_admin {
+            match crate::models::post::get_by_id(&state.db, id).await {
+                Ok(p) => {
+                    if p.site_id != admin.site_id { continue; }
+                    if admin.site_role == "author" && p.author_id != admin.user.id { continue; }
+                    if admin.site_role == "author" && p.status == "published" { continue; }
+                }
+                Err(_) => continue,
+            }
+        }
+        if let Err(e) = crate::models::post::delete(&state.db, id).await {
+            tracing::error!("bulk delete: failed to delete post {}: {:?}", id, e);
+        } else {
+            crate::search::indexer::delete_post(&state.search_index, &id.to_string());
+        }
+    }
+    Redirect::to(redirect).into_response()
+}
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 async fn fetch_term_options(state: &AppState, site_id: Option<Uuid>) -> (Vec<TermOption>, Vec<TermOption>) {

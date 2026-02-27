@@ -41,6 +41,8 @@ pub fn render_list(posts: &[PostRow], post_type: &str, page: i64, total_pages: i
     let edit_prefix = if post_type == "page" { "/admin/pages" } else { "/admin/posts" };
     let base_path = if post_type == "page" { "/admin/pages" } else { "/admin/posts" };
 
+    let bulk_action = if post_type == "page" { "/admin/pages/bulk-delete" } else { "/admin/posts/bulk-delete" };
+
     let rows = posts.iter().map(|p| {
         let path = if p.post_type == "page" {
             format!("/{}", p.slug)
@@ -54,6 +56,9 @@ pub fn render_list(posts: &[PostRow], post_type: &str, page: i64, total_pages: i
         };
         format!(
             r#"<tr>
+              <td style="width:2rem;text-align:center">
+                <input type="checkbox" class="bulk-cb" value="{id}" aria-label="Select">
+              </td>
               <td><a href="{prefix}/{id}/edit">{title}</a></td>
               <td><span class="badge badge-{status}">{status}</span></td>
               <td>{author}</td>
@@ -110,13 +115,65 @@ pub fn render_list(posts: &[PostRow], post_type: &str, page: i64, total_pages: i
     };
 
     let content = format!(
-        r#"<p style="margin-bottom:1rem"><a href="{new_href}" class="btn btn-primary">{new_label}</a></p>
+        r#"<div style="display:flex;align-items:center;gap:.75rem;margin-bottom:1rem">
+  <a href="{new_href}" class="btn btn-primary">{new_label}</a>
+  <button id="bulk-delete-btn" type="button" class="btn btn-danger" style="display:none"
+          onclick="bulkDelete()">Delete Selected (<span id="bulk-count">0</span>)</button>
+</div>
 <table class="data-table">
-  <thead><tr><th>Title</th><th>Status</th><th>Author</th><th>Published</th><th>Actions</th></tr></thead>
+  <thead><tr>
+    <th style="width:2rem"><input type="checkbox" id="select-all" title="Select all" aria-label="Select all"></th>
+    <th>Title</th><th>Status</th><th>Author</th><th>Published</th><th>Actions</th>
+  </tr></thead>
   <tbody>{rows}</tbody>
 </table>
-{pagination}"#,
-        new_href = new_href, new_label = new_label, rows = rows, pagination = pagination,
+{pagination}
+<script>
+(function() {{
+  var selectAll = document.getElementById('select-all');
+  var btn       = document.getElementById('bulk-delete-btn');
+  var countEl   = document.getElementById('bulk-count');
+
+  function updateBtn() {{
+    var checked = document.querySelectorAll('.bulk-cb:checked');
+    var n = checked.length;
+    countEl.textContent = n;
+    btn.style.display = n > 0 ? '' : 'none';
+    selectAll.indeterminate = n > 0 && n < document.querySelectorAll('.bulk-cb').length;
+    selectAll.checked = n > 0 && n === document.querySelectorAll('.bulk-cb').length;
+  }}
+
+  document.addEventListener('change', function(e) {{
+    if (e.target.classList.contains('bulk-cb')) updateBtn();
+    if (e.target.id === 'select-all') {{
+      document.querySelectorAll('.bulk-cb').forEach(function(cb) {{ cb.checked = e.target.checked; }});
+      updateBtn();
+    }}
+  }});
+
+  window.bulkDelete = function() {{
+    var checked = Array.from(document.querySelectorAll('.bulk-cb:checked'));
+    if (checked.length === 0) return;
+    var noun = checked.length === 1 ? '1 item' : checked.length + ' items';
+    if (!confirm('Permanently delete ' + noun + '? This cannot be undone.')) return;
+    var form = document.createElement('form');
+    form.method = 'POST';
+    form.action = '{bulk_action}';
+    var input = document.createElement('input');
+    input.type = 'hidden';
+    input.name = 'ids';
+    input.value = checked.map(function(cb) {{ return cb.value; }}).join(',');
+    form.appendChild(input);
+    document.body.appendChild(form);
+    form.submit();
+  }};
+}})();
+</script>"#,
+        new_href = new_href,
+        new_label = new_label,
+        rows = rows,
+        pagination = pagination,
+        bulk_action = bulk_action,
     );
 
     let path = if post_type == "page" { "/admin/pages" } else { "/admin/posts" };

@@ -75,11 +75,13 @@ pub fn build(
         .route("/admin/posts/new", get(posts::new_post).post(posts::save_new))
         .route("/admin/posts/{id}/edit", get(posts::edit_post).post(posts::save_edit))
         .route("/admin/posts/{id}/delete", post(posts::delete_post))
+        .route("/admin/posts/bulk-delete", post(posts::bulk_delete_posts))
         // ── Admin pages ────────────────────────────────────────────────────
         .route("/admin/pages", get(posts::list_pages))
         .route("/admin/pages/new", get(posts::new_page).post(posts::save_new))
         .route("/admin/pages/{id}/edit", get(posts::edit_page).post(posts::save_edit))
         .route("/admin/pages/{id}/delete", post(posts::delete_page))
+        .route("/admin/pages/bulk-delete", post(posts::bulk_delete_pages))
         // ── Admin media ────────────────────────────────────────────────────
         .route("/admin/media", get(media::list))
         .route("/admin/media/upload", post(upload::upload))
