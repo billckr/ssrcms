@@ -20,7 +20,36 @@ pub struct SubmissionRow {
 
 // ── Forms list ────────────────────────────────────────────────────────────────
 
-pub fn render_forms_list(forms: &[FormSummaryRow], flash: Option<&str>, ctx: &PageContext) -> String {
+pub fn render_forms_list(
+    forms: &[FormSummaryRow],
+    all_names: &[String],
+    active_filter: &str,
+    flash: Option<&str>,
+    ctx: &PageContext,
+) -> String {
+    // ── filter dropdown ───────────────────────────────────────────────────────
+    let filter_dropdown = if all_names.is_empty() {
+        String::new()
+    } else {
+        let options = std::iter::once(
+            format!(
+                r#"<option value=""{}>(All forms)</option>"#,
+                if active_filter.is_empty() { " selected" } else { "" }
+            )
+        ).chain(all_names.iter().map(|n| {
+            let sel = if n == active_filter { " selected" } else { "" };
+            format!(r#"<option value="{n}"{sel}>{n}</option>"#, n = html_escape(n), sel = sel)
+        })).collect::<Vec<_>>().join("\n");
+
+        format!(
+            r#"<form method="GET" action="/admin/forms" style="display:inline;margin-left:0.5rem;">
+  <select name="filter" class="forms-filter-select" onchange="this.form.submit()" aria-label="Filter by form name">
+    {options}
+  </select>
+</form>"#
+        )
+    };
+
     let rows = if forms.is_empty() {
         r#"<tr><td colspan="5" class="empty-state">No form submissions yet.</td></tr>"#.to_string()
     } else {
@@ -67,7 +96,10 @@ pub fn render_forms_list(forms: &[FormSummaryRow], flash: Option<&str>, ctx: &Pa
     };
 
     let content = format!(
-        r#"<p style="margin-bottom:1rem"><a href="/admin/pages/new" class="btn btn-primary">New Form</a></p>
+        r#"<div style="margin-bottom:1rem;display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;">
+  <a href="/admin/pages/new" class="btn btn-primary">New Form</a>
+  {filter_dropdown}
+</div>
 <div class="table-wrap">
 <table class="data-table">
   <thead>
@@ -82,7 +114,27 @@ pub fn render_forms_list(forms: &[FormSummaryRow], flash: Option<&str>, ctx: &Pa
     {rows}
   </tbody>
 </table>
-</div>"#
+</div>
+<style>
+.forms-filter-select {{
+  padding: 0.4rem 0.65rem;
+  font-size: 0.875rem;
+  font-family: inherit;
+  border: 1.5px solid var(--color-border, #d1d5db);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--color-text, #1a1a2e);
+  cursor: pointer;
+  height: 2.15rem;
+}}
+.forms-filter-select:focus {{
+  outline: none;
+  border-color: var(--color-primary, #2b6cb0);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary, #2b6cb0) 15%, transparent);
+}}
+</style>"#,
+        filter_dropdown = filter_dropdown,
+        rows = rows,
     );
 
     admin_page("Forms", "/admin/forms", flash, &content, ctx)
