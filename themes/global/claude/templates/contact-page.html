@@ -4,8 +4,8 @@
 
 {% block content %}
 <article class="single-page contact-page">
-  <header class="page-header">
-    <h1 class="page-title">{{ page.title }}</h1>
+  <header class="contact-header">
+    <h1 class="contact-title">{{ page.title }}</h1>
   </header>
 
   {% if page.content %}
@@ -68,11 +68,24 @@
 </article>
 
 <style>
-/* ── Contact page ── */
+/* ── Contact page — Claude theme ── */
 .contact-page { max-width: 640px; }
 
+.contact-header {
+  background: linear-gradient(135deg, var(--orange-pale), white);
+  padding: 1.5rem 1.75rem;
+  border-radius: 8px;
+  border-left: 4px solid var(--orange-primary);
+  margin-bottom: 2rem;
+}
+
+.contact-title {
+  margin: 0;
+  color: var(--orange-dark);
+  font-size: 1.75rem;
+}
+
 .contact-form {
-  margin-top: 2rem;
   display: flex;
   flex-direction: column;
   gap: 1.25rem;
@@ -96,22 +109,20 @@
 .contact-field label {
   font-size: 0.875rem;
   font-weight: 600;
-  color: var(--color-text, #1a1a2e);
+  color: var(--orange-dark);
 }
 
-.contact-required {
-  color: #e63946;
-}
+.contact-required { color: var(--orange-primary); }
 
 .contact-field input,
 .contact-field textarea {
   padding: 0.6rem 0.85rem;
   font-size: 1rem;
   font-family: inherit;
-  border: 1.5px solid var(--color-border, #d1d5db);
-  border-radius: 6px;
-  background: var(--color-surface, #fff);
-  color: var(--color-text, #1a1a2e);
+  border: 2px solid var(--border-color);
+  border-radius: 4px;
+  background: #fff;
+  color: #333;
   transition: border-color 0.15s, box-shadow 0.15s;
   outline: none;
   width: 100%;
@@ -120,8 +131,8 @@
 
 .contact-field input:focus,
 .contact-field textarea:focus {
-  border-color: var(--color-primary, #2b6cb0);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary, #2b6cb0) 15%, transparent);
+  border-color: var(--orange-primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--orange-primary) 15%, transparent);
 }
 
 .contact-field textarea {
@@ -135,21 +146,17 @@
   font-size: 1rem;
   font-weight: 600;
   font-family: inherit;
-  background: var(--color-primary, #2b6cb0);
+  background-color: var(--orange-primary);
   color: #fff;
   border: none;
-  border-radius: 6px;
+  border-radius: 4px;
   cursor: pointer;
-  transition: background 0.15s, transform 0.1s;
+  transition: background-color 0.15s, transform 0.1s;
 }
 
-.contact-submit:hover {
-  background: var(--color-primary-dark, #1a4a8a);
-}
-
-.contact-submit:active {
-  transform: scale(0.98);
-}
+.contact-submit:hover { background-color: var(--orange-dark); }
+.contact-submit:active { transform: scale(0.98); }
+.contact-submit:disabled { opacity: 0.7; cursor: not-allowed; }
 
 .contact-success {
   display: flex;
@@ -164,9 +171,6 @@
   font-weight: 500;
 }
 
-.contact-success svg {
-  flex-shrink: 0;
-  color: #16a34a;
-}
+.contact-success svg { flex-shrink: 0; color: #16a34a; }
 </style>
 {% endblock content %}
