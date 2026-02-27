@@ -64,6 +64,8 @@ pub async fn list(
         vec![]
     };
     let current_user_id = admin.user.id.to_string();
+    // Exclude the currently logged-in user — they manage their own account via /admin/profile.
+    let rows: Vec<_> = rows.into_iter().filter(|u| u.id != current_user_id).collect();
     let can_manage_access = admin.caps.can_manage_users;
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
     Html(admin::pages::users::render_list(&rows, None, &current_user_id, can_manage_access, &ctx)).into_response()
