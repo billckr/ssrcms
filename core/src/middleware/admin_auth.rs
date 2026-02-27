@@ -259,19 +259,13 @@ impl FromRequestParts<AppState> for AdminUser {
             user.role.clone()
         };
 
-        // Determine if super_admin is browsing a site they don't own.
-        let is_visiting_foreign_site = if is_global_admin {
-            if let Some(sid) = site_id {
-                match crate::models::site::get_by_id(&state.db, sid).await {
-                    Ok(site) => site.owner_user_id != Some(user.id),
-                    Err(_) => false,
-                }
-            } else {
-                false
-            }
-        } else {
-            false
-        };
+        // Show the "visiting" badge when a super_admin is browsing any site other
+        // than their own default/home site.  Using default_site_id (not owner_user_id)
+        // because a super_admin typically creates every client site themselves, so
+        // they technically "own" all of them — but they're still visiting as admin.
+        let is_visiting_foreign_site = is_global_admin
+            && site_id.is_some()
+            && site_id != user.default_site_id;
 
         // System settings are only accessible to super_admin on the default site
         // (the oldest site by created_at — the agency owner's primary install).
