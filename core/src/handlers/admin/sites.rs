@@ -54,8 +54,10 @@ pub async fn list(
             });
         for (s, site_role) in &site_roles {
             let post_count = crate::models::site::post_count(&state.db, s.id).await.unwrap_or(0);
-            // can_manage if they are the owner of this site
-            let can_manage = s.owner_user_id == Some(admin.user.id);
+            // can_manage if they own the site or hold an admin role on it.
+            // Delete is separately blocked for the default site in the renderer.
+            let can_manage = s.owner_user_id == Some(admin.user.id)
+                || matches!(site_role.as_str(), "admin" | "site_admin");
             rows.push(SiteRow {
                 id: s.id.to_string(),
                 hostname: s.hostname.clone(),
@@ -63,7 +65,6 @@ pub async fn list(
                 is_default: admin.user.default_site_id == Some(s.id),
                 can_manage,
             });
-            let _ = site_role; // used for future display
         }
     }
 
@@ -182,7 +183,12 @@ pub async fn site_settings(
         Err(_) => return Redirect::to("/admin/sites").into_response(),
     };
     let is_owner = site.owner_user_id == Some(admin.user.id);
-    if !admin.caps.is_global_admin && !is_owner {
+    let has_role = matches!(
+        crate::models::site_user::get_role(&state.db, id, admin.user.id)
+            .await.ok().flatten().as_deref(),
+        Some("admin" | "site_admin")
+    );
+    if !admin.caps.is_global_admin && !is_owner && !has_role {
         return (axum::http::StatusCode::FORBIDDEN, "Forbidden").into_response();
     }
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
@@ -218,7 +224,12 @@ pub async fn save_site_settings(
         Err(_) => return Redirect::to("/admin/sites").into_response(),
     };
     let is_owner = site.owner_user_id == Some(admin.user.id);
-    if !admin.caps.is_global_admin && !is_owner {
+    let has_role = matches!(
+        crate::models::site_user::get_role(&state.db, id, admin.user.id)
+            .await.ok().flatten().as_deref(),
+        Some("admin" | "site_admin")
+    );
+    if !admin.caps.is_global_admin && !is_owner && !has_role {
         return (axum::http::StatusCode::FORBIDDEN, "Forbidden").into_response();
     }
     let cs = state.site_hostname(admin.site_id);
@@ -364,7 +375,12 @@ pub async fn save_site_config(
         Err(_) => return Redirect::to("/admin/sites").into_response(),
     };
     let is_owner = site.owner_user_id == Some(admin.user.id);
-    if !admin.caps.is_global_admin && !is_owner {
+    let has_role = matches!(
+        crate::models::site_user::get_role(&state.db, id, admin.user.id)
+            .await.ok().flatten().as_deref(),
+        Some("admin" | "site_admin")
+    );
+    if !admin.caps.is_global_admin && !is_owner && !has_role {
         return (axum::http::StatusCode::FORBIDDEN, "Forbidden").into_response();
     }
 

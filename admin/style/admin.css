@@ -164,6 +164,8 @@ tr.muted td { opacity: .55; }
 .form-group textarea { resize: vertical; }
 .form-group small { display: block; color: var(--muted); margin-top: .25rem; font-size: 12px; }
 .form-context-note { font-size: 13px; color: var(--muted); margin-bottom: 1.25rem; padding: .5rem .75rem; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
+.site-context-banner { font-size: 14px; color: var(--text); margin-bottom: 1.5rem; padding: .6rem 1rem; background: #f1f5f9; border-left: 4px solid var(--primary); border-radius: var(--radius); }
+.site-context-banner strong { font-weight: 700; }
 .form-section { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem; margin-bottom: 1rem; }
 .form-section h3 { font-size: 13px; font-weight: 600; margin-bottom: .75rem; }
 .checkbox-group { display: flex; flex-direction: column; gap: .35rem; font-size: 13px; max-height: 200px; overflow-y: auto; }

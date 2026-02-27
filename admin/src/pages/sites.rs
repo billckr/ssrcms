@@ -37,8 +37,8 @@ pub fn render_list(
                 )
             };
             format!(
-                r#"<a href="/admin/sites/{id}/settings" class="icon-btn" title="Change Hostname">
-                  <img src="/admin/static/icons/edit.svg" alt="Change Hostname">
+                r#"<a href="/admin/sites/{id}/settings" class="icon-btn" title="Site Settings">
+                  <img src="/admin/static/icons/edit.svg" alt="Site Settings">
                 </a>
                 {delete}"#,
                 id = crate::html_escape(&s.id),
@@ -99,12 +99,16 @@ pub struct SiteSettingsData {
 }
 
 pub fn render_settings(data: &SiteSettingsData, flash: Option<&str>, ctx: &crate::PageContext) -> String {
+    let confirm_msg = format!(
+        "Are you sure you want to change the hostname? All links and routes for this site will use the new hostname immediately.",
+    );
     let content = format!(
-        r#"<form method="post" action="/admin/sites/{id}/settings" class="edit-form">
+        r#"<p class="site-context-banner">Settings for: <strong>{hostname}</strong></p>
+<form method="post" action="/admin/sites/{id}/settings" class="edit-form"
+      data-confirm="{confirm_msg}" onsubmit="return confirm(this.dataset.confirm)">
   <div class="form-group">
     <label for="hostname">Hostname</label>
     <input type="text" id="hostname" name="hostname" value="{hostname}" required>
-    <small>Change the hostname of {hostname}.</small>
   </div>
   <div class="form-actions">
     <button type="submit" class="btn btn-primary">Save</button>
@@ -112,8 +116,7 @@ pub fn render_settings(data: &SiteSettingsData, flash: Option<&str>, ctx: &crate
   </div>
 </form>
 
-<hr style="margin:2rem 0">
-<h2 style="margin-bottom:1.25rem">Site Settings</h2>
+<p class="site-context-banner" style="margin-top:2rem">Site Settings</p>
 <form method="post" action="/admin/sites/{id}/site-config" class="edit-form">
   <div class="form-group">
     <label for="site_name">Site Name</label>
@@ -141,6 +144,7 @@ pub fn render_settings(data: &SiteSettingsData, flash: Option<&str>, ctx: &crate
 </form>"#,
         id = crate::html_escape(&data.id),
         hostname = crate::html_escape(&data.hostname),
+        confirm_msg = crate::html_escape(&confirm_msg),
         site_name = crate::html_escape(&data.site_name),
         site_description = crate::html_escape(&data.site_description),
         language = crate::html_escape(&data.language),
