@@ -107,7 +107,8 @@ pub fn render_settings(data: &SiteSettingsData, flash: Option<&str>, ctx: &crate
     <input type="text" id="hostname-input" name="hostname" value="{hostname}" required>
   </div>
   <div class="form-actions">
-    <button type="button" class="btn btn-primary" onclick="showHostnameModal()">Save</button>
+    <button type="button" id="hostname-save-btn" class="btn btn-primary"
+            onclick="showHostnameModal()" disabled>Save</button>
     <a href="/admin/sites" class="btn btn-secondary">Cancel</a>
   </div>
 </form>
@@ -115,7 +116,7 @@ pub fn render_settings(data: &SiteSettingsData, flash: Option<&str>, ctx: &crate
 <!-- Hostname change checklist modal -->
 <div id="hostname-modal" role="dialog" aria-modal="true" aria-labelledby="hm-title"
      style="display:none;position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.45);
-            display:flex;align-items:center;justify-content:center;" hidden>
+            align-items:center;justify-content:center;" hidden>
   <div style="background:#fff;border-radius:8px;padding:1.75rem 2rem;max-width:480px;width:90%;
               box-shadow:0 8px 32px rgba(0,0,0,.18);">
     <h2 id="hm-title" style="margin:0 0 .25rem;font-size:1.1rem;">Before changing the hostname</h2>
@@ -192,9 +193,11 @@ pub fn render_settings(data: &SiteSettingsData, flash: Option<&str>, ctx: &crate
   document.querySelectorAll('.hm-check').forEach(function(cb) {{
     cb.addEventListener('change', updateConfirmBtn);
   }});
-  // Close on backdrop click.
-  document.getElementById('hostname-modal').addEventListener('click', function(e) {{
-    if (e.target === this) closeHostnameModal();
+  // Enable Save button only when the hostname has actually changed.
+  var originalHostname = document.getElementById('hostname-input').value;
+  document.getElementById('hostname-input').addEventListener('input', function() {{
+    document.getElementById('hostname-save-btn').disabled =
+      this.value.trim() === originalHostname.trim();
   }});
 </script>
 
