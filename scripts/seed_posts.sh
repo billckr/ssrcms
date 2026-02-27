@@ -101,6 +101,15 @@ if [[ -z "$USER_ID" ]]; then
     exit 1
 fi
 
+# Check user is a super_admin OR has a role on this specific site.
+IS_SUPER=$(psql -c "SELECT 1 FROM users WHERE id = '$USER_ID' AND role = 'super_admin' LIMIT 1;" | tr -d '[:space:]')
+IS_MEMBER=$(psql -c "SELECT 1 FROM site_users WHERE site_id = '$SITE_ID' AND user_id = '$USER_ID' LIMIT 1;" | tr -d '[:space:]')
+if [[ -z "$IS_SUPER" && -z "$IS_MEMBER" ]]; then
+    echo "ERROR: User '$USER_EMAIL' has no access to site '$DOMAIN'" >&2
+    echo "       Add the user to the site first, or use a super_admin account." >&2
+    exit 1
+fi
+
 echo "Site:   $DOMAIN  ($SITE_ID)"
 echo "Author: $USER_EMAIL  ($USER_ID)"
 echo "Posts:  $NUMBER"
