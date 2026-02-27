@@ -280,6 +280,30 @@ pub async fn save_new(
     let post_type = if form.post_type == "page" { PostType::Page } else { PostType::Post };
     let published_at = parse_datetime(form.published_at.as_deref());
 
+    // Require content when publishing.
+    if matches!(status, PostStatus::Published) && content_is_empty(&form.content) {
+        let cs = state.site_hostname(admin.site_id);
+        let ctx = super::page_ctx_full(&state, &admin, &cs).await;
+        let (categories, tags) = fetch_term_options(&state, admin.site_id).await;
+        let edit = PostEdit {
+            id: None,
+            title: form.title,
+            slug: form.slug.unwrap_or_default(),
+            content: form.content,
+            excerpt: form.excerpt.unwrap_or_default(),
+            status: form.status,
+            published_at: form.published_at,
+            post_type: form.post_type.clone(),
+            categories,
+            tags,
+            selected_categories: form.categories,
+            selected_tags: form.tags,
+            template: form.template.clone().filter(|s| !s.is_empty()),
+            available_templates: if form.post_type == "page" { scan_templates(&state, admin.site_id) } else { vec![] },
+        };
+        return Html(admin::pages::posts::render_editor(&edit, Some("Content is required before publishing."), &ctx)).into_response();
+    }
+
     let create = CreatePost {
         site_id: admin.site_id,
         title: form.title.clone(),
@@ -362,6 +386,30 @@ pub async fn save_edit(
 
     let status = parse_status(&form.status);
     let published_at = parse_datetime(form.published_at.as_deref());
+
+    // Require content when publishing.
+    if matches!(status, PostStatus::Published) && content_is_empty(&form.content) {
+        let cs = state.site_hostname(admin.site_id);
+        let ctx = super::page_ctx_full(&state, &admin, &cs).await;
+        let (categories, tags) = fetch_term_options(&state, admin.site_id).await;
+        let edit = PostEdit {
+            id: Some(id.to_string()),
+            title: form.title,
+            slug: form.slug.unwrap_or_default(),
+            content: form.content,
+            excerpt: form.excerpt.unwrap_or_default(),
+            status: form.status,
+            published_at: form.published_at,
+            post_type: form.post_type.clone(),
+            categories,
+            tags,
+            selected_categories: form.categories,
+            selected_tags: form.tags,
+            template: form.template.clone().filter(|s| !s.is_empty()),
+            available_templates: if form.post_type == "page" { scan_templates(&state, admin.site_id) } else { vec![] },
+        };
+        return Html(admin::pages::posts::render_editor(&edit, Some("Content is required before publishing."), &ctx)).into_response();
+    }
 
     let update = UpdatePost {
         title: Some(form.title.clone()),
@@ -634,6 +682,23 @@ fn friendly_save_error(e: &crate::errors::AppError) -> String {
     } else {
         "Failed to save post. Please try again.".to_string()
     }
+}
+
+/// Returns true when the content is empty or contains only whitespace / blank
+/// HTML tags (e.g. Quill's default `<p><br></p>`).
+fn content_is_empty(html: &str) -> bool {
+    // Strip every HTML tag and check if anything meaningful remains.
+    let mut out = String::with_capacity(html.len());
+    let mut in_tag = false;
+    for ch in html.chars() {
+        match ch {
+            '<' => in_tag = true,
+            '>' => in_tag = false,
+            _ if !in_tag => out.push(ch),
+            _ => {}
+        }
+    }
+    out.trim().is_empty()
 }
 
 fn parse_status(s: &str) -> PostStatus {

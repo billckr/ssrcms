@@ -67,7 +67,8 @@ pub fn render_forms_list(forms: &[FormSummaryRow], flash: Option<&str>, ctx: &Pa
     };
 
     let content = format!(
-        r#"<div class="table-wrap">
+        r#"<p style="margin-bottom:1rem"><a href="/admin/pages/new" class="btn btn-primary">New Form</a></p>
+<div class="table-wrap">
 <table class="data-table">
   <thead>
     <tr>
