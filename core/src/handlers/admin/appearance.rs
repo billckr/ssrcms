@@ -737,8 +737,13 @@ pub async fn save_file(
     };
 
     // Validate Tera syntax before touching disk — reject HTML files that won't parse.
+    // Load the full theme into a scratch Tera instance first so that {% extends %}
+    // and {% include %} references (e.g. base.html) resolve correctly during validation.
     if form.file.ends_with(".html") {
-        let mut test_tera = tera::Tera::default();
+        let templates_glob = theme_dir.join("templates").join("**").join("*.html");
+        let glob_str = templates_glob.to_string_lossy().to_string();
+        let mut test_tera = tera::Tera::new(&glob_str).unwrap_or_default();
+        // Override the file being saved with the new content so we test the edited version.
         if let Err(e) = test_tera.add_raw_template("__validate__", &form.content) {
             // Strip ANSI colour codes Tera sometimes adds to error messages.
             let msg = e.to_string();
