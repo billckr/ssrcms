@@ -116,6 +116,7 @@ pub fn build(
         .route("/admin/sites/new", get(admin_sites::new_site))
         .route("/admin/sites/switch", post(admin_sites::switch))
         .route("/admin/sites/{id}/settings", get(admin_sites::site_settings).post(admin_sites::save_site_settings))
+        .route("/admin/sites/{id}/site-config", post(admin_sites::save_site_config))
         .route("/admin/sites/{id}/delete", post(admin_sites::delete))
         // ── Admin forms ────────────────────────────────────────────────────
         .route("/admin/forms", get(admin_forms::list_forms))

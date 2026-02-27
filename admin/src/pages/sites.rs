@@ -91,6 +91,11 @@ pub fn render_list(
 pub struct SiteSettingsData {
     pub id: String,
     pub hostname: String,
+    pub site_name: String,
+    pub site_description: String,
+    pub language: String,
+    pub posts_per_page: i64,
+    pub date_format: String,
 }
 
 pub fn render_settings(data: &SiteSettingsData, flash: Option<&str>, ctx: &crate::PageContext) -> String {
@@ -105,9 +110,42 @@ pub fn render_settings(data: &SiteSettingsData, flash: Option<&str>, ctx: &crate
     <button type="submit" class="btn btn-primary">Save</button>
     <a href="/admin/sites" class="btn btn-secondary">Cancel</a>
   </div>
+</form>
+
+<hr style="margin:2rem 0">
+<h2 style="margin-bottom:1.25rem">Site Settings</h2>
+<form method="post" action="/admin/sites/{id}/site-config" class="edit-form">
+  <div class="form-group">
+    <label for="site_name">Site Name</label>
+    <input type="text" id="site_name" name="site_name" value="{site_name}" required>
+    <small>The display name shown in the browser tab, header, and footer.</small>
+  </div>
+  <div class="form-group">
+    <label for="site_description">Site Description</label>
+    <textarea id="site_description" name="site_description" rows="3">{site_description}</textarea>
+  </div>
+  <div class="form-group">
+    <label for="language">Language</label>
+    <input type="text" id="language" name="language" value="{language}">
+  </div>
+  <div class="form-group">
+    <label for="posts_per_page">Posts Per Page</label>
+    <input type="number" id="posts_per_page" name="posts_per_page" value="{posts_per_page}" min="1" max="100">
+  </div>
+  <div class="form-group">
+    <label for="date_format">Date Format</label>
+    <input type="text" id="date_format" name="date_format" value="{date_format}">
+    <small>Uses chrono format strings, e.g. "%B %-d, %Y" &rarr; January 1, 2026</small>
+  </div>
+  <button type="submit" class="btn btn-primary">Save Settings</button>
 </form>"#,
         id = crate::html_escape(&data.id),
         hostname = crate::html_escape(&data.hostname),
+        site_name = crate::html_escape(&data.site_name),
+        site_description = crate::html_escape(&data.site_description),
+        language = crate::html_escape(&data.language),
+        posts_per_page = data.posts_per_page,
+        date_format = crate::html_escape(&data.date_format),
     );
 
     crate::admin_page("Edit Hostname", "/admin/sites", flash, &content, ctx)

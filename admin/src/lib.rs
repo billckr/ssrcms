@@ -170,7 +170,7 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
         } else { String::new() },
         plugins = if ctx.can_manage_plugins { nav_link("/admin/plugins", "Plugins") } else { String::new() },
         appearance = if ctx.can_manage_appearance { nav_link("/admin/appearance", "Appearance") } else { String::new() },
-        settings = if ctx.can_manage_settings { nav_link("/admin/settings", "Settings") } else { String::new() },
+        settings = if ctx.can_manage_settings { nav_link("/admin/settings", "System Settings") } else { String::new() },
         flash_html = flash_html,
         content = content,
         visiting_badge = visiting_badge,

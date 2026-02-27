@@ -186,9 +186,17 @@ pub async fn site_settings(
         return (axum::http::StatusCode::FORBIDDEN, "Forbidden").into_response();
     }
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
+    let cfg = state.get_site_by_id(id)
+        .map(|(_, s)| s)
+        .unwrap_or_else(|| (*state.settings).clone());
     let data = SiteSettingsData {
         id: site.id.to_string(),
         hostname: site.hostname.clone(),
+        site_name: cfg.site_name.clone(),
+        site_description: cfg.site_description.clone(),
+        language: cfg.language.clone(),
+        posts_per_page: cfg.posts_per_page,
+        date_format: cfg.date_format.clone(),
     };
     Html(admin::pages::sites::render_settings(&data, None, &ctx)).into_response()
 }
@@ -216,8 +224,22 @@ pub async fn save_site_settings(
     let cs = state.site_hostname(admin.site_id);
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
     let hostname = form.hostname.trim().to_lowercase();
+
+    // Helper: load current site config for error re-renders.
+    let cfg = state.get_site_by_id(id)
+        .map(|(_, s)| s)
+        .unwrap_or_else(|| (*state.settings).clone());
+
     if hostname.is_empty() {
-        let data = SiteSettingsData { id: id.to_string(), hostname: String::new() };
+        let data = SiteSettingsData {
+            id: id.to_string(),
+            hostname: String::new(),
+            site_name: cfg.site_name.clone(),
+            site_description: cfg.site_description.clone(),
+            language: cfg.language.clone(),
+            posts_per_page: cfg.posts_per_page,
+            date_format: cfg.date_format.clone(),
+        };
         return Html(admin::pages::sites::render_settings(&data, Some("Hostname cannot be empty."), &ctx)).into_response();
     }
 
@@ -256,7 +278,15 @@ pub async fn save_site_settings(
             } else {
                 format!("Failed to save: {e}")
             };
-            let data = SiteSettingsData { id: id.to_string(), hostname };
+            let data = SiteSettingsData {
+                id: id.to_string(),
+                hostname,
+                site_name: cfg.site_name.clone(),
+                site_description: cfg.site_description.clone(),
+                language: cfg.language.clone(),
+                posts_per_page: cfg.posts_per_page,
+                date_format: cfg.date_format.clone(),
+            };
             Html(admin::pages::sites::render_settings(&data, Some(&msg), &ctx)).into_response()
         }
     }
@@ -311,4 +341,52 @@ pub async fn delete(
         }
     }
     Redirect::to("/admin/sites").into_response()
+}
+
+#[derive(Deserialize)]
+pub struct SiteConfigForm {
+    pub site_name: String,
+    pub site_description: String,
+    pub language: String,
+    pub posts_per_page: i64,
+    pub date_format: String,
+}
+
+/// POST /admin/sites/{id}/site-config — save site name, description, language, etc.
+pub async fn save_site_config(
+    State(state): State<AppState>,
+    admin: AdminUser,
+    Path(id): Path<Uuid>,
+    Form(form): Form<SiteConfigForm>,
+) -> impl IntoResponse {
+    let site = match crate::models::site::get_by_id(&state.db, id).await {
+        Ok(s) => s,
+        Err(_) => return Redirect::to("/admin/sites").into_response(),
+    };
+    let is_owner = site.owner_user_id == Some(admin.user.id);
+    if !admin.caps.is_global_admin && !is_owner {
+        return (axum::http::StatusCode::FORBIDDEN, "Forbidden").into_response();
+    }
+
+    let settings = [
+        ("site_name", form.site_name.as_str()),
+        ("site_description", form.site_description.as_str()),
+        ("language", form.language.as_str()),
+        ("date_format", form.date_format.as_str()),
+    ];
+    for (key, value) in &settings {
+        if let Err(e) = crate::app_state::set_site_setting(&state.db, id, key, value).await {
+            tracing::error!("failed to save site config '{}' for site {}: {:?}", key, id, e);
+        }
+    }
+    let ppp = form.posts_per_page.to_string();
+    if let Err(e) = crate::app_state::set_site_setting(&state.db, id, "posts_per_page", &ppp).await {
+        tracing::error!("failed to save posts_per_page for site {}: {:?}", id, e);
+    }
+
+    if let Err(e) = state.reload_site_cache().await {
+        tracing::warn!("site cache reload failed after site config save: {:?}", e);
+    }
+
+    Redirect::to(&format!("/admin/sites/{}/settings", id)).into_response()
 }
