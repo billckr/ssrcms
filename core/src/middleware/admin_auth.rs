@@ -34,7 +34,7 @@ pub struct AdminCaps {
     pub can_manage_sites: bool,
     /// Can activate, configure, and remove plugins.
     pub can_manage_plugins: bool,
-    /// Can edit site settings (name, description, etc.).
+    /// Can access system-level settings (super_admin on the default site only).
     pub can_manage_settings: bool,
     /// Can create, edit, publish, and delete content.
     pub can_manage_content: bool,
@@ -49,7 +49,14 @@ pub struct AdminCaps {
 impl AdminCaps {
     /// Derive capabilities from the user's global role, their role on the current
     /// site, and whether a super-admin is visiting a foreign site.
-    pub fn from_roles(global_role: &str, site_role: &str, visiting_foreign: bool) -> Self {
+    /// `is_on_default_site` must be true for `can_manage_settings` to be granted —
+    /// system settings are restricted to super_admin on the system default site only.
+    pub fn from_roles(
+        global_role: &str,
+        site_role: &str,
+        visiting_foreign: bool,
+        is_on_default_site: bool,
+    ) -> Self {
         let is_global_admin = global_role == "super_admin";
         let is_admin = is_global_admin || site_role == "admin";
         let is_editor_or_above = is_admin || site_role == "editor";
@@ -59,7 +66,7 @@ impl AdminCaps {
             can_manage_users: is_admin,
             can_manage_sites: is_admin,
             can_manage_plugins: is_admin,
-            can_manage_settings: is_admin,
+            can_manage_settings: is_global_admin && is_on_default_site,
             can_manage_content: true,
             can_manage_appearance: is_admin,
             can_manage_taxonomies: is_editor_or_above,
@@ -266,7 +273,19 @@ impl FromRequestParts<AppState> for AdminUser {
             false
         };
 
-        let caps = AdminCaps::from_roles(&user.role, &site_role, is_visiting_foreign_site);
+        // System settings are only accessible to super_admin on the default site
+        // (the oldest site by created_at — the agency owner's primary install).
+        // Skip the query entirely for non-global-admin users.
+        let is_on_default_site = if is_global_admin {
+            match crate::models::site::get_default_site_id(&state.db).await {
+                Some(default_id) => site_id == Some(default_id),
+                None => false,
+            }
+        } else {
+            false
+        };
+
+        let caps = AdminCaps::from_roles(&user.role, &site_role, is_visiting_foreign_site, is_on_default_site);
 
         Ok(AdminUser { user, site_id, site_role, caps })
     }

@@ -136,6 +136,16 @@ pub async fn list(pool: &PgPool) -> Result<Vec<Site>> {
     Ok(sites)
 }
 
+/// Return the UUID of the oldest site (the system default, first by created_at).
+/// Returns `None` if no sites exist yet.
+pub async fn get_default_site_id(pool: &PgPool) -> Option<Uuid> {
+    sqlx::query_scalar("SELECT id FROM sites ORDER BY created_at ASC LIMIT 1")
+        .fetch_optional(pool)
+        .await
+        .ok()
+        .flatten()
+}
+
 pub async fn delete(pool: &PgPool, id: Uuid) -> Result<()> {
     sqlx::query("DELETE FROM sites WHERE id = $1")
         .bind(id)

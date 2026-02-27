@@ -24,7 +24,12 @@ pub struct AdminCaps {
 }
 
 impl AdminCaps {
-    pub fn from_roles(global_role: &str, site_role: &str, visiting_foreign: bool) -> Self {
+    pub fn from_roles(
+        global_role: &str,
+        site_role: &str,
+        visiting_foreign: bool,
+        is_on_default_site: bool,
+    ) -> Self {
         let is_global_admin = global_role == "super_admin";
         let is_admin = is_global_admin || site_role == "admin";
         Self {
@@ -33,7 +38,8 @@ impl AdminCaps {
             can_manage_users:      is_admin,
             can_manage_sites:      is_admin,
             can_manage_plugins:    is_admin,
-            can_manage_settings:   is_admin,
+            // System settings: super_admin only, and only on the default site.
+            can_manage_settings:   is_global_admin && is_on_default_site,
             can_manage_content:    true,
             can_manage_appearance: is_admin,
         }
