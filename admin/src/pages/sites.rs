@@ -99,22 +99,104 @@ pub struct SiteSettingsData {
 }
 
 pub fn render_settings(data: &SiteSettingsData, flash: Option<&str>, ctx: &crate::PageContext) -> String {
-    let confirm_msg = format!(
-        "Are you sure you want to change the hostname? All links and routes for this site will use the new hostname immediately.",
-    );
     let content = format!(
         r#"<p class="site-context-banner">Settings for: <strong>{hostname}</strong></p>
-<form method="post" action="/admin/sites/{id}/settings" class="edit-form"
-      data-confirm="{confirm_msg}" onsubmit="return confirm(this.dataset.confirm)">
+<form method="post" action="/admin/sites/{id}/settings" class="edit-form" id="hostname-form">
   <div class="form-group">
     <label for="hostname">Hostname</label>
-    <input type="text" id="hostname" name="hostname" value="{hostname}" required>
+    <input type="text" id="hostname-input" name="hostname" value="{hostname}" required>
   </div>
   <div class="form-actions">
-    <button type="submit" class="btn btn-primary">Save</button>
+    <button type="button" class="btn btn-primary" onclick="showHostnameModal()">Save</button>
     <a href="/admin/sites" class="btn btn-secondary">Cancel</a>
   </div>
 </form>
+
+<!-- Hostname change checklist modal -->
+<div id="hostname-modal" role="dialog" aria-modal="true" aria-labelledby="hm-title"
+     style="display:none;position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.45);
+            display:flex;align-items:center;justify-content:center;" hidden>
+  <div style="background:#fff;border-radius:8px;padding:1.75rem 2rem;max-width:480px;width:90%;
+              box-shadow:0 8px 32px rgba(0,0,0,.18);">
+    <h2 id="hm-title" style="margin:0 0 .25rem;font-size:1.1rem;">Before changing the hostname</h2>
+    <p style="margin:.25rem 0 1.25rem;color:#6b7280;font-size:.875rem;">
+      Changing to <strong id="hm-new-hostname" style="color:#111827"></strong> takes effect
+      immediately. Please confirm the following before continuing:
+    </p>
+    <ul style="margin:0 0 1.5rem;padding-left:1.25rem;display:flex;flex-direction:column;gap:.6rem;
+               font-size:.875rem;color:#374151;list-style:none;padding:0;">
+      <li class="hm-check-item">
+        <label style="display:flex;align-items:flex-start;gap:.6rem;cursor:pointer;">
+          <input type="checkbox" class="hm-check" style="margin-top:.15rem;flex-shrink:0;accent-color:#2b6cb0;">
+          <span><strong>DNS</strong> — the new domain's A/CNAME record points to this server.</span>
+        </label>
+      </li>
+      <li class="hm-check-item">
+        <label style="display:flex;align-items:flex-start;gap:.6rem;cursor:pointer;">
+          <input type="checkbox" class="hm-check" style="margin-top:.15rem;flex-shrink:0;accent-color:#2b6cb0;">
+          <span><strong>Reverse proxy</strong> — Caddy (or your proxy) is configured to serve the new hostname.</span>
+        </label>
+      </li>
+      <li class="hm-check-item">
+        <label style="display:flex;align-items:flex-start;gap:.6rem;cursor:pointer;">
+          <input type="checkbox" class="hm-check" style="margin-top:.15rem;flex-shrink:0;accent-color:#2b6cb0;">
+          <span><strong>Local dev</strong> — if this is a local domain, <code>/etc/hosts</code> is updated.</span>
+        </label>
+      </li>
+      <li class="hm-check-item">
+        <label style="display:flex;align-items:flex-start;gap:.6rem;cursor:pointer;">
+          <input type="checkbox" class="hm-check" style="margin-top:.15rem;flex-shrink:0;accent-color:#2b6cb0;">
+          <span><strong>SSL</strong> — Caddy will provision a certificate automatically once DNS resolves.</span>
+        </label>
+      </li>
+    </ul>
+    <p style="margin:0 0 1.25rem;padding:.65rem .85rem;background:#fffbeb;border:1px solid #fcd34d;
+              border-radius:6px;font-size:.8rem;color:#92400e;line-height:1.5;">
+      Your admin session stays active during the transition. Navigate to
+      <strong id="hm-new-link"></strong> when the new domain is live.
+    </p>
+    <div style="display:flex;justify-content:flex-end;gap:.75rem;">
+      <button type="button" class="btn btn-secondary" onclick="closeHostnameModal()">Go back</button>
+      <button type="button" id="hm-confirm-btn" class="btn btn-primary"
+              onclick="submitHostnameForm()" disabled>Save hostname</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  function showHostnameModal() {{
+    var newHost = document.getElementById('hostname-input').value.trim();
+    if (!newHost) return;
+    document.getElementById('hm-new-hostname').textContent = newHost;
+    document.getElementById('hm-new-link').textContent = 'http://' + newHost + '/admin';
+    // Reset checkboxes and confirm button each time the modal opens.
+    document.querySelectorAll('.hm-check').forEach(function(cb) {{ cb.checked = false; }});
+    updateConfirmBtn();
+    var modal = document.getElementById('hostname-modal');
+    modal.hidden = false;
+    modal.style.display = 'flex';
+  }}
+  function closeHostnameModal() {{
+    var modal = document.getElementById('hostname-modal');
+    modal.hidden = true;
+    modal.style.display = 'none';
+  }}
+  function updateConfirmBtn() {{
+    var all = Array.from(document.querySelectorAll('.hm-check'));
+    document.getElementById('hm-confirm-btn').disabled = !all.every(function(cb) {{ return cb.checked; }});
+  }}
+  function submitHostnameForm() {{
+    closeHostnameModal();
+    document.getElementById('hostname-form').submit();
+  }}
+  document.querySelectorAll('.hm-check').forEach(function(cb) {{
+    cb.addEventListener('change', updateConfirmBtn);
+  }});
+  // Close on backdrop click.
+  document.getElementById('hostname-modal').addEventListener('click', function(e) {{
+    if (e.target === this) closeHostnameModal();
+  }});
+</script>
 
 <p class="site-context-banner" style="margin-top:2rem">Site Settings</p>
 <form method="post" action="/admin/sites/{id}/site-config" class="edit-form">
@@ -144,7 +226,6 @@ pub fn render_settings(data: &SiteSettingsData, flash: Option<&str>, ctx: &crate
 </form>"#,
         id = crate::html_escape(&data.id),
         hostname = crate::html_escape(&data.hostname),
-        confirm_msg = crate::html_escape(&confirm_msg),
         site_name = crate::html_escape(&data.site_name),
         site_description = crate::html_escape(&data.site_description),
         language = crate::html_escape(&data.language),
