@@ -12,7 +12,7 @@ use uuid::Uuid;
 
 use crate::app_state::{AppState, set_site_setting};
 use crate::middleware::admin_auth::AdminUser;
-use admin::pages::appearance::{ThemeInfo, render_with_flash};
+use admin::pages::appearance::{ThemeInfo, render_with_flash, render_create_theme_form};
 
 /// Required template files every valid theme must provide.
 const REQUIRED_TEMPLATES: &[&str] = &[
@@ -532,6 +532,768 @@ fn tempdir_in(dir: &str) -> Result<String, String> {
         .map(|s| s.to_string())
         .ok_or("Temp path is not valid UTF-8.".to_string())
 }
+// ── Create Theme ──────────────────────────────────────────────────────────────
+
+#[derive(Deserialize)]
+pub struct CreateThemeForm {
+    pub name: String,
+    pub description: Option<String>,
+    pub author: Option<String>,
+}
+
+pub async fn create_form(
+    State(state): State<AppState>,
+    admin: AdminUser,
+) -> impl IntoResponse {
+    if !admin.caps.can_manage_appearance {
+        return (StatusCode::FORBIDDEN, Html("<h1>403 Forbidden</h1>".to_string())).into_response();
+    }
+    let cs = state.site_hostname(admin.site_id);
+    let ctx = super::page_ctx_full(&state, &admin, &cs).await;
+    Html(render_create_theme_form(None, &ctx)).into_response()
+}
+
+pub async fn create_theme(
+    State(state): State<AppState>,
+    admin: AdminUser,
+    Form(form): Form<CreateThemeForm>,
+) -> impl IntoResponse {
+    if !admin.caps.can_manage_appearance {
+        return (StatusCode::FORBIDDEN, Html("<h1>403 Forbidden</h1>".to_string())).into_response();
+    }
+    let cs = state.site_hostname(admin.site_id);
+    let ctx = super::page_ctx_full(&state, &admin, &cs).await;
+
+    macro_rules! form_err {
+        ($msg:expr) => {
+            return Html(render_create_theme_form(Some($msg), &ctx)).into_response()
+        };
+    }
+
+    // Validate name
+    let name = form.name.trim().to_string();
+    if name.is_empty() {
+        form_err!("Theme name is required.");
+    }
+    if name.len() > 64 {
+        form_err!("Theme name must be 64 characters or less.");
+    }
+    if name.contains('/') || name.contains('\\') || name.contains("..") || name.starts_with('.') {
+        form_err!("Theme name must not contain slashes, backslashes, '..', or start with a dot.");
+    }
+
+    // Determine target directory
+    let themes_parent = &state.config.themes_dir;
+    let target_dir: PathBuf = if admin.caps.is_global_admin {
+        FsPath::new(themes_parent).join("global").join(&name)
+    } else if let Some(sid) = admin.site_id {
+        FsPath::new(themes_parent).join("sites").join(sid.to_string()).join(&name)
+    } else {
+        form_err!("No site selected. Cannot create theme.");
+    };
+
+    // Check uniqueness
+    if target_dir.exists() {
+        form_err!("A theme with that name already exists.");
+    }
+
+    // Create directories
+    let templates_dir = target_dir.join("templates");
+    let static_dir = target_dir.join("static");
+    if let Err(e) = fs::create_dir_all(&templates_dir).and_then(|_| fs::create_dir_all(&static_dir)) {
+        tracing::error!("create_theme: failed to create dirs for '{}': {}", name, e);
+        form_err!("Failed to create theme directory. Please try again.");
+    }
+
+    // Write theme.toml
+    let description = form.description.as_deref().unwrap_or("").trim().to_string();
+    let author = form.author.as_deref().unwrap_or("").trim().to_string();
+    let toml_content = format!(
+        "[theme]\nname = \"{name}\"\nversion = \"1.0.0\"\ndescription = \"{description}\"\nauthor = \"{author}\"\n",
+        name = name.replace('"', "\\\""),
+        description = description.replace('"', "\\\""),
+        author = author.replace('"', "\\\""),
+    );
+    if let Err(e) = fs::write(target_dir.join("theme.toml"), toml_content.as_bytes()) {
+        tracing::error!("create_theme: failed to write theme.toml for '{}': {}", name, e);
+        let _ = fs::remove_dir_all(&target_dir);
+        form_err!("Failed to write theme files. Please try again.");
+    }
+
+    // Scaffold template files
+    let templates: &[(&str, &str)] = &[
+        ("templates/newsletter.html", r#"{% extends "base.html" %}
+
+{% block title %}{{ page.title }} — {{ site.name }}{% endblock title %}
+
+{% block content %}
+<article class="single-page newsletter-page">
+  <header class="contact-header">
+    <h1 class="contact-title">{{ page.title }}</h1>
+  </header>
+
+  {% if page.content %}
+  <div class="page-content">
+    {{ page.content | safe }}
+  </div>
+  {% endif %}
+
+  {% if request.query.submitted %}
+  <div class="newsletter-success" role="alert">
+    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"
+         fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+         aria-hidden="true">
+      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+      <polyline points="22 4 12 14.01 9 11.01"/>
+    </svg>
+    You're signed up! Thanks for subscribing.
+  </div>
+  {% else %}
+  <form class="newsletter-form" method="POST" action="/form/newsletter">
+    <!-- Honeypot — hidden from real users, bots fill it in -->
+    <div class="newsletter-honeypot" aria-hidden="true" tabindex="-1">
+      <label for="_hp">Leave this blank</label>
+      <input type="text" id="_hp" name="_honeypot" tabindex="-1" autocomplete="off">
+    </div>
+
+    <div class="newsletter-field">
+      <label for="nl-email">Email address <span class="newsletter-required" aria-hidden="true">*</span></label>
+      <input type="email" id="nl-email" name="email" required autocomplete="email"
+             placeholder="you@example.com">
+    </div>
+
+    <div class="newsletter-field newsletter-field--checkbox">
+      <label class="newsletter-checkbox-label">
+        <input type="checkbox" name="terms_accepted" value="yes" required>
+        I agree to the <a href="/terms" target="_blank" rel="noopener noreferrer">Terms &amp; Conditions</a>
+        and consent to receiving email newsletters.
+        <span class="newsletter-required" aria-hidden="true">*</span>
+      </label>
+    </div>
+
+    <button type="submit" class="newsletter-submit" id="newsletter-submit-btn">Subscribe</button>
+  </form>
+  <script>
+    document.querySelector('.newsletter-form').addEventListener('submit', function() {
+      var btn = document.getElementById('newsletter-submit-btn');
+      btn.disabled = true;
+      btn.textContent = 'Subscribing…';
+    });
+  </script>
+  {% endif %}
+</article>
+
+<style>
+/* ── Newsletter page ── */
+.newsletter-page { max-width: 520px; }
+
+.newsletter-form {
+  margin-top: 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.newsletter-honeypot {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.newsletter-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.newsletter-field label {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #333;
+}
+
+.newsletter-required { color: #c00; }
+
+.newsletter-field input[type="email"] {
+  padding: 0.6rem 0.85rem;
+  font-size: 1rem;
+  font-family: inherit;
+  border: 1.5px solid #ccc;
+  border-radius: 4px;
+  background: #fff;
+  color: #333;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  outline: none;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.newsletter-field input[type="email"]:focus {
+  border-color: #555;
+  box-shadow: 0 0 0 3px rgba(0,0,0,0.08);
+}
+
+.newsletter-field--checkbox { flex-direction: row; align-items: flex-start; gap: 0; }
+
+.newsletter-checkbox-label {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  font-size: 0.875rem;
+  font-weight: 400;
+  color: #333;
+  cursor: pointer;
+  line-height: 1.5;
+}
+
+.newsletter-checkbox-label input[type="checkbox"] {
+  margin-top: 0.2rem;
+  flex-shrink: 0;
+  width: 1rem;
+  height: 1rem;
+  accent-color: #333;
+  cursor: pointer;
+}
+
+.newsletter-checkbox-label a {
+  color: #333;
+  text-decoration: underline;
+}
+
+.newsletter-submit {
+  align-self: flex-start;
+  padding: 0.65rem 1.5rem;
+  font-size: 1rem;
+  font-weight: 600;
+  font-family: inherit;
+  background: #333;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.1s;
+}
+
+.newsletter-submit:hover { background: #111; }
+.newsletter-submit:active { transform: scale(0.98); }
+.newsletter-submit:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.newsletter-success {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-top: 1.5rem;
+  padding: 1rem 1.25rem;
+  background: #f0fdf4;
+  border: 1.5px solid #86efac;
+  border-radius: 6px;
+  color: #166534;
+  font-weight: 500;
+}
+
+.newsletter-success svg { flex-shrink: 0; color: #16a34a; }
+</style>
+{% endblock content %}
+"#),
+        ("templates/contact-page.html", r#"{% extends "base.html" %}
+
+{% block title %}{{ page.title }} — {{ site.name }}{% endblock title %}
+
+{% block content %}
+<article class="single-page contact-page">
+  <header class="contact-header">
+    <h1 class="contact-title">{{ page.title }}</h1>
+  </header>
+
+  {% if page.content %}
+  <div class="page-content">
+    {{ page.content | safe }}
+  </div>
+  {% endif %}
+
+  {% if request.query.submitted %}
+  <div class="contact-success" role="alert">
+    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"
+         fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+         aria-hidden="true">
+      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+      <polyline points="22 4 12 14.01 9 11.01"/>
+    </svg>
+    Thanks! Your message has been sent. We'll be in touch soon.
+  </div>
+  {% else %}
+  <form class="contact-form" method="POST" action="/form/contact">
+    <!-- Honeypot — hidden from real users, bots fill it in -->
+    <div class="contact-honeypot" aria-hidden="true" tabindex="-1">
+      <label for="_hp">Leave this blank</label>
+      <input type="text" id="_hp" name="_honeypot" tabindex="-1" autocomplete="off">
+    </div>
+
+    <div class="contact-field">
+      <label for="cf-name">Your name <span class="contact-required" aria-hidden="true">*</span></label>
+      <input type="text" id="cf-name" name="name" required autocomplete="name"
+             placeholder="Jane Smith">
+    </div>
+
+    <div class="contact-field">
+      <label for="cf-email">Email address <span class="contact-required" aria-hidden="true">*</span></label>
+      <input type="email" id="cf-email" name="email" required autocomplete="email"
+             placeholder="jane@example.com">
+    </div>
+
+    <div class="contact-field">
+      <label for="cf-subject">Subject</label>
+      <input type="text" id="cf-subject" name="subject" placeholder="How can we help?">
+    </div>
+
+    <div class="contact-field">
+      <label for="cf-message">Message <span class="contact-required" aria-hidden="true">*</span></label>
+      <textarea id="cf-message" name="message" rows="6" required
+                placeholder="Write your message here…"></textarea>
+    </div>
+
+    <button type="submit" class="contact-submit" id="contact-submit-btn">Send message</button>
+  </form>
+  <script>
+    document.querySelector('.contact-form').addEventListener('submit', function() {
+      var btn = document.getElementById('contact-submit-btn');
+      btn.disabled = true;
+      btn.textContent = 'Sending…';
+    });
+  </script>
+  {% endif %}
+</article>
+
+<style>
+/* ── Contact page ── */
+.contact-page { max-width: 640px; }
+
+.contact-header {
+  padding: 1.25rem 1.5rem;
+  border-radius: 6px;
+  border-left: 4px solid #555;
+  background: #f8f8f8;
+  margin-bottom: 2rem;
+}
+
+.contact-title {
+  margin: 0;
+  font-size: 1.75rem;
+  color: #222;
+}
+
+.contact-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.contact-honeypot {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.contact-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.contact-field label {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #333;
+}
+
+.contact-required { color: #c00; }
+
+.contact-field input,
+.contact-field textarea {
+  padding: 0.6rem 0.85rem;
+  font-size: 1rem;
+  font-family: inherit;
+  border: 1.5px solid #ccc;
+  border-radius: 4px;
+  background: #fff;
+  color: #333;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  outline: none;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.contact-field input:focus,
+.contact-field textarea:focus {
+  border-color: #555;
+  box-shadow: 0 0 0 3px rgba(0,0,0,0.08);
+}
+
+.contact-field textarea {
+  resize: vertical;
+  min-height: 8rem;
+}
+
+.contact-submit {
+  align-self: flex-start;
+  padding: 0.65rem 1.5rem;
+  font-size: 1rem;
+  font-weight: 600;
+  font-family: inherit;
+  background: #333;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.1s;
+}
+
+.contact-submit:hover { background: #111; }
+.contact-submit:active { transform: scale(0.98); }
+.contact-submit:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.contact-success {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-top: 1.5rem;
+  padding: 1rem 1.25rem;
+  background: #f0fdf4;
+  border: 1.5px solid #86efac;
+  border-radius: 6px;
+  color: #166534;
+  font-weight: 500;
+}
+
+.contact-success svg { flex-shrink: 0; color: #16a34a; }
+</style>
+{% endblock content %}
+"#),
+        ("templates/base.html", r#"<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}{{ site.name }}{% endblock %}</title>
+  <link rel="stylesheet" href="/theme/static/style.css">
+  {% block head %}{% endblock %}
+</head>
+<body>
+  <header>
+    <h1><a href="/">{{ site.name }}</a></h1>
+  </header>
+  <main>
+    {% block content %}{% endblock %}
+  </main>
+  <footer>
+    <p>&copy; {{ site.name }}</p>
+  </footer>
+</body>
+</html>
+"#),
+        ("templates/index.html", r#"{% extends "base.html" %}
+{% block title %}{{ site.name }}{% endblock %}
+{% block content %}
+  {% for post in posts %}
+  <article>
+    <h2><a href="{{ post.url }}">{{ post.title }}</a></h2>
+    <p>{{ post.excerpt }}</p>
+  </article>
+  {% endfor %}
+{% endblock %}
+"#),
+        ("templates/single.html", r#"{% extends "base.html" %}
+{% block title %}{{ post.title }} — {{ site.name }}{% endblock %}
+{% block content %}
+  <article>
+    <h1>{{ post.title }}</h1>
+    <div>{{ post.content | safe }}</div>
+  </article>
+{% endblock %}
+"#),
+        ("templates/page.html", r#"{% extends "base.html" %}
+{% block title %}{{ post.title }} — {{ site.name }}{% endblock %}
+{% block content %}
+  <article>
+    <h1>{{ post.title }}</h1>
+    <div>{{ post.content | safe }}</div>
+  </article>
+{% endblock %}
+"#),
+        ("templates/archive.html", r#"{% extends "base.html" %}
+{% block title %}{{ archive_type | title }}: {% if archive_term %}{{ archive_term.name }}{% endif %} — {{ site.name }}{% endblock %}
+{% block content %}
+  <h1>{{ archive_type | title }}{% if archive_term %}: {{ archive_term.name }}{% endif %}</h1>
+  {% for post in posts %}
+  <article>
+    <h2><a href="{{ post.url }}">{{ post.title }}</a></h2>
+    <p>{{ post.excerpt }}</p>
+  </article>
+  {% endfor %}
+{% endblock %}
+"#),
+        ("templates/search.html", r#"{% extends "base.html" %}
+{% block title %}Search — {{ site.name }}{% endblock %}
+{% block content %}
+  <h1>Search Results</h1>
+  <form method="get" action="/search">
+    <input type="search" name="q" value="{{ query }}">
+    <button type="submit">Search</button>
+  </form>
+  {% for post in results %}
+  <article>
+    <h2><a href="{{ post.url }}">{{ post.title }}</a></h2>
+    <p>{{ post.excerpt }}</p>
+  </article>
+  {% endfor %}
+{% endblock %}
+"#),
+        ("templates/404.html", r#"{% extends "base.html" %}
+{% block title %}Page Not Found — {{ site.name }}{% endblock %}
+{% block content %}
+  <h1>404 — Page Not Found</h1>
+  <p>The page you requested could not be found.</p>
+  <p><a href="/">Return home</a></p>
+{% endblock %}
+"#),
+    ];
+
+    for (rel, content) in templates {
+        let dest = target_dir.join(rel);
+        if let Err(e) = fs::write(&dest, content.as_bytes()) {
+            tracing::error!("create_theme: failed to write '{}' for '{}': {}", rel, name, e);
+            let _ = fs::remove_dir_all(&target_dir);
+            form_err!("Failed to write template files. Please try again.");
+        }
+    }
+
+    // Starter stylesheet — not a required template, but scaffolded for convenience.
+    let css_path = target_dir.join("static").join("style.css");
+    let css_content = b"/* -- Reset & base --------------------------------------- */
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif;
+  font-size: 1rem;
+  line-height: 1.6;
+  color: #222;
+  background: #fff;
+}
+
+img, video { max-width: 100%; height: auto; display: block; }
+
+a { color: #0066cc; text-decoration: none; }
+a:hover { color: #004499; text-decoration: underline; }
+
+/* -- Layout --------------------------------------------- */
+.container {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 0 1.25rem;
+}
+
+header, main, footer {
+  padding: 1.5rem 0;
+}
+
+/* -- Typography ----------------------------------------- */
+h1, h2, h3, h4, h5, h6 {
+  line-height: 1.25;
+  margin: 1.5rem 0 0.5rem;
+  font-weight: 700;
+  color: #111;
+}
+
+h1 { font-size: 2rem; }
+h2 { font-size: 1.5rem; }
+h3 { font-size: 1.25rem; }
+h4 { font-size: 1.1rem; }
+
+p { margin: 0 0 1rem; }
+
+ul, ol { margin: 0 0 1rem; padding-left: 1.5rem; }
+li { margin-bottom: 0.25rem; }
+
+blockquote {
+  margin: 1.5rem 0;
+  padding: 0.75rem 1.25rem;
+  border-left: 4px solid #ccc;
+  color: #555;
+}
+
+hr { border: none; border-top: 1px solid #ddd; margin: 2rem 0; }
+
+/* -- Code ----------------------------------------------- */
+code, kbd {
+  font-family: ui-monospace, \"Cascadia Code\", \"Fira Code\", monospace;
+  font-size: 0.875em;
+  background: #f3f3f3;
+  padding: 0.15em 0.35em;
+  border-radius: 3px;
+}
+
+pre {
+  background: #f3f3f3;
+  padding: 1rem 1.25rem;
+  border-radius: 4px;
+  overflow-x: auto;
+  margin: 0 0 1rem;
+}
+
+pre code { background: none; padding: 0; font-size: 0.9rem; }
+
+/* -- Forms ---------------------------------------------- */
+input, textarea, select, button { font: inherit; }
+
+input[type=\"text\"],
+input[type=\"email\"],
+input[type=\"search\"],
+textarea,
+select {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  border: 1.5px solid #ccc;
+  border-radius: 4px;
+  background: #fff;
+  color: #222;
+  box-sizing: border-box;
+}
+
+input:focus, textarea:focus, select:focus {
+  outline: none;
+  border-color: #555;
+  box-shadow: 0 0 0 3px rgba(0,0,0,0.08);
+}
+
+button, input[type=\"submit\"] {
+  display: inline-block;
+  padding: 0.5rem 1.25rem;
+  background: #333;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+button:hover, input[type=\"submit\"]:hover { background: #111; }
+
+/* -- Utility -------------------------------------------- */
+.muted { color: #666; font-size: 0.9rem; }
+.text-center { text-align: center; }
+";
+    if let Err(e) = fs::write(&css_path, css_content) {
+        tracing::warn!("create_theme: failed to write style.css for '{}': {}", name, e);
+        // Non-fatal — theme is still valid without it.
+    }
+
+    tracing::info!("theme '{}' created by {}", name, if admin.caps.is_global_admin { "super_admin" } else { "site_admin" });
+    Redirect::to(&format!("/admin/appearance/editor/{}", url_encode_param(&name))).into_response()
+}
+
+// ── New File ───────────────────────────────────────────────────────────────────
+
+#[derive(Deserialize)]
+pub struct NewFileForm {
+    pub filename: String,
+    pub ext: String,
+}
+
+pub async fn new_file(
+    State(state): State<AppState>,
+    admin: AdminUser,
+    Path(theme): Path<String>,
+    Form(form): Form<NewFileForm>,
+) -> impl IntoResponse {
+    if !admin.caps.can_manage_appearance {
+        return (StatusCode::FORBIDDEN, "Forbidden").into_response();
+    }
+    let cs = state.site_hostname(admin.site_id);
+    let ctx = super::page_ctx_full(&state, &admin, &cs).await;
+
+    let Some(theme_dir) = resolve_theme_dir(&state.config.themes_dir, &theme, admin.site_id) else {
+        return render_appearance_list(&state, Some("Theme not found."), &ctx, admin.site_id)
+            .await.into_response();
+    };
+
+    // Helper: re-render editor with a flash error.
+    let editor_err = |msg: &'static str| {
+        let files = walk_theme_files(&theme_dir);
+        let editor_files: Vec<admin::pages::appearance::EditorFile> = files.iter().map(|f| {
+            admin::pages::appearance::EditorFile {
+                rel_path: f.clone(),
+                is_selected: false,
+                has_backup: bak_path_for(&theme_dir.join(f)).exists(),
+                edited_at: None,
+            }
+        }).collect();
+        Html(admin::pages::appearance::render_theme_editor(
+            &theme, &editor_files, None, "", false, Some(msg), &ctx,
+        )).into_response()
+    };
+
+    // name = bare name the user typed (e.g. "partials/header" or "custom")
+    // ext  = dropdown selection: ".html", ".css", or ".js"
+    let name = form.filename.trim().to_string();
+    let ext  = form.ext.trim().to_string();
+
+    if name.is_empty() || name.len() > 96 {
+        return editor_err("Filename must be 1–96 characters.");
+    }
+    if name.contains("..") || name.starts_with('/') || name.starts_with('\\') {
+        return editor_err("Invalid filename.");
+    }
+
+    // Map extension → subdirectory and initial file content.
+    let (subdir, initial_content): (&str, &[u8]) = match ext.as_str() {
+        ".html" => ("templates", b"{# New template #}\n"),
+        ".css"  => ("static",    b"/* styles */\n"),
+        ".js"   => ("static",    b"/* scripts */\n"),
+        _       => return editor_err("Invalid file type. Choose .html, .css, or .js."),
+    };
+
+    // Full relative path from theme root, e.g. "templates/partials/header.html"
+    let rel = format!("{}/{}{}", subdir, name, ext);
+    let dest = theme_dir.join(&rel);
+
+    // Create parent dirs if needed, then verify the resolved path stays inside
+    // the expected subdirectory (traversal guard).
+    if let Some(parent) = dest.parent() {
+        let allowed_root = theme_dir.join(subdir);
+        let canonical_allowed = match allowed_root.canonicalize() {
+            Ok(p) => p,
+            Err(_) => return editor_err("Theme directory not found."),
+        };
+        if let Err(e) = fs::create_dir_all(parent) {
+            tracing::error!("new_file: create_dir_all failed: {}", e);
+            return editor_err("Failed to create directory.");
+        }
+        let canonical_parent = parent.canonicalize().unwrap_or(canonical_allowed.clone());
+        if !canonical_parent.starts_with(&canonical_allowed) {
+            tracing::warn!("new_file: path traversal attempt: rel={:?}", rel);
+            return editor_err("Invalid filename.");
+        }
+    }
+
+    if let Err(e) = fs::write(&dest, initial_content) {
+        tracing::error!("new_file: write failed for {:?}: {}", dest, e);
+        return editor_err("Failed to create file. Please try again.");
+    }
+
+    Redirect::to(&format!(
+        "/admin/appearance/editor/{}?file={}",
+        url_encode_param(&theme),
+        url_encode_param(&rel),
+    )).into_response()
+}
+
 // ── Theme file editor ────────────────────────────────────────────────────────
 
 #[derive(Deserialize)]
@@ -554,6 +1316,22 @@ pub struct RestoreFileForm {
 }
 
 /// Encode a string for use as a URL query-parameter value.
+/// Convert days since Unix epoch (1970-01-01) to (year, month, day).
+fn days_to_ymd(mut days: i64) -> (i64, i64, i64) {
+    // Shift epoch to 1 Mar 0000 for simpler leap-year arithmetic.
+    days += 719468;
+    let era = if days >= 0 { days } else { days - 146096 } / 146097;
+    let doe = days - era * 146097;
+    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+    let y = yoe + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = if m <= 2 { y + 1 } else { y };
+    (y, m, d)
+}
+
 fn url_encode_param(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     for b in s.bytes() {
@@ -691,11 +1469,38 @@ pub async fn edit_file(
     let effective_flash: Option<String> = file_err.map(|s| s.to_string()).or(status_flash);
 
     let editor_files: Vec<admin::pages::appearance::EditorFile> = files.iter().map(|f| {
-        let has_bak = bak_path_for(&theme_dir.join(f)).exists();
+        let abs = theme_dir.join(f);
+        let has_bak = bak_path_for(&abs).exists();
+        let edited_at = if has_bak {
+            fs::metadata(&abs)
+                .and_then(|m| m.modified())
+                .ok()
+                .map(|t| {
+                    let secs = t
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_secs();
+                    // Format as "DD Mon YYYY HH:MM"
+                    let secs_i = secs as i64;
+                    let days_since_epoch = secs_i / 86400;
+                    let time_of_day = secs_i % 86400;
+                    let hh = time_of_day / 3600;
+                    let mm = (time_of_day % 3600) / 60;
+                    // Compute date from days since 1970-01-01
+                    let (y, mo, d) = days_to_ymd(days_since_epoch);
+                    let month = ["Jan","Feb","Mar","Apr","May","Jun",
+                                 "Jul","Aug","Sep","Oct","Nov","Dec"]
+                        [(mo - 1) as usize];
+                    format!("{:02} {} {} {:02}:{:02}", d, month, y, hh, mm)
+                })
+        } else {
+            None
+        };
         admin::pages::appearance::EditorFile {
             rel_path: f.clone(),
             is_selected: selected_rel.as_deref() == Some(f.as_str()),
             has_backup: has_bak,
+            edited_at,
         }
     }).collect();
 
@@ -828,6 +1633,93 @@ pub async fn restore_file(
 
     Redirect::to(&format!("{}&restored=1", redirect_base)).into_response()
 }
+// ── Delete file ───────────────────────────────────────────────────────────────
+
+#[derive(Deserialize)]
+pub struct DeleteFileForm {
+    pub file: String,
+}
+
+pub async fn delete_file(
+    State(state): State<AppState>,
+    admin: AdminUser,
+    Path(theme): Path<String>,
+    Form(form): Form<DeleteFileForm>,
+) -> Response {
+    if !admin.caps.can_manage_appearance {
+        return (StatusCode::FORBIDDEN, "Forbidden").into_response();
+    }
+    let cs = state.site_hostname(admin.site_id);
+    let ctx = super::page_ctx_full(&state, &admin, &cs).await;
+
+    let Some(theme_dir) = resolve_theme_dir(&state.config.themes_dir, &theme, admin.site_id) else {
+        return render_appearance_list(&state, Some("Theme not found."), &ctx, admin.site_id)
+            .await.into_response();
+    };
+
+    // Guard: required templates cannot be deleted.
+    let rel = form.file.trim().to_string();
+    if REQUIRED_TEMPLATES.contains(&rel.as_str()) {
+        let files = walk_theme_files(&theme_dir);
+        let editor_files: Vec<admin::pages::appearance::EditorFile> = files.iter().map(|f| {
+            admin::pages::appearance::EditorFile {
+                rel_path: f.clone(),
+                is_selected: f == &rel,
+                has_backup: bak_path_for(&theme_dir.join(f)).exists(),
+                edited_at: None,
+            }
+        }).collect();
+        return Html(admin::pages::appearance::render_theme_editor(
+            &theme, &editor_files, Some(&rel), "", false,
+            Some("Required theme templates cannot be deleted."), &ctx,
+        )).into_response();
+    }
+
+    let Some(abs_path) = resolve_file_in_theme(&theme_dir, &rel) else {
+        let files = walk_theme_files(&theme_dir);
+        let editor_files: Vec<admin::pages::appearance::EditorFile> = files.iter().map(|f| {
+            admin::pages::appearance::EditorFile {
+                rel_path: f.clone(),
+                is_selected: false,
+                has_backup: bak_path_for(&theme_dir.join(f)).exists(),
+                edited_at: None,
+            }
+        }).collect();
+        return Html(admin::pages::appearance::render_theme_editor(
+            &theme, &editor_files, None, "", false,
+            Some("File not found."), &ctx,
+        )).into_response();
+    };
+
+    // Remove .bak file if present.
+    let bak = bak_path_for(&abs_path);
+    if bak.exists() {
+        if let Err(e) = fs::remove_file(&bak) {
+            tracing::warn!("delete_file: could not remove backup {:?}: {}", bak, e);
+        }
+    }
+
+    if let Err(e) = fs::remove_file(&abs_path) {
+        tracing::error!("delete_file: remove failed for {:?}: {}", abs_path, e);
+        let files = walk_theme_files(&theme_dir);
+        let editor_files: Vec<admin::pages::appearance::EditorFile> = files.iter().map(|f| {
+            admin::pages::appearance::EditorFile {
+                rel_path: f.clone(),
+                is_selected: f == &rel,
+                has_backup: bak_path_for(&theme_dir.join(f)).exists(),
+                edited_at: None,
+            }
+        }).collect();
+        return Html(admin::pages::appearance::render_theme_editor(
+            &theme, &editor_files, Some(&rel), "", false,
+            Some("Failed to delete file. Please try again."), &ctx,
+        )).into_response();
+    }
+
+    tracing::info!("theme file deleted: theme={} file={}", theme, rel);
+    Redirect::to(&format!("/admin/appearance/editor/{}", url_encode_param(&theme))).into_response()
+}
+
 // ── Shared list renderer ───────────────────────────────────────────────────────
 
 async fn render_appearance_list(

@@ -108,9 +108,12 @@ pub fn build(
         .route("/admin/appearance/delete", post(appearance::delete))
         .route("/admin/appearance/upload", post(appearance::upload_theme))
         .route("/admin/theme-screenshot/{theme_name}", get(appearance::screenshot))
+        .route("/admin/appearance/create", get(appearance::create_form).post(appearance::create_theme))
         .route("/admin/appearance/editor/{theme}", get(appearance::edit_file))
         .route("/admin/appearance/editor/{theme}/save", post(appearance::save_file))
         .route("/admin/appearance/editor/{theme}/restore", post(appearance::restore_file))
+        .route("/admin/appearance/editor/{theme}/new-file", post(appearance::new_file))
+        .route("/admin/appearance/editor/{theme}/delete-file", post(appearance::delete_file))
         // ── Admin settings ─────────────────────────────────────────────────
         .route("/admin/settings", get(settings::settings).post(settings::save_settings))
         // ── Admin sites ────────────────────────────────────────────────────
