@@ -267,17 +267,12 @@ impl FromRequestParts<AppState> for AdminUser {
             && site_id.is_some()
             && site_id != user.default_site_id;
 
-        // System settings are only accessible to super_admin on the default site
-        // (the oldest site by created_at — the agency owner's primary install).
-        // Skip the query entirely for non-global-admin users.
-        let is_on_default_site = if is_global_admin {
-            match crate::models::site::get_default_site_id(&state.db).await {
-                Some(default_id) => site_id == Some(default_id),
-                None => false,
-            }
-        } else {
-            false
-        };
+        // System settings are only accessible to super_admin on their default/home site.
+        // Uses the same default_site_id as the visiting badge so both stay in sync
+        // when the super_admin changes their default site.
+        let is_on_default_site = is_global_admin
+            && user.default_site_id.is_some()
+            && site_id == user.default_site_id;
 
         let caps = AdminCaps::from_roles(&user.role, &site_role, is_visiting_foreign_site, is_on_default_site);
 
