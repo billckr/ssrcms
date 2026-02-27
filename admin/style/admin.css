@@ -142,6 +142,7 @@ tr.muted td { opacity: .55; }
 .btn-danger:hover { background: #fee2e2; border-color: var(--danger); text-decoration: none; }
 .btn-secondary { background: #e2e8f0; color: var(--text); border-color: var(--border); }
 .btn-secondary:hover { background: #d1d9e6; text-decoration: none; }
+.btn:disabled, .btn[disabled] { opacity: .45; cursor: not-allowed; pointer-events: none; box-shadow: none; transform: none; }
 
 /* Icon buttons */
 .icon-btn { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0; background: none; border: 1px solid var(--border); border-radius: var(--radius); cursor: pointer; color: var(--primary); transition: background .2s, border-color .2s; }
