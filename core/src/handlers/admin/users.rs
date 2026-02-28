@@ -202,6 +202,22 @@ pub async fn save_new(
         }
     };
 
+    // Validate password requirements.
+    if let Err(msg) = crate::models::user::validate_password(&password) {
+        let sites = if admin.caps.is_global_admin { fetch_site_options(&state).await } else { vec![] };
+        let edit = UserEdit {
+            id: None,
+            username: form.username.clone(),
+            email: form.email.clone(),
+            display_name: form.display_name.clone().unwrap_or_default(),
+            role: form.role.clone(),
+            bio: form.bio.clone().unwrap_or_default(),
+            sites,
+            is_super_admin_target: false,
+        };
+        return Html(admin::pages::users::render_editor(&edit, Some(msg), &ctx)).into_response();
+    }
+
     // site_role: what goes into site_users.role (admin/editor/author/subscriber).
     // Site admins cannot assign super_admin; cap to editor.
     let site_role = if !admin.caps.is_global_admin && form.role == "super_admin" {
@@ -350,6 +366,23 @@ pub async fn save_edit(
     // Site admins may not edit super_admin accounts.
     if !admin.caps.is_global_admin && is_super_admin_target {
         return (axum::http::StatusCode::FORBIDDEN, "Forbidden").into_response();
+    }
+
+    // Validate password requirements if a new password was supplied.
+    if let Some(pw) = form.password.as_deref().filter(|p| !p.is_empty()) {
+        if let Err(msg) = crate::models::user::validate_password(pw) {
+            let edit = UserEdit {
+                id: Some(id.to_string()),
+                username: form.username.clone(),
+                email: form.email.clone(),
+                display_name: form.display_name.clone().unwrap_or_default(),
+                role: form.role.clone(),
+                bio: form.bio.clone().unwrap_or_default(),
+                sites: vec![],
+                is_super_admin_target,
+            };
+            return Html(admin::pages::users::render_editor(&edit, Some(msg), &ctx)).into_response();
+        }
     }
 
     let new_password_hash = if let Some(pw) = form.password.as_deref().filter(|p| !p.is_empty()) {

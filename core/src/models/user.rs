@@ -56,6 +56,31 @@ impl UserRole {
     }
 }
 
+/// Validate a plaintext password against site-wide requirements.
+///
+/// Rules: 8–12 characters, at least one uppercase letter, at least one digit,
+/// and at least one symbol from the allowed set `!@#$%&`.
+pub fn validate_password(password: &str) -> std::result::Result<(), &'static str> {
+    let len = password.len();
+    if len < 8 {
+        return Err("Password must be at least 8 characters");
+    }
+    if len > 12 {
+        return Err("Password must be no more than 12 characters");
+    }
+    if !password.chars().any(|c| c.is_uppercase()) {
+        return Err("Password must contain at least one uppercase letter");
+    }
+    if !password.chars().any(|c| c.is_ascii_digit()) {
+        return Err("Password must contain at least one number");
+    }
+    const ALLOWED_SYMBOLS: &[char] = &['!', '@', '#', '$', '%', '&'];
+    if !password.chars().any(|c| ALLOWED_SYMBOLS.contains(&c)) {
+        return Err("Password must contain at least one symbol: ! @ # $ % &");
+    }
+    Ok(())
+}
+
 /// Full user record — never expose password_hash over the API or in templates.
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct User {
@@ -428,6 +453,44 @@ mod tests {
         assert_eq!(UserRole::from_str("SuperAdmin"), None);
         assert_eq!(UserRole::from_str("SUPER_ADMIN"), None);
         assert_eq!(UserRole::from_str("Author"), None);
+    }
+
+    #[test]
+    fn validate_password_accepts_valid() {
+        assert!(validate_password("Secure1!").is_ok());
+        assert!(validate_password("Hello1!ab").is_ok());
+        assert!(validate_password("Abcdef1@").is_ok());
+    }
+
+    #[test]
+    fn validate_password_rejects_too_short() {
+        assert!(validate_password("Ab1!").is_err());
+    }
+
+    #[test]
+    fn validate_password_rejects_too_long() {
+        assert!(validate_password("Abcdefgh1!xxx").is_err()); // 13 chars
+    }
+
+    #[test]
+    fn validate_password_rejects_no_uppercase() {
+        assert!(validate_password("secure1!abc").is_err());
+    }
+
+    #[test]
+    fn validate_password_rejects_no_digit() {
+        assert!(validate_password("SecureAb!").is_err());
+    }
+
+    #[test]
+    fn validate_password_rejects_no_symbol() {
+        assert!(validate_password("Secure1abc").is_err());
+    }
+
+    #[test]
+    fn validate_password_rejects_disallowed_symbol() {
+        // ^ is not in the allowed set !@#$%&
+        assert!(validate_password("Secure1^").is_err());
     }
 
     #[test]

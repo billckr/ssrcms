@@ -36,10 +36,16 @@ async fn create() -> anyhow::Result<()> {
         .default(username.clone())
         .interact_text()?;
 
-    let password = Password::new()
-        .with_prompt("Password")
-        .with_confirmation("Confirm password", "Passwords do not match")
-        .interact()?;
+    let password = loop {
+        let pw = Password::new()
+            .with_prompt("Password (8-12 chars, 1 uppercase, 1 number, 1 symbol: !@#$%&)")
+            .with_confirmation("Confirm password", "Passwords do not match")
+            .interact()?;
+        match validate_password(&pw) {
+            Ok(()) => break pw,
+            Err(msg) => eprintln!("Password error: {msg}"),
+        }
+    };
 
     let roles = &["super_admin", "editor", "author", "subscriber"];
     let role_idx = Select::new()
@@ -128,10 +134,16 @@ async fn reset_password() -> anyhow::Result<()> {
 
     println!("Resetting password for {} ({})", username, id);
 
-    let password = Password::new()
-        .with_prompt("New password")
-        .with_confirmation("Confirm password", "Passwords do not match")
-        .interact()?;
+    let password = loop {
+        let pw = Password::new()
+            .with_prompt("New password (8-12 chars, 1 uppercase, 1 number, 1 symbol: !@#$%&)")
+            .with_confirmation("Confirm password", "Passwords do not match")
+            .interact()?;
+        match validate_password(&pw) {
+            Ok(()) => break pw,
+            Err(msg) => eprintln!("Password error: {msg}"),
+        }
+    };
 
     let hash = hash_password(&password)?;
 
@@ -143,6 +155,27 @@ async fn reset_password() -> anyhow::Result<()> {
         .map_err(|e| anyhow::anyhow!("Failed to update password: {e}"))?;
 
     println!("Password reset successfully.");
+    Ok(())
+}
+
+fn validate_password(password: &str) -> Result<(), &'static str> {
+    let len = password.len();
+    if len < 8 {
+        return Err("Password must be at least 8 characters");
+    }
+    if len > 12 {
+        return Err("Password must be no more than 12 characters");
+    }
+    if !password.chars().any(|c| c.is_uppercase()) {
+        return Err("Password must contain at least one uppercase letter");
+    }
+    if !password.chars().any(|c| c.is_ascii_digit()) {
+        return Err("Password must contain at least one number");
+    }
+    const ALLOWED_SYMBOLS: &[char] = &['!', '@', '#', '$', '%', '&'];
+    if !password.chars().any(|c| ALLOWED_SYMBOLS.contains(&c)) {
+        return Err("Password must contain at least one symbol: ! @ # $ % &");
+    }
     Ok(())
 }
 

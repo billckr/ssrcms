@@ -10,6 +10,7 @@ const ADMIN_CSS: &str = include_str!("../style/admin.css");
 pub struct PageContext {
     pub current_site: String,
     pub user_email: String,
+    pub user_role: String,
     /// Agency-level super-admin with unrestricted cross-site access.
     pub is_global_admin: bool,
     /// Super-admin viewing a site they do not own.
@@ -112,6 +113,7 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
       </ul>
       <div class="sidebar-footer">
         <a href="/admin/profile">{user_email}</a>
+        <span class="sidebar-user-role">{user_role}</span>
         <a href="/admin/logout">Log out</a>
       </div>
     </nav>
@@ -176,6 +178,7 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
         visiting_badge = visiting_badge,
         site_indicator = site_indicator,
         user_email = html_escape(&ctx.user_email),
+        user_role  = html_escape(&ctx.user_role),
     )
 }
 

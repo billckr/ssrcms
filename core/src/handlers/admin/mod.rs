@@ -1,12 +1,24 @@
 use crate::middleware::admin_auth::AdminUser;
 use crate::app_state::AppState;
 
+fn role_display_name(role: &str) -> String {
+    match role {
+        "super_admin" => "Super Admin",
+        "admin"       => "Site Admin",
+        "editor"      => "Editor",
+        "author"      => "Author",
+        "subscriber"  => "Subscriber",
+        other         => other,
+    }.to_string()
+}
+
 /// Build a [`admin::PageContext`] synchronously (unread count defaults to 0).
 /// Prefer `page_ctx_full` in async handlers to include the live unread badge count.
 pub fn page_ctx(admin: &AdminUser, current_site: &str) -> admin::PageContext {
     admin::PageContext {
         current_site: current_site.to_string(),
         user_email: admin.user.email.clone(),
+        user_role: role_display_name(&admin.site_role),
         is_global_admin: admin.caps.is_global_admin,
         visiting_foreign_site: admin.caps.visiting_foreign_site,
         can_manage_users: admin.caps.can_manage_users,

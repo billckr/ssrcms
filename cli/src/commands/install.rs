@@ -86,10 +86,16 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
             .default(username.clone())
             .interact_text()?;
 
-        let password = Password::new()
-            .with_prompt("Admin password")
-            .with_confirmation("Confirm password", "Passwords do not match")
-            .interact()?;
+        let password = loop {
+            let pw = Password::new()
+                .with_prompt("Admin password (8-12 chars, 1 uppercase, 1 number, 1 symbol: !@#$%&)")
+                .with_confirmation("Confirm password", "Passwords do not match")
+                .interact()?;
+            match validate_password(&pw) {
+                Ok(()) => break pw,
+                Err(msg) => eprintln!("Password error: {msg}"),
+            }
+        };
 
         let hash = hash_password(&password)?;
         let id = Uuid::new_v4();
@@ -271,6 +277,27 @@ fn write_systemd_service(output_dir: &std::path::Path, install_dir: &str) -> any
 /// Returns None if the file doesn't exist.
 fn find_template(path: &str) -> Option<String> {
     std::fs::read_to_string(path).ok()
+}
+
+fn validate_password(password: &str) -> Result<(), &'static str> {
+    let len = password.len();
+    if len < 8 {
+        return Err("Password must be at least 8 characters");
+    }
+    if len > 12 {
+        return Err("Password must be no more than 12 characters");
+    }
+    if !password.chars().any(|c| c.is_uppercase()) {
+        return Err("Password must contain at least one uppercase letter");
+    }
+    if !password.chars().any(|c| c.is_ascii_digit()) {
+        return Err("Password must contain at least one number");
+    }
+    const ALLOWED_SYMBOLS: &[char] = &['!', '@', '#', '$', '%', '&'];
+    if !password.chars().any(|c| ALLOWED_SYMBOLS.contains(&c)) {
+        return Err("Password must contain at least one symbol: ! @ # $ % &");
+    }
+    Ok(())
 }
 
 fn hash_password(password: &str) -> anyhow::Result<String> {

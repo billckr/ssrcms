@@ -385,6 +385,14 @@ legend {
   text-decoration: none;
 }
 
+.sidebar-user-role {
+  font-size: 11px;
+  color: #64748b;
+  text-transform: capitalize;
+  margin-top: -0.25rem;
+  margin-bottom: 0.25rem;
+}
+
 /* Theme list */
 .appearance-toolbar { display: flex; align-items: center; gap: .75rem; margin-bottom: 1.25rem; }
 .appearance-filter-select { padding: .4rem .75rem; font-size: .875rem; font-family: inherit; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); color: var(--text); cursor: pointer; }

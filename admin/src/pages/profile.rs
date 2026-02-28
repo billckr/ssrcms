@@ -67,9 +67,10 @@ pub fn render_profile(profile: &ProfileForm, flash: Option<&str>, ctx: &crate::P
       <div class="form-note">
         <p><strong>Password requirements:</strong></p>
         <ul>
-          <li>At least 8 characters</li>
-          <li>Mix of uppercase and lowercase letters</li>
+          <li>8–12 characters</li>
+          <li>At least one uppercase letter</li>
           <li>At least one number</li>
+          <li>At least one symbol: ! @ # $ % &amp;</li>
         </ul>
       </div>
     </fieldset>

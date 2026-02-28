@@ -172,7 +172,7 @@ pub fn render_editor(user: &UserEdit, flash: Option<&str>, ctx: &crate::PageCont
     };
 
     let password_hint = if user.id.is_some() {
-        r#"<small>Leave blank to keep current password.</small>"#
+        r#"<small>Leave blank to keep the current password.</small>"#
     } else {
         ""
     };
@@ -223,7 +223,6 @@ function toggleSiteFields() {{
 
     let content = format!(
         r#"<style>
-.user-form {{ max-width: 580px; }}
 .user-form-grid {{
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -236,37 +235,71 @@ function toggleSiteFields() {{
   .user-form-grid .span-2 {{ grid-column: 1; }}
 }}
 </style>
-<div class="user-form">
-<form method="POST" action="{action}">
-  <div class="user-form-grid">
-    <div class="form-group">
-      <label for="username">Username</label>
-      <input type="text" id="username" name="username" value="{username}" required autocomplete="off">
+<div class="profile-container">
+  <h2>{form_title}</h2>
+  <form method="POST" action="{action}" style="max-width:580px">
+    <div class="user-form-grid">
+      <div class="form-group">
+        <label for="username">Username</label>
+        <input type="text" id="username" name="username" value="{username}" required autocomplete="off">
+      </div>
+      <div class="form-group">
+        <label for="display_name">Full Name</label>
+        <input type="text" id="display_name" name="display_name" value="{display_name}" required autocomplete="off">
+      </div>
+      <div class="form-group">
+        <label for="email">Email</label>
+        <input type="email" id="email" name="email" value="{email}" required autocomplete="off">
+      </div>
+      <div class="form-group">
+        <label for="password">Password</label>
+        <input type="password" id="password" name="password" autocomplete="new-password">
+        {password_hint}
+      </div>
+      <div class="form-group span-2">
+        {role_field_inner}
+      </div>
+      {site_section}
     </div>
-    <div class="form-group">
-      <label for="display_name">Full Name</label>
-      <input type="text" id="display_name" name="display_name" value="{display_name}" required autocomplete="off">
+    <div class="form-note" style="margin-bottom:1.25rem">
+      <p><strong>Password requirements:</strong></p>
+      <ul>
+        <li>8–12 characters</li>
+        <li>At least one uppercase letter</li>
+        <li>At least one number</li>
+        <li>At least one symbol: ! @ # $ % &amp;</li>
+      </ul>
     </div>
-    <div class="form-group">
-      <label for="email">Email</label>
-      <input type="email" id="email" name="email" value="{email}" required autocomplete="off">
+    <div style="display:flex;gap:0.75rem">
+      <button type="submit" class="btn btn-primary">Save</button>
+      <a href="/admin/users" class="btn btn-secondary">Cancel</a>
     </div>
-    <div class="form-group">
-      <label for="password">Password</label>
-      <input type="password" id="password" name="password" autocomplete="new-password">
-      {password_hint}
-    </div>
-    <div class="form-group span-2">
-      {role_field_inner}
-    </div>
-    {site_section}
-  </div>
-  <div style="margin-top:0.5rem;display:flex;gap:0.75rem">
-    <button type="submit" class="btn btn-primary">Save</button>
-    <a href="/admin/users" class="btn btn-secondary">Cancel</a>
-  </div>
-</form>
+  </form>
+<script>
+(function () {{
+  var form = document.querySelector('form[action="{action}"]');
+  if (!form) return;
+  var pwInput = form.querySelector('#password');
+  var isNew   = {is_new_js};
+  form.addEventListener('submit', function (e) {{
+    var pw = pwInput ? pwInput.value : '';
+    if (!pw && !isNew) return; // blank on edit = keep current, no validation needed
+    if (!pw && isNew) {{ e.preventDefault(); alert('Password is required.'); return; }}
+    var err = validatePw(pw);
+    if (err) {{ e.preventDefault(); alert(err); }}
+  }});
+  function validatePw(pw) {{
+    if (pw.length < 8)  return 'Password must be at least 8 characters.';
+    if (pw.length > 12) return 'Password must be no more than 12 characters.';
+    if (!/[A-Z]/.test(pw))       return 'Password must contain at least one uppercase letter.';
+    if (!/[0-9]/.test(pw))       return 'Password must contain at least one number.';
+    if (!/[!@#$%&]/.test(pw))    return 'Password must contain at least one symbol: ! @ # $ % &';
+    return null;
+  }}
+}}());
+</script>
 </div>"#,
+        form_title        = title,
         action            = action,
         username          = crate::html_escape(&user.username),
         display_name      = crate::html_escape(&user.display_name),
@@ -274,6 +307,7 @@ function toggleSiteFields() {{
         role_field_inner  = role_field,
         site_section      = site_section,
         password_hint     = password_hint,
+        is_new_js         = if is_new { "true" } else { "false" },
     );
 
     crate::admin_page(title, "/admin/users", flash, &content, ctx)

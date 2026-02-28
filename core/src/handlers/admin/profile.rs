@@ -82,20 +82,8 @@ pub struct ChangePasswordForm {
     pub confirm_password: String,
 }
 
-fn validate_password_requirements(password: &str) -> Result<(), &'static str> {
-    if password.len() < 8 {
-        return Err("Password must be at least 8 characters long");
-    }
-
-    let has_upper = password.chars().any(|c| c.is_uppercase());
-    let has_lower = password.chars().any(|c| c.is_lowercase());
-    let has_digit = password.chars().any(|c| c.is_numeric());
-
-    if !has_upper || !has_lower || !has_digit {
-        return Err("Password must contain uppercase and lowercase letters, and at least one number");
-    }
-
-    Ok(())
+fn validate_password_requirements(password: &str) -> std::result::Result<(), &'static str> {
+    crate::models::user::validate_password(password)
 }
 
 pub async fn change_password(
