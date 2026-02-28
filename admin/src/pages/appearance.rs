@@ -427,7 +427,7 @@ fn render_card(t: &ThemeInfo, ctx: &crate::PageContext, filter: &str) -> String 
     };
 
     let edit_html = format!(
-        r#"<a href="/admin/appearance/editor/{name}" class="btn btn-sm btn-secondary">Edit files</a>"#,
+        r#"<a href="/admin/appearance/editor/{name}" class="btn btn-edit">Edit</a>"#,
         name = name_esc,
     );
 

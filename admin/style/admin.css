@@ -139,8 +139,12 @@ tr.muted td { opacity: .55; }
 .btn-primary:focus { box-shadow: var(--primary-dark) 0 0 0 1.5px inset, rgba(45,35,66,.3) 0 2px 4px, rgba(45,35,66,.2) 0 5px 10px -3px, var(--primary-dark) 0 -2px 0 inset; }
 .btn-primary:active { box-shadow: var(--primary-dark) 0 2px 5px inset; transform: translateY(1px); }
 .btn-link { background: none; border: none; cursor: pointer; color: var(--primary); font-size: 13px; padding: 0; transition: none; will-change: auto; }
-.btn-danger { color: var(--danger); border-color: var(--border); }
-.btn-danger:hover { background: #fee2e2; border-color: var(--danger); text-decoration: none; }
+.btn-danger { background-image: radial-gradient(100% 100% at 100% 0, #f87171 0, var(--danger) 100%); border: 0; box-shadow: rgba(66,35,35,.4) 0 2px 4px, rgba(66,35,35,.3) 0 7px 13px -3px, rgba(185,28,28,.5) 0 -3px 0 inset; color: #fff; }
+.btn-danger:hover { background-image: radial-gradient(100% 100% at 100% 0, #f87171 0, var(--danger) 100%); box-shadow: rgba(66,35,35,.3) 0 3px 6px, rgba(66,35,35,.2) 0 5px 10px -3px, #b91c1c 0 -2px 0 inset; transform: translateY(-1px); color: #fff; text-decoration: none; }
+.btn-danger:active { box-shadow: #b91c1c 0 2px 5px inset; transform: translateY(1px); }
+.btn-edit { background-image: radial-gradient(100% 100% at 100% 0, #94a3b8 0, #475569 100%); border: 0; box-shadow: rgba(35,45,66,.4) 0 2px 4px, rgba(35,45,66,.3) 0 7px 13px -3px, rgba(51,65,85,.5) 0 -3px 0 inset; color: #fff; }
+.btn-edit:hover { background-image: radial-gradient(100% 100% at 100% 0, #94a3b8 0, #475569 100%); box-shadow: rgba(35,45,66,.3) 0 3px 6px, rgba(35,45,66,.2) 0 5px 10px -3px, #334155 0 -2px 0 inset; transform: translateY(-1px); color: #fff; text-decoration: none; }
+.btn-edit:active { box-shadow: #334155 0 2px 5px inset; transform: translateY(1px); }
 .btn-secondary { background: #e2e8f0; color: var(--text); border-color: var(--border); }
 .btn-secondary:hover { background: #d1d9e6; text-decoration: none; }
 .btn:disabled, .btn[disabled] { opacity: .45; cursor: not-allowed; pointer-events: none; box-shadow: none; transform: none; }
