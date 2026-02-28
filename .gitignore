@@ -27,6 +27,7 @@
 .DS_Store
 Thumbs.db
 *.Zone.Identifier
+*:Zone.Identifier
 
 # Application runtime
 synaptic.pid
