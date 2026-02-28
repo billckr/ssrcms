@@ -134,6 +134,7 @@ pub fn render_editor(user: &UserEdit, flash: Option<&str>, ctx: &crate::PageCont
     // Role field: read-only display for super_admin targets; dropdown for everyone else.
     // Global admin creates/edits site-scoped users using site role values (admin/editor/author/subscriber).
     // "admin" here means site_users.role = 'admin' (site admin), NOT users.role = 'super_admin'.
+    let is_new = user.id.is_none();
     let role_field = if user.is_super_admin_target {
         r#"<div class="form-group">
   <label>Role</label>
@@ -154,13 +155,19 @@ pub fn render_editor(user: &UserEdit, flash: Option<&str>, ctx: &crate::PageCont
                 ("author", "Author"),
             ]
         };
+        // On new-user form: prepend a disabled placeholder; on edit: pre-select current role.
+        let placeholder = if is_new {
+            r#"<option value="" disabled selected>Select Role</option>"#.to_string()
+        } else {
+            String::new()
+        };
         let role_options = roles.iter().map(|(value, label)| {
-            let selected = if *value == user.role { " selected" } else { "" };
+            let selected = if !is_new && *value == user.role { " selected" } else { "" };
             format!(r#"<option value="{value}"{selected}>{label}</option>"#)
         }).collect::<Vec<_>>().join("");
         format!(r#"<div class="form-group">
   <label for="role">Role</label>
-  <select id="role" name="role">{role_options}</select>
+  <select id="role" name="role" required>{placeholder}{role_options}</select>
 </div>"#)
     };
 
@@ -171,81 +178,102 @@ pub fn render_editor(user: &UserEdit, flash: Option<&str>, ctx: &crate::PageCont
     };
 
     // Site-assignment section — only for global admins creating a new user.
-    let site_section = if user.id.is_none() && ctx.is_global_admin {
+    let site_section = if is_new && ctx.is_global_admin {
         let site_opts = user.sites.iter().map(|s| {
             format!(
-                "<option value=\"{}\">{}</option>",
+                r#"<option value="{}">{}</option>"#,
                 crate::html_escape(&s.id),
                 crate::html_escape(&s.hostname),
             )
         }).collect::<Vec<_>>().join("\n");
-        format!(
-            "<div class=\"form-group\">\
-\n  <label>Site Assignment</label>\
-\n  <div style=\"margin-bottom:0.5rem\">\
-\n    <label style=\"margin-right:1.5rem\">\
-\n      <input type=\"radio\" name=\"site_assignment\" value=\"existing\" checked onchange=\"toggleSiteFields()\"> Use existing site\
-\n    </label>\
-\n    <label>\
-\n      <input type=\"radio\" name=\"site_assignment\" value=\"new\" onchange=\"toggleSiteFields()\"> Create new site\
-\n    </label>\
-\n  </div>\
-\n  <div id=\"site-existing\">\
-\n    <select name=\"existing_site_id\" style=\"width:100%\">{site_opts}</select>\
-\n  </div>\
-\n  <div id=\"site-new\" style=\"display:none\">\
-\n    <input type=\"text\" name=\"new_hostname\" placeholder=\"example.com\" style=\"width:100%\">\
-\n    <small>The domain this site will respond to (e.g. client.example.com)</small>\
-\n  </div>\
-\n</div>\
-\n<script>\
-\nfunction toggleSiteFields() {{\
-\n  var val = document.querySelector('input[name=\"site_assignment\"]:checked').value;\
-\n  document.getElementById('site-existing').style.display = val === 'existing' ? '' : 'none';\
-\n  document.getElementById('site-new').style.display = val === 'new' ? '' : 'none';\
-\n}}\
-\n</script>",
+        format!(r#"
+<div class="form-group" style="grid-column:1/-1;margin-top:0.5rem">
+  <label>Site Assignment</label>
+  <div style="display:flex;gap:1.5rem;margin:0.4rem 0 0.75rem;flex-wrap:wrap">
+    <label style="display:flex;align-items:center;gap:0.4rem;cursor:pointer;font-weight:400">
+      <input type="radio" name="site_assignment" value="none" checked onchange="toggleSiteFields()"> None
+    </label>
+    <label style="display:flex;align-items:center;gap:0.4rem;cursor:pointer;font-weight:400">
+      <input type="radio" name="site_assignment" value="existing" onchange="toggleSiteFields()"> Existing site
+    </label>
+    <label style="display:flex;align-items:center;gap:0.4rem;cursor:pointer;font-weight:400">
+      <input type="radio" name="site_assignment" value="new" onchange="toggleSiteFields()"> New site
+    </label>
+  </div>
+  <div id="site-existing" style="display:none">
+    <select name="existing_site_id" style="width:100%;max-width:360px">{site_opts}</select>
+  </div>
+  <div id="site-new" style="display:none">
+    <input type="text" name="new_hostname" placeholder="example.com" style="width:100%;max-width:360px">
+    <small>The domain this site will respond to (e.g. client.example.com)</small>
+  </div>
+</div>
+<script>
+function toggleSiteFields() {{
+  var val = document.querySelector('input[name="site_assignment"]:checked').value;
+  document.getElementById('site-existing').style.display = val === 'existing' ? '' : 'none';
+  document.getElementById('site-new').style.display     = val === 'new'      ? '' : 'none';
+}}
+</script>"#,
             site_opts = site_opts,
         )
     } else {
         String::new()
     };
+
     let content = format!(
-        r#"<form method="POST" action="{action}">
-  <div class="form-group">
-    <label for="username">Username</label>
-    <input type="text" id="username" name="username" value="{username}" required>
+        r#"<style>
+.user-form {{ max-width: 580px; }}
+.user-form-grid {{
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 1.25rem;
+}}
+.user-form-grid .form-group {{ margin-bottom: 1rem; }}
+.user-form-grid .span-2 {{ grid-column: 1 / -1; }}
+@media (max-width: 540px) {{
+  .user-form-grid {{ grid-template-columns: 1fr; }}
+  .user-form-grid .span-2 {{ grid-column: 1; }}
+}}
+</style>
+<div class="user-form">
+<form method="POST" action="{action}">
+  <div class="user-form-grid">
+    <div class="form-group">
+      <label for="username">Username</label>
+      <input type="text" id="username" name="username" value="{username}" required autocomplete="off">
+    </div>
+    <div class="form-group">
+      <label for="display_name">Display Name</label>
+      <input type="text" id="display_name" name="display_name" value="{display_name}" autocomplete="off">
+    </div>
+    <div class="form-group">
+      <label for="email">Email</label>
+      <input type="email" id="email" name="email" value="{email}" required autocomplete="off">
+    </div>
+    <div class="form-group">
+      <label for="password">Password</label>
+      <input type="password" id="password" name="password" autocomplete="new-password">
+      {password_hint}
+    </div>
+    <div class="form-group span-2">
+      {role_field_inner}
+    </div>
+    {site_section}
   </div>
-  <div class="form-group">
-    <label for="display_name">Display Name</label>
-    <input type="text" id="display_name" name="display_name" value="{display_name}">
+  <div style="margin-top:0.5rem;display:flex;gap:0.75rem">
+    <button type="submit" class="btn btn-primary">Save</button>
+    <a href="/admin/users" class="btn btn-secondary">Cancel</a>
   </div>
-  <div class="form-group">
-    <label for="email">Email</label>
-    <input type="email" id="email" name="email" value="{email}" required>
-  </div>
-  <div class="form-group">
-    <label for="password">Password</label>
-    <input type="password" id="password" name="password">
-    {password_hint}
-  </div>
-  {role_field}
-  {site_section}
-  <div class="form-group">
-    <label for="bio">Bio</label>
-    <textarea id="bio" name="bio" rows="3">{bio}</textarea>
-  </div>
-  <button type="submit" class="btn btn-primary">Save</button>
-  <a href="/admin/users" class="btn">Cancel</a>
-</form>"#,
-        action = action,
-        username = crate::html_escape(&user.username),
-        display_name = crate::html_escape(&user.display_name),
-        email = crate::html_escape(&user.email),
-        role_field = role_field,
-        site_section = site_section,
-        bio = crate::html_escape(&user.bio),
-        password_hint = password_hint,
+</form>
+</div>"#,
+        action            = action,
+        username          = crate::html_escape(&user.username),
+        display_name      = crate::html_escape(&user.display_name),
+        email             = crate::html_escape(&user.email),
+        role_field_inner  = role_field,
+        site_section      = site_section,
+        password_hint     = password_hint,
     );
 
     crate::admin_page(title, "/admin/users", flash, &content, ctx)

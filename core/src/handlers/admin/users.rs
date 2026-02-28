@@ -230,6 +230,7 @@ pub async fn save_new(
             if admin.caps.is_global_admin {
                 // Resolve target site: create new or use existing.
                 let site_id = match form.site_assignment.as_deref() {
+                    Some("none") | None => None,
                     Some("new") => {
                         let hostname = form.new_hostname.as_deref().unwrap_or("").trim().to_lowercase();
                         if hostname.is_empty() {
@@ -261,7 +262,7 @@ pub async fn save_new(
                         }
                     }
                     _ => {
-                        // "existing" or unset — use the selected site id.
+                        // "existing" — use the selected site id.
                         form.existing_site_id
                             .as_deref()
                             .and_then(|s| s.parse::<Uuid>().ok())
