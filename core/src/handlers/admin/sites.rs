@@ -35,11 +35,19 @@ pub async fn list(
             vec![]
         });
         for s in &sites {
-            let post_count = crate::models::site::post_count(&state.db, s.id).await.unwrap_or(0);
+            let (admin_email, user_count, subscriber_count, post_count) = tokio::join!(
+                crate::models::site::admin_email(&state.db, s.id),
+                crate::models::site::user_count(&state.db, s.id),
+                crate::models::site::subscriber_count(&state.db, s.id),
+                crate::models::site::post_count(&state.db, s.id),
+            );
             rows.push(SiteRow {
                 id: s.id.to_string(),
                 hostname: s.hostname.clone(),
-                post_count,
+                admin_email: admin_email.unwrap_or(None),
+                user_count: user_count.unwrap_or(0),
+                subscriber_count: subscriber_count.unwrap_or(0),
+                post_count: post_count.unwrap_or(0),
                 is_default: admin.user.default_site_id == Some(s.id),
                 can_manage: true,
             });
@@ -53,7 +61,12 @@ pub async fn list(
                 vec![]
             });
         for (s, site_role) in &site_roles {
-            let post_count = crate::models::site::post_count(&state.db, s.id).await.unwrap_or(0);
+            let (admin_email, user_count, subscriber_count, post_count) = tokio::join!(
+                crate::models::site::admin_email(&state.db, s.id),
+                crate::models::site::user_count(&state.db, s.id),
+                crate::models::site::subscriber_count(&state.db, s.id),
+                crate::models::site::post_count(&state.db, s.id),
+            );
             // can_manage if they own the site or hold an admin role on it.
             // Delete is separately blocked for the default site in the renderer.
             let can_manage = s.owner_user_id == Some(admin.user.id)
@@ -61,7 +74,10 @@ pub async fn list(
             rows.push(SiteRow {
                 id: s.id.to_string(),
                 hostname: s.hostname.clone(),
-                post_count,
+                admin_email: admin_email.unwrap_or(None),
+                user_count: user_count.unwrap_or(0),
+                subscriber_count: subscriber_count.unwrap_or(0),
+                post_count: post_count.unwrap_or(0),
                 is_default: admin.user.default_site_id == Some(s.id),
                 can_manage,
             });

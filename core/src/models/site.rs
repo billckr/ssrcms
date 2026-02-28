@@ -155,3 +155,51 @@ pub async fn post_count(pool: &PgPool, site_id: Uuid) -> Result<i64> {
     .await?;
     Ok(count)
 }
+
+/// Email of the non-super_admin site owner, if one is assigned.
+pub async fn admin_email(pool: &PgPool, site_id: Uuid) -> Result<Option<String>> {
+    let email: Option<String> = sqlx::query_scalar(
+        r#"SELECT u.email
+           FROM sites s
+           JOIN users u ON u.id = s.owner_user_id
+           WHERE s.id = $1
+             AND u.role != 'super_admin'
+             AND u.deleted_at IS NULL"#,
+    )
+    .bind(site_id)
+    .fetch_optional(pool)
+    .await?;
+    Ok(email)
+}
+
+/// Count of non-subscriber users assigned to a site (editors, authors, admins).
+pub async fn user_count(pool: &PgPool, site_id: Uuid) -> Result<i64> {
+    let count: i64 = sqlx::query_scalar(
+        r#"SELECT COUNT(*)
+           FROM site_users su
+           JOIN users u ON u.id = su.user_id
+           WHERE su.site_id = $1
+             AND su.role != 'subscriber'
+             AND u.deleted_at IS NULL"#,
+    )
+    .bind(site_id)
+    .fetch_one(pool)
+    .await?;
+    Ok(count)
+}
+
+/// Count of subscribers assigned to a site.
+pub async fn subscriber_count(pool: &PgPool, site_id: Uuid) -> Result<i64> {
+    let count: i64 = sqlx::query_scalar(
+        r#"SELECT COUNT(*)
+           FROM site_users su
+           JOIN users u ON u.id = su.user_id
+           WHERE su.site_id = $1
+             AND su.role = 'subscriber'
+             AND u.deleted_at IS NULL"#,
+    )
+    .bind(site_id)
+    .fetch_one(pool)
+    .await?;
+    Ok(count)
+}

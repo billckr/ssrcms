@@ -3,6 +3,12 @@
 pub struct SiteRow {
     pub id: String,
     pub hostname: String,
+    /// Email of the site_admin who owns this site, if one is assigned.
+    pub admin_email: Option<String>,
+    /// Count of non-subscriber users (site_admin, editor, author).
+    pub user_count: i64,
+    /// Count of subscribers only.
+    pub subscriber_count: i64,
     pub post_count: i64,
     /// True for the first site created during CLI install — cannot be deleted.
     pub is_default: bool,
@@ -51,6 +57,9 @@ pub fn render_list(
         format!(
             r#"<tr>
               <td>{hostname}{default_badge}</td>
+              <td style="color:var(--muted);font-size:0.875rem">{admin_email}</td>
+              <td>{user_count}</td>
+              <td>{subscriber_count}</td>
               <td>{post_count}</td>
               <td class="actions">
                 <form method="post" action="/admin/sites/switch" style="display:inline">
@@ -62,11 +71,14 @@ pub fn render_list(
                 {manage}
               </td>
             </tr>"#,
-            id = crate::html_escape(&s.id),
-            hostname = crate::html_escape(&s.hostname),
-            default_badge = if s.is_default { r#" <span class="badge" title="Install site — cannot be deleted">default</span>"# } else { "" },
-            post_count = s.post_count,
-            manage = manage_html,
+            id               = crate::html_escape(&s.id),
+            hostname         = crate::html_escape(&s.hostname),
+            default_badge    = if s.is_default { r#" <span class="badge" title="Install site — cannot be deleted">default</span>"# } else { "" },
+            admin_email      = s.admin_email.as_deref().map(|e| crate::html_escape(e)).unwrap_or_else(|| "<em>none</em>".to_string()),
+            user_count       = s.user_count,
+            subscriber_count = s.subscriber_count,
+            post_count       = s.post_count,
+            manage           = manage_html,
         )
     }).collect::<Vec<_>>().join("\n");
 
@@ -78,7 +90,7 @@ pub fn render_list(
 
     let content = format!(
         r#"{new_site_btn}<table class="data-table">
-  <thead><tr><th>Hostname</th><th>Posts</th><th>Actions</th></tr></thead>
+  <thead><tr><th>Hostname</th><th>Admin</th><th>Users</th><th>Subs</th><th>Posts</th><th>Actions</th></tr></thead>
   <tbody>{rows}</tbody>
 </table>"#,
         new_site_btn = new_site_btn,
