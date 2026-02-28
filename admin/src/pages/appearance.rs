@@ -421,15 +421,31 @@ fn render_card(t: &ThemeInfo, ctx: &crate::PageContext, filter: &str) -> String 
     );
 
     let delete_html = if t.can_delete {
-        let confirm_msg = format!("Delete theme &quot;{}&quot;? This cannot be undone.", name_esc);
+        // Site themes use "Remove" language — the user can get a fresh copy from
+        // Global Themes any time. Global/private themes are permanently deleted.
+        let (btn_label, confirm_msg) = if t.source == "site" {
+            (
+                "Remove",
+                format!(
+                    "Remove &quot;{name}&quot; from My Themes?\n\nYour local copy and any edits will be deleted. You can get a fresh copy from Global Themes at any time.",
+                    name = name_esc,
+                ),
+            )
+        } else {
+            (
+                "Delete",
+                format!("Permanently delete theme &quot;{name}&quot;? This cannot be undone.", name = name_esc),
+            )
+        };
         format!(
             r#"<form method="post" action="/admin/appearance/delete" style="display:inline;"
                 data-confirm="{confirm}" onsubmit="return confirm(this.dataset.confirm)">
     <input type="hidden" name="theme" value="{name}">
-    <button type="submit" class="btn btn-danger">Delete</button>
+    <button type="submit" class="btn btn-danger">{label}</button>
 </form>"#,
             confirm = confirm_msg,
             name    = name_esc,
+            label   = btn_label,
         )
     } else {
         String::new()
