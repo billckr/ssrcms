@@ -255,7 +255,7 @@ pub fn render_new(flash: Option<&str>, ctx: &crate::PageContext) -> String {
     let content = r#"<form method="post" action="/admin/sites" class="edit-form">
   <div class="form-group">
     <label for="hostname">Hostname</label>
-    <input type="text" id="hostname" name="hostname" required placeholder="example.com">
+    <input type="text" id="hostname" name="hostname" required placeholder="example.com" autofocus>
     <small>The domain this site will respond to</small>
   </div>
   <div class="form-actions">

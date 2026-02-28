@@ -280,7 +280,7 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
     <div class="editor-main">
       <div class="form-group">
         <label for="title">Title</label>
-        <input type="text" id="title" name="title" value="{title_val}" required class="title-input">
+        <input type="text" id="title" name="title" value="{title_val}" required class="title-input"{autofocus}>
       </div>
       <div class="form-group">
         <label for="slug">Slug</label>
@@ -351,6 +351,7 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
 }})();
 </script>"#,
         action = action,
+        autofocus = if is_new { " autofocus" } else { "" },
         title_val = crate::html_escape(&post.title),
         slug = crate::html_escape(&post.slug),
         content_js = serde_json::to_string(&post.content).unwrap_or_else(|_| "\"\"".into()),

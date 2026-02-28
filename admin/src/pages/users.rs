@@ -241,7 +241,7 @@ function toggleSiteFields() {{
     <div class="user-form-grid">
       <div class="form-group">
         <label for="username">Username</label>
-        <input type="text" id="username" name="username" value="{username}" required autocomplete="off">
+        <input type="text" id="username" name="username" value="{username}" required autocomplete="off"{autofocus}>
       </div>
       <div class="form-group">
         <label for="display_name">Full Name</label>
@@ -308,6 +308,7 @@ function toggleSiteFields() {{
         site_section      = site_section,
         password_hint     = password_hint,
         is_new_js         = if is_new { "true" } else { "false" },
+        autofocus         = if is_new { " autofocus" } else { "" },
     );
 
     crate::admin_page(title, "/admin/users", flash, &content, ctx)
