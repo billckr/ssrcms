@@ -1865,7 +1865,7 @@ pub async fn delete_file(
 }
 
 /// Recursively copy a directory tree from `src` to `dst`.
-fn copy_dir_all(src: &FsPath, dst: &FsPath) -> std::io::Result<()> {
+pub(crate) fn copy_dir_all(src: &FsPath, dst: &FsPath) -> std::io::Result<()> {
     fs::create_dir_all(dst)?;
     for entry in fs::read_dir(src)? {
         let entry = entry?;

@@ -8,8 +8,10 @@ use axum::{
 use serde::Deserialize;
 use uuid::Uuid;
 
+use std::path::Path as FsPath;
 use crate::app_state::AppState;
 use crate::middleware::admin_auth::{AdminUser, SESSION_CURRENT_SITE_KEY};
+use crate::handlers::admin::appearance::copy_dir_all;
 use admin::pages::sites::{SiteRow, SiteSettingsData};
 use tower_sessions::Session;
 
@@ -126,11 +128,10 @@ pub async fn create(
     }
 
     let result = crate::models::site::create_with_defaults(&state.db, &hostname, admin.user.id)
-        .await
-        .map(|_| ());
+        .await;
 
     match result {
-        Ok(_) => {
+        Ok(site) => {
             tracing::info!(
                 user_id = %admin.user.id,
                 user_email = %admin.user.email,
@@ -138,6 +139,23 @@ pub async fn create(
                 hostname = %hostname,
                 "site created",
             );
+
+            // Copy the global default theme into the new site's theme folder so it
+            // appears immediately in the site admin's "My Themes" view.
+            let themes_dir = state.config.themes_dir.clone();
+            let site_id = site.id;
+            tokio::task::spawn_blocking(move || {
+                let src = FsPath::new(&themes_dir).join("global").join("default");
+                let dst = FsPath::new(&themes_dir).join("sites").join(site_id.to_string()).join("default");
+                if src.is_dir() && !dst.exists() {
+                    if let Err(e) = copy_dir_all(&src, &dst) {
+                        tracing::warn!(site_id = %site_id, "failed to seed default theme for new site: {}", e);
+                    } else {
+                        tracing::info!(site_id = %site_id, "seeded default theme for new site");
+                    }
+                }
+            }).await.ok();
+
             if let Err(e) = state.reload_site_cache().await {
                 tracing::warn!("site cache reload failed after create: {:?}", e);
             }
