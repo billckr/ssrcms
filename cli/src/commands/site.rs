@@ -27,6 +27,12 @@ pub enum SiteAction {
         /// Hostname for the new site (e.g. client.example.com)
         #[arg(long)]
         hostname: String,
+        /// Path to the themes/ directory so the default theme can be seeded
+        /// for the new site (e.g. /opt/synaptic-signals/themes).
+        /// If omitted the theme copy is skipped and the site will fall back
+        /// to the shared global default until a copy is made manually.
+        #[arg(long)]
+        themes_dir: Option<String>,
         /// Database URL (overrides DATABASE_URL env var)
         #[arg(long, env = "DATABASE_URL")]
         database_url: Option<String>,
@@ -51,7 +57,7 @@ pub enum SiteAction {
 pub async fn run(action: SiteAction) -> anyhow::Result<()> {
     match action {
         SiteAction::Init { hostname, database_url } => init(hostname, database_url).await,
-        SiteAction::Create { hostname, database_url } => create(hostname, database_url).await,
+        SiteAction::Create { hostname, themes_dir, database_url } => create(hostname, themes_dir, database_url).await,
         SiteAction::List { database_url } => list(database_url).await,
         SiteAction::Delete { id, database_url } => delete(id, database_url).await,
     }
@@ -209,7 +215,7 @@ async fn init(hostname: String, database_url: Option<String>) -> anyhow::Result<
     Ok(())
 }
 
-async fn create(hostname: String, database_url: Option<String>) -> anyhow::Result<()> {
+async fn create(hostname: String, themes_dir: Option<String>, database_url: Option<String>) -> anyhow::Result<()> {
     if let Some(url) = database_url {
         // SAFETY: CLI runs single-threaded during arg parsing; safe to mutate env here.
         #[allow(unused_unsafe)]
@@ -261,11 +267,55 @@ async fn create(hostname: String, database_url: Option<String>) -> anyhow::Resul
         .bind(owner_id)
         .execute(&pool)
         .await
-        .map_err(|e| anyhow::anyhow!("Failed to set default site: {e}"))?;    } else {
+        .map_err(|e| anyhow::anyhow!("Failed to set default site: {e}"))?;
+    } else {
         println!("No protected super_admin found — owner_user_id left NULL.");
         println!("Backfill with: UPDATE sites SET owner_user_id = '<user-uuid>' WHERE id = '{}'", site_id);
     }
 
+    // Copy the global default theme into the new site's own folder so that
+    // edits via the theme editor affect only this site and not the global default.
+    if let Some(ref td) = themes_dir {
+        let src = std::path::Path::new(td).join("global").join("default");
+        let dst = std::path::Path::new(td).join("sites").join(site_id.to_string()).join("default");
+        if src.is_dir() {
+            match copy_dir_all(&src, &dst) {
+                Ok(()) => println!(
+                    "Default theme copied to {}/sites/{}/default/",
+                    td, site_id
+                ),
+                Err(e) => println!(
+                    "Warning: could not copy default theme ({}). \
+                     Copy {}/global/default/ to {}/sites/{}/default/ manually.",
+                    e, td, td, site_id
+                ),
+            }
+        } else {
+            println!(
+                "Note: {}/global/default/ not found. Copy it to {}/sites/{}/default/ manually.",
+                td, td, site_id
+            );
+        }
+    } else {
+        println!(
+            "Note: pass --themes-dir <path> to automatically seed the default theme for this site."
+        );
+    }
+
+    Ok(())
+}
+
+fn copy_dir_all(src: &std::path::Path, dst: &std::path::Path) -> std::io::Result<()> {
+    std::fs::create_dir_all(dst)?;
+    for entry in std::fs::read_dir(src)? {
+        let entry = entry?;
+        let ty = entry.file_type()?;
+        if ty.is_dir() {
+            copy_dir_all(&entry.path(), &dst.join(entry.file_name()))?;
+        } else {
+            std::fs::copy(entry.path(), dst.join(entry.file_name()))?;
+        }
+    }
     Ok(())
 }
 

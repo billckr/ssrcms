@@ -2,5 +2,5 @@
 name        = "claude"
 version     = "1.0.1"
 api_version = "1"
-description = "Claude theme with warm Anthropic orange color scheme."
+description = "Anthropic orange color scheme."
 author      = "Synaptic Signals"

@@ -163,8 +163,12 @@ pub fn render_theme_editor(
     flash: Option<&str>,
     ctx: &crate::PageContext,
     is_readonly: bool,
+    // Which directory this theme lives in: "site", "global", or "private".
+    // Threaded through every form so saves always target the correct copy.
+    source: &str,
 ) -> String {
     let theme_esc = crate::html_escape(theme_name);
+    let source_esc = crate::html_escape(source);
 
     // Build <select> options — files with a backup get a ★ marker
     let options: String = {
@@ -184,12 +188,14 @@ pub fn render_theme_editor(
 
     let file_picker = format!(
         r#"<form method="GET" action="/admin/appearance/editor/{theme}" style="display:contents;">
+  <input type="hidden" name="source" value="{source}">
   <select name="file" class="editor-file-select" onchange="this.form.submit()"
           aria-label="Select theme file" title="Navigate to file">
     {options}
   </select>
 </form>"#,
         theme = theme_esc,
+        source = source_esc,
         options = options,
     );
 
@@ -200,6 +206,7 @@ pub fn render_theme_editor(
 <div id="new-file-form" style="display:none;align-items:center;gap:.5rem;flex-wrap:wrap;margin-top:.5rem;">
   <form method="POST" action="/admin/appearance/editor/{theme}/new-file"
         style="display:contents">
+    <input type="hidden" name="source" value="{source}">
     <input type="text" name="filename" placeholder="e.g. partials/header or custom"
            required style="flex:1;min-width:180px;">
     <select name="ext" style="width:auto;">
@@ -213,6 +220,7 @@ pub fn render_theme_editor(
   </form>
 </div>"#,
             theme = theme_esc,
+            source = source_esc,
         )
     } else {
         String::new()
@@ -249,10 +257,12 @@ pub fn render_theme_editor(
                 r#"<form method="POST" action="/admin/appearance/editor/{theme}/restore" style="display:contents"
      onsubmit="return confirm('Restore the original backup? Your current edits will be overwritten.')">
   <input type="hidden" name="file" value="{file}">
+  <input type="hidden" name="source" value="{source}">
   <button type="submit" class="btn btn-sm btn-secondary">Restore original</button>
 </form>"#,
-                theme = theme_esc,
-                file  = rel_esc,
+                theme  = theme_esc,
+                file   = rel_esc,
+                source = source_esc,
             )
         } else {
             String::new()
@@ -268,11 +278,13 @@ pub fn render_theme_editor(
                 r#"<form method="POST" action="/admin/appearance/editor/{theme}/delete-file" style="display:contents"
      onsubmit="return confirm('Delete {file_js}? This cannot be undone.')">
   <input type="hidden" name="file" value="{file}">
+  <input type="hidden" name="source" value="{source}">
   <button type="submit" class="btn btn-sm btn-danger">Delete file</button>
 </form>"#,
                 theme    = theme_esc,
                 file     = rel_esc,
                 file_js  = rel_esc,
+                source   = source_esc,
             )
         } else {
             String::new()
@@ -306,6 +318,7 @@ pub fn render_theme_editor(
 </div>
 <form method="POST" action="/admin/appearance/editor/{theme}/save" class="editor-form" id="save-form">
   <input type="hidden" name="file" value="{file}">
+  <input type="hidden" name="source" value="{source}">
   <textarea name="content" class="editor-textarea" spellcheck="false" autocorrect="off" autocapitalize="off"{ro}>{content}</textarea>
 </form>
 <div class="editor-actions">
@@ -321,6 +334,7 @@ pub fn render_theme_editor(
             file     = rel_esc,
             theme    = theme_esc,
             content  = content_esc,
+            source   = source_esc,
             restore  = restore_btn.clone(),
             restore2 = restore_btn,
         )
@@ -437,8 +451,9 @@ fn render_card(t: &ThemeInfo, ctx: &crate::PageContext, filter: &str) -> String 
     };
 
     let edit_html = format!(
-        r#"<a href="/admin/appearance/editor/{name}" class="btn btn-edit">Edit</a>"#,
-        name = name_esc,
+        r#"<a href="/admin/appearance/editor/{name}?source={source}" class="btn btn-edit">Edit</a>"#,
+        name   = name_esc,
+        source = crate::html_escape(&t.source),
     );
 
     let delete_html = if t.can_delete {

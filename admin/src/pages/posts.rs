@@ -386,6 +386,7 @@ mod tests {
         crate::PageContext {
             current_site: String::new(),
             user_email: "test@example.com".to_string(),
+            user_role: "admin".to_string(),
             is_global_admin: false,
             visiting_foreign_site: false,
             can_manage_users: false,

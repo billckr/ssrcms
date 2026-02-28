@@ -167,6 +167,34 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
     }
     println!("Default site settings seeded.");
 
+    // Copy the global default theme into the new site's own theme folder.
+    // Without this the site would use themes/global/default/ directly and any
+    // edits made via the theme editor would modify the shared global theme.
+    let theme_src = std::path::Path::new(&install_dir)
+        .join("themes").join("global").join("default");
+    let theme_dst = std::path::Path::new(&install_dir)
+        .join("themes").join("sites").join(site_id.to_string()).join("default");
+    if theme_src.is_dir() {
+        match copy_dir_all(&theme_src, &theme_dst) {
+            Ok(()) => println!(
+                "Default theme copied to themes/sites/{}/default/",
+                site_id
+            ),
+            Err(e) => println!(
+                "Warning: could not copy default theme ({}). \
+                 The site will fall back to the shared global default until \
+                 you copy themes/global/default/ to themes/sites/{}/default/ manually.",
+                e, site_id
+            ),
+        }
+    } else {
+        println!(
+            "Note: themes/global/default/ not found at '{}'. \
+             Copy it to themes/sites/{}/default/ after placing the themes directory.",
+            theme_src.display(), site_id
+        );
+    }
+
     // Link the admin user to their site in site_users so the switcher works.
     if let Some(uid) = admin_id {
         sqlx::query(
@@ -296,6 +324,20 @@ fn validate_password(password: &str) -> Result<(), &'static str> {
     const ALLOWED_SYMBOLS: &[char] = &['!', '@', '#', '$', '%', '&'];
     if !password.chars().any(|c| ALLOWED_SYMBOLS.contains(&c)) {
         return Err("Password must contain at least one symbol: ! @ # $ % &");
+    }
+    Ok(())
+}
+
+fn copy_dir_all(src: &std::path::Path, dst: &std::path::Path) -> std::io::Result<()> {
+    std::fs::create_dir_all(dst)?;
+    for entry in std::fs::read_dir(src)? {
+        let entry = entry?;
+        let ty = entry.file_type()?;
+        if ty.is_dir() {
+            copy_dir_all(&entry.path(), &dst.join(entry.file_name()))?;
+        } else {
+            std::fs::copy(entry.path(), dst.join(entry.file_name()))?;
+        }
     }
     Ok(())
 }

@@ -698,6 +698,7 @@ pub async fn create_theme(
 pub struct NewFileForm {
     pub filename: String,
     pub ext: String,
+    pub source: Option<String>,
 }
 
 pub async fn new_file(
@@ -712,7 +713,8 @@ pub async fn new_file(
     let cs = state.site_hostname(admin.site_id);
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
 
-    let Some(theme_dir) = resolve_theme_dir(&state.config.themes_dir, &theme, admin.site_id, !admin.caps.is_global_admin) else {
+    let source = form.source.as_deref().unwrap_or("site");
+    let Some(theme_dir) = resolve_theme_dir_by_source(&state.config.themes_dir, &theme, Some(source), admin.site_id) else {
         return render_appearance_list(&state, Some("Theme not found."), &ctx, admin.site_id, "my")
             .await.into_response();
     };
@@ -729,7 +731,7 @@ pub async fn new_file(
             }
         }).collect();
         Html(admin::pages::appearance::render_theme_editor(
-            &theme, &editor_files, None, "", false, Some(msg), &ctx, false,
+            &theme, &editor_files, None, "", false, Some(msg), &ctx, false, source,
         )).into_response()
     };
 
@@ -786,8 +788,9 @@ pub async fn new_file(
     }
 
     Redirect::to(&format!(
-        "/admin/appearance/editor/{}?file={}",
+        "/admin/appearance/editor/{}?source={}&file={}",
         url_encode_param(&theme),
+        source,
         url_encode_param(&rel),
     )).into_response()
 }
@@ -880,17 +883,23 @@ pub struct EditorQuery {
     pub saved: Option<String>,
     pub restored: Option<String>,
     pub error: Option<String>,
+    /// Which directory the theme lives in: "site", "global", or "private".
+    /// Set by the Edit button on each theme card; threads through all editor
+    /// operations so saves always target the correct copy of the theme.
+    pub source: Option<String>,
 }
 
 #[derive(Deserialize)]
 pub struct SaveFileForm {
     pub file: String,
     pub content: String,
+    pub source: Option<String>,
 }
 
 #[derive(Deserialize)]
 pub struct RestoreFileForm {
     pub file: String,
+    pub source: Option<String>,
 }
 
 /// Encode a string for use as a URL query-parameter value.
@@ -923,27 +932,40 @@ fn url_encode_param(s: &str) -> String {
 
 /// Find the filesystem path of a named theme (global or site-scoped).
 ///
-/// When `prefer_site` is true (site admins), the site-scoped copy is returned
-/// first so that a copied global theme is editable by its owner. When false
-/// (super admins), the global directory takes priority.
-fn resolve_theme_dir(themes_dir: &str, theme_name: &str, site_id: Option<Uuid>, prefer_site: bool) -> Option<PathBuf> {
+/// Resolve a theme directory using an explicit source hint ("site", "global",
+/// or "private"). Called by every editor handler so writes always land in the
+/// correct copy of the theme rather than whichever copy happens to win in the
+/// generic prefer_site search.
+///
+/// - `"site"` → `themes/sites/<site_id>/<name>/`
+/// - `"global"` → `themes/global/<name>/`
+/// - `"private"` → `themes/private/<name>/`
+/// - `None` or unknown → falls back to site copy first, then global, then private
+fn resolve_theme_dir_by_source(
+    themes_dir: &str,
+    theme_name: &str,
+    source: Option<&str>,
+    site_id: Option<Uuid>,
+) -> Option<PathBuf> {
     if theme_name.is_empty() || theme_name.contains("..") || theme_name.contains('/') || theme_name.contains('\\') {
         return None;
     }
-    let global  = FsPath::new(themes_dir).join("global").join(theme_name);
-    let private = FsPath::new(themes_dir).join("private").join(theme_name);
-    let site    = site_id.map(|id| FsPath::new(themes_dir).join("sites").join(id.to_string()).join(theme_name));
-
-    if prefer_site {
-        if let Some(ref s) = site { if s.is_dir() { return Some(s.clone()); } }
-        if global.is_dir()  { return Some(global); }
-        if private.is_dir() { return Some(private); }
-    } else {
-        if global.is_dir()  { return Some(global); }
-        if private.is_dir() { return Some(private); }
-        if let Some(s) = site { if s.is_dir() { return Some(s); } }
-    }
-    None
+    let dir = match source.unwrap_or("site") {
+        "global" => FsPath::new(themes_dir).join("global").join(theme_name),
+        "private" => FsPath::new(themes_dir).join("private").join(theme_name),
+        _ => {
+            // "site" or fallback — use the site-specific copy if one exists,
+            // then global, then private (super admins may have no site copy yet)
+            if let Some(id) = site_id {
+                let s = FsPath::new(themes_dir).join("sites").join(id.to_string()).join(theme_name);
+                if s.is_dir() { return Some(s); }
+            }
+            let g = FsPath::new(themes_dir).join("global").join(theme_name);
+            if g.is_dir() { return Some(g); }
+            FsPath::new(themes_dir).join("private").join(theme_name)
+        }
+    };
+    if dir.is_dir() { Some(dir) } else { None }
 }
 
 /// Returns true when `path` lives inside the global themes directory.
@@ -1023,7 +1045,8 @@ pub async fn edit_file(
     let cs = state.site_hostname(admin.site_id);
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
 
-    let Some(theme_dir) = resolve_theme_dir(&state.config.themes_dir, &theme, admin.site_id, !admin.caps.is_global_admin) else {
+    let source = q.source.as_deref().unwrap_or("site");
+    let Some(theme_dir) = resolve_theme_dir_by_source(&state.config.themes_dir, &theme, Some(source), admin.site_id) else {
         return render_appearance_list(&state, Some("Theme not found."), &ctx, admin.site_id, "my")
             .await.into_response();
     };
@@ -1122,6 +1145,7 @@ pub async fn edit_file(
         effective_flash.as_deref(),
         &ctx,
         is_readonly,
+        source,
     )).into_response()
 }
 
@@ -1137,18 +1161,19 @@ pub async fn save_file(
     let cs = state.site_hostname(admin.site_id);
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
 
-    let Some(theme_dir) = resolve_theme_dir(&state.config.themes_dir, &theme, admin.site_id, !admin.caps.is_global_admin) else {
+    let source = form.source.as_deref().unwrap_or("site");
+    let Some(theme_dir) = resolve_theme_dir_by_source(&state.config.themes_dir, &theme, Some(source), admin.site_id) else {
         return render_appearance_list(&state, Some("Theme not found."), &ctx, admin.site_id, "my")
             .await.into_response();
     };
 
     if !admin.caps.is_global_admin && (is_in_global_dir(&theme_dir, &state.config.themes_dir) || is_in_private_dir(&theme_dir, &state.config.themes_dir)) {
-        return Redirect::to(&format!("/admin/appearance/editor/{}", url_encode_param(&theme))).into_response();
+        return Redirect::to(&format!("/admin/appearance/editor/{}?source={}", url_encode_param(&theme), source)).into_response();
     }
 
     let redirect_base = format!(
-        "/admin/appearance/editor/{}?file={}",
-        url_encode_param(&theme), url_encode_param(&form.file)
+        "/admin/appearance/editor/{}?source={}&file={}",
+        url_encode_param(&theme), source, url_encode_param(&form.file)
     );
 
     let Some(abs_path) = resolve_file_in_theme(&theme_dir, &form.file) else {
@@ -1187,7 +1212,7 @@ pub async fn save_file(
     if form.file.ends_with(".html") {
         // Invalidate the cached Tera instance for this (theme, site) pair so it is
         // reloaded from disk on the next request — picking up the edit from the
-        // site-specific copy (themes/sites/<id>/<theme>/) if one exists.
+        // correct copy of the theme.
         state.templates.invalidate_theme(&theme, admin.site_id);
     }
 
@@ -1206,18 +1231,19 @@ pub async fn restore_file(
     let cs = state.site_hostname(admin.site_id);
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
 
-    let Some(theme_dir) = resolve_theme_dir(&state.config.themes_dir, &theme, admin.site_id, !admin.caps.is_global_admin) else {
+    let source = form.source.as_deref().unwrap_or("site");
+    let Some(theme_dir) = resolve_theme_dir_by_source(&state.config.themes_dir, &theme, Some(source), admin.site_id) else {
         return render_appearance_list(&state, Some("Theme not found."), &ctx, admin.site_id, "my")
             .await.into_response();
     };
 
     if !admin.caps.is_global_admin && (is_in_global_dir(&theme_dir, &state.config.themes_dir) || is_in_private_dir(&theme_dir, &state.config.themes_dir)) {
-        return Redirect::to(&format!("/admin/appearance/editor/{}", url_encode_param(&theme))).into_response();
+        return Redirect::to(&format!("/admin/appearance/editor/{}?source={}", url_encode_param(&theme), source)).into_response();
     }
 
     let redirect_base = format!(
-        "/admin/appearance/editor/{}?file={}",
-        url_encode_param(&theme), url_encode_param(&form.file)
+        "/admin/appearance/editor/{}?source={}&file={}",
+        url_encode_param(&theme), source, url_encode_param(&form.file)
     );
 
     let Some(abs_path) = resolve_file_in_theme(&theme_dir, &form.file) else {
@@ -1239,12 +1265,7 @@ pub async fn restore_file(
     }
 
     if form.file.ends_with(".html") {
-        let active = state.active_theme_for_site(admin.site_id);
-        if active == theme {
-            if let Err(e) = state.templates.switch_theme(&theme) {
-                tracing::warn!("theme editor: Tera reload after restore failed: {e}");
-            }
-        }
+        state.templates.invalidate_theme(&theme, admin.site_id);
     }
 
     Redirect::to(&format!("{}&restored=1", redirect_base)).into_response()
@@ -1254,6 +1275,7 @@ pub async fn restore_file(
 #[derive(Deserialize)]
 pub struct DeleteFileForm {
     pub file: String,
+    pub source: Option<String>,
 }
 
 pub async fn delete_file(
@@ -1268,7 +1290,8 @@ pub async fn delete_file(
     let cs = state.site_hostname(admin.site_id);
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
 
-    let Some(theme_dir) = resolve_theme_dir(&state.config.themes_dir, &theme, admin.site_id, !admin.caps.is_global_admin) else {
+    let source = form.source.as_deref().unwrap_or("site");
+    let Some(theme_dir) = resolve_theme_dir_by_source(&state.config.themes_dir, &theme, Some(source), admin.site_id) else {
         return render_appearance_list(&state, Some("Theme not found."), &ctx, admin.site_id, "my")
             .await.into_response();
     };
@@ -1287,7 +1310,7 @@ pub async fn delete_file(
         }).collect();
         return Html(admin::pages::appearance::render_theme_editor(
             &theme, &editor_files, Some(&rel), "", false,
-            Some("Required theme templates cannot be deleted."), &ctx, false,
+            Some("Required theme templates cannot be deleted."), &ctx, false, source,
         )).into_response();
     }
 
@@ -1303,7 +1326,7 @@ pub async fn delete_file(
         }).collect();
         return Html(admin::pages::appearance::render_theme_editor(
             &theme, &editor_files, None, "", false,
-            Some("File not found."), &ctx, false,
+            Some("File not found."), &ctx, false, source,
         )).into_response();
     };
 
@@ -1328,12 +1351,12 @@ pub async fn delete_file(
         }).collect();
         return Html(admin::pages::appearance::render_theme_editor(
             &theme, &editor_files, Some(&rel), "", false,
-            Some("Failed to delete file. Please try again."), &ctx, false,
+            Some("Failed to delete file. Please try again."), &ctx, false, source,
         )).into_response();
     }
 
     tracing::info!("theme file deleted: theme={} file={}", theme, rel);
-    Redirect::to(&format!("/admin/appearance/editor/{}", url_encode_param(&theme))).into_response()
+    Redirect::to(&format!("/admin/appearance/editor/{}?source={}", url_encode_param(&theme), source)).into_response()
 }
 
 /// Recursively copy a directory tree from `src` to `dst`.
