@@ -361,7 +361,7 @@ fn render_card(t: &ThemeInfo, ctx: &crate::PageContext, filter: &str) -> String 
 
     // ── Theme card badges ─────────────────────────────────────────────────────
     // All metadata badges live here in the header, right of the version badge.
-    // Keep them together: [version] [Private] [any future badge].
+    // Keep them together: [version] [Private] [site count] [any future badge].
     // Do NOT scatter new badges elsewhere in the card.
     let private_badge = if t.source == "private" {
         r#"<span class="badge badge-private" title="Only visible to you">Private</span>"#
@@ -369,18 +369,28 @@ fn render_card(t: &ThemeInfo, ctx: &crate::PageContext, filter: &str) -> String 
         ""
     };
 
+    let in_use_badge = if ctx.is_global_admin && t.source == "global" && t.in_use_by > 0 {
+        format!(
+            r#"<span class="badge badge-in-use" title="Active on {} site(s) — cannot delete">{}</span>"#,
+            t.in_use_by, t.in_use_by,
+        )
+    } else {
+        String::new()
+    };
+
     let header = format!(
         r#"<div class="theme-card-header">
     <span class="theme-name">{name}</span>
-    <span class="badge">{version}</span>{private_badge}
+    <span class="badge">{version}</span>{private_badge}{in_use_badge}
   </div>
   <p class="theme-description">{desc}</p>
   <p class="theme-author">by {author}</p>"#,
-        name          = name_esc,
-        version       = crate::html_escape(&t.version),
+        name         = name_esc,
+        version      = crate::html_escape(&t.version),
         private_badge = private_badge,
-        desc          = crate::html_escape(&t.description),
-        author        = crate::html_escape(&t.author),
+        in_use_badge  = in_use_badge,
+        desc         = crate::html_escape(&t.description),
+        author       = crate::html_escape(&t.author),
     );
 
     // ── Global library view ───────────────────────────────────────────────────
@@ -415,7 +425,7 @@ fn render_card(t: &ThemeInfo, ctx: &crate::PageContext, filter: &str) -> String 
     let active_class = if t.active { " active" } else { "" };
 
     let activate_html = if t.active {
-        r#"<button class="btn btn-secondary" disabled>Active</button>"#.to_string()
+        String::new()
     } else {
         format!(
             r#"<form method="post" action="/admin/appearance/activate" style="display:inline;">
@@ -462,31 +472,19 @@ fn render_card(t: &ThemeInfo, ctx: &crate::PageContext, filter: &str) -> String 
         String::new()
     };
 
-    let in_use_badge = if ctx.is_global_admin && t.source == "global" && t.in_use_by > 0 {
-        format!(
-            r#" <span class="badge badge-in-use" title="Active on {n} site(s) — cannot delete">used by {n} site{s}</span>"#,
-            n = t.in_use_by,
-            s = if t.in_use_by == 1 { "" } else { "s" },
-        )
-    } else {
-        String::new()
-    };
-
     format!(
         r#"<div class="theme-card{active}">
   {screenshot}
   {header}
-  {in_use_badge}
   <div class="theme-actions">
     {activate}{edit}{delete}
   </div>
 </div>"#,
-        active       = active_class,
-        screenshot   = screenshot_html,
-        header       = header,
-        in_use_badge = in_use_badge,
-        activate     = activate_html,
-        edit         = edit_html,
-        delete       = delete_html,
+        active     = active_class,
+        screenshot = screenshot_html,
+        header     = header,
+        activate   = activate_html,
+        edit       = edit_html,
+        delete     = delete_html,
     )
 }
