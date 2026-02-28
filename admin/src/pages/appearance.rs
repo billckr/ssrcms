@@ -121,8 +121,8 @@ pub fn render_create_theme_form(flash: Option<&str>, ctx: &crate::PageContext) -
     <p class="muted">Used as the folder name. Letters, numbers, hyphens, and underscores only.</p>
   </div>
   <div class="form-group">
-    <label for="description">Description</label>
-    <input type="text" id="description" name="description" maxlength="200" placeholder="A minimal starter theme">
+    <label for="description">Description — 30 chars max</label>
+    <input type="text" id="description" name="description" maxlength="30" placeholder="A minimal starter theme">
   </div>
   <div class="form-group">
     <label for="author">Author</label>
@@ -371,7 +371,7 @@ fn render_card(t: &ThemeInfo, ctx: &crate::PageContext, filter: &str) -> String 
 
     let in_use_badge = if ctx.is_global_admin && t.source == "global" && t.in_use_by > 0 {
         format!(
-            r#"<span class="badge badge-in-use" title="Active on {} site(s) — cannot delete">{}</span>"#,
+            r#"<span class="badge" title="Active on {} site(s) — cannot delete">{}</span>"#,
             t.in_use_by, t.in_use_by,
         )
     } else {
