@@ -122,10 +122,12 @@ pub async fn activate(
         }
     };
 
-    // If a site admin is activating a global theme, copy it to their site dir
-    // first so they get their own editable version. Skip if a site copy already exists.
-    // Private themes are never copied — the super_admin retains exclusive ownership.
-    if !admin.caps.is_global_admin && canonical_theme.starts_with(&canonical_global) {
+    // Copy global or private themes to the site folder before activating so
+    // the theme shows up in "My Themes" for both site_admin and super_admin.
+    // Skip the copy if a site-scoped copy already exists.
+    let is_from_global  = canonical_theme.starts_with(&canonical_global);
+    let is_from_private = admin.caps.is_global_admin && canonical_theme.starts_with(&canonical_private);
+    if is_from_global || is_from_private {
         let site_copy = FsPath::new(themes_dir)
             .join("sites")
             .join(site_id.to_string())
@@ -134,7 +136,7 @@ pub async fn activate(
             let src = canonical_theme.clone();
             let dst = site_copy.clone();
             match tokio::task::spawn_blocking(move || copy_dir_all(&src, &dst)).await {
-                Ok(Ok(())) => tracing::info!("auto-copied global theme '{}' to site {}", form.theme, site_id),
+                Ok(Ok(())) => tracing::info!("auto-copied theme '{}' to site {}", form.theme, site_id),
                 Ok(Err(e)) => {
                     tracing::error!("activate: failed to copy theme '{}' to site dir: {}", form.theme, e);
                     return render_appearance_list(&state, Some("Failed to copy theme to your site. Please try again."), &ctx, admin.site_id, "my").await.into_response();
@@ -1456,13 +1458,15 @@ async fn render_appearance_list(
     }
 
     // Apply filter.
-    // - super_admin: "my" = global+private, "global" = global only, "private" = private only
-    // - site_admin:  "my" = site themes, "global" = global themes (no private ever)
+    // Both super_admin and site_admin: "my" = site-scoped copies only.
+    // Activating from Global/Private auto-copies to the site folder first,
+    // so the activated theme will always appear here.
+    // super_admin extras: "global" = global only, "private" = private only.
     let mut themes: Vec<ThemeInfo> = if ctx.is_global_admin {
         match filter {
             "global"  => themes.into_iter().filter(|t| t.source == "global").collect(),
             "private" => themes.into_iter().filter(|t| t.source == "private").collect(),
-            _ => themes.into_iter().filter(|t| t.source == "global" || t.source == "private").collect(),
+            _ => themes.into_iter().filter(|t| t.source == "site").collect(),
         }
     } else if filter == "global" {
         themes.into_iter().filter(|t| t.source == "global").collect()
