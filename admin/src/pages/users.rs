@@ -244,8 +244,8 @@ function toggleSiteFields() {{
       <input type="text" id="username" name="username" value="{username}" required autocomplete="off">
     </div>
     <div class="form-group">
-      <label for="display_name">Display Name</label>
-      <input type="text" id="display_name" name="display_name" value="{display_name}" autocomplete="off">
+      <label for="display_name">Full Name</label>
+      <input type="text" id="display_name" name="display_name" value="{display_name}" required autocomplete="off">
     </div>
     <div class="form-group">
       <label for="email">Email</label>
