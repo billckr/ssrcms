@@ -404,7 +404,7 @@ legend {
 .theme-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 1.5rem; margin-top: 1rem; }
 .theme-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.25rem 1.5rem; box-shadow: var(--shadow); transition: box-shadow .2s; }
 .theme-card.active { border: 2px solid var(--primary); box-shadow: 0 0 0 3px rgba(79,70,229,.1); }
-.theme-card-header { display: flex; align-items: center; gap: .6rem; margin-bottom: .4rem; }
+.theme-card-header { display: flex; align-items: center; gap: .35rem; margin-bottom: .4rem; }
 .theme-name { font-size: 1.05rem; font-weight: 600; color: var(--text); }
 .theme-description { color: var(--text); margin: .25rem 0 .1rem; }
 .theme-author { color: var(--muted); font-size: .8rem; margin-bottom: 1rem; }
