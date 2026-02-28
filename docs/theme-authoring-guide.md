@@ -78,8 +78,13 @@ Themes are stored under the configured `themes/` folder, organised into three su
 On first server startup, any themes that previously lived in the flat `themes/` root are
 automatically migrated to `themes/global/`.
 
-Within each subdirectory, each theme has its own named folder. The directory name becomes
-the theme's identifier and must match the `name` field in `theme.toml`.
+Within each subdirectory, each theme has its own named folder. The **directory name** is the
+theme's identifier — it is used in URLs, the database, activation keys, and all internal
+references. It must be lowercase and contain only letters, numbers, and hyphens.
+
+The `name` field inside `theme.toml` is a **display label only** — it is shown in theme
+cards and the editor header but has no functional role. It may use any capitalisation or
+spacing you like and does not need to match the folder name.
 
 ```
 themes/global/
@@ -139,7 +144,7 @@ Every theme must have a `theme.toml` file at its root. The manifest identifies t
 
 ```toml
 [theme]
-name        = "your-theme-name"
+name        = "Your Theme Name"
 version     = "1.0.0"
 api_version = "1"
 description = "A short description of your theme."
@@ -150,7 +155,7 @@ author      = "Your Name <you@example.com>"
 
 | Field | Required | Description |
 |-------|----------|-------------|
-| `name` | yes | Must match the directory name exactly. Used as the theme identifier. |
+| `name` | yes | Human-readable display name shown in the admin theme browser. May use any capitalisation and spaces — does **not** need to match the folder name. |
 | `version` | yes | Semantic version string for your theme. |
 | `api_version` | yes | The Plugin API version this theme targets. Use `"1"` for the current API. |
 | `description` | yes | One-line description shown in the admin theme browser. |
@@ -160,10 +165,14 @@ author      = "Your Name <you@example.com>"
 
 You may optionally include a `screenshot.png` at the theme root (alongside `theme.toml`). This image is displayed in the admin Appearance page so users can preview the theme before activating it. Themes without a screenshot show a labelled placeholder instead.
 
+- **Filename:** must be exactly `screenshot.png` — lowercase, this exact name (the server only looks for this specific filename)
+- **Format:** PNG only (no JPG or WebP)
+- **Location:** theme root directory, not inside `templates/` or `static/`
 - Recommended size: **1200×900 px** (4:3 aspect ratio)
-- Format: PNG
 - Content: a representative browser-window screenshot of the theme rendering a typical post or home page
 - The screenshot is included in the theme zip when distributing your theme
+
+> **Linux is case-sensitive.** `Screenshot.PNG`, `screenshot.PNG`, or `SCREENSHOT.png` will not be found. Use `screenshot.png` exactly.
 
 The `api_version` field tells the CMS which context variables, filters, and functions your theme expects. If a future CMS release introduces a breaking change (which requires a major API version bump), the core will continue to serve themes that declare an older `api_version` using a compatibility layer. Always set this to the version you developed against.
 
@@ -1000,23 +1009,25 @@ Actions available on each card (site admin):
 | **Get Theme** | Copies the global theme to your site folder and takes you to My Themes |
 | **In My Themes** (badge) | You already have a copy; no action needed — go to My Themes to activate or edit it |
 
-No editing, activating, or deleting happens from the Global Themes view for site admins. All work on a theme happens after you have your own copy in My Themes.
-
-Super admins see full controls (Activate, Edit, Delete) on Global Themes directly — they own global themes and can edit them without copying.
+No editing, activating, or deleting happens from the Global Themes view. All work on a theme happens after you have your own copy in My Themes. This applies to both site admins and super admins — the Get Theme workflow is the same for everyone.
 
 ### Private Themes view (`?filter=private`) — Super Admin only
 
 Shows themes stored in `themes/private/`. These are the super admin's personal theme library — works in progress, client-specific themes, or any theme you do not want site admins to see or use.
 
-Private themes are completely invisible to site admins. They do not appear in Global Themes and cannot be copied with **Get Theme**. Only a super admin can activate a private theme for any site.
+Private themes are completely invisible to site admins. They do not appear in Global Themes and cannot be copied with **Get Theme**. Only a super admin can get or activate a private theme.
 
-Actions available:
+Actions available on each card:
 
 | Button | What it does |
 |--------|-------------|
-| **Activate** | Activates the private theme for the current site |
-| **Edit** | Opens the in-browser editor |
-| **Delete** | Permanently deletes the private theme (not available for the active theme) |
+| **Edit** | Opens the in-browser editor for the private original in `themes/private/` |
+| **Get Theme** | Copies the private theme to `themes/sites/<id>/` and takes you to My Themes — same workflow as Global Themes |
+| **In My Themes** (badge) | You already have a site copy; go to My Themes to activate or edit it |
+
+Once in My Themes, activate and manage the site copy there (Activate, Edit, Remove) exactly as you would any other theme.
+
+> **Private badge on site copies:** when a theme in My Themes was originally obtained from Private Themes, it displays a **Private** badge as a reminder of its origin. The badge stays visible even after the theme has been copied and activated.
 
 ### Uploading a theme
 
@@ -1241,12 +1252,13 @@ Removing a site theme does not affect the original in `themes/global/` — other
 
 ### Super admin theme management
 
-Super admins are not bound by the site theme workflow:
+Super admins follow the same My Themes / Global Themes / Private Themes workflow as site admins, with the following additional capabilities:
 
-- They see full controls (Activate, Edit, Delete) on all themes in all three views (My Themes, Global Themes, Private Themes).
-- The Create Theme form defaults to **Private** visibility for super admins; select **Public** to create directly in `themes/global/`.
-- They can edit global and private themes directly in the editor without needing a site copy.
-- A global theme cannot be deleted if it is currently active on any site (the card header shows a gray site-count badge `[N]`).
+- **My Themes** — shows only themes in your site's own folder (`themes/sites/<site_id>/`), the same as other site admins. This keeps your working view manageable regardless of how many global or private themes exist.
+- **Global Themes** — shows all themes in `themes/global/`. Each card shows **Get Theme** (to copy to My Themes) or **In My Themes** (if you already have a copy). To edit a global theme directly, navigate to its editor via `/admin/appearance/editor/<name>?source=global` — the editor is fully writable for super admins.
+- **Private Themes** — shows all themes in `themes/private/`. Each card has an **Edit** button that opens the private original directly in the editor, plus the same **Get Theme** / **In My Themes** controls as the Global Themes view. Private originals can be edited without taking a site copy.
+- The **Create Theme** form defaults to **Private** visibility for super admins; select **Public** to create directly in `themes/global/`.
+- A global theme cannot be deleted if it is currently active on any site (the card header shows an amber site-count badge `[N]`).
 
 ### Theme deletion and removal rules
 
@@ -1342,7 +1354,7 @@ Use this checklist before publishing or deploying a theme.
 ### Manifest
 
 - [ ] `theme.toml` is present at the theme root.
-- [ ] `name` in `theme.toml` matches the directory name exactly.
+- [ ] `name` in `theme.toml` is set to the human-readable display label you want shown in the admin UI (any capitalisation or spacing is fine — it does **not** need to match the folder name).
 - [ ] `api_version = "1"` is set.
 - [ ] `version`, `description`, and `author` fields are filled in.
 
@@ -1435,8 +1447,8 @@ Use this checklist before publishing or deploying a theme.
 - [ ] Themes under active development are created as **Private** and moved to **Public** only when ready.
 - [ ] Private themes are not activated on live production sites unless intentionally releasing to that site.
 - [ ] The description field is 30 characters or fewer.
-- [ ] The `name` field in `theme.toml` exactly matches the directory name in `themes/global/`, `themes/private/`, or `themes/sites/<site_id>/`.
+- [ ] The `name` field in `theme.toml` is a descriptive display label (e.g. `"My Client Theme"`). Remember: the **folder name** is the functional identifier used for activation, URLs, and the database — the `name` field is cosmetic only and does not need to match.
 
 ---
 
-*Synaptic Signals Theme Authoring Guide — API v1 — last updated 2026-02-27*
+*Synaptic Signals Theme Authoring Guide — API v1 — last updated 2026-02-28*
