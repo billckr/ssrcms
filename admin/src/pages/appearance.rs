@@ -1,7 +1,12 @@
 use crate::admin_page;
 
 pub struct ThemeInfo {
+    /// Folder name — used as the key for all operations (URLs, forms, DB, screenshots).
+    /// Always matches the on-disk directory name exactly.
     pub name: String,
+    /// Human-readable display name from theme.toml `name` field.
+    /// May differ in capitalisation or spacing from the folder name.
+    pub display_name: String,
     pub version: String,
     pub description: String,
     pub author: String,
@@ -362,17 +367,21 @@ pub fn render_theme_editor(
 }
 
 fn render_card(t: &ThemeInfo, ctx: &crate::PageContext, filter: &str) -> String {
-    let name_esc = crate::html_escape(&t.name);
+    // name_esc  — folder name, used for all functional references (URLs, forms, DB)
+    // label_esc — display name from theme.toml, used only for visible text
+    let name_esc  = crate::html_escape(&t.name);
+    let label_esc = crate::html_escape(&t.display_name);
 
     let screenshot_html = if t.has_screenshot {
         format!(
-            r#"<div class="theme-screenshot"><img src="/admin/theme-screenshot/{name}" alt="{name} preview"></div>"#,
-            name = name_esc,
+            r#"<div class="theme-screenshot"><img src="/admin/theme-screenshot/{name}" alt="{label} preview"></div>"#,
+            name  = name_esc,
+            label = label_esc,
         )
     } else {
         format!(
-            r#"<div class="theme-screenshot theme-screenshot-placeholder"><span>{name}</span></div>"#,
-            name = name_esc,
+            r#"<div class="theme-screenshot theme-screenshot-placeholder"><span>{label}</span></div>"#,
+            label = label_esc,
         )
     };
 
@@ -397,12 +406,12 @@ fn render_card(t: &ThemeInfo, ctx: &crate::PageContext, filter: &str) -> String 
 
     let header = format!(
         r#"<div class="theme-card-header">
-    <span class="theme-name">{name}</span>
+    <span class="theme-name">{label}</span>
     <span class="badge">{version}</span>{private_badge}{in_use_badge}
   </div>
   <p class="theme-description">{desc}</p>
   <p class="theme-author">by {author}</p>"#,
-        name         = name_esc,
+        label        = label_esc,
         version      = crate::html_escape(&t.version),
         private_badge = private_badge,
         in_use_badge  = in_use_badge,

@@ -1526,17 +1526,20 @@ fn scan_theme_dir(dir: &FsPath, active_theme: &str, source: &str, themes: &mut V
         if let Ok(toml_content) = fs::read_to_string(&toml_path) {
             if let Ok(parsed) = toml::from_str::<toml::Table>(&toml_content) {
                 if let Some(theme_section) = parsed.get("theme").and_then(|v| v.as_table()) {
-                    let name = theme_section.get("name").and_then(|v| v.as_str()).unwrap_or(&dir_name).to_string();
+                    // folder name is the key used everywhere (URLs, DB, activations).
+                    // display_name is the human label from theme.toml — may differ in casing.
+                    let display_name = theme_section.get("name").and_then(|v| v.as_str()).unwrap_or(&dir_name).to_string();
                     let version = theme_section.get("version").and_then(|v| v.as_str()).unwrap_or("unknown").to_string();
                     let description = theme_section.get("description").and_then(|v| v.as_str()).unwrap_or("No description").to_string();
                     let author = theme_section.get("author").and_then(|v| v.as_str()).unwrap_or("Unknown").to_string();
                     let has_screenshot = path.join("screenshot.png").exists();
                     themes.push(ThemeInfo {
-                        name: name.clone(),
+                        name: dir_name.clone(),
+                        display_name,
                         version,
                         description,
                         author,
-                        active: name == active_theme,
+                        active: dir_name == active_theme,
                         has_screenshot,
                         source: source.to_string(),
                         can_delete: false,         // computed after scanning in render_appearance_list

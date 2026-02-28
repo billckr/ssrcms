@@ -1,6 +1,6 @@
 [theme]
-name        = "default"
+name        = "Default"
 version     = "1.0.0"
 api_version = "1"
-description = "Clean but not without style."
+description = "Default Theme. Generic but not without style."
 author      = "Synaptic Signals"
