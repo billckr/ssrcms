@@ -91,6 +91,11 @@ impl TemplateEngine {
         if global_candidate.is_dir() {
             return Some(global_candidate);
         }
+        // Check private (super_admin-only themes).
+        let private_candidate = self.themes_root.join("private").join(name);
+        if private_candidate.is_dir() {
+            return Some(private_candidate);
+        }
         // Last resort: any site copy (single-site installs without a site_id).
         let sites_dir = self.themes_root.join("sites");
         if let Ok(entries) = std::fs::read_dir(&sites_dir) {

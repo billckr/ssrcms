@@ -73,17 +73,21 @@ pub async fn activate(
         return render_appearance_list(&state, Some("Invalid theme name."), &ctx, admin.site_id, "my").await.into_response();
     }
 
-    let global_dir = FsPath::new(themes_dir).join("global");
-    let site_dir = admin.site_id.map(|id| FsPath::new(themes_dir).join("sites").join(id.to_string()));
+    let global_dir  = FsPath::new(themes_dir).join("global");
+    let private_dir = FsPath::new(themes_dir).join("private");
+    let site_dir    = admin.site_id.map(|id| FsPath::new(themes_dir).join("sites").join(id.to_string()));
 
     // Resolve which directory the theme lives in.
     let theme_path = if global_dir.join(&form.theme).is_dir() {
         global_dir.join(&form.theme)
+    } else if admin.caps.is_global_admin && private_dir.join(&form.theme).is_dir() {
+        // Only super_admin may activate private themes.
+        private_dir.join(&form.theme)
     } else if let Some(ref sd) = site_dir {
         if sd.join(&form.theme).is_dir() {
             sd.join(&form.theme)
         } else {
-            tracing::warn!("theme activation failed: theme '{}' not found in global or site dirs", form.theme);
+            tracing::warn!("theme activation failed: theme '{}' not found", form.theme);
             return render_appearance_list(&state, Some("Theme not found."), &ctx, admin.site_id, "my").await.into_response();
         }
     } else {
@@ -91,17 +95,21 @@ pub async fn activate(
         return render_appearance_list(&state, Some("Theme not found."), &ctx, admin.site_id, "my").await.into_response();
     };
 
-    // Path traversal guard: theme must stay within global/ or sites/<id>/.
+    // Path traversal guard: theme must live within global/, private/, or sites/<id>/.
     let canonical_theme = match theme_path.canonicalize() {
         Ok(p) => p,
         Err(_) => return render_appearance_list(&state, Some("Theme not found."), &ctx, admin.site_id, "my").await.into_response(),
     };
-    let canonical_global = global_dir.canonicalize().unwrap_or_default();
+    let canonical_global  = global_dir.canonicalize().unwrap_or_default();
+    let canonical_private = private_dir.canonicalize().unwrap_or_default();
     let canonical_site = site_dir
         .as_ref()
         .and_then(|sd| sd.canonicalize().ok())
         .unwrap_or_default();
-    if !canonical_theme.starts_with(&canonical_global) && !canonical_theme.starts_with(&canonical_site) {
+    let in_allowed_dir = canonical_theme.starts_with(&canonical_global)
+        || (admin.caps.is_global_admin && canonical_theme.starts_with(&canonical_private))
+        || canonical_theme.starts_with(&canonical_site);
+    if !in_allowed_dir {
         tracing::warn!("activate path traversal attempt: theme_name={:?}", form.theme);
         return render_appearance_list(&state, Some("Theme not found."), &ctx, admin.site_id, "my").await.into_response();
     }
@@ -116,6 +124,7 @@ pub async fn activate(
 
     // If a site admin is activating a global theme, copy it to their site dir
     // first so they get their own editable version. Skip if a site copy already exists.
+    // Private themes are never copied — the super_admin retains exclusive ownership.
     if !admin.caps.is_global_admin && canonical_theme.starts_with(&canonical_global) {
         let site_copy = FsPath::new(themes_dir)
             .join("sites")
@@ -190,16 +199,19 @@ pub async fn delete(
     }
 
     let themes_dir = &state.config.themes_dir;
-    let global_path = FsPath::new(themes_dir).join("global").join(&form.theme);
-    let site_path = admin.site_id
+    let global_path  = FsPath::new(themes_dir).join("global").join(&form.theme);
+    let private_path = FsPath::new(themes_dir).join("private").join(&form.theme);
+    let site_path    = admin.site_id
         .map(|id| FsPath::new(themes_dir).join("sites").join(id.to_string()).join(&form.theme));
 
-    // Determine whether this is a global or site theme.
-    let (theme_path, is_global) = if global_path.is_dir() {
-        (global_path, true)
+    // Determine where the theme lives: "global", "private", or "site".
+    let (theme_path, theme_source) = if global_path.is_dir() {
+        (global_path, "global")
+    } else if private_path.is_dir() {
+        (private_path, "private")
     } else if let Some(ref sp) = site_path {
         if sp.is_dir() {
-            (sp.clone(), false)
+            (sp.clone(), "site")
         } else {
             err!("Theme not found.");
         }
@@ -207,12 +219,12 @@ pub async fn delete(
         err!("Theme not found.");
     };
 
-    // Authorization: only super admins may delete global themes.
-    if is_global && !admin.caps.is_global_admin {
-        err!("Only super admins can delete global themes.");
+    // Authorization: only super_admin may delete global or private themes.
+    if (theme_source == "global" || theme_source == "private") && !admin.caps.is_global_admin {
+        err!("Only super admins can delete this theme.");
     }
 
-    // Active theme guard (server-side, even though UI hides the button).
+    // Active theme guard (server-side).
     let active_for_site: Option<String> = if let Some(sid) = admin.site_id {
         sqlx::query_scalar(
             "SELECT value FROM site_settings WHERE site_id = $1 AND key = 'active_theme'",
@@ -230,7 +242,7 @@ pub async fn delete(
     }
 
     // In-use guard for global themes: block if any site has it active.
-    if is_global {
+    if theme_source == "global" {
         let in_use: i64 = sqlx::query_scalar(
             "SELECT COUNT(*) FROM site_settings WHERE key = 'active_theme' AND value = $1",
         )
@@ -245,16 +257,21 @@ pub async fn delete(
     }
 
     // Path traversal guard: confirm the theme dir is a direct child of the expected parent.
-    let expected_parent = if is_global {
-        match FsPath::new(themes_dir).join("global").canonicalize() {
+    let expected_parent = match theme_source {
+        "global" => match FsPath::new(themes_dir).join("global").canonicalize() {
             Ok(p) => p,
             Err(_) => err!("Theme not found."),
-        }
-    } else {
-        let sid = admin.site_id.unwrap();
-        match FsPath::new(themes_dir).join("sites").join(sid.to_string()).canonicalize() {
+        },
+        "private" => match FsPath::new(themes_dir).join("private").canonicalize() {
             Ok(p) => p,
             Err(_) => err!("Theme not found."),
+        },
+        _ => {
+            let sid = admin.site_id.unwrap();
+            match FsPath::new(themes_dir).join("sites").join(sid.to_string()).canonicalize() {
+                Ok(p) => p,
+                Err(_) => err!("Theme not found."),
+            }
         }
     };
 
@@ -287,14 +304,19 @@ pub async fn screenshot(
     admin: AdminUser,
     Path(theme_name): Path<String>,
 ) -> Response {
-    let themes_dir = FsPath::new(&state.config.themes_dir);
-    let global_dir = themes_dir.join("global");
-    let site_dir = admin.site_id.map(|id| themes_dir.join("sites").join(id.to_string()));
+    let themes_dir  = FsPath::new(&state.config.themes_dir);
+    let global_dir  = themes_dir.join("global");
+    let private_dir = themes_dir.join("private");
+    let site_dir    = admin.site_id.map(|id| themes_dir.join("sites").join(id.to_string()));
 
-    // Try global dir first, then site dir.
-    let dirs_to_search: Vec<PathBuf> = std::iter::once(global_dir)
-        .chain(site_dir.into_iter())
-        .collect();
+    // Try global, then private (super_admin only), then site dir.
+    let mut dirs_to_search: Vec<PathBuf> = vec![global_dir];
+    if admin.caps.is_global_admin {
+        dirs_to_search.push(private_dir);
+    }
+    if let Some(sd) = site_dir {
+        dirs_to_search.push(sd);
+    }
 
     for dir in &dirs_to_search {
         let candidate = dir.join(&theme_name).join("screenshot.png");
@@ -571,6 +593,9 @@ pub struct CreateThemeForm {
     pub name: String,
     pub description: Option<String>,
     pub author: Option<String>,
+    /// `"public"` → `themes/global/`; anything else (including absent) → `themes/private/`.
+    /// Only respected for super_admin; site_admin themes always go to `themes/sites/<id>/`.
+    pub visibility: Option<String>,
 }
 
 pub async fn create_form(
@@ -614,10 +639,17 @@ pub async fn create_theme(
         form_err!("Theme name must not contain slashes, backslashes, '..', or start with a dot.");
     }
 
-    // Determine target directory
+    // Determine target directory.
+    // super_admin: public → themes/global/<name>/, private → themes/private/<name>/
+    // site_admin:  always → themes/sites/<id>/<name>/  (visibility ignored)
     let themes_parent = &state.config.themes_dir;
+    let is_public = form.visibility.as_deref() == Some("public");
     let target_dir: PathBuf = if admin.caps.is_global_admin {
-        FsPath::new(themes_parent).join("global").join(&name)
+        if is_public {
+            FsPath::new(themes_parent).join("global").join(&name)
+        } else {
+            FsPath::new(themes_parent).join("private").join(&name)
+        }
     } else if let Some(sid) = admin.site_id {
         FsPath::new(themes_parent).join("sites").join(sid.to_string()).join(&name)
     } else {
@@ -701,7 +733,7 @@ pub async fn new_file(
         )).into_response()
     };
 
-    if !admin.caps.is_global_admin && is_in_global_dir(&theme_dir, &state.config.themes_dir) {
+    if !admin.caps.is_global_admin && (is_in_global_dir(&theme_dir, &state.config.themes_dir) || is_in_private_dir(&theme_dir, &state.config.themes_dir)) {
         return editor_err("Global themes cannot be modified. Copy this theme to your site first.");
     }
 
@@ -898,14 +930,17 @@ fn resolve_theme_dir(themes_dir: &str, theme_name: &str, site_id: Option<Uuid>, 
     if theme_name.is_empty() || theme_name.contains("..") || theme_name.contains('/') || theme_name.contains('\\') {
         return None;
     }
-    let global = FsPath::new(themes_dir).join("global").join(theme_name);
-    let site = site_id.map(|id| FsPath::new(themes_dir).join("sites").join(id.to_string()).join(theme_name));
+    let global  = FsPath::new(themes_dir).join("global").join(theme_name);
+    let private = FsPath::new(themes_dir).join("private").join(theme_name);
+    let site    = site_id.map(|id| FsPath::new(themes_dir).join("sites").join(id.to_string()).join(theme_name));
 
     if prefer_site {
         if let Some(ref s) = site { if s.is_dir() { return Some(s.clone()); } }
-        if global.is_dir() { return Some(global); }
+        if global.is_dir()  { return Some(global); }
+        if private.is_dir() { return Some(private); }
     } else {
-        if global.is_dir() { return Some(global); }
+        if global.is_dir()  { return Some(global); }
+        if private.is_dir() { return Some(private); }
         if let Some(s) = site { if s.is_dir() { return Some(s); } }
     }
     None
@@ -916,6 +951,15 @@ fn is_in_global_dir(path: &FsPath, themes_dir: &str) -> bool {
     let global_dir = FsPath::new(themes_dir).join("global");
     match (path.canonicalize(), global_dir.canonicalize()) {
         (Ok(p), Ok(g)) => p.starts_with(g),
+        _ => false,
+    }
+}
+
+/// Returns true when `path` lives inside the private themes directory.
+fn is_in_private_dir(path: &FsPath, themes_dir: &str) -> bool {
+    let private_dir = FsPath::new(themes_dir).join("private");
+    match (path.canonicalize(), private_dir.canonicalize()) {
+        (Ok(p), Ok(d)) => p.starts_with(d),
         _ => false,
     }
 }
@@ -984,7 +1028,7 @@ pub async fn edit_file(
             .await.into_response();
     };
 
-    let is_readonly = !admin.caps.is_global_admin && is_in_global_dir(&theme_dir, &state.config.themes_dir);
+    let is_readonly = !admin.caps.is_global_admin && (is_in_global_dir(&theme_dir, &state.config.themes_dir) || is_in_private_dir(&theme_dir, &state.config.themes_dir));
 
     let files = walk_theme_files(&theme_dir);
 
@@ -1098,7 +1142,7 @@ pub async fn save_file(
             .await.into_response();
     };
 
-    if !admin.caps.is_global_admin && is_in_global_dir(&theme_dir, &state.config.themes_dir) {
+    if !admin.caps.is_global_admin && (is_in_global_dir(&theme_dir, &state.config.themes_dir) || is_in_private_dir(&theme_dir, &state.config.themes_dir)) {
         return Redirect::to(&format!("/admin/appearance/editor/{}", url_encode_param(&theme))).into_response();
     }
 
@@ -1167,7 +1211,7 @@ pub async fn restore_file(
             .await.into_response();
     };
 
-    if !admin.caps.is_global_admin && is_in_global_dir(&theme_dir, &state.config.themes_dir) {
+    if !admin.caps.is_global_admin && (is_in_global_dir(&theme_dir, &state.config.themes_dir) || is_in_private_dir(&theme_dir, &state.config.themes_dir)) {
         return Redirect::to(&format!("/admin/appearance/editor/{}", url_encode_param(&theme))).into_response();
     }
 
@@ -1338,11 +1382,16 @@ async fn render_appearance_list(
         String::new()
     };
 
-    let global_dir = FsPath::new(themes_dir).join("global");
-    let site_dir = site_id.map(|id| FsPath::new(themes_dir).join("sites").join(id.to_string()));
+    let global_dir  = FsPath::new(themes_dir).join("global");
+    let private_dir = FsPath::new(themes_dir).join("private");
+    let site_dir    = site_id.map(|id| FsPath::new(themes_dir).join("sites").join(id.to_string()));
 
     let mut themes = Vec::new();
     scan_theme_dir(&global_dir, &active_theme_from_db, "global", &mut themes);
+    // Private themes are only loaded for super_admin.
+    if ctx.is_global_admin {
+        scan_theme_dir(&private_dir, &active_theme_from_db, "private", &mut themes);
+    }
     if let Some(ref sd) = site_dir {
         scan_theme_dir(sd, &active_theme_from_db, "site", &mut themes);
     }
@@ -1364,18 +1413,14 @@ async fn render_appearance_list(
     for theme in &mut themes {
         let in_use = usage_counts.get(&theme.name).copied().unwrap_or(0);
         theme.in_use_by = if theme.source == "global" { in_use } else { 0 };
-        theme.can_delete = if theme.source == "global" {
-            // Super admin only; not in use on any site.
-            // in_use == 0 already guarantees it isn't active anywhere, so we
-            // don't need a separate !theme.active check here.
-            ctx.is_global_admin && in_use == 0
-        } else {
-            // Site theme: deletable as long as it isn't the currently active theme.
-            !theme.active
+        theme.can_delete = match theme.source.as_str() {
+            "global" => ctx.is_global_admin && in_use == 0,
+            "private" => ctx.is_global_admin && !theme.active,
+            _ => !theme.active, // site theme
         };
     }
 
-    // For the global filter view, mark which themes the user already has a site copy of.
+    // For the global filter view, mark which themes the site admin already has a copy of.
     if filter == "global" && !ctx.is_global_admin {
         if let Some(sid) = site_id {
             let site_dir = FsPath::new(themes_dir).join("sites").join(sid.to_string());
@@ -1387,15 +1432,18 @@ async fn render_appearance_list(
         }
     }
 
-    // Apply filter. Super admins always see everything (global themes are their domain).
-    // Site admins see their own themes (source=="site") by default, or global themes
-    // when explicitly requesting filter=global.
+    // Apply filter.
+    // - super_admin: "my" = global+private, "global" = global only, "private" = private only
+    // - site_admin:  "my" = site themes, "global" = global themes (no private ever)
     let mut themes: Vec<ThemeInfo> = if ctx.is_global_admin {
-        themes
+        match filter {
+            "global"  => themes.into_iter().filter(|t| t.source == "global").collect(),
+            "private" => themes.into_iter().filter(|t| t.source == "private").collect(),
+            _ => themes.into_iter().filter(|t| t.source == "global" || t.source == "private").collect(),
+        }
     } else if filter == "global" {
         themes.into_iter().filter(|t| t.source == "global").collect()
     } else {
-        // "my" — site themes only
         themes.into_iter().filter(|t| t.source == "site").collect()
     };
 

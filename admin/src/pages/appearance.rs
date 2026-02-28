@@ -7,7 +7,7 @@ pub struct ThemeInfo {
     pub author: String,
     pub active: bool,
     pub has_screenshot: bool,
-    /// Origin of this theme: `"global"` (available to all sites) or `"site"` (site-specific).
+    /// Origin of this theme: `"global"`, `"private"` (super_admin only), or `"site"`.
     pub source: String,
     /// Whether the current user is permitted to delete this theme.
     /// Computed server-side; never shown for active themes.
@@ -28,24 +28,40 @@ pub fn render_with_flash(themes: &[ThemeInfo], flash: Option<&str>, ctx: &crate:
         themes.iter().map(|t| render_card(t, ctx, filter)).collect()
     };
 
-    let sel_my     = if filter != "global" { " selected" } else { "" };
-    let sel_global = if filter == "global"  { " selected" } else { "" };
+    let sel_my      = if filter != "global" && filter != "private" { " selected" } else { "" };
+    let sel_global  = if filter == "global"  { " selected" } else { "" };
+    let sel_private = if filter == "private" { " selected" } else { "" };
 
-    // For super admins the filter is a no-op (they always see all themes), but we
-    // still render the dropdown so the UI is consistent.
     let toolbar = if ctx.can_manage_appearance {
+        // Super admins get a three-option dropdown (My Themes = global+private, Global, Private).
+        // Site admins get the two-option dropdown (My Themes, Global Themes).
+        let filter_options = if ctx.is_global_admin {
+            format!(
+                r#"<option value="my"{sel_my}>My Themes</option>
+      <option value="global"{sel_global}>Global Themes</option>
+      <option value="private"{sel_private}>Private Themes</option>"#,
+                sel_my = sel_my,
+                sel_global = sel_global,
+                sel_private = sel_private,
+            )
+        } else {
+            format!(
+                r#"<option value="my"{sel_my}>My Themes</option>
+      <option value="global"{sel_global}>Global Themes</option>"#,
+                sel_my = sel_my,
+                sel_global = sel_global,
+            )
+        };
         format!(
             r#"<div class="appearance-toolbar">
   <form method="GET" action="/admin/appearance" style="display:contents">
     <select name="filter" class="appearance-filter-select" onchange="this.form.submit()" aria-label="Theme filter">
-      <option value="my"{sel_my}>My Themes</option>
-      <option value="global"{sel_global}>Global Themes</option>
+      {filter_options}
     </select>
   </form>
   <a href="/admin/appearance/create" class="btn btn-primary">+ Create Theme</a>
 </div>"#,
-            sel_my = sel_my,
-            sel_global = sel_global,
+            filter_options = filter_options,
         )
     } else {
         String::new()
@@ -70,7 +86,33 @@ pub fn render_with_flash(themes: &[ThemeInfo], flash: Option<&str>, ctx: &crate:
 }
 
 pub fn render_create_theme_form(flash: Option<&str>, ctx: &crate::PageContext) -> String {
-    let content = r#"<form method="POST" action="/admin/appearance/create" class="form-section" style="max-width:520px;">
+    // Visibility radio is only shown to super_admin.
+    let visibility_section = if ctx.is_global_admin {
+        r#"<div class="form-group">
+    <label>Visibility</label>
+    <div class="radio-group">
+      <label class="radio-label">
+        <input type="radio" name="visibility" value="private" checked>
+        <span>
+          <strong>Private</strong> — only you can see, edit, and assign this theme.
+          It will not appear in any site admin's theme library.
+        </span>
+      </label>
+      <label class="radio-label">
+        <input type="radio" name="visibility" value="public">
+        <span>
+          <strong>Public</strong> — listed in the global theme library.
+          Any site admin can get a copy.
+        </span>
+      </label>
+    </div>
+  </div>"#
+    } else {
+        ""
+    };
+
+    let content = format!(
+        r#"<form method="POST" action="/admin/appearance/create" class="form-section" style="max-width:520px;">
   <div class="form-group">
     <label for="name">Theme name <span class="required">*</span></label>
     <input type="text" id="name" name="name" required maxlength="64"
@@ -86,13 +128,16 @@ pub fn render_create_theme_form(flash: Option<&str>, ctx: &crate::PageContext) -
     <label for="author">Author</label>
     <input type="text" id="author" name="author" maxlength="100" placeholder="Your name">
   </div>
+  {visibility}
   <div class="form-actions">
     <button type="submit" class="btn btn-primary">Create Theme</button>
     <a href="/admin/appearance" class="btn btn-secondary">Cancel</a>
   </div>
-</form>"#;
+</form>"#,
+        visibility = visibility_section,
+    );
 
-    admin_page("Create Theme", "/admin/appearance", flash, content, ctx)
+    admin_page("Create Theme", "/admin/appearance", flash, &content, ctx)
 }
 
 pub fn render(themes: &[ThemeInfo], ctx: &crate::PageContext) -> String {
@@ -400,21 +445,29 @@ fn render_card(t: &ThemeInfo, ctx: &crate::PageContext, filter: &str) -> String 
         String::new()
     };
 
+    // Private badge — shown on private themes so the owner knows they're not public.
+    let private_badge = if t.source == "private" {
+        r#" <span class="badge badge-private" title="Only visible to you">Private</span>"#
+    } else {
+        ""
+    };
+
     format!(
         r#"<div class="theme-card{active}">
   {screenshot}
   {header}
-  {in_use_badge}
+  {private_badge}{in_use_badge}
   <div class="theme-actions">
     {activate}{edit}{delete}
   </div>
 </div>"#,
-        active       = active_class,
-        screenshot   = screenshot_html,
-        header       = header,
-        in_use_badge = in_use_badge,
-        activate     = activate_html,
-        edit         = edit_html,
-        delete       = delete_html,
+        active        = active_class,
+        screenshot    = screenshot_html,
+        header        = header,
+        private_badge = private_badge,
+        in_use_badge  = in_use_badge,
+        activate      = activate_html,
+        edit          = edit_html,
+        delete        = delete_html,
     )
 }
