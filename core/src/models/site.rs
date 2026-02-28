@@ -156,14 +156,13 @@ pub async fn post_count(pool: &PgPool, site_id: Uuid) -> Result<i64> {
     Ok(count)
 }
 
-/// Email of the non-super_admin site owner, if one is assigned.
+/// Email of the site owner (any role), if one is assigned.
 pub async fn admin_email(pool: &PgPool, site_id: Uuid) -> Result<Option<String>> {
     let email: Option<String> = sqlx::query_scalar(
         r#"SELECT u.email
            FROM sites s
            JOIN users u ON u.id = s.owner_user_id
            WHERE s.id = $1
-             AND u.role != 'super_admin'
              AND u.deleted_at IS NULL"#,
     )
     .bind(site_id)
