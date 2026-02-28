@@ -85,10 +85,11 @@ async fn render_post(
     let theme = state.active_theme_for_site(Some(site_id));
     let hook_outputs = state.templates.render_hooks_for_theme(
         &theme,
+        Some(site_id),
         &["head_start", "head_end", "body_start", "body_end", "before_content", "after_content", "footer"],
         &ctx,
     );
     ContextBuilder::add_hook_outputs(&mut ctx, &hook_outputs);
 
-    state.templates.render_for_theme(&theme, "single.html", &ctx)
+    state.templates.render_for_theme(&theme, Some(site_id), "single.html", &ctx)
 }

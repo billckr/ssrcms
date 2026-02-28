@@ -124,12 +124,13 @@ async fn render_home(
     // Pre-render hooks
     let hook_outputs = state.templates.render_hooks_for_theme(
         &theme,
+        Some(site_id),
         &["head_start", "head_end", "body_start", "body_end", "before_content", "after_content", "footer"],
         &ctx,
     );
     ContextBuilder::add_hook_outputs(&mut ctx, &hook_outputs);
 
-    state.templates.render_for_theme(&theme, "index.html", &ctx)
+    state.templates.render_for_theme(&theme, Some(site_id), "index.html", &ctx)
 }
 
 /// Render an error response, using the active theme's 404.html for NotFound errors.
@@ -179,12 +180,13 @@ async fn render_404(state: &AppState, path: &str, site_id: Option<uuid::Uuid>) -
     let theme = state.active_theme_for_site(site_id);
     let hook_outputs = state.templates.render_hooks_for_theme(
         &theme,
+        site_id,
         &["head_start", "head_end", "body_start", "body_end", "before_content", "after_content", "footer"],
         &ctx,
     );
     ContextBuilder::add_hook_outputs(&mut ctx, &hook_outputs);
 
-    state.templates.render_for_theme(&theme, "404.html", &ctx)
+    state.templates.render_for_theme(&theme, site_id, "404.html", &ctx)
 }
 
 // ── Shared helpers ──────────────────────────────────────────────────────────

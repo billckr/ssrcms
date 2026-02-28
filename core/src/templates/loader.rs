@@ -3,6 +3,7 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
+use uuid::Uuid;
 
 use sqlx::PgPool;
 use tera::Tera;
@@ -62,13 +63,35 @@ impl TemplateEngine {
         Ok(engine)
     }
 
-    /// Resolve the filesystem directory for a named theme.
-    /// Searches `themes_root/global/<name>` first, then `themes_root/sites/*/<name>`.
+    /// Resolve the filesystem directory for a named theme, preferring a
+    /// site-specific copy when `site_id` is provided.
+    ///
+    /// Resolution order with site_id:
+    ///   1. `themes_root/sites/<site_id>/<name>/`
+    ///   2. `themes_root/global/<name>/`
+    ///
+    /// Resolution order without site_id (or when site copy does not exist):
+    ///   1. `themes_root/global/<name>/`
+    ///   2. Any `themes_root/sites/*/<name>/`
     pub fn resolve_theme_dir(&self, name: &str) -> Option<PathBuf> {
+        self.resolve_theme_dir_for_site(name, None)
+    }
+
+    /// Resolve the filesystem directory for a named theme for a specific site.
+    pub fn resolve_theme_dir_for_site(&self, name: &str, site_id: Option<Uuid>) -> Option<PathBuf> {
+        // Prefer the site-specific copy when a site_id is given.
+        if let Some(sid) = site_id {
+            let site_candidate = self.themes_root.join("sites").join(sid.to_string()).join(name);
+            if site_candidate.is_dir() {
+                return Some(site_candidate);
+            }
+        }
+        // Fall back to global.
         let global_candidate = self.themes_root.join("global").join(name);
         if global_candidate.is_dir() {
             return Some(global_candidate);
         }
+        // Last resort: any site copy (single-site installs without a site_id).
         let sites_dir = self.themes_root.join("sites");
         if let Ok(entries) = std::fs::read_dir(&sites_dir) {
             for entry in entries.flatten() {
@@ -81,12 +104,28 @@ impl TemplateEngine {
         None
     }
 
+    /// Canonical cache key for a (theme_name, site_id) pair: the resolved
+    /// absolute path of the theme directory. This means two sites with a
+    /// theme of the same name but different on-disk copies get separate Tera
+    /// instances.
+    fn theme_cache_key(&self, name: &str, site_id: Option<Uuid>) -> Option<String> {
+        self.resolve_theme_dir_for_site(name, site_id)
+            .and_then(|p| p.canonicalize().ok())
+            .map(|p| p.to_string_lossy().to_string())
+    }
+
     /// Load (or reload) a theme into the engine map.
     ///
-    /// Safe to call for an already-loaded theme (reloads it in place).
-    fn load_theme(&self, theme_name: &str) -> anyhow::Result<()> {
-        let theme_dir = self.resolve_theme_dir(theme_name)
+    /// The map key is the canonical path of the theme directory so that two
+    /// sites with the same theme name but different on-disk copies are kept
+    /// separate.
+    fn load_theme_for_site(&self, theme_name: &str, site_id: Option<Uuid>) -> anyhow::Result<()> {
+        let theme_dir = self.resolve_theme_dir_for_site(theme_name, site_id)
             .ok_or_else(|| anyhow::anyhow!("Theme '{}' not found", theme_name))?;
+        let cache_key = theme_dir.canonicalize()
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_else(|_| theme_dir.to_string_lossy().to_string());
+
         let theme_path = theme_dir.join("templates");
         let glob = format!("{}/**/*.html", theme_path.display());
 
@@ -97,26 +136,47 @@ impl TemplateEngine {
 
         // Re-add plugin templates.
         let plugin_templates = self.plugin_templates.read().unwrap();
-        for (name, source) in plugin_templates.iter() {
-            if let Err(e) = tera.add_raw_template(name, source) {
-                tracing::warn!("load_theme: could not add plugin template '{}': {}", name, e);
+        for (tname, source) in plugin_templates.iter() {
+            if let Err(e) = tera.add_raw_template(tname, source) {
+                tracing::warn!("load_theme: could not add plugin template '{}': {}", tname, e);
             }
         }
         drop(plugin_templates);
 
         self.register_on_tera(&mut tera);
 
-        self.engines.write().unwrap().insert(theme_name.to_string(), tera);
-        info!("loaded theme '{}'", theme_name);
+        self.engines.write().unwrap().insert(cache_key.clone(), tera);
+        info!("loaded theme '{}' from {}", theme_name, cache_key);
         Ok(())
+    }
+
+    /// Load (or reload) a theme without site context (legacy / global path).
+    fn load_theme(&self, theme_name: &str) -> anyhow::Result<()> {
+        self.load_theme_for_site(theme_name, None)
+    }
+
+    /// Ensure a theme is loaded for a given site, loading lazily if needed.
+    fn ensure_theme_loaded_for_site(&self, theme_name: &str, site_id: Option<Uuid>) {
+        if let Some(key) = self.theme_cache_key(theme_name, site_id) {
+            if !self.engines.read().unwrap().contains_key(&key) {
+                if let Err(e) = self.load_theme_for_site(theme_name, site_id) {
+                    tracing::warn!("ensure_theme_loaded: could not load '{}': {}", theme_name, e);
+                }
+            }
+        }
     }
 
     /// Ensure a theme is loaded into the engine map, loading lazily if needed.
     fn ensure_theme_loaded(&self, theme_name: &str) {
-        if !self.engines.read().unwrap().contains_key(theme_name) {
-            if let Err(e) = self.load_theme(theme_name) {
-                tracing::warn!("ensure_theme_loaded: could not load '{}': {}", theme_name, e);
-            }
+        self.ensure_theme_loaded_for_site(theme_name, None);
+    }
+
+    /// Remove a theme's Tera instance from the cache so it is reloaded on
+    /// the next render. Call this after editing theme files on disk.
+    pub fn invalidate_theme(&self, theme_name: &str, site_id: Option<Uuid>) {
+        if let Some(key) = self.theme_cache_key(theme_name, site_id) {
+            self.engines.write().unwrap().remove(&key);
+            tracing::debug!("invalidated theme cache for '{}' (site={:?})", theme_name, site_id);
         }
     }
 
@@ -165,13 +225,19 @@ impl TemplateEngine {
         Ok(())
     }
 
-    /// Render a template using the specified theme. Falls back to `active_theme`
-    /// if the requested theme is not yet loaded.
-    pub fn render_for_theme(&self, theme: &str, template_name: &str, context: &tera::Context) -> Result<String> {
-        self.ensure_theme_loaded(theme);
-        let engines = self.engines.read().unwrap();
+    /// Render a template using the specified theme and site context.
+    ///
+    /// Passing `site_id` ensures the site-specific copy of the theme is used
+    /// when one exists (e.g. `themes/sites/<id>/default/`) in preference to
+    /// the shared global copy (`themes/global/default/`).
+    pub fn render_for_theme(&self, theme: &str, site_id: Option<Uuid>, template_name: &str, context: &tera::Context) -> Result<String> {
+        self.ensure_theme_loaded_for_site(theme, site_id);
+        let key = self.theme_cache_key(theme, site_id);
+        let fallback_key = self.theme_cache_key(theme, None);
         let active = self.active_theme.read().unwrap().clone();
-        let tera = engines.get(theme)
+        let engines = self.engines.read().unwrap();
+        let tera = key.as_deref().and_then(|k| engines.get(k))
+            .or_else(|| fallback_key.as_deref().and_then(|k| engines.get(k)))
             .or_else(|| engines.get(&active))
             .ok_or_else(|| AppError::Internal("No theme engine available".to_string()))?;
         let rendered = tera.render(template_name, context)?;
@@ -182,7 +248,7 @@ impl TemplateEngine {
     /// Render a template using the current `active_theme` (legacy / single-site path).
     pub fn render(&self, template_name: &str, context: &tera::Context) -> Result<String> {
         let theme = self.active_theme.read().unwrap().clone();
-        self.render_for_theme(&theme, template_name, context)
+        self.render_for_theme(&theme, None, template_name, context)
     }
 
     /// Render a template by raw source string (used for plugin-registered routes).
@@ -204,13 +270,19 @@ impl TemplateEngine {
     pub fn render_hooks_for_theme(
         &self,
         theme: &str,
+        site_id: Option<Uuid>,
         hook_names: &[&str],
         context: &tera::Context,
     ) -> HashMap<String, String> {
-        self.ensure_theme_loaded(theme);
-        let engines = self.engines.read().unwrap();
+        self.ensure_theme_loaded_for_site(theme, site_id);
+        let key = self.theme_cache_key(theme, site_id);
+        let fallback_key = self.theme_cache_key(theme, None);
         let active = self.active_theme.read().unwrap().clone();
-        let tera = match engines.get(theme).or_else(|| engines.get(&active)) {
+        let engines = self.engines.read().unwrap();
+        let tera = match key.as_deref().and_then(|k| engines.get(k))
+            .or_else(|| fallback_key.as_deref().and_then(|k| engines.get(k)))
+            .or_else(|| engines.get(&active))
+        {
             Some(t) => t,
             None => return HashMap::new(),
         };
@@ -240,7 +312,7 @@ impl TemplateEngine {
         context: &tera::Context,
     ) -> HashMap<String, String> {
         let theme = self.active_theme.read().unwrap().clone();
-        self.render_hooks_for_theme(&theme, hook_names, context)
+        self.render_hooks_for_theme(&theme, None, hook_names, context)
     }
 
     /// Replace `[[HOOK:__hook_output__<name>]]` sentinels in rendered HTML

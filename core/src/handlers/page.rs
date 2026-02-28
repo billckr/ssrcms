@@ -65,6 +65,7 @@ async fn render_page(
     let theme = state.active_theme_for_site(Some(site_id));
     let hook_outputs = state.templates.render_hooks_for_theme(
         &theme,
+        Some(site_id),
         &["head_start", "head_end", "body_start", "body_end", "before_content", "after_content", "footer"],
         &ctx,
     );
@@ -78,7 +79,7 @@ async fn render_page(
         .map(|t| format!("{}.html", t))
         .unwrap_or_else(|| "page.html".to_string());
 
-    state.templates.render_for_theme(&theme, &template_name, &ctx)
+    state.templates.render_for_theme(&theme, Some(site_id), &template_name, &ctx)
 }
 /// Parse `key=value&key2=value2` query strings into a HashMap.
 /// Percent-decoding is intentionally minimal (+ → space, %XX → char).

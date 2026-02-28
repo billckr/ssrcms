@@ -1711,12 +1711,10 @@ pub async fn save_file(
     }
 
     if form.file.ends_with(".html") {
-        let active = state.active_theme_for_site(admin.site_id);
-        if active == theme {
-            if let Err(e) = state.templates.switch_theme(&theme) {
-                tracing::warn!("theme editor: Tera reload after save failed: {e}");
-            }
-        }
+        // Invalidate the cached Tera instance for this (theme, site) pair so it is
+        // reloaded from disk on the next request — picking up the edit from the
+        // site-specific copy (themes/sites/<id>/<theme>/) if one exists.
+        state.templates.invalidate_theme(&theme, admin.site_id);
     }
 
     Redirect::to(&format!("{}&saved=1", redirect_base)).into_response()
