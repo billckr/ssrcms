@@ -173,6 +173,8 @@ pub async fn activate(
 #[derive(Deserialize)]
 pub struct DeleteForm {
     pub theme: String,
+    /// "site", "global", or "private" — from the hidden field in the card form.
+    pub source: Option<String>,
 }
 
 pub async fn delete(
@@ -206,19 +208,23 @@ pub async fn delete(
     let site_path    = admin.site_id
         .map(|id| FsPath::new(themes_dir).join("sites").join(id.to_string()).join(&form.theme));
 
-    // Determine where the theme lives: "global", "private", or "site".
-    let (theme_path, theme_source) = if global_path.is_dir() {
-        (global_path, "global")
-    } else if private_path.is_dir() {
-        (private_path, "private")
-    } else if let Some(ref sp) = site_path {
-        if sp.is_dir() {
-            (sp.clone(), "site")
-        } else {
-            err!("Theme not found.");
+    // Determine where the theme lives using the explicit source hint from the form.
+    // Falling back to filesystem discovery is a security risk — if source is
+    // "site" but the global copy is found first, we'd delete the wrong directory.
+    let (theme_path, theme_source) = match form.source.as_deref().unwrap_or("site") {
+        "global" => {
+            if global_path.is_dir() { (global_path, "global") } else { err!("Theme not found."); }
         }
-    } else {
-        err!("Theme not found.");
+        "private" => {
+            if private_path.is_dir() { (private_path, "private") } else { err!("Theme not found."); }
+        }
+        _ => {
+            // "site" — only look in the site-scoped folder.
+            match site_path {
+                Some(ref sp) if sp.is_dir() => (sp.clone(), "site"),
+                _ => err!("Theme not found."),
+            }
+        }
     };
 
     // Authorization: only super_admin may delete global or private themes.

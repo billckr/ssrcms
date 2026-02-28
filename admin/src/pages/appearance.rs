@@ -480,10 +480,12 @@ fn render_card(t: &ThemeInfo, ctx: &crate::PageContext, filter: &str) -> String 
             r#"<form method="post" action="/admin/appearance/delete" style="display:inline;"
                 data-confirm="{confirm}" onsubmit="return confirm(this.dataset.confirm)">
     <input type="hidden" name="theme" value="{name}">
+    <input type="hidden" name="source" value="{source}">
     <button type="submit" class="btn btn-danger">{label}</button>
 </form>"#,
             confirm = confirm_msg,
             name    = name_esc,
+            source  = crate::html_escape(&t.source),
             label   = btn_label,
         )
     } else {
