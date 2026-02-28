@@ -407,19 +407,22 @@ fn render_card(t: &ThemeInfo, ctx: &crate::PageContext, filter: &str) -> String 
         author       = crate::html_escape(&t.author),
     );
 
-    // ── Global library view ───────────────────────────────────────────────────
-    // Super admins see full controls everywhere; site admins in the global view
-    // can only "Get Theme" (copy to their site folder). No edit, activate, delete.
-    if filter == "global" && !ctx.is_global_admin {
+    // ── Global / Private library views ───────────────────────────────────────
+    // In these views all users (including super_admin) see "Get Theme" to copy
+    // to their site folder without activating. Only My Themes shows Edit/Activate/Delete.
+    if filter == "global" || filter == "private" {
+        let source_val = crate::html_escape(&t.source);
         let action_html = if t.has_site_copy {
             r#"<span class="badge badge-in-use">In My Themes</span>"#.to_string()
         } else {
             format!(
                 r#"<form method="post" action="/admin/appearance/get-theme" style="display:inline;">
     <input type="hidden" name="theme" value="{name}">
+    <input type="hidden" name="source" value="{source}">
     <button type="submit" class="btn btn-primary">Get Theme</button>
 </form>"#,
-                name = name_esc,
+                name   = name_esc,
+                source = source_val,
             )
         };
 

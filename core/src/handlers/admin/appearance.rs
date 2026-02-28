@@ -802,6 +802,8 @@ pub async fn new_file(
 #[derive(Deserialize)]
 pub struct GetThemeForm {
     pub theme: String,
+    /// "global" or "private" — tells the handler which directory to copy from.
+    pub source: Option<String>,
 }
 
 pub async fn get_theme(
@@ -813,11 +815,6 @@ pub async fn get_theme(
         return (StatusCode::FORBIDDEN, "Forbidden").into_response();
     }
 
-    // Super admins own global themes directly — nothing to copy.
-    if admin.caps.is_global_admin {
-        return Redirect::to("/admin/appearance?filter=my").into_response();
-    }
-
     let name = form.theme.trim().to_string();
     if name.is_empty() || name.contains("..") || name.contains('/') || name.contains('\\') {
         let cs = state.site_hostname(admin.site_id);
@@ -827,11 +824,20 @@ pub async fn get_theme(
     }
 
     let themes_dir = &state.config.themes_dir;
-    let source = FsPath::new(themes_dir).join("global").join(&name);
+
+    // Determine source directory. Only super_admin may get private themes.
+    let from_private = form.source.as_deref() == Some("private") && admin.caps.is_global_admin;
+    let source = if from_private {
+        FsPath::new(themes_dir).join("private").join(&name)
+    } else {
+        FsPath::new(themes_dir).join("global").join(&name)
+    };
+    let return_filter = if from_private { "private" } else { "global" };
+
     if !source.is_dir() {
         let cs = state.site_hostname(admin.site_id);
         let ctx = super::page_ctx_full(&state, &admin, &cs).await;
-        return render_appearance_list(&state, Some("Global theme not found."), &ctx, admin.site_id, "global")
+        return render_appearance_list(&state, Some("Theme not found."), &ctx, admin.site_id, return_filter)
             .await.into_response();
     }
 
@@ -857,21 +863,21 @@ pub async fn get_theme(
     let dest_owned = dest.to_path_buf();
     match tokio::task::spawn_blocking(move || copy_dir_all(&source_owned, &dest_owned)).await {
         Ok(Ok(())) => {
-            tracing::info!("get_theme: copied global theme '{}' to site {}", name, site_id);
+            tracing::info!("get_theme: copied '{}' ({}) to site {}", name, return_filter, site_id);
             Redirect::to("/admin/appearance?filter=my").into_response()
         }
         Ok(Err(e)) => {
             tracing::error!("get_theme: copy failed for '{}': {}", name, e);
             let cs = state.site_hostname(admin.site_id);
             let ctx = super::page_ctx_full(&state, &admin, &cs).await;
-            render_appearance_list(&state, Some("Failed to get theme. Please try again."), &ctx, admin.site_id, "global")
+            render_appearance_list(&state, Some("Failed to get theme. Please try again."), &ctx, admin.site_id, return_filter)
                 .await.into_response()
         }
         Err(e) => {
             tracing::error!("get_theme: task panicked: {:?}", e);
             let cs = state.site_hostname(admin.site_id);
             let ctx = super::page_ctx_full(&state, &admin, &cs).await;
-            render_appearance_list(&state, Some("Failed to get theme. Please try again."), &ctx, admin.site_id, "global")
+            render_appearance_list(&state, Some("Failed to get theme. Please try again."), &ctx, admin.site_id, return_filter)
                 .await.into_response()
         }
     }
@@ -1445,14 +1451,14 @@ async fn render_appearance_list(
         };
     }
 
-    // For the global filter view, mark which themes the site admin already has a copy of.
-    if filter == "global" && !ctx.is_global_admin {
+    // For the global/private filter views, mark which themes already have a
+    // site-scoped copy. Applies to all users so "Get Theme" / "In My Themes"
+    // renders correctly for super_admin and site_admin alike.
+    if filter == "global" || filter == "private" {
         if let Some(sid) = site_id {
             let site_dir = FsPath::new(themes_dir).join("sites").join(sid.to_string());
             for theme in &mut themes {
-                if theme.source == "global" {
-                    theme.has_site_copy = site_dir.join(&theme.name).is_dir();
-                }
+                theme.has_site_copy = site_dir.join(&theme.name).is_dir();
             }
         }
     }
