@@ -132,7 +132,7 @@ tr.muted td { opacity: .55; }
 .badge-unread-pulse { animation: badge-pulse 2s ease-in-out infinite; }
 
 /* Buttons */
-.btn { display: inline-flex; align-items: center; justify-content: center; padding: .4rem .9rem; border-radius: var(--radius); border: 1px solid var(--border); cursor: pointer; font-size: 13px; background: var(--surface); color: var(--text); text-decoration: none; transition: box-shadow .15s, transform .15s; touch-action: manipulation; white-space: nowrap; user-select: none; -webkit-user-select: none; will-change: box-shadow, transform; }
+.btn { display: inline-flex; align-items: center; justify-content: center; padding: .4rem .9rem; border-radius: var(--radius); border: 1px solid var(--border); cursor: pointer; font-size: 13px; line-height: 1; background: var(--surface); color: var(--text); text-decoration: none; transition: box-shadow .15s, transform .15s; touch-action: manipulation; white-space: nowrap; user-select: none; -webkit-user-select: none; will-change: box-shadow, transform; }
 .btn:hover { background: #f8fafc; text-decoration: none; }
 .btn-primary { background-image: radial-gradient(100% 100% at 100% 0, #818cf8 0, var(--primary) 100%); border: 0; box-shadow: rgba(45,35,66,.4) 0 2px 4px, rgba(45,35,66,.3) 0 7px 13px -3px, rgba(67,56,202,.5) 0 -3px 0 inset; color: #fff; }
 .btn-primary:hover { background-image: radial-gradient(100% 100% at 100% 0, #818cf8 0, var(--primary) 100%); box-shadow: rgba(45,35,66,.3) 0 3px 6px, rgba(45,35,66,.2) 0 5px 10px -3px, var(--primary-dark) 0 -2px 0 inset; transform: translateY(-1px); color: #fff; text-decoration: none; }
