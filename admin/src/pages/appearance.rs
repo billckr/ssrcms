@@ -359,17 +359,28 @@ fn render_card(t: &ThemeInfo, ctx: &crate::PageContext, filter: &str) -> String 
         )
     };
 
+    // ── Theme card badges ─────────────────────────────────────────────────────
+    // All metadata badges live here in the header, right of the version badge.
+    // Keep them together: [version] [Private] [any future badge].
+    // Do NOT scatter new badges elsewhere in the card.
+    let private_badge = if t.source == "private" {
+        r#"<span class="badge badge-private" title="Only visible to you">Private</span>"#
+    } else {
+        ""
+    };
+
     let header = format!(
         r#"<div class="theme-card-header">
     <span class="theme-name">{name}</span>
-    <span class="badge">{version}</span>
+    <span class="badge">{version}</span>{private_badge}
   </div>
   <p class="theme-description">{desc}</p>
   <p class="theme-author">by {author}</p>"#,
-        name    = name_esc,
-        version = crate::html_escape(&t.version),
-        desc    = crate::html_escape(&t.description),
-        author  = crate::html_escape(&t.author),
+        name          = name_esc,
+        version       = crate::html_escape(&t.version),
+        private_badge = private_badge,
+        desc          = crate::html_escape(&t.description),
+        author        = crate::html_escape(&t.author),
     );
 
     // ── Global library view ───────────────────────────────────────────────────
@@ -461,29 +472,21 @@ fn render_card(t: &ThemeInfo, ctx: &crate::PageContext, filter: &str) -> String 
         String::new()
     };
 
-    // Private badge — shown on private themes so the owner knows they're not public.
-    let private_badge = if t.source == "private" {
-        r#" <span class="badge badge-private" title="Only visible to you">Private</span>"#
-    } else {
-        ""
-    };
-
     format!(
         r#"<div class="theme-card{active}">
   {screenshot}
   {header}
-  {private_badge}{in_use_badge}
+  {in_use_badge}
   <div class="theme-actions">
     {activate}{edit}{delete}
   </div>
 </div>"#,
-        active        = active_class,
-        screenshot    = screenshot_html,
-        header        = header,
-        private_badge = private_badge,
-        in_use_badge  = in_use_badge,
-        activate      = activate_html,
-        edit          = edit_html,
-        delete        = delete_html,
+        active       = active_class,
+        screenshot   = screenshot_html,
+        header       = header,
+        in_use_badge = in_use_badge,
+        activate     = activate_html,
+        edit         = edit_html,
+        delete       = delete_html,
     )
 }
