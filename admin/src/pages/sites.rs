@@ -73,7 +73,7 @@ pub fn render_list(
             </tr>"#,
             id               = crate::html_escape(&s.id),
             hostname         = crate::html_escape(&s.hostname),
-            default_badge    = if s.is_default { r#" <span class="badge" title="Install site — cannot be deleted">default</span>"# } else { "" },
+            default_badge    = if s.is_default { r#" <span class="badge-visiting" title="Primary domain — cannot be deleted">system domain</span>"# } else { "" },
             admin_email      = s.admin_email.as_deref().map(|e| crate::html_escape(e)).unwrap_or_else(|| "<em>none</em>".to_string()),
             user_count       = s.user_count,
             subscriber_count = s.subscriber_count,
