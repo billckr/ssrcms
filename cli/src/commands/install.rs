@@ -245,6 +245,12 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
         println!("\n   Run './app.sh rebuild' to build and start the app.");
     }
 
+    // ── Write / update .env ────────────────────────────────────────────────
+    // Record INSTALL_DIR so `synaptic-cli dev reset` can clean up filesystem
+    // artefacts (themes/sites/, uploads/) without needing an explicit flag.
+    let env_path = std::path::Path::new(&install_dir).join(".env");
+    write_env_key(&env_path, "INSTALL_DIR", &install_dir);
+
     println!("\nNext steps:");
     println!(
         "  1. Copy the binary and files to {}",
@@ -258,7 +264,8 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
         output_dir.join("synaptic-signals.service").display()
     );
     println!("     Then run: systemctl daemon-reload && systemctl enable --now synaptic-signals");
-    println!("  4. Create {install_dir}/.env with your DATABASE_URL and SECRET_KEY");
+    println!("  4. Ensure {install_dir}/.env contains DATABASE_URL and SECRET_KEY");
+    println!("     (INSTALL_DIR has been written automatically)");
     println!("\nSite will be live at: https://{}", domain);
 
     Ok(())
@@ -350,4 +357,39 @@ fn hash_password(password: &str) -> anyhow::Result<String> {
         .hash_password(password.as_bytes(), &salt)
         .map(|h| h.to_string())
         .map_err(|e| anyhow::anyhow!("Password hashing failed: {e}"))
+}
+
+/// Write (or update) a single `KEY=value` line in a .env file.
+/// Creates the file if it does not exist. If the key is already present its
+/// value is updated in-place; otherwise the line is appended.
+fn write_env_key(path: &std::path::Path, key: &str, value: &str) {
+    let line = format!("{}={}", key, value);
+
+    let existing = std::fs::read_to_string(path).unwrap_or_default();
+    let prefix = format!("{}=", key);
+
+    let updated: String = if existing.lines().any(|l| l.starts_with(&prefix)) {
+        existing.lines()
+            .map(|l| if l.starts_with(&prefix) { line.as_str() } else { l })
+            .collect::<Vec<_>>()
+            .join("\n") + "\n"
+    } else {
+        // Append, ensuring file ends with a newline before the new line.
+        if existing.is_empty() {
+            format!("{line}\n")
+        } else if existing.ends_with('\n') {
+            format!("{existing}{line}\n")
+        } else {
+            format!("{existing}\n{line}\n")
+        }
+    };
+
+    match std::fs::write(path, &updated) {
+        Ok(()) => println!("INSTALL_DIR written to {}", path.display()),
+        Err(e) => println!(
+            "Warning: could not write INSTALL_DIR to {} ({}). \
+             Add 'INSTALL_DIR={}' manually so 'dev reset' can clean up artefacts.",
+            path.display(), e, value
+        ),
+    }
 }
