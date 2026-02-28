@@ -17,6 +17,9 @@ pub struct ThemeInfo {
     /// True when a site copy of this global theme already exists in the site's theme folder.
     /// Only meaningful in the global filter view; always false for site themes.
     pub has_site_copy: bool,
+    /// True when this theme originated from themes/private/ (even if now in a site folder).
+    /// Used to keep the Private badge visible on site copies of private themes.
+    pub is_private_origin: bool,
 }
 
 pub fn render_with_flash(themes: &[ThemeInfo], flash: Option<&str>, ctx: &crate::PageContext, filter: &str) -> String {
@@ -377,8 +380,8 @@ fn render_card(t: &ThemeInfo, ctx: &crate::PageContext, filter: &str) -> String 
     // All metadata badges live here in the header, right of the version badge.
     // Keep them together: [version] [Private] [site count] [any future badge].
     // Do NOT scatter new badges elsewhere in the card.
-    let private_badge = if t.source == "private" {
-        r#"<span class="badge badge-private" title="Only visible to you">Private</span>"#
+    let private_badge = if t.source == "private" || t.is_private_origin {
+        r#"<span class="badge badge-private" title="Originated from a private theme">Private</span>"#
     } else {
         ""
     };
@@ -408,11 +411,12 @@ fn render_card(t: &ThemeInfo, ctx: &crate::PageContext, filter: &str) -> String 
     );
 
     // ── Global / Private library views ───────────────────────────────────────
-    // In these views all users (including super_admin) see "Get Theme" to copy
-    // to their site folder without activating. Only My Themes shows Edit/Activate/Delete.
+    // In these views all users see "Get Theme" to copy to their site folder
+    // without activating. Private tab also shows an Edit button so super_admin
+    // can edit the private original directly without getting a site copy first.
     if filter == "global" || filter == "private" {
         let source_val = crate::html_escape(&t.source);
-        let action_html = if t.has_site_copy {
+        let get_html = if t.has_site_copy {
             r#"<span class="badge badge-in-use">In My Themes</span>"#.to_string()
         } else {
             format!(
@@ -426,15 +430,26 @@ fn render_card(t: &ThemeInfo, ctx: &crate::PageContext, filter: &str) -> String 
             )
         };
 
+        // Private themes: super_admin can edit the private original directly.
+        let edit_html = if filter == "private" {
+            format!(
+                r#"<a href="/admin/appearance/editor/{name}?source=private" class="btn btn-edit">Edit</a>"#,
+                name = name_esc,
+            )
+        } else {
+            String::new()
+        };
+
         return format!(
             r#"<div class="theme-card">
   {screenshot}
   {header}
-  <div class="theme-actions">{action}</div>
+  <div class="theme-actions">{get}{edit}</div>
 </div>"#,
             screenshot = screenshot_html,
             header     = header,
-            action     = action_html,
+            get        = get_html,
+            edit       = edit_html,
         );
     }
 

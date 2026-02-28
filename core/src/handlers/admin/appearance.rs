@@ -1469,6 +1469,17 @@ async fn render_appearance_list(
         }
     }
 
+    // Mark site copies of private themes so the Private badge stays visible
+    // in My Themes even after the theme has been copied out of themes/private/.
+    if filter == "my" || filter.is_empty() {
+        let private_dir = FsPath::new(themes_dir).join("private");
+        for theme in &mut themes {
+            if theme.source == "site" && private_dir.join(&theme.name).is_dir() {
+                theme.is_private_origin = true;
+            }
+        }
+    }
+
     // Apply filter.
     // Both super_admin and site_admin: "my" = site-scoped copies only.
     // Activating from Global/Private auto-copies to the site folder first,
@@ -1528,9 +1539,10 @@ fn scan_theme_dir(dir: &FsPath, active_theme: &str, source: &str, themes: &mut V
                         active: name == active_theme,
                         has_screenshot,
                         source: source.to_string(),
-                        can_delete: false,    // computed after scanning in render_appearance_list
-                        in_use_by: 0,         // computed after scanning in render_appearance_list
-                        has_site_copy: false, // computed below for global filter view
+                        can_delete: false,         // computed after scanning in render_appearance_list
+                        in_use_by: 0,              // computed after scanning in render_appearance_list
+                        has_site_copy: false,      // computed below for global/private filter view
+                        is_private_origin: source == "private", // also set for site copies below
                     });
                 }
             }
