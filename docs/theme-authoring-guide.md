@@ -1,7 +1,7 @@
 # Synaptic Signals — Theme Authoring Guide
 
 > **API version:** 1
-> **Last updated:** 2026-02-27
+> **Last updated:** 2026-02-28
 
 ---
 
@@ -67,17 +67,18 @@ You do not need Rust, JavaScript, a build pipeline, or any server-side programmi
 
 ## 3. Theme Directory Structure
 
-Themes are stored under the configured `themes/` folder, organised into two subdirectories:
+Themes are stored under the configured `themes/` folder, organised into three subdirectories:
 
-| Directory | Purpose | Who can upload |
-|-----------|---------|----------------|
-| `themes/global/` | Available to all sites | Super Admin only |
-| `themes/sites/<site_id>/` | Scoped to one specific site | Site Admin (or Super Admin) |
+| Directory | Purpose | Who can upload/create | Visible to |
+|-----------|---------|----------------------|------------|
+| `themes/global/` | Available to all sites | Super Admin only | All site admins |
+| `themes/sites/<site_id>/` | Scoped to one specific site | Site Admin (or Super Admin) | That site only |
+| `themes/private/` | Super Admin's personal library | Super Admin only | Super Admin only |
 
 On first server startup, any themes that previously lived in the flat `themes/` root are
 automatically migrated to `themes/global/`.
 
-Within either subdirectory, each theme has its own named folder. The directory name becomes
+Within each subdirectory, each theme has its own named folder. The directory name becomes
 the theme's identifier and must match the `name` field in `theme.toml`.
 
 ```
@@ -104,6 +105,18 @@ themes/global/
         main.js
       images/
         logo.svg
+
+themes/private/
+  my-wip-theme/                  ← super admin's personal/unreleased themes
+    theme.toml
+    templates/
+    static/
+
+themes/sites/<site_id>/
+  custom-site-theme/             ← site-specific theme (copied from global or created fresh)
+    theme.toml
+    templates/
+    static/
 ```
 
 **Required files**
@@ -931,15 +944,36 @@ Synaptic Signals does not include a CSS preprocessor, bundler, or minifier. If y
 
 ## 13. Admin Appearance UI
 
-The **Appearance** page (`/admin/appearance`) is the starting point for all theme management. It lists themes in two views toggled by a dropdown in the toolbar.
+The **Appearance** page (`/admin/appearance`) is the starting point for all theme management. It lists themes in views toggled by a dropdown in the toolbar.
 
 ### Toolbar
 
+**Site admin toolbar:**
 ```
 [ My Themes ▾ ]   [ + Create Theme ]
 ```
 
+**Super admin toolbar:**
+```
+[ My Themes ▾ ]   [ + Create Theme ]
+     My Themes
+     Global Themes
+     Private Themes
+```
+
 The dropdown and the Create Theme button both appear only for users with the `can_manage_appearance` permission (site admins and super admins).
+
+### Theme card layout
+
+Each theme card displays:
+
+- **Header row** — theme name on the left; on the right, all metadata badges in a compact cluster:
+  - `[1.0.0]` — version badge (always shown)
+  - `[Private]` — shown for themes in `themes/private/` (super admin only)
+  - `[N]` — the number of sites currently using this theme (super admin only, global themes)
+- **Screenshot or placeholder** — preview image below the header
+- **Description and author line**
+- **Action buttons** — Activate / Edit / Remove (or Delete)
 
 ### My Themes view (default)
 
@@ -947,27 +981,42 @@ Shows only themes stored in your site's own theme folder (`themes/sites/<site_id
 
 Actions available on each card:
 
-| Button | What it does |
-|--------|-------------|
-| **Activate** | Makes this theme live for your site immediately |
-| **Active** (disabled) | Shown on the currently active theme |
-| **Edit files** | Opens the in-browser theme editor for this theme |
-| **Delete** | Permanently deletes the theme (not available for the active theme) |
+| Button | Color | What it does |
+|--------|-------|-------------|
+| **Activate** | Blue (primary) | Makes this theme live for your site immediately |
+| **Edit** | Slate-gray | Opens the in-browser theme editor for this theme |
+| **Remove** | Red | Removes the theme from My Themes (not available for the active theme). Friendly confirmation explains you can re-get it from Global Themes at any time. |
+
+When a theme is active, the Activate button is not shown. Switch to another theme to enable Remove.
 
 ### Global Themes view (`?filter=global`)
 
 Shows themes stored in `themes/global/` — shared themes available to all sites. Think of this as a theme library.
 
-Actions available on each card in this view:
+Actions available on each card (site admin):
 
 | Button | What it does |
 |--------|-------------|
 | **Get Theme** | Copies the global theme to your site folder and takes you to My Themes |
 | **In My Themes** (badge) | You already have a copy; no action needed — go to My Themes to activate or edit it |
 
-No editing, activating, or deleting happens from the Global Themes view. All work on a theme happens after you have your own copy in My Themes.
+No editing, activating, or deleting happens from the Global Themes view for site admins. All work on a theme happens after you have your own copy in My Themes.
 
-Super admins see full controls (Activate, Edit files, Delete) on both views because they own global themes directly.
+Super admins see full controls (Activate, Edit, Delete) on Global Themes directly — they own global themes and can edit them without copying.
+
+### Private Themes view (`?filter=private`) — Super Admin only
+
+Shows themes stored in `themes/private/`. These are the super admin's personal theme library — works in progress, client-specific themes, or any theme you do not want site admins to see or use.
+
+Private themes are completely invisible to site admins. They do not appear in Global Themes and cannot be copied with **Get Theme**. Only a super admin can activate a private theme for any site.
+
+Actions available:
+
+| Button | What it does |
+|--------|-------------|
+| **Activate** | Activates the private theme for the current site |
+| **Edit** | Opens the in-browser editor |
+| **Delete** | Permanently deletes the private theme (not available for the active theme) |
 
 ### Uploading a theme
 
@@ -977,7 +1026,7 @@ A zip upload section appears at the bottom of the Appearance page. Upload a `.zi
 
 ## 14. Creating a Theme in the Admin UI
 
-The **+ Create Theme** button on the Appearance toolbar scaffolds a new theme with all required files so you can start editing immediately — no file uploads or command-line steps required.
+The **+ Create Theme** button on the Appearance toolbar creates a new theme pre-populated with a full copy of the default theme so you can start editing immediately — no file uploads or command-line steps required.
 
 ### Accessing the form
 
@@ -985,28 +1034,32 @@ Click **+ Create Theme** on `/admin/appearance`. The form requires the `can_mana
 
 ### Form fields
 
-| Field | Required | Description |
-|-------|----------|-------------|
+| Field | Required | Notes |
+|-------|----------|-------|
 | **Theme name** | Yes | Becomes the directory name and the `name` in `theme.toml`. Letters, numbers, hyphens, and underscores only. No slashes, backslashes, or leading dots. Maximum 64 characters. |
-| **Description** | No | One-line description shown in the theme card. |
+| **Description** | No | Short description shown in the theme card. Maximum 30 characters. |
 | **Author** | No | Your name, shown in the theme card. |
+| **Visibility** | Super admin only | **Private** (default) — stores in `themes/private/`, invisible to site admins. **Public** — stores in `themes/global/`, visible to all site admins. |
 
-If a theme with the same name already exists, the form re-renders with an error — names must be unique.
+If a theme with the same name already exists in the target directory, the form re-renders with an error.
 
 ### Where the theme is created
 
-| Role | Theme location |
-|------|----------------|
-| Super admin | `themes/global/<name>/` |
-| Site admin | `themes/sites/<site_id>/<name>/` |
+| Role | Visibility selection | Theme location |
+|------|---------------------|----------------|
+| Super admin | Private (default) | `themes/private/<name>/` |
+| Super admin | Public | `themes/global/<name>/` |
+| Site admin | (no visibility choice) | `themes/sites/<site_id>/<name>/` |
 
-### Scaffold files
+> **Private is the default for super admins.** Start with Private while developing the theme. When it is ready for site admins to use, re-create it as Public or move the directory manually to `themes/global/`.
 
-The CMS creates the following files immediately:
+### What gets created
+
+The new theme is a **full copy of `themes/global/default/`** with the `theme.toml` overwritten to use your chosen name, description, and author. This means you start with a complete, working theme including:
 
 ```
 <name>/
-  theme.toml
+  theme.toml             ← updated with your name/description/author
   templates/
     base.html
     index.html
@@ -1015,13 +1068,16 @@ The CMS creates the following files immediately:
     archive.html
     search.html
     404.html
-    contact-page.html      ← ready-to-use contact form template
-    newsletter.html        ← ready-to-use newsletter signup template
+    contact-page.html    ← ready-to-use contact form template
+    newsletter.html      ← ready-to-use newsletter signup template
+    partials/            ← any partials from the default theme
   static/
-    style.css              ← starter stylesheet with commented sections
+    css/
+      style.css          ← full starter stylesheet from the default theme
+    ...
 ```
 
-All seven required templates are included as minimal, working Tera files that extend `base.html`. `contact-page.html` and `newsletter.html` are optional pre-built templates for common page types — they post to the `/form/contact` and `/form/newsletter` endpoints respectively. The starter `style.css` contains commented placeholder sections for you to fill in.
+You get a complete, functional theme right away — not a minimal skeleton. The default theme's CSS, partials, and extra templates are all included. Modify what you need and delete what you do not.
 
 After the theme is created you are redirected directly into the theme editor with the file list open.
 
@@ -1033,7 +1089,7 @@ The in-browser editor at `/admin/appearance/editor/<theme>` lets you view and ed
 
 ### Accessing the editor
 
-Click **Edit files** on any theme card in the **My Themes** view. You can also navigate directly to `/admin/appearance/editor/<theme-name>`.
+Click **Edit** on any theme card in the **My Themes** view. You can also navigate directly to `/admin/appearance/editor/<theme-name>`.
 
 The editor toolbar shows:
 
@@ -1102,9 +1158,9 @@ templates/archive.html
 
 Clicking **Delete file** prompts for confirmation. The corresponding `.bak` backup file (if one exists) is also deleted.
 
-### Read-only mode for global themes
+### Read-only mode for global and private themes (site admins)
 
-When a site admin opens the editor for a theme from `themes/global/`, the editor is **read-only**:
+When a site admin opens the editor for a theme from `themes/global/` or `themes/private/`, the editor is **read-only**:
 
 - A notice banner reads: *"Global theme — read only. This is a shared global theme. Activate it to get your own editable copy."*
 - The `<textarea>` has the `readonly` attribute.
@@ -1112,7 +1168,7 @@ When a site admin opens the editor for a theme from `themes/global/`, the editor
 
 To edit a global theme, go back to Appearance, switch to **Global Themes**, and click **Get Theme** to copy it to your site folder. Then open the copy from **My Themes** to edit it.
 
-Super admins can always edit global themes directly.
+Super admins can always edit global and private themes directly.
 
 ### Critical Tera rules to remember while editing
 
@@ -1128,9 +1184,15 @@ These rules are enforced by the Tera parser — violating them produces a 500 er
 
 ## 16. Multi-site Theme Management
 
-In a multi-site installation, themes are either **global** (shared across all sites, stored in `themes/global/`) or **site-specific** (private to one site, stored in `themes/sites/<site_id>/`).
+In a multi-site installation, themes fall into three categories based on where they are stored.
 
 ### The separation of concerns
+
+| Category | Location | Who can create | Visible to |
+|----------|----------|---------------|------------|
+| Global themes | `themes/global/` | Super admin | All site admins |
+| Private themes | `themes/private/` | Super admin | Super admin only |
+| Site themes | `themes/sites/<site_id>/` | Site admin (or super admin) | That site only |
 
 | Global themes | Site themes |
 |---------------|-------------|
@@ -1138,6 +1200,19 @@ In a multi-site installation, themes are either **global** (shared across all si
 | Visible to all sites | Visible only to the owning site |
 | Cannot be edited by site admins | Fully editable by the owning site admin |
 | Shared — changes affect all sites that use them | Isolated — changes only affect your site |
+
+### Private themes (Super Admin only)
+
+Private themes live in `themes/private/` and form the super admin's personal theme library. They are completely invisible to site admins — they do not appear in Global Themes and cannot be copied with **Get Theme**.
+
+Use cases for private themes:
+- Works in progress not yet ready for site admins
+- Client-specific themes you do not want other site admins to see or accidentally use
+- Experimental forks of global themes
+
+A super admin can activate a private theme for any site directly from the **Private Themes** view. Private themes support the full editor including Save, Restore, New file, and Delete file. They can be deleted when not active.
+
+When you are ready to make a private theme publicly available, move the directory from `themes/private/<name>/` to `themes/global/<name>/` on the server (manual file operation). It will then appear in Global Themes on the next appearance page load.
 
 ### Getting a global theme (site admins)
 
@@ -1158,23 +1233,31 @@ Activation is always done from the **My Themes** view using the **Activate** but
 
 If a site admin somehow triggers an activate on a global theme (e.g. via the activate form directly), the CMS silently copies the global theme to the site folder first, then activates the copy. The site admin always ends up with an editable site-specific copy as the active theme.
 
+### Removing a theme from My Themes (site admins)
+
+The **Remove** button on a My Themes card deletes your site's copy of the theme. A confirmation dialog reminds you that you can re-get it from Global Themes at any time if you change your mind. Removing a theme is only available when the theme is not the active theme for your site.
+
+Removing a site theme does not affect the original in `themes/global/` — other sites' copies are untouched.
+
 ### Super admin theme management
 
 Super admins are not bound by the site theme workflow:
 
-- They see full controls (Activate, Edit files, Delete) on all themes in both views.
-- They create themes in `themes/global/` by default (the Create Theme form targets global for super admins).
-- They can edit global themes directly in the editor without needing a site copy.
-- A global theme cannot be deleted if it is currently active on any site (the admin shows an amber "used by N sites" badge on the theme card).
+- They see full controls (Activate, Edit, Delete) on all themes in all three views (My Themes, Global Themes, Private Themes).
+- The Create Theme form defaults to **Private** visibility for super admins; select **Public** to create directly in `themes/global/`.
+- They can edit global and private themes directly in the editor without needing a site copy.
+- A global theme cannot be deleted if it is currently active on any site (the card header shows a gray site-count badge `[N]`).
 
-### Theme deletion rules
+### Theme deletion and removal rules
 
-| Scenario | Can delete? |
-|----------|-------------|
-| Site theme that is not active | Yes (site admin or super admin) |
-| Site theme that is currently active | No — deactivate first by switching to another theme |
-| Global theme with zero sites using it | Yes (super admin only) |
-| Global theme active on one or more sites | No — shown with "used by N sites" badge |
+| Scenario | Action | Available to |
+|----------|--------|-------------|
+| Site theme that is not active | **Remove** (friendly confirm) | Site admin, super admin |
+| Site theme that is currently active | Cannot remove — switch themes first | — |
+| Global theme with zero sites using it | **Delete** (permanent, confirm) | Super admin only |
+| Global theme active on one or more sites | Cannot delete — badge shows `[N]` count | — |
+| Private theme that is not active | **Delete** (permanent, confirm) | Super admin only |
+| Private theme that is currently active | Cannot delete — deactivate first | — |
 
 ---
 
@@ -1184,7 +1267,7 @@ Super admins are not bound by the site theme workflow:
 
 There are three ways to install a theme:
 
-**Create in the admin (recommended for new themes)** — Click **+ Create Theme** on the Appearance page. The CMS scaffolds all required files and drops you straight into the editor. See Section 14 for details.
+**Create in the admin (recommended for new themes)** — Click **+ Create Theme** on the Appearance page. The CMS copies the full default theme as a starting point and drops you straight into the editor. See Section 14 for details.
 
 **Zip upload** — Go to **Appearance** (`/admin/appearance`), scroll to the Upload Theme section, and upload a `.zip` file containing your theme. The zip may place theme files at the root or inside a single top-level folder — both layouts are accepted. The CMS validates the structure and rejects the upload with an error message if anything is missing. On success the theme appears in the theme list immediately. Uploading a zip whose `theme.toml` names an already-installed theme replaces it in place.
 
@@ -1346,6 +1429,13 @@ Use this checklist before publishing or deploying a theme.
 - [ ] If a 500 appears after editing a child template, verify `{% extends "base.html" %}` is on line 1 with nothing before it.
 - [ ] Comments outside blocks have been removed or moved inside a `{% block %}` tag.
 - [ ] `| safe` is not applied to any field you did not verify is CMS-produced HTML.
+
+### Theme visibility (super admins)
+
+- [ ] Themes under active development are created as **Private** and moved to **Public** only when ready.
+- [ ] Private themes are not activated on live production sites unless intentionally releasing to that site.
+- [ ] The description field is 30 characters or fewer.
+- [ ] The `name` field in `theme.toml` exactly matches the directory name in `themes/global/`, `themes/private/`, or `themes/sites/<site_id>/`.
 
 ---
 
