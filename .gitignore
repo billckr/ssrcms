@@ -36,6 +36,7 @@ logs/
 
 # Local deployment and dev artifacts
 *.sql
+!migrations/*.sql
 Caddyfile
 synaptic-signals.service
 

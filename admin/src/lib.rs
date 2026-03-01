@@ -33,6 +33,8 @@ pub struct PageContext {
     pub can_manage_forms: bool,
     /// Number of unread form submissions across all forms on this site.
     pub unread_forms_count: i64,
+    /// Admin chrome brand label — from app_settings.app_name.
+    pub app_name: String,
 }
 
 /// Wrap a rendered content HTML string in the full admin page shell.
@@ -96,7 +98,7 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
   <div class="sidebar-overlay" onclick="closeSidebar()"></div>
   <div class="admin-wrap">
     <nav class="admin-sidebar">
-      <div class="brand">Synaptic</div>
+      <div class="brand">{app_name}</div>
       <ul>
         {dash}
         {posts}
@@ -147,6 +149,7 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
 </html>"#,
         title = html_escape(title),
         css = ADMIN_CSS,
+        app_name = html_escape(&ctx.app_name),
         dash = nav_link("/admin", "Dashboard"),
         posts = nav_link("/admin/posts", "Posts"),
         pages = nav_link("/admin/pages", "Pages"),

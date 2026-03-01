@@ -14,7 +14,10 @@ fn role_display_name(role: &str) -> String {
 
 /// Build a [`admin::PageContext`] synchronously (unread count defaults to 0).
 /// Prefer `page_ctx_full` in async handlers to include the live unread badge count.
-pub fn page_ctx(admin: &AdminUser, current_site: &str) -> admin::PageContext {
+pub fn page_ctx(state: &AppState, admin: &AdminUser, current_site: &str) -> admin::PageContext {
+    let app_name = state.app_settings.read()
+        .map(|s| s.app_name.clone())
+        .unwrap_or_else(|_| "Synaptic".to_string());
     admin::PageContext {
         current_site: current_site.to_string(),
         user_email: admin.user.email.clone(),
@@ -30,13 +33,14 @@ pub fn page_ctx(admin: &AdminUser, current_site: &str) -> admin::PageContext {
         can_manage_taxonomies: admin.caps.can_manage_taxonomies,
         can_manage_forms: admin.caps.can_manage_forms,
         unread_forms_count: 0,
+        app_name,
     }
 }
 
 /// Build a [`admin::PageContext`] with a live unread form submissions count.
 /// Use this in all standard async admin handlers.
 pub async fn page_ctx_full(state: &AppState, admin: &AdminUser, current_site: &str) -> admin::PageContext {
-    let mut ctx = page_ctx(admin, current_site);
+    let mut ctx = page_ctx(state, admin, current_site);
     if admin.caps.can_manage_forms {
         if let Some(site_id) = admin.site_id {
             ctx.unread_forms_count = crate::models::form_submission::count_unread(&state.db, site_id)

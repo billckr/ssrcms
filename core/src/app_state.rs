@@ -101,6 +101,64 @@ impl SiteSettings {
     }
 }
 
+/// App-wide runtime settings loaded from the app_settings table.
+/// Cached in AppState behind an Arc<RwLock<>>; updated without restart when
+/// saved via /admin/settings.
+#[derive(Debug, Clone)]
+pub struct AppSettings {
+    pub app_name: String,
+    pub timezone: String,
+    pub max_upload_mb: i64,
+}
+
+impl Default for AppSettings {
+    fn default() -> Self {
+        AppSettings {
+            app_name: "Synaptic".to_string(),
+            timezone: "UTC".to_string(),
+            max_upload_mb: 25,
+        }
+    }
+}
+
+impl AppSettings {
+    pub async fn load(pool: &PgPool) -> anyhow::Result<Self> {
+        let rows: Vec<(String, String)> = sqlx::query_as(
+            "SELECT key, value FROM app_settings",
+        )
+        .fetch_all(pool)
+        .await
+        .unwrap_or_default();
+
+        let mut map: HashMap<String, String> = rows.into_iter().collect();
+        Ok(AppSettings {
+            app_name: map.remove("app_name").unwrap_or_else(|| "Synaptic".into()),
+            timezone: map.remove("timezone").unwrap_or_else(|| "UTC".into()),
+            max_upload_mb: map
+                .remove("max_upload_mb")
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(25),
+        })
+    }
+}
+
+/// Upsert a key-value pair in the app_settings table.
+pub async fn set_app_setting(
+    pool: &PgPool,
+    key: &str,
+    value: &str,
+) -> crate::errors::Result<()> {
+    sqlx::query(
+        "INSERT INTO app_settings (key, value) VALUES ($1, $2)
+         ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value",
+    )
+    .bind(key)
+    .bind(value)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
 /// Upsert a key-value pair in the site_settings table for a specific site.
 /// Uses the partial unique index site_settings_site_key_idx for conflict resolution.
 pub async fn set_site_setting(
@@ -150,6 +208,8 @@ pub struct AppState {
     pub metrics_handle: PrometheusHandle,
     /// Optional bearer token required to access GET /metrics.
     pub metrics_token: Option<String>,
+    /// App-wide settings (app_name, timezone, max_upload_mb) — hot-reloadable.
+    pub app_settings: Arc<RwLock<AppSettings>>,
 }
 
 impl AppState {
@@ -197,6 +257,16 @@ impl AppState {
                 }
             }
         }
+    }
+
+    /// Reload app_settings from the database into the in-memory cache.
+    /// Called after saving /admin/settings so changes take effect immediately.
+    pub async fn reload_app_settings(&self) -> anyhow::Result<()> {
+        let fresh = AppSettings::load(&self.db).await?;
+        if let Ok(mut w) = self.app_settings.write() {
+            *w = fresh;
+        }
+        Ok(())
     }
 
     /// Reload the site cache from the database.

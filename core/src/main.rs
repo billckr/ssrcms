@@ -5,7 +5,7 @@ use metrics_exporter_prometheus::PrometheusBuilder;
 use tracing::info;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 
-use synaptic_core::app_state::{AppState, SiteCache, SiteSettings};
+use synaptic_core::app_state::{AppSettings, AppState, SiteCache, SiteSettings};
 use synaptic_core::config::AppConfig;
 use synaptic_core::db;
 use synaptic_core::plugins::manifest::{PluginManifest, RouteRegistration};
@@ -169,6 +169,10 @@ async fn main() -> anyhow::Result<()> {
         Arc::new(RwLock::new(cache))
     };
 
+    // ── App-wide settings (from DB) ───────────────────────────────────────────
+    let app_settings = AppSettings::load(&pool).await.unwrap_or_default();
+    info!("app: {} | tz: {}", app_settings.app_name, app_settings.timezone);
+
     // ── Application state ─────────────────────────────────────────────────────
     let active_theme = Arc::new(std::sync::RwLock::new(startup_theme));
     let state = AppState {
@@ -183,6 +187,7 @@ async fn main() -> anyhow::Result<()> {
         site_cache,
         metrics_handle,
         metrics_token: cfg.metrics_token.clone(),
+        app_settings: Arc::new(std::sync::RwLock::new(app_settings)),
     };
 
     // ── Router ────────────────────────────────────────────────────────────────

@@ -40,8 +40,14 @@ notification address for system emails. Same rationale as SMTP: rarely changes, 
 needed. The `admin_email` key that was seeded in `site_settings` by migration 0006 is
 dead weight — never populated, never read — and can be ignored.
 
-**Status:** Decided. SMTP fields and `admin_email` added to `AppConfig`. Email tab removed
-from `/admin/settings`.
+**Install wizard:** The installer prompts for two separate email addresses:
+- **Admin login email** — stored in `users.email`; used to log in to the admin panel
+- **System notification email** — written as `ADMIN_EMAIL` in `.env`; used as the reply-to
+  address for outbound system emails. Defaults to the login email but can be any address
+  (e.g. `info@acme.com`). Changing it later requires editing `.env` and restarting (no rebuild).
+
+**Status:** Implemented. Migration 0022 live. SMTP fields and `admin_email` added to `AppConfig`.
+Email tab removed from `/admin/settings`. Installer writes `ADMIN_EMAIL` to `.env`.
 
 ---
 
@@ -74,7 +80,10 @@ site's `site_name` (which is public-facing content). These are distinct concepts
 `Arc<RwLock<>>`. Saving via the UI invalidates the cache without a restart — same pattern
 as `active_theme`.
 
-**Status:** Decided. Migration and wiring to be implemented.
+**Status:** Implemented. Migration 0022 (`app_settings` table) applied. `AppSettings` struct
+cached in `AppState` behind `Arc<RwLock<>>`. Hot-reload confirmed working — saving via UI
+updates the sidebar brand label without a restart. `page_ctx()` reads `app_name` from state
+on every request.
 
 ### General Settings Tab — Field Breakdown
 
@@ -91,8 +100,8 @@ publishing, and form submission records. Running different timezones per site on
 server is not supported — one installation, one timezone, set by the agency.
 
 **Date Format and Posts Per Page** have no meaning at the app level. They are purely
-per-site content settings and belong only in the per-site settings page. They should be
-removed from the General tab in `/admin/settings`.
+per-site content settings and belong only in the per-site settings page. Removed from
+the General tab in `/admin/settings`.
 
 ### Security Tab — Deferred
 

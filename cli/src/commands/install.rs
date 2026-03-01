@@ -66,8 +66,11 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
         .default(true)
         .interact()?;
 
-    // Track the created admin's UUID so we can link them to the site as owner.
+    // Track the created admin's UUID so we can link them to the site.
     let mut admin_id: Option<Uuid> = None;
+    // Notification email is collected outside the admin block so it can be
+    // written to .env even if the admin user step is skipped.
+    let mut notification_email: Option<String> = None;
 
     if create_admin {
         println!("\n── Admin User ───────────────────────────────────────────");
@@ -78,8 +81,14 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
             .interact_text()?;
 
         let email: String = Input::new()
-            .with_prompt("Admin email")
+            .with_prompt("Admin login email")
             .interact_text()?;
+
+        let notify_email: String = Input::new()
+            .with_prompt("System notification email (reply-to for outbound mail)")
+            .default(email.clone())
+            .interact_text()?;
+        notification_email = Some(notify_email);
 
         let display_name: String = Input::new()
             .with_prompt("Display name")
@@ -167,6 +176,27 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
     }
     println!("Default site settings seeded.");
 
+    // Seed app_settings defaults. Uses ON CONFLICT DO NOTHING so re-running
+    // the installer doesn't overwrite values the agency has already changed.
+    let app_name = domain.split('.').next().unwrap_or("Synaptic");
+    let app_settings_defaults: &[(&str, &str)] = &[
+        ("app_name",      app_name),
+        ("timezone",      "UTC"),
+        ("max_upload_mb", "25"),
+    ];
+    for (key, value) in app_settings_defaults {
+        sqlx::query(
+            "INSERT INTO app_settings (key, value) VALUES ($1, $2)
+             ON CONFLICT (key) DO NOTHING"
+        )
+        .bind(key)
+        .bind(value)
+        .execute(&pool)
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to seed app_settings: {e}"))?;
+    }
+    println!("Default app settings seeded (app_name: {}).", app_name);
+
     // Copy the global default theme into the new site's own theme folder.
     // Without this the site would use themes/global/default/ directly and any
     // edits made via the theme editor would modify the shared global theme.
@@ -250,6 +280,9 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
     // artefacts (themes/sites/, uploads/) without needing an explicit flag.
     let env_path = std::path::Path::new(&install_dir).join(".env");
     write_env_key(&env_path, "INSTALL_DIR", &install_dir);
+    if let Some(ref ae) = notification_email {
+        write_env_key(&env_path, "ADMIN_EMAIL", ae);
+    }
 
     println!("\nNext steps:");
     println!(
