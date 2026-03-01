@@ -44,9 +44,11 @@ pub fn render_with_flash(themes: &[ThemeInfo], flash: Option<&str>, ctx: &crate:
     let sel_private = if filter == "private" { " selected" } else { "" };
 
     let toolbar = if ctx.can_manage_appearance {
-        // Super admins get a three-option dropdown (My Themes = global+private, Global, Private).
+        // Super admins get a three-option dropdown (My Themes, Global, Private).
+        // When impersonating, private themes are hidden — they belong to the super admin's
+        // own space and would be confusing in another site's context.
         // Site admins get the two-option dropdown (My Themes, Global Themes).
-        let filter_options = if ctx.is_global_admin {
+        let filter_options = if ctx.is_global_admin && !ctx.visiting_foreign_site {
             format!(
                 r#"<option value="my"{sel_my}>My Themes</option>
       <option value="global"{sel_global}>Global Themes</option>

@@ -31,7 +31,8 @@ pub async fn list(
     // Build site list with per-row manage flag.
     let mut rows: Vec<SiteRow> = Vec::new();
 
-    if admin.caps.is_global_admin {
+    if admin.caps.is_global_admin && !admin.caps.visiting_foreign_site {
+        // True super admin view — see all sites.
         let sites = crate::models::site::list(&state.db).await.unwrap_or_else(|e| {
             tracing::warn!("failed to list sites: {:?}", e);
             vec![]
@@ -55,6 +56,30 @@ pub async fn list(
                 is_default: admin.user.default_site_id == Some(s.id),
                 can_manage: true,
             });
+        }
+    } else if admin.caps.is_global_admin && admin.caps.visiting_foreign_site {
+        // Super admin impersonating — show only the site currently being visited.
+        if let Some(site_id) = admin.site_id {
+            if let Ok(s) = crate::models::site::get_by_id(&state.db, site_id).await {
+                let (admin_email, user_count, subscriber_count, post_count, page_count) = tokio::join!(
+                    crate::models::site::admin_email(&state.db, s.id),
+                    crate::models::site::user_count(&state.db, s.id),
+                    crate::models::site::subscriber_count(&state.db, s.id),
+                    crate::models::site::post_count(&state.db, s.id),
+                    crate::models::site::page_count(&state.db, s.id),
+                );
+                rows.push(SiteRow {
+                    id: s.id.to_string(),
+                    hostname: s.hostname.clone(),
+                    admin_email: admin_email.unwrap_or(None),
+                    user_count: user_count.unwrap_or(0),
+                    subscriber_count: subscriber_count.unwrap_or(0),
+                    post_count: post_count.unwrap_or(0),
+                    page_count: page_count.unwrap_or(0),
+                    is_default: false,
+                    can_manage: true,
+                });
+            }
         }
     } else {
         // Non-global-admin: fetch all sites the user has any role on.
