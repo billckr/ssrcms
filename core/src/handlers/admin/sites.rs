@@ -37,11 +37,12 @@ pub async fn list(
             vec![]
         });
         for s in &sites {
-            let (admin_email, user_count, subscriber_count, post_count) = tokio::join!(
+            let (admin_email, user_count, subscriber_count, post_count, page_count) = tokio::join!(
                 crate::models::site::admin_email(&state.db, s.id),
                 crate::models::site::user_count(&state.db, s.id),
                 crate::models::site::subscriber_count(&state.db, s.id),
                 crate::models::site::post_count(&state.db, s.id),
+                crate::models::site::page_count(&state.db, s.id),
             );
             rows.push(SiteRow {
                 id: s.id.to_string(),
@@ -50,6 +51,7 @@ pub async fn list(
                 user_count: user_count.unwrap_or(0),
                 subscriber_count: subscriber_count.unwrap_or(0),
                 post_count: post_count.unwrap_or(0),
+                page_count: page_count.unwrap_or(0),
                 is_default: admin.user.default_site_id == Some(s.id),
                 can_manage: true,
             });
@@ -63,11 +65,12 @@ pub async fn list(
                 vec![]
             });
         for (s, site_role) in &site_roles {
-            let (admin_email, user_count, subscriber_count, post_count) = tokio::join!(
+            let (admin_email, user_count, subscriber_count, post_count, page_count) = tokio::join!(
                 crate::models::site::admin_email(&state.db, s.id),
                 crate::models::site::user_count(&state.db, s.id),
                 crate::models::site::subscriber_count(&state.db, s.id),
                 crate::models::site::post_count(&state.db, s.id),
+                crate::models::site::page_count(&state.db, s.id),
             );
             // can_manage if they own the site or hold an admin role on it.
             // Delete is separately blocked for the default site in the renderer.
@@ -80,6 +83,7 @@ pub async fn list(
                 user_count: user_count.unwrap_or(0),
                 subscriber_count: subscriber_count.unwrap_or(0),
                 post_count: post_count.unwrap_or(0),
+                page_count: page_count.unwrap_or(0),
                 is_default: admin.user.default_site_id == Some(s.id),
                 can_manage,
             });

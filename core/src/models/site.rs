@@ -156,6 +156,17 @@ pub async fn post_count(pool: &PgPool, site_id: Uuid) -> Result<i64> {
     Ok(count)
 }
 
+/// Count pages for a site (used in site listing).
+pub async fn page_count(pool: &PgPool, site_id: Uuid) -> Result<i64> {
+    let count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM posts WHERE site_id = $1 AND post_type = 'page'",
+    )
+    .bind(site_id)
+    .fetch_one(pool)
+    .await?;
+    Ok(count)
+}
+
 /// Email of the site owner (any role), if one is assigned.
 pub async fn admin_email(pool: &PgPool, site_id: Uuid) -> Result<Option<String>> {
     let email: Option<String> = sqlx::query_scalar(

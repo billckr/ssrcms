@@ -10,6 +10,7 @@ pub struct SiteRow {
     /// Count of subscribers only.
     pub subscriber_count: i64,
     pub post_count: i64,
+    pub page_count: i64,
     /// True for the first site created during CLI install — cannot be deleted.
     pub is_default: bool,
     /// True when the current user may edit settings / delete this site.
@@ -61,6 +62,7 @@ pub fn render_list(
               <td>{user_count}</td>
               <td>{subscriber_count}</td>
               <td>{post_count}</td>
+              <td>{page_count}</td>
               <td class="actions">
                 <form method="post" action="/admin/sites/switch" style="display:inline">
                   <input type="hidden" name="site_id" value="{id}">
@@ -78,6 +80,7 @@ pub fn render_list(
             user_count       = s.user_count,
             subscriber_count = s.subscriber_count,
             post_count       = s.post_count,
+            page_count       = s.page_count,
             manage           = manage_html,
         )
     }).collect::<Vec<_>>().join("\n");
@@ -90,7 +93,7 @@ pub fn render_list(
 
     let content = format!(
         r#"{new_site_btn}<table class="data-table">
-  <thead><tr><th>Hostname</th><th>Admin</th><th>Users</th><th>Subs</th><th>Posts</th><th>Actions</th></tr></thead>
+  <thead><tr><th>Hostname</th><th>Admin</th><th>Users</th><th>Subs</th><th>Posts</th><th>Pages</th><th>Actions</th></tr></thead>
   <tbody>{rows}</tbody>
 </table>"#,
         new_site_btn = new_site_btn,
