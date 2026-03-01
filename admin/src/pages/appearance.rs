@@ -25,6 +25,9 @@ pub struct ThemeInfo {
     /// True when this theme originated from themes/private/ (even if now in a site folder).
     /// Used to keep the Private badge visible on site copies of private themes.
     pub is_private_origin: bool,
+    /// True when a global copy of this private theme already exists in themes/global/.
+    /// Only meaningful in the private filter view; used to show a confirmation on Make Global.
+    pub has_global_copy: bool,
 }
 
 pub fn render_with_flash(themes: &[ThemeInfo], flash: Option<&str>, ctx: &crate::PageContext, filter: &str) -> String {
@@ -439,26 +442,63 @@ fn render_card(t: &ThemeInfo, ctx: &crate::PageContext, filter: &str) -> String 
             )
         };
 
-        // Private themes: super_admin can edit the private original directly.
-        let edit_html = if filter == "private" {
-            format!(
+        // Private themes: super_admin can edit the private original directly,
+        // publish it to global, or remove it entirely.
+        let (edit_html, make_global_html, remove_html) = if filter == "private" {
+            let edit = format!(
                 r#"<a href="/admin/appearance/editor/{name}?source=private" class="btn btn-edit">Edit</a>"#,
                 name = name_esc,
-            )
+            );
+
+            let confirm_attr = if t.has_global_copy {
+                format!(
+                    r#" onclick="return confirm('A global theme named &quot;{name}&quot; already exists. Overwrite it with this private version?')""#,
+                    name = name_esc,
+                )
+            } else {
+                String::new()
+            };
+
+            let make_global = format!(
+                r#"<form method="post" action="/admin/appearance/publish-theme" style="display:inline;">
+    <input type="hidden" name="theme" value="{name}">
+    <button type="submit" class="btn btn-primary"{confirm}>Pub</button>
+</form>"#,
+                name    = name_esc,
+                confirm = confirm_attr,
+            );
+
+            let remove = if t.can_delete {
+                format!(
+                    r#"<form method="post" action="/admin/appearance/delete" style="display:inline;"
+     onsubmit="return confirm('Remove private theme &quot;{name}&quot;? This only deletes the private copy — any site copies are unaffected.')">
+    <input type="hidden" name="theme" value="{name}">
+    <input type="hidden" name="source" value="private">
+    <button type="submit" class="btn btn-danger">Remove</button>
+</form>"#,
+                    name = name_esc,
+                )
+            } else {
+                String::new()
+            };
+
+            (edit, make_global, remove)
         } else {
-            String::new()
+            (String::new(), String::new(), String::new())
         };
 
         return format!(
             r#"<div class="theme-card">
   {screenshot}
   {header}
-  <div class="theme-actions">{get}{edit}</div>
+  <div class="theme-actions">{get}{make_global}{edit}{remove}</div>
 </div>"#,
-            screenshot = screenshot_html,
-            header     = header,
-            get        = get_html,
-            edit       = edit_html,
+            screenshot  = screenshot_html,
+            header      = header,
+            get         = get_html,
+            edit        = edit_html,
+            make_global = make_global_html,
+            remove      = remove_html,
         );
     }
 

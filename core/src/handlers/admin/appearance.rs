@@ -889,6 +889,82 @@ pub async fn get_theme(
     }
 }
 
+// ── Publish Theme (copy private → global) ─────────────────────────────────────
+
+#[derive(Deserialize)]
+pub struct PublishThemeForm {
+    pub theme: String,
+}
+
+pub async fn publish_theme(
+    State(state): State<AppState>,
+    admin: AdminUser,
+    Form(form): Form<PublishThemeForm>,
+) -> impl IntoResponse {
+    // Only super_admin may publish themes to the global library.
+    if !admin.caps.is_global_admin {
+        return (StatusCode::FORBIDDEN, "Forbidden").into_response();
+    }
+
+    let name = form.theme.trim().to_string();
+    let cs = state.site_hostname(admin.site_id);
+
+    macro_rules! err {
+        ($msg:expr) => {{
+            let ctx = super::page_ctx_full(&state, &admin, &cs).await;
+            return render_appearance_list(&state, Some($msg), &ctx, admin.site_id, "private")
+                .await
+                .into_response();
+        }};
+    }
+
+    if name.is_empty() || name.contains("..") || name.contains('/') || name.contains('\\') {
+        err!("Invalid theme name.");
+    }
+
+    let themes_dir = &state.config.themes_dir;
+    let private_path = FsPath::new(themes_dir).join("private").join(&name);
+    let global_path  = FsPath::new(themes_dir).join("global").join(&name);
+
+    if !private_path.is_dir() {
+        err!("Private theme not found.");
+    }
+
+    // If a global copy exists, remove it first (caller confirmed via JS).
+    if global_path.exists() {
+        if let Err(e) = fs::remove_dir_all(&global_path) {
+            tracing::error!("publish_theme: failed to remove existing global copy '{}': {:?}", name, e);
+            err!("Failed to overwrite existing global theme. Please try again.");
+        }
+    }
+
+    let src = private_path.to_path_buf();
+    let dst = global_path.to_path_buf();
+    match tokio::task::spawn_blocking(move || copy_dir_all(&src, &dst)).await {
+        Ok(Ok(())) => {
+            tracing::info!("publish_theme: '{}' published to global by super_admin", name);
+            let ctx = super::page_ctx_full(&state, &admin, &cs).await;
+            render_appearance_list(
+                &state,
+                Some(&format!("Theme '{}' is now in the global library.", name)),
+                &ctx,
+                admin.site_id,
+                "private",
+            )
+            .await
+            .into_response()
+        }
+        Ok(Err(e)) => {
+            tracing::error!("publish_theme: copy failed for '{}': {}", name, e);
+            err!("Failed to publish theme. Please try again.");
+        }
+        Err(e) => {
+            tracing::error!("publish_theme: task panicked: {:?}", e);
+            err!("Failed to publish theme. Please try again.");
+        }
+    }
+}
+
 // ── Theme file editor ────────────────────────────────────────────────────────
 
 #[derive(Deserialize)]
@@ -1469,6 +1545,16 @@ async fn render_appearance_list(
         }
     }
 
+    // For the private filter view, mark which private themes already have a
+    // global copy so the "Make Global" button can show a confirmation.
+    if filter == "private" {
+        for theme in &mut themes {
+            if theme.source == "private" {
+                theme.has_global_copy = FsPath::new(themes_dir).join("global").join(&theme.name).is_dir();
+            }
+        }
+    }
+
     // Mark site copies of private themes so the Private badge stays visible
     // in My Themes even after the theme has been copied out of themes/private/.
     if filter == "my" || filter.is_empty() {
@@ -1546,6 +1632,7 @@ fn scan_theme_dir(dir: &FsPath, active_theme: &str, source: &str, themes: &mut V
                         in_use_by: 0,              // computed after scanning in render_appearance_list
                         has_site_copy: false,      // computed below for global/private filter view
                         is_private_origin: source == "private", // also set for site copies below
+                        has_global_copy: false,    // computed below for private filter view
                     });
                 }
             }
