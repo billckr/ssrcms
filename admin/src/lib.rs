@@ -114,7 +114,7 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
         {settings}
       </ul>
       <div class="sidebar-footer">
-        <a href="/admin/profile">{user_email}</a>
+        <a href="{profile_or_home}">{user_email}</a>
         <span class="sidebar-user-role">{user_role}</span>
         <a href="/admin/logout">Log out</a>
       </div>
@@ -180,6 +180,7 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
         content = content,
         visiting_badge = visiting_badge,
         site_indicator = site_indicator,
+        profile_or_home = if ctx.visiting_foreign_site { "/admin/sites/go-home" } else { "/admin/profile" },
         user_email = html_escape(&ctx.user_email),
         user_role  = html_escape(&ctx.user_role),
     )
