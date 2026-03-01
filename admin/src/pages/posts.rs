@@ -400,6 +400,7 @@ mod tests {
             can_manage_forms: false,
             unread_forms_count: 0,
             app_name: "Synaptic".to_string(),
+            home_admin_url: "/admin".to_string(),
         }
     }
 

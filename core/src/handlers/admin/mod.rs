@@ -18,6 +18,21 @@ pub fn page_ctx(state: &AppState, admin: &AdminUser, current_site: &str) -> admi
     let app_name = state.app_settings.read()
         .map(|s| s.app_name.clone())
         .unwrap_or_else(|_| "Synaptic".to_string());
+
+    // Build the URL of the super admin's home admin panel so the visiting badge
+    // can link back to it. Falls back to /admin if the default site isn't cached.
+    let home_admin_url = admin.user.default_site_id
+        .and_then(|id| state.get_site_by_id(id))
+        .map(|(site, _)| {
+            let port = state.config.port;
+            match port {
+                80  => format!("http://{}/admin", site.hostname),
+                443 => format!("https://{}/admin", site.hostname),
+                _   => format!("http://{}:{}/admin", site.hostname, port),
+            }
+        })
+        .unwrap_or_else(|| "/admin".to_string());
+
     admin::PageContext {
         current_site: current_site.to_string(),
         user_email: admin.user.email.clone(),
@@ -34,6 +49,7 @@ pub fn page_ctx(state: &AppState, admin: &AdminUser, current_site: &str) -> admi
         can_manage_forms: admin.caps.can_manage_forms,
         unread_forms_count: 0,
         app_name,
+        home_admin_url,
     }
 }
 

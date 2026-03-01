@@ -35,6 +35,9 @@ pub struct PageContext {
     pub unread_forms_count: i64,
     /// Admin chrome brand label — from app_settings.app_name.
     pub app_name: String,
+    /// Full URL of the super admin's home admin panel (e.g. http://bckr.local:3000/admin).
+    /// Used in the visiting badge so they can return home in one click.
+    pub home_admin_url: String,
 }
 
 /// Wrap a rendered content HTML string in the full admin page shell.
@@ -42,8 +45,16 @@ pub struct PageContext {
 pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content: &str, ctx: &PageContext) -> String {
     let visiting_badge = if ctx.visiting_foreign_site && !ctx.current_site.is_empty() {
         format!(
-            r#"<span class="badge-visiting">Super Admin → {}</span>"#,
-            html_escape(&ctx.current_site)
+            r#"<a href="{home_url}" class="badge-visiting" title="Return to your admin panel">\
+<svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" \
+stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" \
+style="vertical-align:-.15em;margin-right:.35em">\
+<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>\
+<polyline points="16 17 21 12 16 7"></polyline>\
+<line x1="21" y1="12" x2="9" y2="12"></line>\
+</svg>Super Admin → {site}</a>"#,
+            home_url = html_escape(&ctx.home_admin_url),
+            site = html_escape(&ctx.current_site),
         )
     } else {
         String::new()
