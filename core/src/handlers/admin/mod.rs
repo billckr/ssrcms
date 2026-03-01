@@ -22,7 +22,7 @@ pub fn page_ctx(state: &AppState, admin: &AdminUser, current_site: &str) -> admi
     admin::PageContext {
         current_site: current_site.to_string(),
         user_email: admin.user.email.clone(),
-        user_role: role_display_name(&admin.site_role),
+        user_role: if admin.caps.is_global_admin { "Super Admin".to_string() } else { role_display_name(&admin.site_role) },
         is_global_admin: admin.caps.is_global_admin,
         visiting_foreign_site: admin.caps.visiting_foreign_site,
         can_manage_users: admin.caps.can_manage_users,
