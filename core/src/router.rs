@@ -123,6 +123,7 @@ pub fn build(
         .route("/admin/settings", get(settings::settings).post(settings::save_settings))
         // ── Admin sites ────────────────────────────────────────────────────
         .route("/admin/sites", get(admin_sites::list).post(admin_sites::create))
+        .route("/admin/sites/go-home", get(admin_sites::go_home))
         .route("/admin/sites/new", get(admin_sites::new_site))
         .route("/admin/sites/switch", post(admin_sites::switch))
         .route("/admin/sites/{id}/settings", get(admin_sites::site_settings).post(admin_sites::save_site_settings))

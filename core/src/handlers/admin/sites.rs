@@ -209,6 +209,18 @@ pub async fn switch(
     Redirect::to("/admin")
 }
 
+/// GET /admin/sites/go-home — switch session back to the super admin's default site.
+/// Used by the visiting badge so the super admin can return home in one click.
+pub async fn go_home(
+    admin: AdminUser,
+    session: Session,
+) -> impl IntoResponse {
+    if let Some(default_site_id) = admin.user.default_site_id {
+        let _ = session.insert(SESSION_CURRENT_SITE_KEY, default_site_id.to_string()).await;
+    }
+    Redirect::to("/admin")
+}
+
 /// GET /admin/sites/{id}/settings — edit site hostname.
 pub async fn site_settings(
     State(state): State<AppState>,
