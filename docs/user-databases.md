@@ -274,6 +274,79 @@ AppState, matching the pattern used by `TemplateEngine.engines`, is the right ap
 
 ---
 
+## Data Type and Query Limitations
+
+Understanding these before building prevents designing around them after the fact.
+
+### Layer 1 — What SQLite can store
+
+SQLite has no strict type enforcement. Every value is stored as one of: `NULL`,
+`INTEGER`, `REAL`, `TEXT`, or `BLOB`. Practically:
+
+- ✅ Text, integers, booleans (0/1), dates (ISO 8601 strings or Unix timestamps)
+- ✅ Large text fields — up to ~1 GB per cell technically
+- ✅ JSON (SQLite has JSON functions, though not exposed in the simple filter API)
+- ❌ No native UUID, array, or enum — those become TEXT
+- ❌ No native decimal/currency — floats lose precision, so decimals must be stored as
+  TEXT or integer cents, which means the database cannot perform math on them directly
+- ❌ No binary files (BLOBs) exposed — files belong in the media library; columns store
+  URLs or paths only
+
+### Layer 2 — What the proposed schema builder exposes
+
+The planned column types are: `text`, `integer`, `decimal`, `boolean`, `date`, `image`.
+
+Not supported:
+- ❌ **Rich text / HTML** — storable as text but no sanitization layer
+- ❌ **Arrays or lists** — e.g. a product with multiple tags requires a separate join table
+- ❌ **Relations between tables** — foreign keys exist in SQLite but the filter API has
+  no JOIN support; complex relations belong in Postgres or a custom plugin
+- ❌ **Geospatial** — no lat/lng type, though two `decimal` columns work for basic use
+- ❌ **Full-text search columns** — SQLite has an FTS5 extension but it is not in scope
+
+### Layer 3 — What the Tera query API can retrieve
+
+The proposed `user_db_query(database, table, filter, order_by, limit)` is intentionally
+simple. Limitations:
+
+- ❌ **No range filters** — cannot express `price > 10` or `date between X and Y`;
+  only equality filters (`{in_stock: true}`)
+- ❌ **No OR conditions** — the filter object is AND-only
+- ❌ **No pattern matching** — no LIKE, no `name contains "chair"`
+- ❌ **No aggregates** — no SUM, AVG, COUNT with GROUP BY from templates
+- ❌ **No JOINs** — single table per query call
+- ❌ **No offset pagination** — LIMIT without OFFSET means page 2+ is not reachable
+  from a template directly; workaround is passing a minimum-ID filter
+- ✅ **Multiple queries per template** — calling `user_db_query` several times on
+  different tables and combining results in the template is fine
+
+### Layer 4 — Concurrency and scale
+
+SQLite uses file-level locking: only one write at a time per database file.
+
+- ✅ Read-heavy workloads — hundreds of concurrent reads are handled well
+- ⚠️ Moderate write workloads — form submissions queue up rather than failing, acceptable
+  for low-traffic sites
+- ❌ High-concurrency writes — e.g. simultaneous checkout submissions — SQLite is the
+  wrong tool; that belongs in Postgres or a dedicated service
+- Practical ceiling: thousands to low millions of rows, moderate traffic, infrequent
+  writes from forms
+
+### What this system is and is not suited for
+
+| Good fit | Poor fit |
+|----------|----------|
+| Product catalog — list and filter by category or status | Inventory with real-time stock decrement under concurrent load |
+| Staff directory, menu items, event schedule | Complex reporting with aggregates or multi-table joins |
+| Simple lead or contact list | Full-text search within stored content |
+| Reference data — pricing tiers, FAQs, size charts | Data with deep relations requiring normalized schema |
+| Low-write, high-read display data | High-concurrency write scenarios |
+
+Anything requiring complex queries, relations, or high write concurrency should be
+handled by a custom plugin backed by Postgres, not a user SQLite database.
+
+---
+
 ## Open Questions
 
 - **Schema migrations for user databases** — if a user adds a column, existing rows need
