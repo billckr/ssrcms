@@ -178,13 +178,17 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
 
     // Seed app_settings defaults. Uses ON CONFLICT DO NOTHING so re-running
     // the installer doesn't overwrite values the agency has already changed.
-    let app_name = domain.split('.').next().unwrap_or("Synaptic");
-    let app_settings_defaults: &[(&str, &str)] = &[
-        ("app_name",      app_name),
+    println!("\n── Branding ─────────────────────────────────────────────");
+    let app_name: String = Input::new()
+        .with_prompt("Admin panel name (shown in the sidebar)")
+        .default("My App".to_string())
+        .interact_text()?;
+
+    for (key, value) in &[
+        ("app_name",      app_name.as_str()),
         ("timezone",      "UTC"),
         ("max_upload_mb", "25"),
-    ];
-    for (key, value) in app_settings_defaults {
+    ] {
         sqlx::query(
             "INSERT INTO app_settings (key, value) VALUES ($1, $2)
              ON CONFLICT (key) DO NOTHING"
@@ -195,7 +199,7 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
         .await
         .map_err(|e| anyhow::anyhow!("Failed to seed app_settings: {e}"))?;
     }
-    println!("Default app settings seeded (app_name: {}).", app_name);
+    println!("App settings seeded (app_name: {}).", app_name);
 
     // Copy the global default theme into the new site's own theme folder.
     // Without this the site would use themes/global/default/ directly and any
