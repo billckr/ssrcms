@@ -142,8 +142,6 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
     .execute(&pool)
     .await
     .map_err(|e| anyhow::anyhow!("Failed to create initial site: {e}"))?;
-    println!("Initial site '{}' created.", domain);
-
     // Seed default site_settings so the admin panel shows real values on first login.
     // Include the port in site_url when it's not the standard HTTP/HTTPS port,
     // so that post/page links resolve correctly during local dev (e.g. port 3000).
@@ -174,7 +172,6 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
         .await
         .map_err(|e| anyhow::anyhow!("Failed to seed site_settings: {e}"))?;
     }
-    println!("Default site settings seeded.");
 
     // Seed app_settings defaults. Uses ON CONFLICT DO NOTHING so re-running
     // the installer doesn't overwrite values the agency has already changed.
@@ -199,7 +196,6 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
         .await
         .map_err(|e| anyhow::anyhow!("Failed to seed app_settings: {e}"))?;
     }
-    println!("App settings seeded (app_name: {}).", app_name);
 
     // Copy the global default theme into the new site's own theme folder.
     // Without this the site would use themes/global/default/ directly and any
@@ -210,10 +206,7 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
         .join("themes").join("sites").join(site_id.to_string()).join("default");
     if theme_src.is_dir() {
         match copy_dir_all(&theme_src, &theme_dst) {
-            Ok(()) => println!(
-                "Default theme copied to themes/sites/{}/default/",
-                site_id
-            ),
+            Ok(()) => {}
             Err(e) => println!(
                 "Warning: could not copy default theme ({}). \
                  The site will fall back to the shared global default until \
@@ -241,8 +234,6 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
         .execute(&pool)
         .await
         .map_err(|e| anyhow::anyhow!("Failed to link admin to site: {e}"))?;
-        println!("Admin linked to site '{}' as owner.", domain);
-
         // Set the admin's default site.
         sqlx::query(
             "UPDATE users SET default_site_id = $1, updated_at = NOW() WHERE id = $2 AND default_site_id IS NULL"
@@ -265,20 +256,6 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
     write_caddyfile(output_dir, &domain, port, &uploads_dir, &theme_dir)?;
     write_systemd_service(output_dir, &install_dir)?;
 
-    // ── Summary ────────────────────────────────────────────────────────────
-
-    println!("\n── Done ─────────────────────────────────────────────────");
-
-    // Warn if the app is already running — its site cache needs a restart to
-    // reflect the newly created site and admin account.
-    let pid_file = std::path::Path::new(&install_dir).join(".synaptic.pid");
-    if pid_file.exists() {
-        println!("\n⚠️  The app is currently running.");
-        println!("   Run './app.sh rebuild' to restart it and load the new site into memory.");
-    } else {
-        println!("\n   Run './app.sh rebuild' to build and start the app.");
-    }
-
     // ── Write / update .env ────────────────────────────────────────────────
     // Record INSTALL_DIR so `synaptic-cli dev reset` can clean up filesystem
     // artefacts (themes/sites/, uploads/) without needing an explicit flag.
@@ -289,7 +266,29 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
         write_env_key(&env_path, "ADMIN_EMAIL", ae);
     }
 
-    println!("\nNext steps:");
+    // ── Install Summary ────────────────────────────────────────────────────
+
+    println!("\n── Installation Summary ─────────────────────────────────");
+    println!("  App name    : {}", app_name);
+    println!("  Site name   : {}", domain);
+    println!("  Domain      : {}", domain);
+    println!("  Install dir : {}", install_dir);
+    if let Some(uid) = admin_id {
+        let _ = uid; // already used above
+        println!("  Admin user  : seeded (see credentials you entered above)");
+    }
+    println!("  Site URL    : {}", site_url);
+
+    // ── Next Steps ─────────────────────────────────────────────────────────
+
+    let pid_file = std::path::Path::new(&install_dir).join(".synaptic.pid");
+    let rebuild_note = if pid_file.exists() {
+        "⚠️  App is already running — rebuild will restart it"
+    } else {
+        "Builds and starts the app for the first time"
+    };
+
+    println!("\n── Next Steps ───────────────────────────────────────────");
     println!(
         "  1. Copy the binary and files to {}",
         install_dir
@@ -304,6 +303,7 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
     println!("     Then run: systemctl daemon-reload && systemctl enable --now synaptic-signals");
     println!("  4. Ensure {install_dir}/.env contains DATABASE_URL and SECRET_KEY");
     println!("     (INSTALL_DIR has been written automatically)");
+    println!("  5. Run './app.sh rebuild'   — {rebuild_note}");
     println!("\nSite will be live at: https://{}", domain);
 
     Ok(())
@@ -422,12 +422,11 @@ fn write_env_key(path: &std::path::Path, key: &str, value: &str) {
         }
     };
 
-    match std::fs::write(path, &updated) {
-        Ok(()) => println!("INSTALL_DIR written to {}", path.display()),
-        Err(e) => println!(
-            "Warning: could not write INSTALL_DIR to {} ({}). \
-             Add 'INSTALL_DIR={}' manually so 'dev reset' can clean up artefacts.",
-            path.display(), e, value
-        ),
+    if let Err(e) = std::fs::write(path, &updated) {
+        println!(
+            "Warning: could not write {}={} to {} ({}). \
+             Add it manually so 'dev reset' can clean up artefacts.",
+            key, value, path.display(), e
+        );
     }
 }

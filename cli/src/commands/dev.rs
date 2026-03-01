@@ -54,7 +54,36 @@ async fn reset(
 
     let pool = super::connect_db().await?;
 
-    // ── Gather info to show the user before any destructive action ────────────
+    // ── Verify super_admin password first ─────────────────────────────────────
+
+    println!();
+    println!("  !! DEV RESET — DESTRUCTIVE OPERATION !!");
+    println!("  NEVER run this on a production database.");
+    println!();
+
+    let row: Option<(String,)> = sqlx::query_as(
+        "SELECT password_hash FROM users WHERE is_protected = TRUE AND deleted_at IS NULL LIMIT 1"
+    )
+    .fetch_optional(&pool)
+    .await
+    .map_err(|e| anyhow::anyhow!("DB error looking up super_admin: {e}"))?;
+
+    let hash = match row {
+        Some((h,)) => h,
+        None => anyhow::bail!("No protected super_admin found in the database."),
+    };
+
+    let supplied = match password {
+        Some(p) => p,
+        None => dialoguer::Password::new()
+            .with_prompt("Super-admin password")
+            .interact()
+            .map_err(|e| anyhow::anyhow!("Password prompt failed: {e}"))?,
+    };
+
+    verify_password(&supplied, &hash)?;
+
+    // ── Gather info to show the user before final confirm ─────────────────────
 
     let sites: Vec<(String, String)> = sqlx::query_as(
         "SELECT id::text, hostname FROM sites ORDER BY created_at"
@@ -82,9 +111,6 @@ async fn reset(
 
     // ── Print summary ─────────────────────────────────────────────────────────
 
-    println!();
-    println!("  !! DEV RESET — DESTRUCTIVE OPERATION !!");
-    println!("  NEVER run this on a production database.");
     println!();
     println!("  ── What will be wiped ──────────────────────────────────");
 
@@ -117,32 +143,6 @@ async fn reset(
 
     println!();
     println!("  Database schema and migration history will be preserved.");
-    println!();
-
-    // ── Verify super_admin password ───────────────────────────────────────────
-
-    let row: Option<(String,)> = sqlx::query_as(
-        "SELECT password_hash FROM users WHERE is_protected = TRUE AND deleted_at IS NULL LIMIT 1"
-    )
-    .fetch_optional(&pool)
-    .await
-    .map_err(|e| anyhow::anyhow!("DB error looking up super_admin: {e}"))?;
-
-    let hash = match row {
-        Some((h,)) => h,
-        None => anyhow::bail!("No protected super_admin found in the database."),
-    };
-
-    let supplied = match password {
-        Some(p) => p,
-        None => dialoguer::Password::new()
-            .with_prompt("Super-admin password to confirm")
-            .interact()
-            .map_err(|e| anyhow::anyhow!("Password prompt failed: {e}"))?,
-    };
-
-    verify_password(&supplied, &hash)?;
-    println!("Password verified.");
     println!();
 
     // ── Final confirmation ────────────────────────────────────────────────────
