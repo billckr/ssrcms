@@ -3,7 +3,7 @@
 
   {# Home page #}
   <url>
-    <loc>{{ site.url }}/</loc>
+    <loc>{{ site.url | safe }}/</loc>
     <changefreq>daily</changefreq>
     <priority>1.0</priority>
   </url>
@@ -11,7 +11,7 @@
   {# Published posts #}
   {% for post in all_posts %}
   <url>
-    <loc>{{ post.url }}</loc>
+    <loc>{{ post.url | safe }}</loc>
     {% if post.updated_at %}
     <lastmod>{{ post.updated_at | date_format(format="%Y-%m-%d") }}</lastmod>
     {% elif post.published_at %}
@@ -25,7 +25,7 @@
   {# Published pages #}
   {% for page in all_pages %}
   <url>
-    <loc>{{ page.url }}</loc>
+    <loc>{{ page.url | safe }}</loc>
     {% if page.updated_at %}
     <lastmod>{{ page.updated_at | date_format(format="%Y-%m-%d") }}</lastmod>
     {% endif %}
