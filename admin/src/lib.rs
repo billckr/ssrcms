@@ -180,7 +180,7 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
         content = content,
         visiting_badge = visiting_badge,
         site_indicator = site_indicator,
-        profile_or_home = if ctx.visiting_foreign_site { "/admin/sites/go-home" } else { "/admin/profile" },
+        profile_or_home = if ctx.visiting_foreign_site { "/admin/sites/go-home?next=/admin/profile" } else { "/admin/profile" },
         user_email = html_escape(&ctx.user_email),
         user_role  = html_escape(&ctx.user_role),
     )

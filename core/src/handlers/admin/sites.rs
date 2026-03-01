@@ -235,15 +235,23 @@ pub async fn switch(
 }
 
 /// GET /admin/sites/go-home — switch session back to the super admin's default site.
-/// Used by the visiting badge so the super admin can return home in one click.
+/// Accepts an optional `?next=/some/path` query param to control the redirect destination.
+/// Defaults to /admin (dashboard). Used by the header badge (?next omitted) and the
+/// sidebar email link (?next=/admin/profile).
 pub async fn go_home(
     admin: AdminUser,
     session: Session,
+    axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
 ) -> impl IntoResponse {
     if let Some(default_site_id) = admin.user.default_site_id {
         let _ = session.insert(SESSION_CURRENT_SITE_KEY, default_site_id.to_string()).await;
     }
-    Redirect::to("/admin")
+    // Only allow relative paths starting with /admin to prevent open-redirect.
+    let next = params.get("next")
+        .filter(|p| p.starts_with("/admin"))
+        .map(|p| p.as_str())
+        .unwrap_or("/admin");
+    Redirect::to(next)
 }
 
 /// GET /admin/sites/{id}/settings — edit site hostname.
