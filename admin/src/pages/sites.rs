@@ -67,7 +67,7 @@ pub fn render_list(
                 <form method="post" action="/admin/sites/switch" style="display:inline">
                   <input type="hidden" name="site_id" value="{id}">
                   <button type="submit" class="icon-btn" title="Switch to this site">
-                    <img src="/admin/static/icons/play.svg" alt="Switch">
+                    <img src="/admin/static/icons/log-in.svg" alt="Switch">
                   </button>
                 </form>
                 {manage}
