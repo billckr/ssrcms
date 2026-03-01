@@ -2,6 +2,7 @@
 name        = "seo"
 version     = "1.0.0"
 api_version = "1"
+type        = "tera"
 description = "SEO meta tags, canonical URLs, Open Graph, JSON-LD structured data, and XML sitemap."
 author      = "Synaptic Signals"
 

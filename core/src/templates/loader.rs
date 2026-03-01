@@ -272,12 +272,17 @@ impl TemplateEngine {
     }
 
     /// Pre-render hook outputs using a specific theme's engine.
+    ///
+    /// `active_plugins`: when `Some`, only handlers whose `plugin_name` is in
+    /// the list will fire — used for per-site plugin activation. Pass `None`
+    /// to fire all registered handlers (backward-compatible default).
     pub fn render_hooks_for_theme(
         &self,
         theme: &str,
         site_id: Option<Uuid>,
         hook_names: &[&str],
         context: &tera::Context,
+        active_plugins: Option<&[String]>,
     ) -> HashMap<String, String> {
         self.ensure_theme_loaded_for_site(theme, site_id);
         let key = self.theme_cache_key(theme, site_id);
@@ -294,7 +299,11 @@ impl TemplateEngine {
 
         let mut outputs = HashMap::new();
         for hook_name in hook_names {
-            let handlers = self.hook_registry.handlers_for(hook_name);
+            let mut handlers = self.hook_registry.handlers_for(hook_name);
+            // Filter by active plugins when a list is provided.
+            if let Some(active) = active_plugins {
+                handlers.retain(|h| active.contains(&h.plugin_name));
+            }
             let mut html = String::new();
             for handler in &handlers {
                 match tera.render(&handler.template_path, context) {
@@ -317,7 +326,7 @@ impl TemplateEngine {
         context: &tera::Context,
     ) -> HashMap<String, String> {
         let theme = self.active_theme.read().unwrap().clone();
-        self.render_hooks_for_theme(&theme, None, hook_names, context)
+        self.render_hooks_for_theme(&theme, None, hook_names, context, None)
     }
 
     /// Replace `[[HOOK:__hook_output__<name>]]` sentinels in rendered HTML

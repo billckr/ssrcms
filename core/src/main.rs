@@ -8,7 +8,8 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilte
 use synaptic_core::app_state::{AppSettings, AppState, SiteCache, SiteSettings};
 use synaptic_core::config::AppConfig;
 use synaptic_core::db;
-use synaptic_core::plugins::manifest::{PluginManifest, RouteRegistration};
+use synaptic_core::plugins::loader::LoadedPlugin;
+use synaptic_core::plugins::manifest::RouteRegistration;
 use synaptic_core::plugins::HookRegistry;
 use synaptic_core::router;
 use synaptic_core::search;
@@ -110,6 +111,33 @@ async fn main() -> anyhow::Result<()> {
         info!("no sites found — using global active_theme: '{}'", settings.active_theme);
         settings.active_theme.clone()
     };
+
+    // ── Plugin directory structure ────────────────────────────────────────────
+    // Establish plugins/global/ and plugins/sites/ layout on first startup.
+    let global_plugins_dir = format!("{}/global", cfg.plugins_dir);
+    let sites_plugins_dir  = format!("{}/sites", cfg.plugins_dir);
+    if !std::path::Path::new(&global_plugins_dir).exists() {
+        std::fs::create_dir_all(&global_plugins_dir)?;
+        // Migrate any flat plugin directories (pre-restructure installs) into plugins/global/.
+        if let Ok(entries) = std::fs::read_dir(&cfg.plugins_dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if !path.is_dir() { continue; }
+                let name = match path.file_name().and_then(|n| n.to_str()) {
+                    Some(n) => n.to_string(),
+                    None => continue,
+                };
+                if name == "global" || name == "sites" { continue; }
+                let dest = std::path::Path::new(&global_plugins_dir).join(&name);
+                match std::fs::rename(&path, &dest) {
+                    Ok(_) => info!("migrated plugin '{}' → plugins/global/", name),
+                    Err(e) => tracing::warn!("could not migrate plugin '{}' to global: {}", name, e),
+                }
+            }
+        }
+        info!("plugin directory structure initialised — plugins/global/ ready");
+    }
+    std::fs::create_dir_all(&sites_plugins_dir)?;
 
     // ── Plugin & hook registry ────────────────────────────────────────────────
     let hook_registry = Arc::new(HookRegistry::new());
@@ -251,101 +279,157 @@ async fn main() -> anyhow::Result<()> {
 
 /// Scan the plugins directory, load manifests, register hooks into the registry,
 /// add templates into the engine, and return the collected plugin route table
-/// and the list of successfully loaded manifests.
+/// and the list of successfully loaded plugins.
+///
+/// Scans two subdirectories:
+/// - `<plugins_dir>/global/`  — agency-managed plugins available to all sites
+/// - `<plugins_dir>/sites/<uuid>/` — per-site plugin copies
 fn load_plugins_into_engine(
     plugins_dir: &str,
     hook_registry: &Arc<HookRegistry>,
     engine: &TemplateEngine,
-) -> (HashMap<String, RouteRegistration>, Vec<synaptic_core::plugins::manifest::PluginManifest>) {
+) -> (HashMap<String, RouteRegistration>, Vec<LoadedPlugin>) {
     use synaptic_core::plugins::hook_registry::HookHandler;
+    use synaptic_core::plugins::manifest::PluginManifest;
     use std::path::Path;
 
     let mut plugin_routes: HashMap<String, RouteRegistration> = HashMap::new();
-    let mut loaded_manifests = Vec::new();
-    let dir = Path::new(plugins_dir);
+    let mut loaded_plugins: Vec<LoadedPlugin> = Vec::new();
+    // Track which plugin names have already been registered (from global scan)
+    // so that site copies of global plugins don't cause duplicate hook registration.
+    let mut registered_plugin_names: std::collections::HashSet<String> = std::collections::HashSet::new();
 
-    if !dir.exists() {
-        return (plugin_routes, loaded_manifests);
-    }
-
-    let entries = match std::fs::read_dir(dir) {
-        Ok(e) => e,
-        Err(e) => {
-            tracing::warn!("could not read plugins directory: {}", e);
-            return (plugin_routes, loaded_manifests);
+    // Helper: scan one directory and register plugins. `register_hooks_and_templates`
+    // controls whether this scan registers Tera templates and hook handlers — set to
+    // false for site copies of plugins that already have a global counterpart.
+    let scan_plugin_dir = |dir: &std::path::PathBuf,
+                               source: &str,
+                               site_id: Option<uuid::Uuid>,
+                               registered: &std::collections::HashSet<String>|
+     -> Vec<(String, LoadedPlugin, HashMap<String, RouteRegistration>)> {
+        let mut results = Vec::new();
+        if !dir.exists() {
+            return results;
         }
-    };
-
-    for entry in entries.flatten() {
-        let plugin_dir = entry.path();
-        if !plugin_dir.is_dir() {
-            continue;
-        }
-
-        let manifest_path = plugin_dir.join("plugin.toml");
-        if !manifest_path.exists() {
-            continue;
-        }
-
-        let manifest = match PluginManifest::from_file(&manifest_path) {
-            Ok(m) => m,
+        let entries = match std::fs::read_dir(dir) {
+            Ok(e) => e,
             Err(e) => {
-                tracing::warn!("skipping plugin at {:?}: {}", plugin_dir, e);
-                continue;
+                tracing::warn!("could not read plugins dir {:?}: {}", dir, e);
+                return results;
             }
         };
-
-        // Add all HTML and XML templates from the plugin directory.
-        let glob_pattern = format!("{}/**/*.{{html,xml}}", plugin_dir.display());
-        let paths = match glob::glob(&glob_pattern) {
-            Ok(p) => p,
-            Err(e) => {
-                tracing::warn!("glob error for plugin {:?}: {}", plugin_dir, e);
+        for entry in entries.flatten() {
+            let plugin_dir = entry.path();
+            if !plugin_dir.is_dir() {
                 continue;
             }
-        };
-
-        for path in paths.flatten() {
-            let rel = match path.strip_prefix(&plugin_dir) {
-                Ok(r) => r,
-                Err(_) => continue,
-            };
-            let template_name = rel.to_string_lossy().replace('\\', "/");
-            let source = match std::fs::read_to_string(&path) {
-                Ok(s) => s,
+            let manifest_path = plugin_dir.join("plugin.toml");
+            if !manifest_path.exists() {
+                continue;
+            }
+            let manifest = match PluginManifest::from_file(&manifest_path) {
+                Ok(m) => m,
                 Err(e) => {
-                    tracing::warn!("could not read template {:?}: {}", path, e);
+                    tracing::warn!("skipping plugin at {:?}: {}", plugin_dir, e);
                     continue;
                 }
             };
-            if let Err(e) = engine.add_raw_template(&template_name, &source) {
-                tracing::warn!("could not register template '{}': {}", template_name, e);
+
+            let plugin_name = manifest.plugin.name.clone();
+            // Skip hooks/templates for site copies of global plugins to avoid duplication.
+            let is_new_plugin = !registered.contains(&plugin_name);
+
+            if is_new_plugin {
+                // Register all HTML and XML templates.
+                // Note: the Rust `glob` crate does not support brace expansion ({html,xml}),
+                // so we run two separate glob passes.
+                for ext in &["html", "xml"] {
+                    let glob_pattern = format!("{}/**/*.{}", plugin_dir.display(), ext);
+                    if let Ok(paths) = glob::glob(&glob_pattern) {
+                        for path in paths.flatten() {
+                            let rel = match path.strip_prefix(&plugin_dir) {
+                                Ok(r) => r,
+                                Err(_) => continue,
+                            };
+                            let template_name = rel.to_string_lossy().replace('\\', "/");
+                            let tmpl_source = match std::fs::read_to_string(&path) {
+                                Ok(s) => s,
+                                Err(e) => {
+                                    tracing::warn!("could not read template {:?}: {}", path, e);
+                                    continue;
+                                }
+                            };
+                            if let Err(e) = engine.add_raw_template(&template_name, &tmpl_source) {
+                                tracing::warn!("could not register template '{}': {}", template_name, e);
+                            }
+                        }
+                    }
+                }
+
+                // Register hooks.
+                for (hook_name, template_path) in &manifest.hooks {
+                    hook_registry.register(
+                        hook_name,
+                        HookHandler {
+                            plugin_name: plugin_name.clone(),
+                            template_path: template_path.clone(),
+                        },
+                    );
+                }
             }
-        }
 
-        // Register hooks into the shared registry.
-        for (hook_name, template_path) in &manifest.hooks {
-            hook_registry.register(
-                hook_name,
-                HookHandler {
-                    plugin_name: manifest.plugin.name.clone(),
-                    template_path: template_path.clone(),
-                },
+            // Routes only from global plugins to avoid duplicates.
+            let mut routes = HashMap::new();
+            if source == "global" {
+                for (path, registration) in manifest.routes.clone() {
+                    routes.insert(path, registration);
+                }
+            }
+
+            info!(
+                "loaded plugin '{}' v{} ({})",
+                manifest.plugin.name, manifest.plugin.version, source
             );
+
+            let lp = LoadedPlugin {
+                manifest,
+                directory: plugin_dir,
+                source: source.to_string(),
+                site_id,
+            };
+            results.push((plugin_name, lp, routes));
         }
+        results
+    };
 
-        // Collect plugin-registered routes.
-        for (path, registration) in manifest.routes.clone() {
-            plugin_routes.insert(path, registration);
-        }
-
-        info!(
-            "loaded plugin '{}' v{}",
-            manifest.plugin.name, manifest.plugin.version
-        );
-
-        loaded_manifests.push(manifest);
+    // Scan global plugins first.
+    let global_dir = Path::new(plugins_dir).join("global");
+    for (name, lp, routes) in scan_plugin_dir(&global_dir, "global", None, &registered_plugin_names) {
+        registered_plugin_names.insert(name);
+        plugin_routes.extend(routes);
+        loaded_plugins.push(lp);
     }
 
-    (plugin_routes, loaded_manifests)
+    // Scan per-site plugin directories.
+    // Site copies of global plugins are tracked in loaded_plugins (for admin UI)
+    // but do NOT re-register hooks or templates — those were already registered above.
+    let sites_dir = Path::new(plugins_dir).join("sites");
+    if let Ok(entries) = std::fs::read_dir(&sites_dir) {
+        for entry in entries.flatten() {
+            let site_dir = entry.path();
+            if !site_dir.is_dir() {
+                continue;
+            }
+            let site_id = site_dir
+                .file_name()
+                .and_then(|n| n.to_str())
+                .and_then(|s| uuid::Uuid::parse_str(s).ok());
+            for (_name, lp, routes) in scan_plugin_dir(&site_dir, "site", site_id, &registered_plugin_names) {
+                plugin_routes.extend(routes);
+                loaded_plugins.push(lp);
+            }
+        }
+    }
+
+    (plugin_routes, loaded_plugins)
 }

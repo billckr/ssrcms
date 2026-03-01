@@ -62,13 +62,16 @@ async fn render_page(
 
     ctx.insert("page", &page_ctx);
 
+    let active_plugins = crate::models::site_plugin::active_plugin_names(&state.db, site_id)
+        .await
+        .unwrap_or_default();
     let theme = state.active_theme_for_site(Some(site_id));
     let hook_outputs = state.templates.render_hooks_for_theme(
         &theme,
         Some(site_id),
         &["head_start", "head_end", "body_start", "body_end", "before_content", "after_content", "footer"],
         &ctx,
-    );
+    Some(&active_plugins));
     crate::templates::context::ContextBuilder::add_hook_outputs(&mut ctx, &hook_outputs);
 
     // Use the page-specific template if set, otherwise fall back to page.html

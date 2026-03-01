@@ -95,13 +95,16 @@ async fn render_search(
     ctx.insert("results", &results);
     ctx.insert("result_count", &result_count);
 
+    let active_plugins = crate::models::site_plugin::active_plugin_names(&state.db, site_id)
+        .await
+        .unwrap_or_default();
     let theme = state.active_theme_for_site(Some(site_id));
     let hook_outputs = state.templates.render_hooks_for_theme(
         &theme,
         Some(site_id),
         &["head_start", "head_end", "body_start", "body_end", "before_content", "after_content", "footer"],
         &ctx,
-    );
+    Some(&active_plugins));
     ContextBuilder::add_hook_outputs(&mut ctx, &hook_outputs);
 
     state.templates.render_for_theme(&theme, Some(site_id), "search.html", &ctx)

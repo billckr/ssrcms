@@ -26,6 +26,13 @@ pub struct PluginInfo {
     pub api_version: String,
     pub description: String,
     pub author: String,
+    /// "tera" (default) or "wasm" (future). Used for display badges and validation.
+    #[serde(default = "default_plugin_type")]
+    pub plugin_type: String,
+}
+
+fn default_plugin_type() -> String {
+    "tera".to_string()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
