@@ -70,7 +70,6 @@
     {{ hook(name="footer") | safe }}
   </footer>
 
-  {# — Analytics — paste your GA/GTM snippet here — #}
   {{ hook(name="body_end") | safe }}
 
   {# — Cookie consent banner (GDPR) — #}
@@ -83,15 +82,36 @@
   </div>
   <script>
     (function () {
-      if (!localStorage.getItem('cookie_consent')) {
+      var consent = localStorage.getItem('cookie_consent');
+      if (!consent) {
         var b = document.getElementById('cookie-banner');
         if (b) b.style.display = 'flex';
+      } else if (consent === 'accepted') {
+        loadAnalytics();
       }
     })();
+
     function cookieConsent(choice) {
       localStorage.setItem('cookie_consent', choice);
       var b = document.getElementById('cookie-banner');
       if (b) b.style.display = 'none';
+      if (choice === 'accepted') loadAnalytics();
+    }
+
+    {# — Analytics — replace G-XXXXXXXXXX with your Measurement ID to enable GA.     #}
+    {# — Remove or leave blank if not using Google Analytics.                         #}
+    var GA_ID = '';
+
+    function loadAnalytics() {
+      if (!GA_ID) return;
+      var s = document.createElement('script');
+      s.async = true;
+      s.src = 'https://www.googletagmanager.com/gtag/js?id=' + GA_ID;
+      document.head.appendChild(s);
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', GA_ID);
     }
   </script>
 </body>
