@@ -180,6 +180,26 @@ impl SearchIndex {
         Ok(results)
     }
 
+    /// Replace the entire index with a new set of documents in a single commit.
+    /// Use this for bulk startup rebuilds — vastly faster than calling upsert()
+    /// per document (which commits after every write, causing N disk flushes).
+    pub fn rebuild_all(&self, docs: &[(String, String, String, String, String, String)]) -> anyhow::Result<()> {
+        let mut writer = self.writer.write().unwrap();
+        writer.delete_all_documents()?;
+        for (id, site_id, title, content, slug, post_type) in docs {
+            let mut doc = TantivyDocument::default();
+            doc.add_text(self.fields.id, id);
+            doc.add_text(self.fields.site_id, site_id);
+            doc.add_text(self.fields.title, title);
+            doc.add_text(self.fields.content, content);
+            doc.add_text(self.fields.slug, slug);
+            doc.add_text(self.fields.post_type, post_type);
+            writer.add_document(doc)?;
+        }
+        writer.commit()?;
+        Ok(())
+    }
+
     /// Add or update a document. Tantivy doesn't have native upsert — we delete
     /// by id term then add the new document, then commit.
     pub fn upsert(&self, id: &str, site_id: &str, title: &str, content: &str, slug: &str, post_type: &str) -> anyhow::Result<()> {
