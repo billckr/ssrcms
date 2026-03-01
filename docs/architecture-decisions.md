@@ -35,41 +35,87 @@ environment variables are outside the app's data layer entirely and are gitignor
 default. Most agencies have a preferred provider (Mailgun, Postmark, SendGrid, SES) with
 their own dashboards — the CMS has no value to add there.
 
-**Status:** Decided. SMTP fields added to `AppConfig`. Email tab removed from
-`/admin/settings`.
+**Admin email:** `ADMIN_EMAIL` in `.env` / `synaptic.toml` — used as the reply-to /
+notification address for system emails. Same rationale as SMTP: rarely changes, no DB
+needed. The `admin_email` key that was seeded in `site_settings` by migration 0006 is
+dead weight — never populated, never read — and can be ignored.
+
+**Status:** Decided. SMTP fields and `admin_email` added to `AppConfig`. Email tab removed
+from `/admin/settings`.
 
 ---
 
-## Settings: Agency-Level vs. Per-Site (OPEN — under discussion)
+## Settings: App-Level vs. Per-Site — Decided
 
-**Context:** The `site_settings` table is a key-value store scoped by `site_id`. Currently
-every site, including the agency's own domain, stores its settings there on equal footing.
+**Decision:** Three-layer separation:
 
-**The concern:** Infrastructure-level settings (SMTP credentials, session policy, upload
-limits, maintenance mode) affect the whole application, not just one site. Storing them
-alongside per-site content settings in the same table creates a single point of failure and
-blurs the line between "app config" and "site config".
+| Layer | Storage | Examples |
+|-------|---------|---------|
+| Infrastructure | `.env` / `synaptic.toml` | DATABASE_URL, SMTP, SECRET_KEY, ports |
+| App-wide runtime | `app_settings` table (new) | app_name, maintenance_mode, default theme for new sites |
+| Per-site | `site_settings` table (existing) | site_name, active_theme, posts_per_page, date_format |
 
-**Options being considered:**
+**The `app_settings` table** is a simple key-value store with no `site_id`. It holds
+settings that affect the whole installation — not any one site. Only `super_admin` can
+edit these, via `/admin/settings`.
 
-1. **Separate `app_settings` table** — Agency/system-wide settings get their own table with
-   no `site_id`. Per-site settings stay in `site_settings`. Clean separation: things that
-   affect the whole app vs. things that are per-site.
+**Why not reuse `site_settings` with `site_id IS NULL`?**
+That was the legacy approach and it created ambiguity — you couldn't tell whether a NULL
+`site_id` row was an intentional app-level setting or a site setting that lost its reference.
+A dedicated table is unambiguous and isolates app data from site data structurally.
 
-2. **Config file for infrastructure settings** — SMTP credentials, session timeouts, max
-   upload size live in `app.toml` / `.env` alongside `DATABASE_URL`. These require a restart
-   to change anyway, so the DB adds no real value for them. DB is reserved for things that
-   need to be editable at runtime via the UI.
+**The admin app name (`app_name`)** is the first concrete use case. The top-left "Synaptic"
+label in the admin UI should reflect what the agency calls their CMS installation — not a
+site's `site_name` (which is public-facing content). These are distinct concepts:
+- `app_settings.app_name` → "Acme CMS" (admin chrome, agency brand)
+- `site_settings.site_name` → "Beth's Bakery" (public site, theme templates)
 
-3. **Combination of 1 + 2** — Infrastructure config (SMTP, limits, timeouts) goes in the
-   config file. Runtime-editable system settings (maintenance mode, default theme for new
-   sites, registration policy) go in `app_settings`. Per-site content settings stay in
-   `site_settings`.
+**Hot-reload:** `app_name` and other app settings are cached in `AppState` behind an
+`Arc<RwLock<>>`. Saving via the UI invalidates the cache without a restart — same pattern
+as `active_theme`.
 
-**Guiding question:** Which settings need to be changeable at runtime without a restart?
-That split cleanly separates DB from config file.
+**Status:** Decided. Migration and wiring to be implemented.
 
-**Status:** Pending decision. Do not wire up `/admin/settings` fully until resolved.
+### General Settings Tab — Field Breakdown
+
+| Field | Tab/Page | Storage | Notes |
+|-------|----------|---------|-------|
+| App Name | `/admin/settings` General | `app_settings` | Admin chrome brand label — not public-facing |
+| Admin Email | `/admin/settings` General (read-only) | `AppConfig` (env) | Set via `ADMIN_EMAIL` in `.env` |
+| Timezone | `/admin/settings` General | `app_settings` | App-wide — one timezone per installation |
+| Date Format | `/admin/sites/{id}/settings` | `site_settings` | Per-site — already live and working |
+| Posts Per Page | `/admin/sites/{id}/settings` | `site_settings` | Per-site — already live and working |
+
+**Timezone** is app-level, not per-site. It is used for admin activity timestamps, scheduled
+publishing, and form submission records. Running different timezones per site on the same
+server is not supported — one installation, one timezone, set by the agency.
+
+**Date Format and Posts Per Page** have no meaning at the app level. They are purely
+per-site content settings and belong only in the per-site settings page. They should be
+removed from the General tab in `/admin/settings`.
+
+### Security Tab — Deferred
+
+Password complexity rules are currently hardcoded in the auth handler (min/max length,
+mixed case, numbers, symbols). Moving these to `app_settings` is useful for agencies that
+want to adjust policy for their clients but is not urgent. Session timeout and login lockout
+do not exist yet. The Security tab will be wired up when auth gets a dedicated pass.
+
+### Advanced Tab — Upload Size
+
+| Field | Storage | Default | Notes |
+|-------|---------|---------|-------|
+| Max Upload Size | `app_settings` | 25 MB | Editable at runtime via UI — no restart |
+
+Upload size belongs in `app_settings`, not `AppConfig`. Reason: this is a CMS — agency
+users upload themes, and a theme zip can easily be 5–10 MB with assets. If the limit were
+in the env/config file, hitting it would require a server restart to fix, which is
+unacceptable UX. With `app_settings`, a super_admin adjusts it in the Advanced tab and it
+takes effect immediately (Axum reads the limit per-request, not at bind time).
+
+Default of 25 MB covers the vast majority of themes. All other Advanced settings
+(maintenance mode, debug logging, template cache TTL) are deferred until the underlying
+features exist.
 
 ---
 

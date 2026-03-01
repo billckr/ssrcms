@@ -171,99 +171,18 @@ pub fn render(flash: Option<&str>, ctx: &crate::PageContext) -> String {
 
 <!-- Security -->
 <div id="tab-security" class="settings-panel" role="tabpanel">
-  <form method="post" action="/admin/settings" class="edit-form">
-    <input type="hidden" name="tab" value="security">
-
-    <p class="settings-section-title">Sessions</p>
-    <div class="form-group">
-      <label for="ss-timeout">Session Timeout (minutes)</label>
-      <input type="number" id="ss-timeout" name="session_timeout_mins" value="120" min="5" max="10080" style="width:120px">
-      <small>Admin sessions expire after this period of inactivity.</small>
-    </div>
-
-    <p class="settings-section-title">Login Protection</p>
-    <div class="form-group">
-      <label for="ss-max-attempts">Max Login Attempts</label>
-      <input type="number" id="ss-max-attempts" name="max_login_attempts" value="5" min="1" max="100" style="width:100px">
-      <small>Account is locked after this many consecutive failures.</small>
-    </div>
-    <div class="form-group">
-      <label for="ss-lockout">Lockout Duration (minutes)</label>
-      <input type="number" id="ss-lockout" name="lockout_duration_mins" value="15" min="1" max="1440" style="width:120px">
-    </div>
-
-    <p class="settings-section-title">Password Policy</p>
-    <div class="toggle-row">
-      <div class="toggle-label">
-        Require strong passwords
-        <small>Min 10 chars, mixed case, number and symbol.</small>
-      </div>
-      <label class="toggle-switch">
-        <input type="checkbox" name="require_strong_passwords" value="1">
-        <span class="toggle-track"></span>
-      </label>
-    </div>
-    <div class="toggle-row">
-      <div class="toggle-label">
-        Force HTTPS
-        <small>Redirect all HTTP requests to HTTPS.</small>
-      </div>
-      <label class="toggle-switch">
-        <input type="checkbox" name="force_https" value="1">
-        <span class="toggle-track"></span>
-      </label>
-    </div>
-
-    <div class="form-actions" style="margin-top:1.5rem">
-      <button type="submit" class="btn btn-primary">Save Security</button>
-    </div>
-  </form>
+  <p style="color:var(--muted);font-size:.875rem;font-style:italic;margin:0">
+    Security settings — coming soon. Session timeouts, login lockout, and password
+    policy configuration will be available here once the underlying features are built.
+  </p>
 </div>
 
 <!-- Advanced -->
 <div id="tab-advanced" class="settings-panel" role="tabpanel">
-  <form method="post" action="/admin/settings" class="edit-form">
-    <input type="hidden" name="tab" value="advanced">
-
-    <p class="settings-section-title">Visibility</p>
-    <div class="toggle-row">
-      <div class="toggle-label">
-        Maintenance Mode
-        <small>Displays a 503 page to all public visitors.</small>
-      </div>
-      <label class="toggle-switch">
-        <input type="checkbox" name="maintenance_mode" value="1">
-        <span class="toggle-track"></span>
-      </label>
-    </div>
-
-    <p class="settings-section-title">Diagnostics</p>
-    <div class="toggle-row">
-      <div class="toggle-label">
-        Debug Logging
-        <small>Verbose application logs. Disable in production.</small>
-      </div>
-      <label class="toggle-switch">
-        <input type="checkbox" name="debug_logging" value="1">
-        <span class="toggle-track"></span>
-      </label>
-    </div>
-
-    <p class="settings-section-title">Performance</p>
-    <div class="form-group">
-      <label for="sa-cache-ttl">Template Cache TTL (seconds)</label>
-      <input type="number" id="sa-cache-ttl" name="cache_ttl_secs" value="300" min="0" style="width:120px">
-      <small>How long rendered templates are cached. Set to 0 to disable.</small>
-    </div>
-    <div class="form-group">
-      <label for="sa-upload-max">Max Upload Size (MB)</label>
-      <input type="number" id="sa-upload-max" name="max_upload_mb" value="10" min="1" max="512" style="width:100px">
-    </div>
-
-    <div class="form-actions" style="margin-top:1.5rem">
-      <button type="submit" class="btn btn-primary">Save Advanced</button>
-    </div>
-  </form>
+  <p style="color:var(--muted);font-size:.875rem;font-style:italic;margin:0 0 1.5rem">
+    Advanced settings — coming soon. Upload size limit and additional options
+    will be available here. Max upload size will default to 25 MB.
+  </p>
 </div>
 
 <script>

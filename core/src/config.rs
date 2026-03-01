@@ -57,6 +57,13 @@ pub struct AppConfig {
     /// If unset, the endpoint is open (restrict access at the network/Caddy level instead).
     pub metrics_token: Option<String>,
 
+    // ── Agency contact ───────────────────────────────────────────────────────
+    // Used as the reply-to / notification address for system emails.
+    // Set via ADMIN_EMAIL in .env or synaptic.toml.
+
+    /// Administrator contact email (e.g. admin@acme.com)
+    pub admin_email: Option<String>,
+
     // ── Outbound mail (SMTP) ──────────────────────────────────────────────────
     // All mail config lives here, not in the database. Set via .env or synaptic.toml.
     // If smtp_host is not set, outbound mail is disabled and operations that
@@ -235,6 +242,7 @@ mod tests {
             search_index_path: default_search_index_path(),
             pid_file: default_pid_file(),
             metrics_token: None,
+            admin_email: None,
             smtp_host: None,
             smtp_port: default_smtp_port(),
             smtp_username: None,
