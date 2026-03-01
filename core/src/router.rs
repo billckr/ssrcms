@@ -62,6 +62,7 @@ pub fn build(
         .route("/tag/{slug}", get(archive::tag_archive))
         .route("/author/{username}", get(archive::author_archive))
         .route("/search", get(search::search))
+        .route("/sitemap.xml", get(plugin_route::sitemap))
         // ── Public form submissions ────────────────────────────────────────
         .route("/form/{name}", post(form_handler::submit))
         // ── Admin auth ─────────────────────────────────────────────────────
@@ -146,8 +147,11 @@ pub fn build(
         .route("/theme/static/{*path}", get(theme_static::serve))
         .nest_service("/admin/static", ServeDir::new("admin/static"));
 
-    // Register plugin routes (e.g. /sitemap.xml)
+    // Register plugin routes — skip any paths already handled by hardcoded routes.
     for path in plugin_route_paths {
+        if path == "/sitemap.xml" {
+            continue; // handled by the hardcoded route above
+        }
         router = router.route(&path, get(plugin_route::dispatch));
     }
 

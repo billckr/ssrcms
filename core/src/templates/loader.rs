@@ -137,6 +137,9 @@ impl TemplateEngine {
         let mut tera = Tera::new(&glob)
             .map_err(|e| anyhow::anyhow!("Failed to load theme '{}': {}", theme_name, e))?;
 
+        // Also load XML templates (e.g. sitemap.xml) from the theme directory.
+        Self::load_xml_from_dir(&mut tera, &theme_path, &theme_path);
+
         tera.autoescape_on(vec![".html", ".xml"]);
 
         // Re-add plugin templates.
@@ -348,6 +351,34 @@ impl TemplateEngine {
             result = result.replace(full_match, &replacement);
         }
         result
+    }
+
+    /// Recursively load XML files from a directory into a Tera instance.
+    /// Template names are relative to `base` (e.g. "sitemap.xml").
+    fn load_xml_from_dir(tera: &mut Tera, dir: &std::path::Path, base: &std::path::Path) {
+        let entries = match std::fs::read_dir(dir) {
+            Ok(e) => e,
+            Err(_) => return,
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                Self::load_xml_from_dir(tera, &path, base);
+            } else if path.extension().and_then(|e| e.to_str()) == Some("xml") {
+                if let Ok(relative) = path.strip_prefix(base) {
+                    let tname = relative.to_string_lossy().replace('\\', "/");
+                    if let Ok(src) = std::fs::read_to_string(&path) {
+                        if let Err(e) = tera.add_raw_template(&tname, &src) {
+                            tracing::warn!(
+                                "load_theme: could not add XML template '{}': {}",
+                                tname,
+                                e
+                            );
+                        }
+                    }
+                }
+            }
+        }
     }
 
     /// Hot-reload the currently active theme's templates (dev mode).

@@ -5,7 +5,40 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   {{ hook(name="head_start") | safe }}
   <title>{% block title %}{{ site.name }}{% endblock title %}</title>
+
+  {# — SEO meta tags — #}
+  {% if post is defined %}
+    <meta name="description" content="{{ post.excerpt | strip_html | truncate(length=160) }}">
+    <link rel="canonical" href="{{ post.url }}">
+    <meta property="og:title" content="{{ post.title }} — {{ site.name }}">
+    <meta property="og:description" content="{{ post.excerpt | strip_html | truncate(length=160) }}">
+    <meta property="og:url" content="{{ post.url }}">
+    <meta property="og:type" content="article">
+    {% if post.featured_image %}
+      <meta property="og:image" content="{{ post.featured_image.url }}">
+      <meta name="twitter:card" content="summary_large_image">
+      <meta name="twitter:image" content="{{ post.featured_image.url }}">
+    {% else %}
+      <meta name="twitter:card" content="summary">
+    {% endif %}
+    <meta name="twitter:title" content="{{ post.title }} — {{ site.name }}">
+    <meta name="twitter:description" content="{{ post.excerpt | strip_html | truncate(length=160) }}">
+  {% else %}
+    <meta name="description" content="{{ site.description }}">
+    <link rel="canonical" href="{{ request.url }}">
+    <meta property="og:title" content="{{ site.name }}">
+    <meta property="og:description" content="{{ site.description }}">
+    <meta property="og:url" content="{{ request.url }}">
+    <meta property="og:type" content="website">
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="{{ site.name }}">
+    <meta name="twitter:description" content="{{ site.description }}">
+  {% endif %}
+  <meta name="robots" content="index, follow">
+  <link rel="alternate" type="application/rss+xml" title="{{ site.name }}" href="{{ site.url }}/feed.xml">
+
   <link rel="stylesheet" href="/theme/static/css/style.css">
+  {% block head_extra %}{% endblock head_extra %}
   {{ hook(name="head_end") | safe }}
 </head>
 <body>
@@ -38,5 +71,27 @@
   </footer>
 
   {{ hook(name="body_end") | safe }}
+
+  {# — Cookie consent banner (GDPR) — #}
+  <div id="cookie-banner" role="alertdialog" aria-live="polite" aria-label="Cookie consent" style="display:none;position:fixed;bottom:0;left:0;right:0;z-index:9999;background:#1a1a1a;color:#fff;padding:1rem 1.5rem;display:flex;align-items:center;gap:1rem;flex-wrap:wrap;">
+    <p style="margin:0;flex:1;min-width:200px;">This site uses cookies to improve your experience. By continuing to use this site you accept our use of cookies.</p>
+    <div style="display:flex;gap:.5rem;flex-shrink:0;">
+      <button onclick="cookieConsent('accepted')" style="background:#e8530a;color:#fff;border:none;padding:.5rem 1.25rem;border-radius:4px;cursor:pointer;font-size:.875rem;">Accept</button>
+      <button onclick="cookieConsent('dismissed')" style="background:transparent;color:#ccc;border:1px solid #555;padding:.5rem 1.25rem;border-radius:4px;cursor:pointer;font-size:.875rem;">Dismiss</button>
+    </div>
+  </div>
+  <script>
+    (function () {
+      if (!localStorage.getItem('cookie_consent')) {
+        var b = document.getElementById('cookie-banner');
+        if (b) b.style.display = 'flex';
+      }
+    })();
+    function cookieConsent(choice) {
+      localStorage.setItem('cookie_consent', choice);
+      var b = document.getElementById('cookie-banner');
+      if (b) b.style.display = 'none';
+    }
+  </script>
 </body>
 </html>

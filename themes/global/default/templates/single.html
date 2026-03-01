@@ -2,6 +2,31 @@
 
 {% block title %}{{ post.title }} — {{ site.name }}{% endblock title %}
 
+{% block head_extra %}
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": {{ post.title | json_encode | safe }},
+  "url": {{ post.url | json_encode | safe }},
+  "datePublished": {{ post.published_at | default(value="") | json_encode | safe }},
+  "dateModified": {{ post.updated_at | json_encode | safe }},
+  "author": {
+    "@type": "Person",
+    "name": {{ post.author.display_name | json_encode | safe }},
+    "url": {{ post.author.url | json_encode | safe }}
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": {{ site.name | json_encode | safe }},
+    "url": {{ site.url | json_encode | safe }}
+  }{% if post.featured_image %},
+  "image": {{ post.featured_image.url | json_encode | safe }}{% endif %}{% if post.excerpt %},
+  "description": {{ post.excerpt | strip_html | json_encode | safe }}{% endif %}
+}
+</script>
+{% endblock head_extra %}
+
 {% block content %}
 <article class="single-post">
   <header class="post-header">

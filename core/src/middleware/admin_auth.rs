@@ -65,7 +65,7 @@ impl AdminCaps {
             visiting_foreign_site: visiting_foreign,
             can_manage_users: is_admin,
             can_manage_sites: is_admin,
-            can_manage_plugins: is_admin,
+            can_manage_plugins: is_global_admin,
             can_manage_settings: is_global_admin && is_on_default_site,
             can_manage_content: true,
             can_manage_appearance: is_admin,
