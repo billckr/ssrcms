@@ -280,6 +280,7 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
     // artefacts (themes/sites/, uploads/) without needing an explicit flag.
     let env_path = std::path::Path::new(&install_dir).join(".env");
     write_env_key(&env_path, "INSTALL_DIR", &install_dir);
+    write_env_key(&env_path, "MAX_UPLOAD_MB", "25");
     if let Some(ref ae) = notification_email {
         write_env_key(&env_path, "ADMIN_EMAIL", ae);
     }

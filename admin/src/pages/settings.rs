@@ -5,6 +5,7 @@ pub fn render(
     app_name: &str,
     timezone: &str,
     admin_email: &str,
+    max_upload_mb: u64,
     ctx: &crate::PageContext,
 ) -> String {
     let app_name_escaped = crate::html_escape(app_name);
@@ -139,10 +140,13 @@ pub fn render(
 
 <!-- Advanced -->
 <div id="tab-advanced" class="settings-panel" role="tabpanel">
-  <p style="color:var(--muted);font-size:.875rem;font-style:italic;margin:0 0 1.5rem">
-    Advanced settings — coming soon. Upload size limit (default 25 MB) and additional
-    options will be available here.
-  </p>
+  <p class="settings-section-title">Uploads</p>
+  <div class="form-group">
+    <label for="sa-max-upload">Max Upload Size (MB)</label>
+    <input type="number" id="sa-max-upload" value="{max_upload_mb}" readonly
+           style="width:100px;opacity:.7;cursor:not-allowed" title="Set via MAX_UPLOAD_MB in .env or synaptic.toml">
+    <small>Set via <code>MAX_UPLOAD_MB</code> in <code>.env</code> or <code>synaptic.toml</code>. Requires a restart to change. Applies to media and theme zip uploads.</small>
+  </div>
 </div>
 
 <script>
@@ -178,6 +182,7 @@ pub fn render(
         app_name = app_name_escaped,
         admin_email = admin_email_escaped,
         tz_options = tz_options,
+        max_upload_mb = max_upload_mb,
     );
 
     crate::admin_page("System Settings", "/admin/settings", flash, &content, ctx)

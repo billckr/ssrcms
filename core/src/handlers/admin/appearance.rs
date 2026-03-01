@@ -25,8 +25,8 @@ const REQUIRED_TEMPLATES: &[&str] = &[
     "templates/404.html",
 ];
 
-/// Maximum permitted zip upload size: 50 MB.
-const MAX_ZIP_BYTES: usize = 50 * 1024 * 1024;
+/// Fallback upload limit used only if config fails to load (should never happen at runtime).
+const DEFAULT_MAX_ZIP_BYTES: usize = 25 * 1024 * 1024;
 
 #[derive(Deserialize, Default)]
 pub struct AppearanceQuery {
@@ -366,13 +366,17 @@ pub async fn upload_theme(
     let cs = state.site_hostname(admin.site_id);
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
     // Collect the zip bytes from the multipart field named "file".
+    let max_bytes = (state.config.max_upload_mb as usize)
+        .saturating_mul(1024 * 1024)
+        .max(DEFAULT_MAX_ZIP_BYTES);
     let mut zip_bytes: Option<Vec<u8>> = None;
     while let Ok(Some(field)) = multipart.next_field().await {
         if field.name().unwrap_or("") == "file" {
             match field.bytes().await {
-                Ok(b) if b.len() <= MAX_ZIP_BYTES => zip_bytes = Some(b.to_vec()),
+                Ok(b) if b.len() <= max_bytes => zip_bytes = Some(b.to_vec()),
                 Ok(_) => {
-                    return render_appearance_list(&state, Some("Upload too large. Maximum size is 50 MB."), &ctx, admin.site_id, "my")
+                    let msg = format!("Upload too large. Maximum size is {} MB.", state.config.max_upload_mb);
+                    return render_appearance_list(&state, Some(&msg), &ctx, admin.site_id, "my")
                         .await
                         .into_response();
                 }

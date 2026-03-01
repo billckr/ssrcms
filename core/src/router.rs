@@ -1,7 +1,7 @@
 //! Axum router: wires all routes and middleware.
 
 use axum::{
-    extract::Request,
+    extract::{DefaultBodyLimit, Request},
     middleware::{self, Next},
     response::Response,
     routing::{get, post},
@@ -41,6 +41,9 @@ pub fn build(
     uploads_dir: &str,
     session_layer: SessionManagerLayer<PostgresStore>,
 ) -> Router {
+    let upload_limit = DefaultBodyLimit::max(
+        (state.config.max_upload_mb as usize).saturating_mul(1024 * 1024),
+    );
     // Static file services
     let uploads_service = ServeDir::new(uploads_dir);
 
@@ -84,7 +87,7 @@ pub fn build(
         .route("/admin/pages/bulk-delete", post(posts::bulk_delete_pages))
         // ── Admin media ────────────────────────────────────────────────────
         .route("/admin/media", get(media::list))
-        .route("/admin/media/upload", post(upload::upload))
+        .route("/admin/media/upload", post(upload::upload).layer(upload_limit.clone()))
         .route("/admin/media/{id}/delete", post(media::delete))
         // ── Admin categories ───────────────────────────────────────────────
         .route("/admin/categories", get(taxonomy::categories))
@@ -108,7 +111,7 @@ pub fn build(
         .route("/admin/appearance/get-theme", post(appearance::get_theme))
         .route("/admin/appearance/publish-theme", post(appearance::publish_theme))
         .route("/admin/appearance/delete", post(appearance::delete))
-        .route("/admin/appearance/upload", post(appearance::upload_theme))
+        .route("/admin/appearance/upload", post(appearance::upload_theme).layer(upload_limit))
         .route("/admin/theme-screenshot/{theme_name}", get(appearance::screenshot))
         .route("/admin/appearance/create", get(appearance::create_form).post(appearance::create_theme))
         .route("/admin/appearance/editor/{theme}", get(appearance::edit_file))

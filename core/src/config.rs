@@ -57,6 +57,11 @@ pub struct AppConfig {
     /// If unset, the endpoint is open (restrict access at the network/Caddy level instead).
     pub metrics_token: Option<String>,
 
+    /// Maximum file upload size in megabytes (applies to media and theme zip uploads).
+    /// Set via MAX_UPLOAD_MB in .env or synaptic.toml. Requires a restart to take effect.
+    #[serde(default = "default_max_upload_mb")]
+    pub max_upload_mb: u64,
+
     // ── Agency contact ───────────────────────────────────────────────────────
     // Used as the reply-to / notification address for system emails.
     // Set via ADMIN_EMAIL in .env or synaptic.toml.
@@ -136,6 +141,7 @@ fn default_pid_file() -> String {
 
 fn default_smtp_port() -> u16 { 587 }
 fn default_smtp_encryption() -> String { "starttls".to_string() }
+fn default_max_upload_mb() -> u64 { 25 }
 
 impl AppConfig {
     /// Load configuration from an optional TOML file and environment variables.
@@ -250,6 +256,7 @@ mod tests {
             smtp_from_name: None,
             smtp_from_email: None,
             smtp_encryption: default_smtp_encryption(),
+            max_upload_mb: default_max_upload_mb(),
         }
     }
 

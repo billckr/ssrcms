@@ -114,17 +114,21 @@ do not exist yet. The Security tab will be wired up when auth gets a dedicated p
 
 | Field | Storage | Default | Notes |
 |-------|---------|---------|-------|
-| Max Upload Size | `app_settings` | 25 MB | Editable at runtime via UI — no restart |
+| Max Upload Size | `AppConfig` (env) | 25 MB | Read-only in UI — requires restart to change |
 
-Upload size belongs in `app_settings`, not `AppConfig`. Reason: this is a CMS — agency
-users upload themes, and a theme zip can easily be 5–10 MB with assets. If the limit were
-in the env/config file, hitting it would require a server restart to fix, which is
-unacceptable UX. With `app_settings`, a super_admin adjusts it in the Advanced tab and it
-takes effect immediately (Axum reads the limit per-request, not at bind time).
+**Revised decision:** Upload size lives in `.env` / `synaptic.toml` as `MAX_UPLOAD_MB`, not
+in `app_settings`. Rationale: the original case for `app_settings` (no restart) was valid,
+but the operational reality is that agencies almost never need to change the upload limit
+mid-session, and keeping it in config alongside other infrastructure values (ports, DB URL)
+is simpler and more consistent. The Advanced tab shows the current value as a read-only
+field with a note to edit `.env` and restart.
 
-Default of 25 MB covers the vast majority of themes. All other Advanced settings
-(maintenance mode, debug logging, template cache TTL) are deferred until the underlying
-features exist.
+The Axum `DefaultBodyLimit` layer is applied per-route at startup, and the in-handler
+size check in `appearance.rs` also reads from `AppConfig`. Both must agree — both use
+`state.config.max_upload_mb`. Default of 25 MB written to `.env` by the install wizard.
+
+All other Advanced settings (maintenance mode, debug logging, template cache TTL) are
+deferred until the underlying features exist.
 
 ---
 
