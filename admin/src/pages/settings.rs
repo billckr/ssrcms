@@ -115,7 +115,6 @@ pub fn render(flash: Option<&str>, ctx: &crate::PageContext) -> String {
 <!-- Tab bar -->
 <div class="settings-tabs" role="tablist">
   <button class="settings-tab-btn active" role="tab" aria-selected="true"  aria-controls="tab-general"  data-tab="general">General</button>
-  <button class="settings-tab-btn"        role="tab" aria-selected="false" aria-controls="tab-email"    data-tab="email">Email / SMTP</button>
   <button class="settings-tab-btn"        role="tab" aria-selected="false" aria-controls="tab-security" data-tab="security">Security</button>
   <button class="settings-tab-btn"        role="tab" aria-selected="false" aria-controls="tab-advanced" data-tab="advanced">Advanced</button>
 </div>
@@ -166,56 +165,6 @@ pub fn render(flash: Option<&str>, ctx: &crate::PageContext) -> String {
 
     <div class="form-actions" style="margin-top:1.5rem">
       <button type="submit" class="btn btn-primary">Save General</button>
-    </div>
-  </form>
-</div>
-
-<!-- Email / SMTP -->
-<div id="tab-email" class="settings-panel" role="tabpanel">
-  <form method="post" action="/admin/settings" class="edit-form">
-    <input type="hidden" name="tab" value="email">
-
-    <p class="settings-section-title">Outbound Mail</p>
-    <div class="form-group">
-      <label for="se-from-name">From Name</label>
-      <input type="text" id="se-from-name" name="smtp_from_name" value="Synaptic Signals">
-    </div>
-    <div class="form-group">
-      <label for="se-from-email">From Email</label>
-      <input type="email" id="se-from-email" name="smtp_from_email" value="noreply@example.com">
-    </div>
-
-    <p class="settings-section-title">SMTP Server</p>
-    <div class="form-group">
-      <label for="se-host">SMTP Host</label>
-      <input type="text" id="se-host" name="smtp_host" value="smtp.example.com">
-    </div>
-    <div style="display:flex;gap:1rem">
-      <div class="form-group" style="flex:1">
-        <label for="se-port">Port</label>
-        <input type="number" id="se-port" name="smtp_port" value="587" min="1" max="65535">
-      </div>
-      <div class="form-group" style="flex:1">
-        <label for="se-enc">Encryption</label>
-        <select id="se-enc" name="smtp_encryption">
-          <option value="starttls">STARTTLS</option>
-          <option value="tls">TLS / SSL</option>
-          <option value="none">None</option>
-        </select>
-      </div>
-    </div>
-    <div class="form-group">
-      <label for="se-user">Username</label>
-      <input type="text" id="se-user" name="smtp_username" autocomplete="off">
-    </div>
-    <div class="form-group">
-      <label for="se-pass">Password</label>
-      <input type="password" id="se-pass" name="smtp_password" autocomplete="new-password">
-    </div>
-
-    <div class="form-actions" style="margin-top:1.5rem;display:flex;gap:.75rem;align-items:center">
-      <button type="submit" class="btn btn-primary">Save Email</button>
-      <button type="button" class="btn btn-secondary">Send Test Email</button>
     </div>
   </form>
 </div>

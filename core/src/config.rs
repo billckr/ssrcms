@@ -56,6 +56,34 @@ pub struct AppConfig {
     /// Optional bearer token to protect the /metrics endpoint.
     /// If unset, the endpoint is open (restrict access at the network/Caddy level instead).
     pub metrics_token: Option<String>,
+
+    // ── Outbound mail (SMTP) ──────────────────────────────────────────────────
+    // All mail config lives here, not in the database. Set via .env or synaptic.toml.
+    // If smtp_host is not set, outbound mail is disabled and operations that
+    // require email (password reset, form notifications) will log a warning.
+
+    /// SMTP server hostname (e.g. smtp.mailgun.org)
+    pub smtp_host: Option<String>,
+
+    /// SMTP server port (default: 587 for STARTTLS)
+    #[serde(default = "default_smtp_port")]
+    pub smtp_port: u16,
+
+    /// SMTP username / API key
+    pub smtp_username: Option<String>,
+
+    /// SMTP password / API secret
+    pub smtp_password: Option<String>,
+
+    /// Display name used in the From header (e.g. "Acme Agency")
+    pub smtp_from_name: Option<String>,
+
+    /// From email address (e.g. noreply@acme.com)
+    pub smtp_from_email: Option<String>,
+
+    /// Encryption mode: "starttls" (default), "tls", or "none"
+    #[serde(default = "default_smtp_encryption")]
+    pub smtp_encryption: String,
 }
 
 fn default_host() -> String {
@@ -98,6 +126,9 @@ fn default_search_index_path() -> String {
 fn default_pid_file() -> String {
     "synaptic.pid".to_string()
 }
+
+fn default_smtp_port() -> u16 { 587 }
+fn default_smtp_encryption() -> String { "starttls".to_string() }
 
 impl AppConfig {
     /// Load configuration from an optional TOML file and environment variables.
@@ -204,6 +235,13 @@ mod tests {
             search_index_path: default_search_index_path(),
             pid_file: default_pid_file(),
             metrics_token: None,
+            smtp_host: None,
+            smtp_port: default_smtp_port(),
+            smtp_username: None,
+            smtp_password: None,
+            smtp_from_name: None,
+            smtp_from_email: None,
+            smtp_encryption: default_smtp_encryption(),
         }
     }
 
