@@ -9,15 +9,15 @@
   {# — SEO meta tags — #}
   {% if post is defined %}
     <meta name="description" content="{{ post.excerpt | strip_html | truncate(length=160) }}">
-    <link rel="canonical" href="{{ post.url }}">
+    <link rel="canonical" href="{{ post.url | safe }}">
     <meta property="og:title" content="{{ post.title }} — {{ site.name }}">
     <meta property="og:description" content="{{ post.excerpt | strip_html | truncate(length=160) }}">
-    <meta property="og:url" content="{{ post.url }}">
+    <meta property="og:url" content="{{ post.url | safe }}">
     <meta property="og:type" content="article">
     {% if post.featured_image %}
-      <meta property="og:image" content="{{ post.featured_image.url }}">
+      <meta property="og:image" content="{{ post.featured_image.url | safe }}">
       <meta name="twitter:card" content="summary_large_image">
-      <meta name="twitter:image" content="{{ post.featured_image.url }}">
+      <meta name="twitter:image" content="{{ post.featured_image.url | safe }}">
     {% else %}
       <meta name="twitter:card" content="summary">
     {% endif %}
@@ -25,17 +25,17 @@
     <meta name="twitter:description" content="{{ post.excerpt | strip_html | truncate(length=160) }}">
   {% else %}
     <meta name="description" content="{{ site.description }}">
-    <link rel="canonical" href="{{ request.url }}">
+    <link rel="canonical" href="{{ request.url | safe }}">
     <meta property="og:title" content="{{ site.name }}">
     <meta property="og:description" content="{{ site.description }}">
-    <meta property="og:url" content="{{ request.url }}">
+    <meta property="og:url" content="{{ request.url | safe }}">
     <meta property="og:type" content="website">
     <meta name="twitter:card" content="summary">
     <meta name="twitter:title" content="{{ site.name }}">
     <meta name="twitter:description" content="{{ site.description }}">
   {% endif %}
   <meta name="robots" content="index, follow">
-  <link rel="alternate" type="application/rss+xml" title="{{ site.name }}" href="{{ site.url }}/feed.xml">
+  <link rel="alternate" type="application/rss+xml" title="{{ site.name }}" href="{{ site.url | safe }}/feed.xml">
 
   <link rel="stylesheet" href="/theme/static/css/style.css">
   {% block head_extra %}{% endblock head_extra %}
