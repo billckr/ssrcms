@@ -545,9 +545,11 @@ pub async fn provision_ssl(
         return Redirect::to("/admin/sites?flash=Cannot+write+Caddyfile").into_response();
     }
 
-    let result = std::process::Command::new("sudo")
+    // Run caddy reload directly — no sudo needed since caddy reload just talks
+    // to the Caddy admin API on localhost:2019. sudo is blocked by NoNewPrivileges.
+    let result = std::process::Command::new("/usr/bin/caddy")
         .args([
-            "/usr/bin/caddy", "reload",
+            "reload",
             "--config", caddyfile_path,
             "--adapter", "caddyfile",
         ])

@@ -8,7 +8,6 @@ use clap::Subcommand;
 use std::process::Command;
 
 const SUDOERS_FILE: &str = "/etc/sudoers.d/synaptic-caddy";
-const SUDOERS_COMMENT: &str = "# Synaptic Signals — allow app user to reload Caddy without a password";
 
 #[derive(Subcommand)]
 pub enum CaddyAction {
@@ -100,42 +99,6 @@ fn setup(app_user: &str, caddyfile_path: &str) -> anyhow::Result<()> {
         .map_err(|e| anyhow::anyhow!("Failed to run chmod on {}: {e}", log_dir))?;
     if !status.success() {
         anyhow::bail!("chmod 755 {} failed (exit {})", log_dir, status);
-    }
-
-    // 4. Write the sudoers drop-in that allows `sudo caddy reload --config … --adapter caddyfile`
-    //    without a password.  The command in the entry must match exactly what the app calls.
-    let caddy_reload_cmd = format!(
-        "/usr/bin/caddy reload --config {} --adapter caddyfile",
-        caddyfile_path
-    );
-    let sudoers_content = format!(
-        "{comment}\n{user} ALL=(root) NOPASSWD: {cmd}\n",
-        comment = SUDOERS_COMMENT,
-        user    = app_user,
-        cmd     = caddy_reload_cmd,
-    );
-    println!("  Writing {}...", SUDOERS_FILE);
-    std::fs::write(SUDOERS_FILE, &sudoers_content)
-        .map_err(|e| anyhow::anyhow!("Failed to write {}: {e}\nIs this running as root?", SUDOERS_FILE))?;
-
-    // sudoers.d files must be mode 0440 or sudo ignores them.
-    let status = Command::new("chmod")
-        .args(["0440", SUDOERS_FILE])
-        .status()
-        .map_err(|e| anyhow::anyhow!("Failed to chmod sudoers file: {e}"))?;
-    if !status.success() {
-        let _ = std::fs::remove_file(SUDOERS_FILE);
-        anyhow::bail!("chmod 0440 {} failed — file removed", SUDOERS_FILE);
-    }
-
-    // Validate the file before leaving it in place.
-    let status = Command::new("visudo")
-        .args(["-c", "-f", SUDOERS_FILE])
-        .status()
-        .map_err(|e| anyhow::anyhow!("Failed to run visudo: {e}"))?;
-    if !status.success() {
-        let _ = std::fs::remove_file(SUDOERS_FILE);
-        anyhow::bail!("visudo syntax check failed — sudoers file removed to avoid breaking sudo");
     }
 
     println!("  Caddy permissions configured for '{}'.", app_user);
