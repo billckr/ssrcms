@@ -22,6 +22,72 @@
 
 set -euo pipefail
 
+# ── Help ───────────────────────────────────────────────────────────────────────
+usage() {
+  cat <<EOF
+
+Synaptic Signals — Installer
+
+USAGE
+  sudo bash install.sh [--help]
+  curl -sSL https://get.synaptic.rs | sudo bash
+
+  Must be run as root. The app itself runs as a dedicated non-root user.
+
+ENVIRONMENT VARIABLES
+  All variables are optional unless marked required.
+
+  SYNAPTIC_DOMAIN      Domain name for the site, e.g. example.com          [required if non-interactive]
+  ADMIN_EMAIL          Admin login email address                            [required if non-interactive]
+  ADMIN_USERNAME       Admin username                                       (default: admin)
+  ADMIN_PASSWORD       Admin password — generated and printed if not set    (default: auto-generated)
+  APP_NAME             Admin panel brand name                               (default: Synaptic Signals)
+  NOTIFICATION_EMAIL   Reply-to address for system emails                   (default: ADMIN_EMAIL)
+
+  SYNAPTIC_USER        OS user to run the service — must not be root        (default: www-data)
+  INSTALL_DIR          Installation directory                               (default: /opt/synaptic-signals)
+  PORT                 Port the app listens on                              (default: 3000)
+  SYNAPTIC_VERSION     Release tag to install, e.g. v0.1.0-alpha11         (default: latest)
+
+  SKIP_CADDY           Set to any value to skip Caddy setup entirely
+  GITHUB_TOKEN         GitHub personal access token (required for private repos)
+  DB_NAME              PostgreSQL database name                             (default: synaptic_signals)
+  DB_USER              PostgreSQL role name                                 (default: synaptic)
+
+EXAMPLES
+  # Interactive install (prompts for domain and admin email):
+  sudo bash install.sh
+
+  # Fully non-interactive:
+  SYNAPTIC_DOMAIN=example.com ADMIN_EMAIL=me@example.com sudo bash install.sh
+
+  # Custom user and install dir:
+  SYNAPTIC_USER=bill INSTALL_DIR=/home/bill/synaptic sudo bash install.sh
+
+  # Skip Caddy (configure manually later):
+  SKIP_CADDY=1 SYNAPTIC_DOMAIN=example.com ADMIN_EMAIL=me@example.com sudo bash install.sh
+
+POST-INSTALL
+  SSL for additional sites can be provisioned from the admin panel at:
+    https://<domain>/admin/sites
+  This requires the Caddy permissions set up by the installer. To re-run:
+    sudo synaptic-cli caddy setup --app-user <SYNAPTIC_USER>
+
+  To uninstall:
+    systemctl disable --now synaptic-signals caddy
+    rm -rf \$INSTALL_DIR /etc/caddy/Caddyfile /etc/systemd/system/synaptic-signals.service
+    sudo -u postgres psql -c "DROP DATABASE synaptic_signals; DROP ROLE synaptic;"
+
+EOF
+}
+
+for arg in "$@"; do
+  case "$arg" in
+    -h|--help) usage; exit 0 ;;
+    *) die "Unknown argument: $arg\nRun 'bash install.sh --help' for usage." ;;
+  esac
+done
+
 # ── Configuration ──────────────────────────────────────────────────────────────
 SYNAPTIC_VERSION="${SYNAPTIC_VERSION:-latest}"
 INSTALL_DIR="${INSTALL_DIR:-/opt/synaptic-signals}"
