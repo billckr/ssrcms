@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="{{ site.language }}">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  {{ hook(name="head_start") | safe }}
+  <title>{% block title %}{{ site.name }}{% endblock title %}</title>
+  {# — SEO meta tags — #}
+  {% if post is defined %}
+    <meta name="description" content="{{ post.excerpt | strip_html | truncate(length=160) }}">
+    <link rel="canonical" href="{{ post.url | safe }}">
+    <meta property="og:title" content="{{ post.title }} — {{ site.name }}">
+    <meta property="og:description" content="{{ post.excerpt | strip_html | truncate(length=160) }}">
+    <meta property="og:url" content="{{ post.url | safe }}">
+    <meta property="og:type" content="article">
+    {% if post.featured_image %}
+      <meta property="og:image" content="{{ post.featured_image.url | safe }}">
+      <meta name="twitter:card" content="summary_large_image">
+      <meta name="twitter:image" content="{{ post.featured_image.url | safe }}">
+    {% else %}
+      <meta name="twitter:card" content="summary">
+    {% endif %}
+    <meta name="twitter:title" content="{{ post.title }} — {{ site.name }}">
+    <meta name="twitter:description" content="{{ post.excerpt | strip_html | truncate(length=160) }}">
+  {% else %}
+    <meta name="description" content="{{ site.description }}">
+    <link rel="canonical" href="{{ request.url | safe }}">
+    <meta property="og:title" content="{{ site.name }}">
+    <meta property="og:description" content="{{ site.description }}">
+    <meta property="og:url" content="{{ request.url | safe }}">
+    <meta property="og:type" content="website">
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="{{ site.name }}">
+    <meta name="twitter:description" content="{{ site.description }}">
+  {% endif %}
+  <meta name="robots" content="index, follow">
+  <link rel="alternate" type="application/rss+xml" title="{{ site.name }}" href="{{ site.url | safe }}/feed.xml">
+
+  <link rel="stylesheet" href="/theme/static/css/style.css">
+  {% block head_extra %}{% endblock head_extra %}
+  {{ hook(name="head_end") | safe }}
+</head>
+<body>
+  {{ hook(name="body_start") | safe }}
+
+  <header class="site-header">
+    <nav class="site-nav">
+      <a class="site-title" href="/">{{ site.name }}</a>
+      <ul class="nav-links">
+        {% for item in nav.primary.items %}
+          <li><a href="{{ item.url }}"{% if item.target == "_blank" %} target="_blank" rel="noopener"{% endif %}{% if item.is_current %} aria-current="page"{% endif %}>{{ item.label }}</a></li>
+        {% endfor %}
+      </ul>
+    </nav>
+  </header>
+
+  <main class="site-main">
+    {{ hook(name="before_content") | safe }}
+    {% block content %}{% endblock content %}
+    {{ hook(name="after_content") | safe }}
+  </main>
+
+  <footer class="site-footer">
+    <p>&copy; {{ site.name }}</p>
+    {{ hook(name="footer") | safe }}
+  </footer>
+
+  {{ hook(name="body_end") | safe }}
+
+  {# — Cookie consent banner (GDPR) — #}
+  <div id="cookie-banner" role="alertdialog" aria-live="polite" aria-label="Cookie consent" style="display:none;position:fixed;bottom:0;left:0;right:0;z-index:9999;background:#1a1a1a;color:#fff;padding:1rem 1.5rem;align-items:center;gap:1rem;flex-wrap:wrap;">
+    <p style="margin:0;flex:1;min-width:200px;">This site uses cookies to improve your experience. By continuing to use this site you accept our use of cookies.</p>
+    <div style="display:flex;gap:.5rem;flex-shrink:0;">
+      <button onclick="cookieConsent('accepted')" style="background:#cc785c;color:#fff;border:none;padding:.5rem 1.25rem;border-radius:4px;cursor:pointer;font-size:.875rem;">Accept</button>
+      <button onclick="cookieConsent('dismissed')" style="background:transparent;color:#ccc;border:1px solid #555;padding:.5rem 1.25rem;border-radius:4px;cursor:pointer;font-size:.875rem;">Dismiss</button>
+    </div>
+  </div>
+  <script>
+    (function () {
+      var consent = localStorage.getItem('cookie_consent');
+      if (!consent) {
+        var b = document.getElementById('cookie-banner');
+        if (b) b.style.display = 'flex';
+      } else if (consent === 'accepted') {
+        loadAnalytics();
+      }
+    })();
+
+    function cookieConsent(choice) {
+      localStorage.setItem('cookie_consent', choice);
+      var b = document.getElementById('cookie-banner');
+      if (b) b.style.display = 'none';
+      if (choice === 'accepted') loadAnalytics();
+    }
+
+    {# — Analytics — replace G-XXXXXXXXXX with your Measurement ID to enable GA.     #}
+    {# — Remove or leave blank if not using Google Analytics.                         #}
+    var GA_ID = '';
+
+    function loadAnalytics() {
+      if (!GA_ID) return;
+      var s = document.createElement('script');
+      s.async = true;
+      s.src = 'https://www.googletagmanager.com/gtag/js?id=' + GA_ID;
+      document.head.appendChild(s);
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', GA_ID);
+    }
+  </script>
+</body>
+</html>
