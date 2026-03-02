@@ -119,15 +119,18 @@ async fn render_home(
     ctx.insert("tag_cloud", &tag_cloud);
     ctx.insert("category_cloud", &category_cloud);
 
+    let active_plugins = crate::models::site_plugin::active_plugin_names(&state.db, site_id)
+        .await
+        .unwrap_or_default();
     let theme = state.active_theme_for_site(Some(site_id));
 
-    // Pre-render hooks
+    // Pre-render hooks — filtered to plugins active for this site.
     let hook_outputs = state.templates.render_hooks_for_theme(
         &theme,
         Some(site_id),
         &["head_start", "head_end", "body_start", "body_end", "before_content", "after_content", "footer"],
         &ctx,
-    );
+    Some(&active_plugins));
     ContextBuilder::add_hook_outputs(&mut ctx, &hook_outputs);
 
     state.templates.render_for_theme(&theme, Some(site_id), "index.html", &ctx)
@@ -177,13 +180,20 @@ async fn render_404(state: &AppState, path: &str, site_id: Option<uuid::Uuid>) -
     }
     .into_tera_context();
 
+    let active_plugins: Vec<String> = if let Some(sid) = site_id {
+        crate::models::site_plugin::active_plugin_names(&state.db, sid)
+            .await
+            .unwrap_or_default()
+    } else {
+        Vec::new()
+    };
     let theme = state.active_theme_for_site(site_id);
     let hook_outputs = state.templates.render_hooks_for_theme(
         &theme,
         site_id,
         &["head_start", "head_end", "body_start", "body_end", "before_content", "after_content", "footer"],
         &ctx,
-    );
+    Some(&active_plugins));
     ContextBuilder::add_hook_outputs(&mut ctx, &hook_outputs);
 
     state.templates.render_for_theme(&theme, site_id, "404.html", &ctx)

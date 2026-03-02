@@ -62,6 +62,7 @@ pub fn build(
         .route("/tag/{slug}", get(archive::tag_archive))
         .route("/author/{username}", get(archive::author_archive))
         .route("/search", get(search::search))
+        .route("/sitemap.xml", get(plugin_route::sitemap))
         // ── Public form submissions ────────────────────────────────────────
         .route("/form/{name}", post(form_handler::submit))
         // ── Admin auth ─────────────────────────────────────────────────────
@@ -105,6 +106,11 @@ pub fn build(
         .route("/admin/users/{id}/site-access/add", post(users::add_site_access))
         .route("/admin/users/{id}/site-access/remove", post(users::remove_site_access))        // ── Admin plugins ──────────────────────────────────────────────────
         .route("/admin/plugins", get(plugins::list))
+        .route("/admin/plugins/install",    post(plugins::install))
+        .route("/admin/plugins/upload",     post(plugins::upload).layer(upload_limit.clone()))
+        .route("/admin/plugins/activate",   post(plugins::activate))
+        .route("/admin/plugins/deactivate", post(plugins::deactivate))
+        .route("/admin/plugins/delete",     post(plugins::delete))
         // ── Admin appearance ───────────────────────────────────────────────
         .route("/admin/appearance", get(appearance::list))
         .route("/admin/appearance/activate", post(appearance::activate))
@@ -141,8 +147,11 @@ pub fn build(
         .route("/theme/static/{*path}", get(theme_static::serve))
         .nest_service("/admin/static", ServeDir::new("admin/static"));
 
-    // Register plugin routes (e.g. /sitemap.xml)
+    // Register plugin routes — skip any paths already handled by hardcoded routes.
     for path in plugin_route_paths {
+        if path == "/sitemap.xml" {
+            continue; // handled by the hardcoded route above
+        }
         router = router.route(&path, get(plugin_route::dispatch));
     }
 

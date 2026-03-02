@@ -137,6 +137,9 @@ impl TemplateEngine {
         let mut tera = Tera::new(&glob)
             .map_err(|e| anyhow::anyhow!("Failed to load theme '{}': {}", theme_name, e))?;
 
+        // Also load XML templates (e.g. sitemap.xml) from the theme directory.
+        Self::load_xml_from_dir(&mut tera, &theme_path, &theme_path);
+
         tera.autoescape_on(vec![".html", ".xml"]);
 
         // Re-add plugin templates.
@@ -272,12 +275,17 @@ impl TemplateEngine {
     }
 
     /// Pre-render hook outputs using a specific theme's engine.
+    ///
+    /// `active_plugins`: when `Some`, only handlers whose `plugin_name` is in
+    /// the list will fire — used for per-site plugin activation. Pass `None`
+    /// to fire all registered handlers (backward-compatible default).
     pub fn render_hooks_for_theme(
         &self,
         theme: &str,
         site_id: Option<Uuid>,
         hook_names: &[&str],
         context: &tera::Context,
+        active_plugins: Option<&[String]>,
     ) -> HashMap<String, String> {
         self.ensure_theme_loaded_for_site(theme, site_id);
         let key = self.theme_cache_key(theme, site_id);
@@ -294,7 +302,11 @@ impl TemplateEngine {
 
         let mut outputs = HashMap::new();
         for hook_name in hook_names {
-            let handlers = self.hook_registry.handlers_for(hook_name);
+            let mut handlers = self.hook_registry.handlers_for(hook_name);
+            // Filter by active plugins when a list is provided.
+            if let Some(active) = active_plugins {
+                handlers.retain(|h| active.contains(&h.plugin_name));
+            }
             let mut html = String::new();
             for handler in &handlers {
                 match tera.render(&handler.template_path, context) {
@@ -317,7 +329,7 @@ impl TemplateEngine {
         context: &tera::Context,
     ) -> HashMap<String, String> {
         let theme = self.active_theme.read().unwrap().clone();
-        self.render_hooks_for_theme(&theme, None, hook_names, context)
+        self.render_hooks_for_theme(&theme, None, hook_names, context, None)
     }
 
     /// Replace `[[HOOK:__hook_output__<name>]]` sentinels in rendered HTML
@@ -339,6 +351,34 @@ impl TemplateEngine {
             result = result.replace(full_match, &replacement);
         }
         result
+    }
+
+    /// Recursively load XML files from a directory into a Tera instance.
+    /// Template names are relative to `base` (e.g. "sitemap.xml").
+    fn load_xml_from_dir(tera: &mut Tera, dir: &std::path::Path, base: &std::path::Path) {
+        let entries = match std::fs::read_dir(dir) {
+            Ok(e) => e,
+            Err(_) => return,
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                Self::load_xml_from_dir(tera, &path, base);
+            } else if path.extension().and_then(|e| e.to_str()) == Some("xml") {
+                if let Ok(relative) = path.strip_prefix(base) {
+                    let tname = relative.to_string_lossy().replace('\\', "/");
+                    if let Ok(src) = std::fs::read_to_string(&path) {
+                        if let Err(e) = tera.add_raw_template(&tname, &src) {
+                            tracing::warn!(
+                                "load_theme: could not add XML template '{}': {}",
+                                tname,
+                                e
+                            );
+                        }
+                    }
+                }
+            }
+        }
     }
 
     /// Hot-reload the currently active theme's templates (dev mode).

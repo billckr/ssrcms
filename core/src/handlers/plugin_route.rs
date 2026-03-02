@@ -27,6 +27,32 @@ use crate::middleware::site::CurrentSite;
 use crate::models::post::{self, ListFilter, PostStatus, PostType};
 use crate::templates::context::{ContextBuilder, NavContext, RequestContext, SessionContext};
 
+/// Hardcoded handler for `/sitemap.xml`.
+///
+/// Renders `sitemap.xml` from the active theme.  This route is always
+/// present regardless of which plugins are installed — no plugin required.
+pub async fn sitemap(
+    State(state): State<AppState>,
+    current_site: CurrentSite,
+    axum::extract::OriginalUri(uri): axum::extract::OriginalUri,
+) -> Response {
+    let path = uri.path().to_string();
+    let site_id = current_site.site.id;
+    let base_url = current_site.base_url.clone();
+
+    match render_plugin_route(state, &path, "sitemap.xml", "application/xml", site_id, &base_url).await {
+        Ok(body) => Response::builder()
+            .status(StatusCode::OK)
+            .header(header::CONTENT_TYPE, "application/xml; charset=utf-8")
+            .body(Body::from(body))
+            .unwrap_or_else(|_| StatusCode::INTERNAL_SERVER_ERROR.into_response()),
+        Err(e) => {
+            tracing::error!("sitemap render error: {:?}", e);
+            StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
+}
+
 /// Handler for all plugin-registered routes.
 /// The path is resolved against the plugin route registry in AppState.
 pub async fn dispatch(

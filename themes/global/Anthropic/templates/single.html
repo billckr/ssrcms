@@ -38,7 +38,7 @@
       <time datetime="{{ post.published_at }}">
         {% if post.published_at %}{{ post.published_at | date_format }}{% endif %}
       </time>
-      <span class="post-author">by <a href="{{ post.author.url }}">{{ post.author.display_name }}</a></span>
+      <span class="post-author">by&nbsp;<a href="{{ post.author.url }}">{{ post.author.display_name }}</a></span>
       {% if post.categories | length > 0 %}
         <span class="post-categories">
           in {% for cat in post.categories %}<a href="{{ cat.url }}">{{ cat.name }}</a>{% if not loop.last %}, {% endif %}{% endfor %}

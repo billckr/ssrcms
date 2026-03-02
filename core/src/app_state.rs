@@ -8,7 +8,8 @@ use uuid::Uuid;
 
 use crate::config::AppConfig;
 use crate::models::site::Site;
-use crate::plugins::manifest::{PluginManifest, RouteRegistration};
+use crate::plugins::loader::LoadedPlugin;
+use crate::plugins::manifest::RouteRegistration;
 use crate::search::SearchIndex;
 use crate::templates::TemplateEngine;
 
@@ -198,8 +199,8 @@ pub struct AppState {
     pub plugin_routes: PluginRoutes,
     /// Tantivy full-text search index.
     pub search_index: Arc<SearchIndex>,
-    /// Loaded plugin manifests — used by the admin plugins page.
-    pub loaded_plugins: Arc<Vec<PluginManifest>>,
+    /// Loaded plugins (manifest + source metadata) — used by the admin plugins page.
+    pub loaded_plugins: Arc<Vec<LoadedPlugin>>,
     /// Currently active theme name — updated live when admin switches theme.
     pub active_theme: Arc<RwLock<String>>,
     /// Multi-site cache: hostname → (Site, SiteSettings).

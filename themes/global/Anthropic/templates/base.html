@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   {{ hook(name="head_start") | safe }}
   <title>{% block title %}{{ site.name }}{% endblock title %}</title>
-
   {# — SEO meta tags — #}
   {% if post is defined %}
     <meta name="description" content="{{ post.excerpt | strip_html | truncate(length=160) }}">
@@ -53,10 +52,6 @@
         {% endfor %}
       </ul>
     </nav>
-    <form method="get" action="/search" class="header-search" role="search">
-      <input type="search" name="q" placeholder="Search…" aria-label="Search posts">
-      <button type="submit">Search</button>
-    </form>
   </header>
 
   <main class="site-main">
@@ -76,7 +71,7 @@
   <div id="cookie-banner" role="alertdialog" aria-live="polite" aria-label="Cookie consent" style="display:none;position:fixed;bottom:0;left:0;right:0;z-index:9999;background:#1a1a1a;color:#fff;padding:1rem 1.5rem;align-items:center;gap:1rem;flex-wrap:wrap;">
     <p style="margin:0;flex:1;min-width:200px;">This site uses cookies to improve your experience. By continuing to use this site you accept our use of cookies.</p>
     <div style="display:flex;gap:.5rem;flex-shrink:0;">
-      <button onclick="cookieConsent('accepted')" style="background:#e8530a;color:#fff;border:none;padding:.5rem 1.25rem;border-radius:4px;cursor:pointer;font-size:.875rem;">Accept</button>
+      <button onclick="cookieConsent('accepted')" style="background:#cc785c;color:#fff;border:none;padding:.5rem 1.25rem;border-radius:4px;cursor:pointer;font-size:.875rem;">Accept</button>
       <button onclick="cookieConsent('dismissed')" style="background:transparent;color:#ccc;border:1px solid #555;padding:.5rem 1.25rem;border-radius:4px;cursor:pointer;font-size:.875rem;">Dismiss</button>
     </div>
   </div>

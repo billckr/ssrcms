@@ -1,21 +1,25 @@
 //! Plugin loader: scans the plugins directory, parses manifests, registers hooks,
 //! and adds plugin templates to the Tera engine.
-//! Phase 4 scaffolding — not yet wired into the runtime (plugin hot-reload, reload API).
 #![allow(dead_code)]
 
 use std::path::{Path, PathBuf};
 
 use tera::Tera;
 use tracing::{info, warn};
+use uuid::Uuid;
 
 use super::hook_registry::{HookHandler, HookRegistry};
 use super::manifest::PluginManifest;
 
-/// Loaded plugin state.
+/// Loaded plugin state — includes source provenance for multi-site support.
 #[derive(Debug, Clone)]
 pub struct LoadedPlugin {
     pub manifest: PluginManifest,
     pub directory: PathBuf,
+    /// "global" for agency-managed plugins, "site" for per-site copies.
+    pub source: String,
+    /// Present when `source == "site"` — identifies which site owns this copy.
+    pub site_id: Option<Uuid>,
 }
 
 /// Plugin loader: discovers and loads plugins from the plugins directory.
@@ -112,6 +116,8 @@ impl PluginLoader {
         Ok(LoadedPlugin {
             manifest,
             directory: plugin_dir.to_path_buf(),
+            source: "global".to_string(),
+            site_id: None,
         })
     }
 
