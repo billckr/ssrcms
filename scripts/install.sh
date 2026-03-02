@@ -158,6 +158,21 @@ if ! id "$SYNAPTIC_USER" &>/dev/null; then
   useradd --system --no-create-home --shell /sbin/nologin "$SYNAPTIC_USER"
 fi
 
+# ── Install dir permissions ────────────────────────────────────────────────────
+# Ensure the install dir exists and is owned by the service user.
+# Use 750 (rwxr-x---) rather than 755 — Caddy is added to the service group
+# so it can read/serve static files without world-readable permissions.
+mkdir -p "$INSTALL_DIR"
+chown "${SYNAPTIC_USER}:${SYNAPTIC_USER}" "$INSTALL_DIR"
+chmod 750 "$INSTALL_DIR"
+
+# Add caddy to the service user's group so it can traverse the install dir
+# and serve /uploads/* and /theme/* directly.
+if id caddy &>/dev/null; then
+  usermod -aG "$SYNAPTIC_USER" caddy
+  info "Added 'caddy' to group '${SYNAPTIC_USER}' for static file serving."
+fi
+
 # ── Collect install configuration ─────────────────────────────────────────────
 echo ""
 info "── Installation Configuration ────────────────────────────"
