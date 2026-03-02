@@ -542,6 +542,9 @@ info "── Configuring systemd service ─────────────
 
 if [[ -f "${INSTALL_DIR}/synaptic-signals.service" ]]; then
   cp "${INSTALL_DIR}/synaptic-signals.service" /etc/systemd/system/
+  # Ensure the service runs as the correct user — older binaries hardcode www-data.
+  sed -i "s/^User=.*/User=${SYNAPTIC_USER}/" /etc/systemd/system/synaptic-signals.service
+  sed -i "s/^Group=.*/Group=${SYNAPTIC_USER}/" /etc/systemd/system/synaptic-signals.service
   systemctl daemon-reload
   systemctl enable synaptic-signals
   systemctl restart synaptic-signals
