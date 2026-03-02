@@ -102,6 +102,17 @@ The installer will:
 
 ## 5. Configure Caddy
 
+**Before starting Caddy, ensure port 80 is free.** Apache (`httpd`) and Nginx both bind port 80 by default and will block Caddy from starting. Stop and disable them if present:
+
+```bash
+# Check what is using port 80
+sudo ss -tlnp | grep ':80'
+
+# Stop conflicting services if needed
+sudo systemctl stop httpd nginx
+sudo systemctl disable httpd nginx
+```
+
 Copy the generated Caddyfile into your Caddy configuration:
 
 ```bash
@@ -116,6 +127,16 @@ sudo caddy reload --config /etc/caddy/Caddyfile
 ```
 
 Caddy will automatically obtain and renew a TLS certificate from Let's Encrypt.
+
+**Set up the log directory** so Caddy can write per-site access logs:
+
+```bash
+sudo mkdir -p /var/log/caddy
+sudo chown caddy:caddy /var/log/caddy
+sudo chmod 755 /var/log/caddy
+```
+
+This is handled automatically if you run `sudo synaptic-cli caddy setup --app-user www-data`.
 
 **What the Caddyfile does:**
 - Serves `/uploads/*` directly from the filesystem (bypasses Axum)

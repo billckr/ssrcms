@@ -81,7 +81,28 @@ fn setup(app_user: &str, caddyfile_path: &str) -> anyhow::Result<()> {
         );
     }
 
-    // 3. Write the sudoers drop-in that allows `sudo caddy reload --config … --adapter caddyfile`
+    // 3. Ensure /var/log/caddy/ exists and is owned by caddy:caddy so that
+    //    Caddy can create per-site log files without permission errors.
+    let log_dir = "/var/log/caddy";
+    println!("  Ensuring {} exists with caddy:caddy ownership...", log_dir);
+    std::fs::create_dir_all(log_dir)
+        .map_err(|e| anyhow::anyhow!("Failed to create {}: {e}", log_dir))?;
+    let status = Command::new("chown")
+        .args(["caddy:caddy", log_dir])
+        .status()
+        .map_err(|e| anyhow::anyhow!("Failed to run chown on {}: {e}", log_dir))?;
+    if !status.success() {
+        anyhow::bail!("chown caddy:caddy {} failed (exit {})", log_dir, status);
+    }
+    let status = Command::new("chmod")
+        .args(["755", log_dir])
+        .status()
+        .map_err(|e| anyhow::anyhow!("Failed to run chmod on {}: {e}", log_dir))?;
+    if !status.success() {
+        anyhow::bail!("chmod 755 {} failed (exit {})", log_dir, status);
+    }
+
+    // 4. Write the sudoers drop-in that allows `sudo caddy reload --config … --adapter caddyfile`
     //    without a password.  The command in the entry must match exactly what the app calls.
     let caddy_reload_cmd = format!(
         "/usr/bin/caddy reload --config {} --adapter caddyfile",
