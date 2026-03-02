@@ -148,8 +148,8 @@ else
 fi
 
 # ── Create database and user ───────────────────────────────────────────────────
-DB_NAME="synaptic_signals"
-DB_USER="synaptic"
+DB_NAME="${DB_NAME:-synaptic_signals}"
+DB_USER="${DB_USER:-synaptic}"
 
 # Reuse existing credentials if .env already has them (idempotent re-run).
 ENV_FILE="${INSTALL_DIR}/.env"
@@ -228,24 +228,57 @@ fi
 info "Installing Synaptic Signals ${SYNAPTIC_VERSION}..."
 
 TARBALL="synaptic-signals-${SYNAPTIC_VERSION}-${ARCH_SLUG}-linux.tar.gz"
-DOWNLOAD_URL="https://github.com/${GITHUB_REPO}/releases/download/${SYNAPTIC_VERSION}/${TARBALL}"
 
 TMP_DIR=$(mktemp -d)
 trap 'rm -rf "$TMP_DIR"' EXIT
 
 info "Downloading ${TARBALL}..."
-curl -fsSL --progress-bar \
-  ${GITHUB_TOKEN:+-H "Authorization: Bearer ${GITHUB_TOKEN}"} \
-  "$DOWNLOAD_URL" -o "${TMP_DIR}/${TARBALL}" \
-  || die "Download failed. Check that release ${SYNAPTIC_VERSION} exists for ${ARCH_SLUG}."
 
-# Verify checksum if available.
-if curl -fsSL \
-    ${GITHUB_TOKEN:+-H "Authorization: Bearer ${GITHUB_TOKEN}"} \
-    "${DOWNLOAD_URL}.sha256" -o "${TMP_DIR}/${TARBALL}.sha256" 2>/dev/null; then
-  (cd "$TMP_DIR" && sha256sum -c "${TARBALL}.sha256") \
-    || die "Checksum verification failed — download may be corrupt."
-  success "Checksum verified."
+# Private repos require downloading assets via the API (browser URLs return 404).
+# If no GITHUB_TOKEN is set, fall back to the direct URL (works for public repos).
+if [[ -n "${GITHUB_TOKEN:-}" ]]; then
+  # Look up the asset ID from the releases API, then download via API endpoint.
+  RELEASE_JSON=$(curl -fsSL \
+    -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+    "https://api.github.com/repos/${GITHUB_REPO}/releases/tags/${SYNAPTIC_VERSION}") \
+    || die "Could not fetch release metadata for ${SYNAPTIC_VERSION}."
+
+  ASSET_ID=$(echo "$RELEASE_JSON" \
+    | grep -A2 "\"name\": \"${TARBALL}\"" \
+    | grep '"id"' | head -1 | grep -o '[0-9]*')
+  [[ -n "$ASSET_ID" ]] || die "Asset '${TARBALL}' not found in release ${SYNAPTIC_VERSION}."
+
+  curl -fsSL --progress-bar \
+    -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+    -H "Accept: application/octet-stream" \
+    "https://api.github.com/repos/${GITHUB_REPO}/releases/assets/${ASSET_ID}" \
+    -o "${TMP_DIR}/${TARBALL}" \
+    || die "Download failed for asset ID ${ASSET_ID}."
+
+  # Checksum (also via API).
+  SHA_ASSET_ID=$(echo "$RELEASE_JSON" \
+    | grep -A2 "\"name\": \"${TARBALL}.sha256\"" \
+    | grep '"id"' | head -1 | grep -o '[0-9]*')
+  if [[ -n "$SHA_ASSET_ID" ]]; then
+    curl -fsSL \
+      -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+      -H "Accept: application/octet-stream" \
+      "https://api.github.com/repos/${GITHUB_REPO}/releases/assets/${SHA_ASSET_ID}" \
+      -o "${TMP_DIR}/${TARBALL}.sha256" 2>/dev/null \
+      && (cd "$TMP_DIR" && sha256sum -c "${TARBALL}.sha256") \
+      && success "Checksum verified." \
+      || true
+  fi
+else
+  # Public repo — direct download.
+  DOWNLOAD_URL="https://github.com/${GITHUB_REPO}/releases/download/${SYNAPTIC_VERSION}/${TARBALL}"
+  curl -fsSL --progress-bar "$DOWNLOAD_URL" -o "${TMP_DIR}/${TARBALL}" \
+    || die "Download failed. Check that release ${SYNAPTIC_VERSION} exists for ${ARCH_SLUG}."
+  if curl -fsSL "${DOWNLOAD_URL}.sha256" -o "${TMP_DIR}/${TARBALL}.sha256" 2>/dev/null; then
+    (cd "$TMP_DIR" && sha256sum -c "${TARBALL}.sha256") \
+      || die "Checksum verification failed — download may be corrupt."
+    success "Checksum verified."
+  fi
 fi
 
 mkdir -p "$INSTALL_DIR"
