@@ -162,7 +162,8 @@ pub fn render_form_detail(
                 let val = s.data.get(col)
                     .and_then(|v| v.as_str())
                     .unwrap_or("");
-                format!("<td>{}</td>", html_escape(val))
+                format!("<td class=\"cell-truncate\" title=\"{}\">{}</td>",
+                    html_escape(val), html_escape(val))
             }).collect::<Vec<_>>().join("");
 
             format!(

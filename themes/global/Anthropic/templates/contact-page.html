@@ -35,7 +35,8 @@
     <div class="contact-field">
       <label for="cf-name">Your name <span class="contact-required" aria-hidden="true">*</span></label>
       <input type="text" id="cf-name" name="name" required autocomplete="name"
-             placeholder="Jane Smith">
+             placeholder="Jane Smith" maxlength="25">
+      <span class="contact-field-hint">Max 25 characters</span>
     </div>
 
     <div class="contact-field">
@@ -46,7 +47,8 @@
 
     <div class="contact-field">
       <label for="cf-subject">Subject</label>
-      <input type="text" id="cf-subject" name="subject" placeholder="How can we help?">
+      <input type="text" id="cf-subject" name="subject" placeholder="How can we help?" maxlength="50">
+      <span class="contact-field-hint">Max 50 characters</span>
     </div>
 
     <div class="contact-field">
@@ -161,6 +163,7 @@
   text-align: right;
 }
 .contact-char-count.contact-char-warn { color: #dc2626; font-weight: 600; }
+.contact-field-hint { font-size: 0.75rem; color: #9ca3af; }
 
 .contact-submit {
   align-self: flex-start;
