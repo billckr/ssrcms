@@ -328,17 +328,19 @@ info "── Synaptic Signals ────────────────�
 
 if [[ "$SYNAPTIC_VERSION" == "latest" ]]; then
   info "Fetching latest release version..."
-  # Use grep -m1 with || true so a no-match never kills the script under pipefail.
-  SYNAPTIC_VERSION=$(curl -sSL \
+  # Temporarily disable pipefail so grep returning no matches doesn't kill the script.
+  set +o pipefail
+  API_JSON=$(curl -sSL \
     ${GITHUB_TOKEN:+-H "Authorization: Bearer ${GITHUB_TOKEN}"} \
-    "https://api.github.com/repos/${GITHUB_REPO}/releases/latest" \
-    | grep -m1 '"tag_name"' | cut -d'"' -f4 || true)
+    "https://api.github.com/repos/${GITHUB_REPO}/releases/latest" 2>/dev/null || true)
+  SYNAPTIC_VERSION=$(echo "$API_JSON" | grep -m1 '"tag_name"' | cut -d'"' -f4 || true)
   if [[ -z "$SYNAPTIC_VERSION" ]]; then
-    SYNAPTIC_VERSION=$(curl -sSL \
+    API_JSON=$(curl -sSL \
       ${GITHUB_TOKEN:+-H "Authorization: Bearer ${GITHUB_TOKEN}"} \
-      "https://api.github.com/repos/${GITHUB_REPO}/releases?per_page=1" \
-      | grep -m1 '"tag_name"' | cut -d'"' -f4 || true)
+      "https://api.github.com/repos/${GITHUB_REPO}/releases?per_page=1" 2>/dev/null || true)
+    SYNAPTIC_VERSION=$(echo "$API_JSON" | grep -m1 '"tag_name"' | cut -d'"' -f4 || true)
   fi
+  set -o pipefail
   if [[ -z "$SYNAPTIC_VERSION" ]]; then
     warn "Could not auto-detect latest version (GitHub API may require authentication for this repo)."
     read -rp "$(echo -e "${BOLD}Enter version to install (e.g. v0.1.0-alpha12):${RESET} ")" SYNAPTIC_VERSION

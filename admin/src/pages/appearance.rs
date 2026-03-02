@@ -310,7 +310,6 @@ pub fn render_theme_editor(
             (restore_btn, delete_btn)
         };
 
-        let del_btn = delete_btn.clone();
         let del_btn2 = delete_btn;
         let ro = if is_readonly { " readonly" } else { "" };
         let save_btn = if is_readonly { "" } else { r#"<button type="submit" form="save-form" class="btn btn-primary">Save file</button>"# };
@@ -327,7 +326,6 @@ pub fn render_theme_editor(
             r#"<div class="editor-meta">
   <span class="editor-filename">{file}</span>{edited_at}
   {restore}
-  {del_btn}
 </div>
 <form method="POST" action="/admin/appearance/editor/{theme}/save" class="editor-form" id="save-form">
   <input type="hidden" name="file" value="{file}">
