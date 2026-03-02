@@ -41,7 +41,7 @@
       <span class="post-author">by&nbsp;<a href="{{ post.author.url }}">{{ post.author.display_name }}</a></span>
       {% if post.categories | length > 0 %}
         <span class="post-categories">
-          in {% for cat in post.categories %}<a href="{{ cat.url }}">{{ cat.name }}</a>{% if not loop.last %}, {% endif %}{% endfor %}
+          in&nbsp;{% for cat in post.categories %}<a href="{{ cat.url }}">{{ cat.name }}</a>{% if not loop.last %}, {% endif %}{% endfor %}
         </span>
       {% endif %}
       <span class="reading-time">{{ post.reading_time }} min read</span>

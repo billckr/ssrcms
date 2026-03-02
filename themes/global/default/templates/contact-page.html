@@ -51,18 +51,33 @@
 
     <div class="contact-field">
       <label for="cf-message">Message <span class="contact-required" aria-hidden="true">*</span></label>
-      <textarea id="cf-message" name="message" rows="6" required
+      <textarea id="cf-message" name="message" rows="6" required maxlength="250"
                 placeholder="Write your message here…"></textarea>
+      <span class="contact-char-count" id="cf-message-count" aria-live="polite">250 characters remaining</span>
     </div>
 
     <button type="submit" class="contact-submit" id="contact-submit-btn">Send message</button>
   </form>
   <script>
-    document.querySelector('.contact-form').addEventListener('submit', function() {
-      var btn = document.getElementById('contact-submit-btn');
-      btn.disabled = true;
-      btn.textContent = 'Sending…';
-    });
+    (function () {
+      var textarea = document.getElementById('cf-message');
+      var counter  = document.getElementById('cf-message-count');
+      var max      = 250;
+
+      function updateCount() {
+        var remaining = max - textarea.value.length;
+        counter.textContent = remaining + ' character' + (remaining === 1 ? '' : 's') + ' remaining';
+        counter.classList.toggle('contact-char-warn', remaining <= 30);
+      }
+
+      textarea.addEventListener('input', updateCount);
+
+      document.querySelector('.contact-form').addEventListener('submit', function() {
+        var btn = document.getElementById('contact-submit-btn');
+        btn.disabled = true;
+        btn.textContent = 'Sending…';
+      });
+    })();
   </script>
   {% endif %}
 </article>
@@ -123,6 +138,13 @@
 }
 
 .contact-field textarea { resize: vertical; min-height: 8rem; }
+
+.contact-char-count {
+  font-size: 0.8rem;
+  color: #6b7280;
+  text-align: right;
+}
+.contact-char-count.contact-char-warn { color: #dc2626; font-weight: 600; }
 
 .contact-submit {
   align-self: flex-start;

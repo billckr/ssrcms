@@ -9,7 +9,7 @@
 use std::collections::HashMap;
 
 use axum::{
-    extract::{Form, Path, State},
+    extract::{ConnectInfo, Form, Path, State},
     http::HeaderMap,
     response::{IntoResponse, Redirect},
 };
@@ -23,6 +23,7 @@ pub async fn submit(
     State(state): State<AppState>,
     current_site: CurrentSite,
     headers: HeaderMap,
+    ConnectInfo(peer_addr): ConnectInfo<std::net::SocketAddr>,
     Path(name): Path<String>,
     Form(fields): Form<HashMap<String, String>>,
 ) -> impl IntoResponse {
@@ -46,12 +47,15 @@ pub async fn submit(
     let is_empty = data.values().all(|v| v.trim().is_empty());
 
     if !is_empty {
-        // Best-effort IP extraction; Caddy sets X-Real-IP
+        // Best-effort IP extraction.
+        // In production, Caddy sets X-Real-IP (or X-Forwarded-For).
+        // In development (direct connection, no proxy), fall back to the TCP peer address.
         let ip = headers
             .get("x-real-ip")
             .or_else(|| headers.get("x-forwarded-for"))
             .and_then(|v| v.to_str().ok())
-            .map(|s| s.split(',').next().unwrap_or(s).trim().to_string());
+            .map(|s| s.split(',').next().unwrap_or(s).trim().to_string())
+            .or_else(|| Some(peer_addr.ip().to_string()));
 
         let input = CreateFormSubmission {
             site_id: current_site.site.id,
