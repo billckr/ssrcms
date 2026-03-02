@@ -5,8 +5,8 @@ Wants=postgresql.service
 
 [Service]
 Type=simple
-User=www-data
-Group=www-data
+User={SERVICE_USER}
+Group={SERVICE_USER}
 WorkingDirectory={INSTALL_DIR}
 EnvironmentFile={INSTALL_DIR}/.env
 ExecStart={INSTALL_DIR}/synaptic

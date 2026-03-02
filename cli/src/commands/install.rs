@@ -60,9 +60,64 @@ pub struct InstallArgs {
     pub app_user: Option<String>,
 }
 
+/// Returns true if the current process is running as root (uid 0).
+fn is_root() -> bool {
+    #[cfg(unix)]
+    {
+        // Read effective UID from /proc/self/status — no extra dependencies.
+        if let Ok(status) = std::fs::read_to_string("/proc/self/status") {
+            for line in status.lines() {
+                if line.starts_with("Uid:") {
+                    return line.split_whitespace().nth(1).map(|s| s == "0").unwrap_or(false);
+                }
+            }
+        }
+    }
+    // Fallback: check USER env var.
+    std::env::var("USER").map(|u| u == "root").unwrap_or(false)
+}
+
+/// Returns the current effective UID.
+#[cfg(unix)]
+fn current_uid() -> u32 {
+    if let Ok(status) = std::fs::read_to_string("/proc/self/status") {
+        for line in status.lines() {
+            if line.starts_with("Uid:") {
+                if let Some(uid_str) = line.split_whitespace().nth(1) {
+                    if let Ok(uid) = uid_str.parse::<u32>() {
+                        return uid;
+                    }
+                }
+            }
+        }
+    }
+    0
+}
+
+/// Returns the current username from the USER env var.
+fn current_username() -> String {
+    std::env::var("USER").unwrap_or_else(|_| "unknown".to_string())
+}
+
 pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
     println!("\nWelcome to Synaptic Signals CMS Installer");
     println!("==========================================\n");
+
+    // ── Root check ────────────────────────────────────────────────────────
+    if is_root() {
+        eprintln!("Error: Synaptic Signals must not be installed as root.");
+        eprintln!();
+        eprintln!("Running the application as root is a security risk — if the app is");
+        eprintln!("compromised, an attacker gains full control of the system.");
+        eprintln!();
+        eprintln!("Create a dedicated system user and run the installer as that user:");
+        eprintln!("  sudo useradd -r -m -d /opt/synaptic-signals -s /sbin/nologin synaptic");
+        eprintln!("  sudo -u synaptic synaptic-cli install");
+        eprintln!();
+        eprintln!("Then run the Caddy permission step as root afterwards:");
+        eprintln!("  sudo synaptic-cli caddy setup --app-user synaptic");
+        anyhow::bail!("Installation cancelled — do not run as root.");
+    }
 
     let ni = args.non_interactive;
 
@@ -96,6 +151,36 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
             .interact_text()
             .map_err(Into::into)
     })?;
+
+    // ── Install dir ownership check ───────────────────────────────────────
+    // If the directory already exists it must be owned by the current user.
+    let service_user = current_username();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        let dir_path = std::path::Path::new(&install_dir);
+        if dir_path.exists() {
+            match std::fs::metadata(dir_path) {
+                Ok(meta) => {
+                    let dir_uid  = meta.uid();
+                    let my_uid   = current_uid();
+                    if dir_uid != my_uid {
+                        eprintln!("Error: {} is not owned by the current user ({}).",
+                            install_dir, service_user);
+                        eprintln!("  Directory owner uid : {}", dir_uid);
+                        eprintln!("  Your uid            : {}", my_uid);
+                        eprintln!();
+                        eprintln!("Fix ownership before installing:");
+                        eprintln!("  sudo chown -R {}:{} {}", service_user, service_user, install_dir);
+                        anyhow::bail!("Installation cancelled — fix directory ownership first.");
+                    }
+                }
+                Err(e) => {
+                    eprintln!("Warning: could not stat {} — {}", install_dir, e);
+                }
+            }
+        }
+    }
 
     let database_url: String = if ni {
         std::env::var("DATABASE_URL").map_err(|_| {
@@ -357,7 +442,7 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
     println!("\n── Deployment Files ─────────────────────────────────────");
 
     write_caddyfile(output_dir, &domain, port, &uploads_dir, &theme_dir)?;
-    write_systemd_service(output_dir, &install_dir)?;
+    write_systemd_service(output_dir, &install_dir, &service_user)?;
 
     // ── Caddy permissions (SSL provisioning from admin panel) ──────────────
     // Resolve app_user: flag → env → interactive prompt (skippable).
@@ -404,6 +489,7 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
     // ── Install Summary ────────────────────────────────────────────────────
     println!("\n── Installation Summary ─────────────────────────────────");
     println!("  App name    : {}", app_name);
+    println!("  Service user: {}", service_user);
     println!("  Site name   : {}", domain);
     println!("  Domain      : {}", domain);
     println!("  Install dir : {}", install_dir);
@@ -430,8 +516,7 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
             output_dir.join("Caddyfile").display()
         );
         println!("     Then run: sudo caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile");
-        let caddy_setup_user = app_user.as_deref().unwrap_or("www-data");
-        println!("  4. Run:  sudo synaptic-cli caddy setup --app-user {}",  caddy_setup_user);
+        println!("  4. Run:  sudo synaptic-cli caddy setup --app-user {}", service_user);
         println!("     Sets up Caddy write permissions + log directory for SSL provisioning.");
         println!("  5. Ensure {install_dir}/.env contains DATABASE_URL and SECRET_KEY");
         println!("     (INSTALL_DIR has been written automatically)");
@@ -512,11 +597,13 @@ fn write_caddyfile(
     Ok(())
 }
 
-fn write_systemd_service(output_dir: &std::path::Path, install_dir: &str) -> anyhow::Result<()> {
+fn write_systemd_service(output_dir: &std::path::Path, install_dir: &str, service_user: &str) -> anyhow::Result<()> {
     let template = find_template("deployment/synaptic-signals.service")
         .unwrap_or_else(|| include_str!("../../deployment_templates/synaptic-signals.service").to_string());
 
-    let content = template.replace("{INSTALL_DIR}", install_dir);
+    let content = template
+        .replace("{INSTALL_DIR}", install_dir)
+        .replace("{SERVICE_USER}", service_user);
 
     let path = output_dir.join("synaptic-signals.service");
     std::fs::write(&path, content)
