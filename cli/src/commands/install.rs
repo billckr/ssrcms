@@ -204,7 +204,7 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
         sqlx::query(
             "INSERT INTO users (id, username, email, display_name, password_hash, role, is_protected, created_at)
              VALUES ($1, $2, $3, $4, $5, 'super_admin', TRUE, NOW())
-             ON CONFLICT (email) DO NOTHING"
+             ON CONFLICT (email) DO UPDATE SET password_hash = EXCLUDED.password_hash, updated_at = NOW()"
         )
         .bind(id)
         .bind(&username)
