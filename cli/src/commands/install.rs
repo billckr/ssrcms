@@ -51,6 +51,13 @@ pub struct InstallArgs {
     /// Admin panel brand name. Env: APP_NAME
     #[arg(long, env = "APP_NAME")]
     pub app_name: Option<String>,
+
+    /// System user the app runs as (e.g. www-data, synaptic).
+    /// When provided, the installer sets up Caddy write permissions and the
+    /// sudoers entry needed for SSL provisioning from the admin panel.
+    /// Requires root. Env: APP_USER
+    #[arg(long, env = "APP_USER")]
+    pub app_user: Option<String>,
 }
 
 pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
@@ -352,6 +359,40 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
     write_caddyfile(output_dir, &domain, port, &uploads_dir, &theme_dir)?;
     write_systemd_service(output_dir, &install_dir)?;
 
+    // ── Caddy permissions (SSL provisioning from admin panel) ──────────────
+    // Resolve app_user: flag → env → interactive prompt (skippable).
+    let app_user: Option<String> = if let Some(u) = args.app_user {
+        Some(u)
+    } else if ni {
+        None  // non-interactive without --app-user: skip silently, print note later
+    } else {
+        let val: String = Input::new()
+            .with_prompt(
+                "App system user for Caddy SSL permissions (e.g. www-data) \
+                 [leave blank to skip]"
+            )
+            .allow_empty(true)
+            .interact_text()?;
+        let trimmed = val.trim().to_string();
+        if trimmed.is_empty() { None } else { Some(trimmed) }
+    };
+
+    if let Some(ref user) = app_user {
+        println!("\n── Caddy SSL Permissions ────────────────────────────────");
+        let caddyfile_live = "/etc/caddy/Caddyfile";
+        match super::caddy::setup_caddy_permissions(user, caddyfile_live) {
+            Ok(()) => println!("  SSL provisioning permissions configured."),
+            Err(e) => {
+                println!("  Warning: could not set up Caddy permissions ({e}).");
+                println!(
+                    "  Re-run as root when ready:  \
+                     sudo synaptic-cli caddy setup --app-user {}",
+                    user
+                );
+            }
+        }
+    }
+
     // ── Write / update .env ────────────────────────────────────────────────
     let env_path = std::path::Path::new(&install_dir).join(".env");
     write_env_key(&env_path, "INSTALL_DIR", &install_dir);
@@ -393,6 +434,10 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
         println!("  4. Ensure {install_dir}/.env contains DATABASE_URL and SECRET_KEY");
         println!("     (INSTALL_DIR has been written automatically)");
         println!("  5. Run './app.sh rebuild'   — {rebuild_note}");
+        if app_user.is_none() {
+            println!("\n  To enable SSL provisioning from the admin panel, run as root:");
+            println!("    sudo synaptic-cli caddy setup --app-user <system-user>");
+        }
         println!("\nSite will be live at: https://{}", domain);
     }
 

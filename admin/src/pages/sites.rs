@@ -15,6 +15,8 @@ pub struct SiteRow {
     pub is_default: bool,
     /// True when the current user may edit settings / delete this site.
     pub can_manage: bool,
+    /// True when a Caddy block exists for this hostname (SSL provisioned).
+    pub ssl_active: bool,
 }
 
 pub fn render_list(
@@ -55,9 +57,26 @@ pub fn render_list(
             String::new()
         };
 
+        let ssl_badge = if s.ssl_active {
+            r#"<span class="ssl-badge ssl-active" title="SSL active — Caddy block provisioned">
+                 <img src="/admin/static/icons/lock.svg" alt="SSL active" style="width:14px;height:14px;vertical-align:middle;filter:invert(35%) sepia(80%) saturate(500%) hue-rotate(95deg)">
+               </span>"#.to_string()
+        } else {
+            format!(
+                r#"<form method="post" action="/admin/sites/{id}/provision-ssl" style="display:inline"
+                        onsubmit="return confirm('Add SSL (Caddy block) for {hostname_js}?\n\nEnsure DNS for this domain points to this server before proceeding.\nCaddy will provision the Let\'s Encrypt certificate automatically.')">
+                     <button type="submit" class="ssl-badge ssl-inactive" title="SSL not provisioned — click to set up">
+                       <img src="/admin/static/icons/lock.svg" alt="Provision SSL" style="width:14px;height:14px;vertical-align:middle;opacity:0.4">
+                     </button>
+                   </form>"#,
+                id          = crate::html_escape(&s.id),
+                hostname_js = crate::html_escape(&s.hostname),
+            )
+        };
+
         format!(
             r#"<tr>
-              <td>{hostname}{default_badge}</td>
+              <td>{hostname}{default_badge} {ssl_badge}</td>
               <td style="color:var(--muted);font-size:0.875rem">{admin_email}</td>
               <td>{user_count}</td>
               <td>{subscriber_count}</td>
@@ -76,6 +95,7 @@ pub fn render_list(
             id               = crate::html_escape(&s.id),
             hostname         = crate::html_escape(&s.hostname),
             default_badge    = if s.is_default { r#" <span class="badge-visiting" title="Primary domain — cannot be deleted">system domain</span>"# } else { "" },
+            ssl_badge        = ssl_badge,
             admin_email      = s.admin_email.as_deref().map(|e| crate::html_escape(e)).unwrap_or_else(|| "<em>none</em>".to_string()),
             user_count       = s.user_count,
             subscriber_count = s.subscriber_count,

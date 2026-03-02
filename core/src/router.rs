@@ -135,6 +135,7 @@ pub fn build(
         .route("/admin/sites/{id}/settings", get(admin_sites::site_settings).post(admin_sites::save_site_settings))
         .route("/admin/sites/{id}/site-config", post(admin_sites::save_site_config))
         .route("/admin/sites/{id}/delete", post(admin_sites::delete))
+        .route("/admin/sites/{id}/provision-ssl", post(admin_sites::provision_ssl))
         // ── Admin forms ────────────────────────────────────────────────────
         .route("/admin/forms", get(admin_forms::list_forms))
         .route("/admin/forms/{name}", get(admin_forms::view_form))

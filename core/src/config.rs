@@ -53,6 +53,10 @@ pub struct AppConfig {
     #[serde(default = "default_pid_file")]
     pub pid_file: String,
 
+    /// Path to the Caddy configuration file (used for SSL provisioning from the admin panel).
+    #[serde(default = "default_caddyfile_path")]
+    pub caddyfile_path: String,
+
     /// Optional bearer token to protect the /metrics endpoint.
     /// If unset, the endpoint is open (restrict access at the network/Caddy level instead).
     pub metrics_token: Option<String>,
@@ -140,6 +144,10 @@ fn default_pid_file() -> String {
 }
 
 fn default_smtp_port() -> u16 { 587 }
+
+fn default_caddyfile_path() -> String {
+    "/etc/caddy/Caddyfile".to_string()
+}
 fn default_smtp_encryption() -> String { "starttls".to_string() }
 fn default_max_upload_mb() -> u64 { 25 }
 
@@ -257,6 +265,7 @@ mod tests {
             smtp_from_email: None,
             smtp_encryption: default_smtp_encryption(),
             max_upload_mb: default_max_upload_mb(),
+            caddyfile_path: default_caddyfile_path(),
         }
     }
 

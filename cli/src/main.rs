@@ -44,6 +44,11 @@ enum Commands {
         #[command(subcommand)]
         action: commands::site::SiteAction,
     },
+    /// Caddy permission management (SSL provisioning from admin panel)
+    Caddy {
+        #[command(subcommand)]
+        action: commands::caddy::CaddyAction,
+    },
 }
 
 #[tokio::main]
@@ -61,6 +66,7 @@ async fn main() -> anyhow::Result<()> {
         Commands::Plugin { action } => commands::plugin::run(action).await?,
         Commands::Theme { action } => commands::theme::run(action).await?,
         Commands::Site { action } => commands::site::run(action).await?,
+        Commands::Caddy { action } => commands::caddy::run(action)?,
     }
 
     Ok(())

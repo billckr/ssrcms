@@ -1,10 +1,11 @@
 //! Admin handlers for site management (list, create, switch, settings).
 
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     response::{Html, IntoResponse, Redirect},
     Form,
 };
+use std::collections::HashMap;
 use serde::Deserialize;
 use uuid::Uuid;
 
@@ -22,11 +23,16 @@ use tower_sessions::Session;
 pub async fn list(
     State(state): State<AppState>,
     admin: AdminUser,
+    Query(params): Query<HashMap<String, String>>,
 ) -> Html<String> {
+    let flash = params.get("flash").map(|s| s.as_str());
     // Require at minimum a logged-in admin user; subscribers/unauthenticated are blocked by AdminUser extractor.
     // All roles that reach here may view the page.
     let cs = state.site_hostname(admin.site_id);
     let can_create = admin.caps.can_manage_sites;
+
+    // Read the Caddyfile once to determine SSL status for each site.
+    let caddyfile_content = std::fs::read_to_string(&state.config.caddyfile_path).unwrap_or_default();
 
     // Build site list with per-row manage flag.
     let mut rows: Vec<SiteRow> = Vec::new();
@@ -55,6 +61,7 @@ pub async fn list(
                 page_count: page_count.unwrap_or(0),
                 is_default: admin.user.default_site_id == Some(s.id),
                 can_manage: true,
+                ssl_active: caddy_block_exists(&caddyfile_content, &s.hostname),
             });
         }
     } else if admin.caps.is_global_admin && admin.caps.visiting_foreign_site {
@@ -78,6 +85,7 @@ pub async fn list(
                     page_count: page_count.unwrap_or(0),
                     is_default: false,
                     can_manage: true,
+                    ssl_active: caddy_block_exists(&caddyfile_content, &s.hostname),
                 });
             }
         }
@@ -111,12 +119,13 @@ pub async fn list(
                 page_count: page_count.unwrap_or(0),
                 is_default: admin.user.default_site_id == Some(s.id),
                 can_manage,
+                ssl_active: caddy_block_exists(&caddyfile_content, &s.hostname),
             });
         }
     }
 
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
-    Html(admin::pages::sites::render_list(&rows, None, can_create, &ctx))
+    Html(admin::pages::sites::render_list(&rows, flash, can_create, &ctx))
 }
 
 /// GET /admin/sites/new — new site form.
@@ -488,4 +497,126 @@ pub async fn save_site_config(
     }
 
     Redirect::to(&format!("/admin/sites/{}/settings", id)).into_response()
+}
+
+/// POST /admin/sites/{id}/provision-ssl
+/// Appends a Caddy block for the site's hostname to the Caddyfile and reloads
+/// Caddy so it begins provisioning a Let's Encrypt certificate.
+/// Super-admin only; idempotent (no-op if the block already exists).
+pub async fn provision_ssl(
+    State(state): State<AppState>,
+    admin: AdminUser,
+    Path(id): Path<Uuid>,
+) -> impl IntoResponse {
+    if !admin.caps.is_global_admin {
+        return Redirect::to("/admin/sites?flash=Forbidden").into_response();
+    }
+
+    let site = match crate::models::site::get_by_id(&state.db, id).await {
+        Ok(s)  => s,
+        Err(_) => return Redirect::to("/admin/sites?flash=Site+not+found").into_response(),
+    };
+
+    let caddyfile_path = &state.config.caddyfile_path;
+    let hostname       = &site.hostname;
+
+    let existing = match std::fs::read_to_string(caddyfile_path) {
+        Ok(c)  => c,
+        Err(e) => {
+            tracing::error!("provision_ssl: cannot read {}: {:?}", caddyfile_path, e);
+            return Redirect::to("/admin/sites?flash=Cannot+read+Caddyfile").into_response();
+        }
+    };
+
+    if caddy_block_exists(&existing, hostname) {
+        return Redirect::to("/admin/sites?flash=SSL+already+active+for+this+site").into_response();
+    }
+
+    let block = build_caddy_block(
+        hostname,
+        state.config.port,
+        &state.config.uploads_dir,
+        &state.config.themes_dir,
+    );
+    let new_content = format!("{}\n{}\n", existing.trim_end(), block);
+
+    if let Err(e) = std::fs::write(caddyfile_path, &new_content) {
+        tracing::error!("provision_ssl: cannot write {}: {:?}", caddyfile_path, e);
+        return Redirect::to("/admin/sites?flash=Cannot+write+Caddyfile").into_response();
+    }
+
+    let result = std::process::Command::new("sudo")
+        .args([
+            "/usr/bin/caddy", "reload",
+            "--config", caddyfile_path,
+            "--adapter", "caddyfile",
+        ])
+        .output();
+
+    match result {
+        Ok(out) if out.status.success() => {
+            tracing::info!(hostname = %hostname, "SSL provisioned via Caddy");
+        }
+        Ok(out) => {
+            let stderr = String::from_utf8_lossy(&out.stderr);
+            tracing::error!("provision_ssl: caddy reload failed: {}", stderr);
+            return Redirect::to("/admin/sites?flash=Caddy+reload+failed%3A+check+server+logs").into_response();
+        }
+        Err(e) => {
+            tracing::error!("provision_ssl: cannot run caddy reload: {:?}", e);
+            return Redirect::to("/admin/sites?flash=Cannot+run+caddy+reload").into_response();
+        }
+    }
+
+    Redirect::to("/admin/sites?flash=SSL+provisioning+started+for+this+site").into_response()
+}
+
+/// Returns true if the Caddyfile already contains a block for `hostname`.
+/// Matches lines where the hostname is the sole token before `{` (bare domain blocks).
+pub fn caddy_block_exists(caddyfile: &str, hostname: &str) -> bool {
+    caddyfile.lines().any(|line| {
+        let t = line.trim();
+        t == hostname
+            || t.starts_with(&format!("{} ", hostname))
+            || t.starts_with(&format!("{},", hostname))
+            || t.starts_with(&format!("{}{{", hostname))
+    })
+}
+
+/// Build the Caddyfile block to append for a new site.
+fn build_caddy_block(hostname: &str, port: u16, uploads_dir: &str, themes_dir: &str) -> String {
+    format!(
+        r#"{hostname} {{
+    handle /uploads/* {{
+        root * {uploads_dir}
+        file_server
+    }}
+
+    handle /theme/* {{
+        root * {themes_dir}
+        file_server
+    }}
+
+    reverse_proxy localhost:{port}
+
+    encode zstd gzip
+
+    header {{
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "SAMEORIGIN"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        -Server
+    }}
+
+    log {{
+        output file /var/log/caddy/{hostname}.log
+        format json
+    }}
+}}"#,
+        hostname    = hostname,
+        port        = port,
+        uploads_dir = uploads_dir,
+        themes_dir  = themes_dir,
+    )
 }

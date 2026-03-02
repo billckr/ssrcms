@@ -1,3 +1,4 @@
+pub mod caddy;
 pub mod dev;
 pub mod install;
 pub mod migrate;
