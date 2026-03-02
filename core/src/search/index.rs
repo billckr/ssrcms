@@ -123,7 +123,14 @@ impl SearchIndex {
 
         let query = query_parser
             .parse_query(query_str)
-            .map_err(|e| AppError::Internal(format!("search query parse error: {e}")))?;
+            .unwrap_or_else(|_| {
+                // Special characters in the query (e.g. +, -, :) can cause parse errors.
+                // Fall back to a literal search on the escaped string so we return empty
+                // results rather than a 500.
+                query_parser
+                    .parse_query_lenient(query_str)
+                    .0
+            });
 
         // Fetch more than `limit` to allow for site_id post-filtering.
         let fetch_limit = if site_id.is_some() { limit * 4 + 20 } else { limit };
