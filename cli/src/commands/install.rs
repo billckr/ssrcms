@@ -4,52 +4,111 @@ use uuid::Uuid;
 
 #[derive(Args)]
 pub struct InstallArgs {
-    /// Skip interactive prompts and use defaults/env vars
+    /// Skip interactive prompts — reads all values from flags or env vars.
+    /// Required env vars in non-interactive mode: SYNAPTIC_DOMAIN, ADMIN_EMAIL.
+    /// ADMIN_PASSWORD is optional; a compliant password is generated if omitted.
     #[arg(long)]
     pub non_interactive: bool,
 
     /// Output directory for Caddyfile and .service (defaults to current dir)
     #[arg(long, default_value = ".")]
     pub output_dir: String,
+
+    // ── Non-interactive / env-var-backed fields ───────────────────────────
+    /// Domain name (e.g. example.com). Env: SYNAPTIC_DOMAIN
+    #[arg(long, env = "SYNAPTIC_DOMAIN")]
+    pub domain: Option<String>,
+
+    /// Port Axum listens on. Env: PORT
+    #[arg(long, env = "PORT", default_value = "3000")]
+    pub port: u16,
+
+    /// Install directory (full path). Env: INSTALL_DIR
+    #[arg(long, env = "INSTALL_DIR")]
+    pub install_dir: Option<String>,
+
+    /// Admin login email. Env: ADMIN_EMAIL
+    #[arg(long, env = "ADMIN_EMAIL")]
+    pub admin_email: Option<String>,
+
+    /// Admin username. Env: ADMIN_USERNAME
+    #[arg(long, env = "ADMIN_USERNAME")]
+    pub admin_username: Option<String>,
+
+    /// Admin display name. Env: ADMIN_DISPLAY_NAME
+    #[arg(long, env = "ADMIN_DISPLAY_NAME")]
+    pub admin_display_name: Option<String>,
+
+    /// Admin password (must satisfy policy). Env: ADMIN_PASSWORD
+    /// If omitted in non-interactive mode a compliant password is generated and printed once.
+    #[arg(long, env = "ADMIN_PASSWORD")]
+    pub admin_password: Option<String>,
+
+    /// System notification / reply-to email. Env: NOTIFICATION_EMAIL
+    #[arg(long, env = "NOTIFICATION_EMAIL")]
+    pub notification_email: Option<String>,
+
+    /// Admin panel brand name. Env: APP_NAME
+    #[arg(long, env = "APP_NAME")]
+    pub app_name: Option<String>,
 }
 
 pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
     println!("\nWelcome to Synaptic Signals CMS Installer");
     println!("==========================================\n");
 
+    let ni = args.non_interactive;
+
     // ── Gather configuration ───────────────────────────────────────────────
 
-    let domain: String = Input::new()
-        .with_prompt("Domain name (e.g. example.com)")
-        .interact_text()?;
+    let domain: String = prompt_or(ni, args.domain, || {
+        Input::new()
+            .with_prompt("Domain name (e.g. example.com)")
+            .interact_text()
+            .map_err(Into::into)
+    })?;
 
-    let port: u16 = Input::new()
-        .with_prompt("Port Axum listens on")
-        .default(3000u16)
-        .interact_text()?;
+    let port: u16 = if ni {
+        args.port
+    } else {
+        Input::new()
+            .with_prompt("Port Axum listens on")
+            .default(args.port)
+            .interact_text()?
+    };
 
-    let install_dir: String = Input::new()
-        .with_prompt("Install directory (full path)")
-        .default(
-            std::env::current_dir()
-                .ok()
-                .and_then(|p| p.to_str().map(String::from))
-                .unwrap_or_else(|| "/opt/synaptic-signals".to_string()),
-        )
-        .interact_text()?;
+    let install_dir: String = prompt_or(ni, args.install_dir, || {
+        Input::new()
+            .with_prompt("Install directory (full path)")
+            .default(
+                std::env::current_dir()
+                    .ok()
+                    .and_then(|p| p.to_str().map(String::from))
+                    .unwrap_or_else(|| "/opt/synaptic-signals".to_string()),
+            )
+            .interact_text()
+            .map_err(Into::into)
+    })?;
 
-    let database_url: String = Input::new()
-        .with_prompt("Database URL")
-        .default(
-            std::env::var("DATABASE_URL")
-                .unwrap_or_else(|_| "postgres://synaptic:password@localhost:5432/synaptic_signals".to_string()),
-        )
-        .interact_text()?;
+    let database_url: String = if ni {
+        std::env::var("DATABASE_URL").map_err(|_| {
+            anyhow::anyhow!("DATABASE_URL env var is required in --non-interactive mode")
+        })?
+    } else {
+        Input::new()
+            .with_prompt("Database URL")
+            .default(
+                std::env::var("DATABASE_URL")
+                    .unwrap_or_else(|_| "postgres://synaptic:password@localhost:5432/synaptic_signals".to_string()),
+            )
+            .interact_text()?
+    };
 
     println!("\n── Database ─────────────────────────────────────────────");
     println!("Connecting to database...");
 
-    std::env::set_var("DATABASE_URL", &database_url);
+    // SAFETY: single-threaded at this point in the installer; no other threads read env.
+    unsafe { std::env::set_var("DATABASE_URL", &database_url); }
     let pool = super::connect_db().await?;
 
     println!("Running migrations...");
@@ -61,48 +120,80 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
 
     // ── Admin user ─────────────────────────────────────────────────────────
 
-    let create_admin = Confirm::new()
-        .with_prompt("Create an admin user now?")
-        .default(true)
-        .interact()?;
+    let create_admin = if ni {
+        // In non-interactive mode: create admin iff ADMIN_EMAIL is provided.
+        args.admin_email.is_some()
+    } else {
+        Confirm::new()
+            .with_prompt("Create an admin user now?")
+            .default(true)
+            .interact()?
+    };
 
-    // Track the created admin's UUID so we can link them to the site.
     let mut admin_id: Option<Uuid> = None;
-    // Notification email is collected outside the admin block so it can be
-    // written to .env even if the admin user step is skipped.
-    let mut notification_email: Option<String> = None;
+    let mut notification_email: Option<String> = args.notification_email.clone();
 
     if create_admin {
         println!("\n── Admin User ───────────────────────────────────────────");
 
-        let username: String = Input::new()
-            .with_prompt("Admin username")
-            .default("admin".to_string())
-            .interact_text()?;
+        let username: String = prompt_or(ni, args.admin_username.clone(), || {
+            Input::new()
+                .with_prompt("Admin username")
+                .default("admin".to_string())
+                .interact_text()
+                .map_err(Into::into)
+        })?;
 
-        let email: String = Input::new()
-            .with_prompt("Admin login email")
-            .interact_text()?;
+        let email: String = prompt_or(ni, args.admin_email.clone(), || {
+            Input::new()
+                .with_prompt("Admin login email")
+                .interact_text()
+                .map_err(Into::into)
+        })?;
 
-        let notify_email: String = Input::new()
-            .with_prompt("System notification email (reply-to for outbound mail)")
-            .default(email.clone())
-            .interact_text()?;
-        notification_email = Some(notify_email);
+        if notification_email.is_none() {
+            notification_email = Some(if ni {
+                email.clone()
+            } else {
+                Input::new()
+                    .with_prompt("System notification email (reply-to for outbound mail)")
+                    .default(email.clone())
+                    .interact_text()?
+            });
+        }
 
-        let display_name: String = Input::new()
-            .with_prompt("Display name")
-            .default(username.clone())
-            .interact_text()?;
+        let display_name: String = prompt_or(ni, args.admin_display_name.clone(), || {
+            Input::new()
+                .with_prompt("Display name")
+                .default(username.clone())
+                .interact_text()
+                .map_err(Into::into)
+        })?;
 
-        let password = loop {
-            let pw = Password::new()
-                .with_prompt("Admin password (8-12 chars, 1 uppercase, 1 number, 1 symbol: !@#$%&)")
-                .with_confirmation("Confirm password", "Passwords do not match")
-                .interact()?;
-            match validate_password(&pw) {
-                Ok(()) => break pw,
-                Err(msg) => eprintln!("Password error: {msg}"),
+        // Password: use provided value, generate one, or prompt interactively.
+        let password = if ni {
+            match args.admin_password.clone() {
+                Some(pw) => {
+                    validate_password(&pw).map_err(|e| anyhow::anyhow!("Provided ADMIN_PASSWORD is invalid: {e}"))?;
+                    pw
+                }
+                None => {
+                    let pw = generate_password();
+                    println!("GENERATED_ADMIN_PASSWORD={pw}");
+                    println!("IMPORTANT: Save this password — it will not be shown again.");
+                    pw
+                }
+            }
+        } else {
+            loop {
+                let pw = Password::new()
+                    .with_prompt("Admin password (8-12 chars, 1 uppercase, 1 number, 1 symbol: !@#$%&)")
+                    .with_confirmation("Confirm password", "Passwords do not match")
+                    .interact()?;
+                match validate_password(&pw) {
+                    Ok(()) => break pw,
+                    Err(msg) => eprintln!("Password error: {msg}"),
+                }
             }
         };
 
@@ -128,8 +219,6 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
     }
 
     // ── Initial site ───────────────────────────────────────────────────────
-    // Insert the domain as the first site so the super admin has a default
-    // site context on first login. Link the admin as owner if one was created.
     let site_id = Uuid::new_v4();
     sqlx::query(
         "INSERT INTO sites (id, hostname, owner_user_id, created_at, updated_at)
@@ -142,9 +231,7 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
     .execute(&pool)
     .await
     .map_err(|e| anyhow::anyhow!("Failed to create initial site: {e}"))?;
-    // Seed default site_settings so the admin panel shows real values on first login.
-    // Include the port in site_url when it's not the standard HTTP/HTTPS port,
-    // so that post/page links resolve correctly during local dev (e.g. port 3000).
+
     let site_url = match port {
         80  => format!("http://{domain}"),
         443 => format!("https://{domain}"),
@@ -173,13 +260,16 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
         .map_err(|e| anyhow::anyhow!("Failed to seed site_settings: {e}"))?;
     }
 
-    // Seed app_settings defaults. Uses ON CONFLICT DO NOTHING so re-running
-    // the installer doesn't overwrite values the agency has already changed.
+    // ── Branding ───────────────────────────────────────────────────────────
     println!("\n── Branding ─────────────────────────────────────────────");
-    let app_name: String = Input::new()
-        .with_prompt("Admin panel name (shown in the sidebar)")
-        .default("My App".to_string())
-        .interact_text()?;
+
+    let app_name: String = prompt_or(ni, args.app_name.clone(), || {
+        Input::new()
+            .with_prompt("Admin panel name (shown in the sidebar)")
+            .default("My App".to_string())
+            .interact_text()
+            .map_err(Into::into)
+    })?;
 
     for (key, value) in &[
         ("app_name",      app_name.as_str()),
@@ -198,8 +288,6 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
     }
 
     // Copy the global default theme into the new site's own theme folder.
-    // Without this the site would use themes/global/default/ directly and any
-    // edits made via the theme editor would modify the shared global theme.
     let theme_src = std::path::Path::new(&install_dir)
         .join("themes").join("global").join("default");
     let theme_dst = std::path::Path::new(&install_dir)
@@ -222,7 +310,7 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
         );
     }
 
-    // Link the admin user to their site in site_users so the switcher works.
+    // Link the admin user to their site.
     if let Some(uid) = admin_id {
         sqlx::query(
             "INSERT INTO site_users (site_id, user_id, role)
@@ -234,7 +322,7 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
         .execute(&pool)
         .await
         .map_err(|e| anyhow::anyhow!("Failed to link admin to site: {e}"))?;
-        // Set the admin's default site.
+
         sqlx::query(
             "UPDATE users SET default_site_id = $1, updated_at = NOW() WHERE id = $2 AND default_site_id IS NULL"
         )
@@ -246,10 +334,9 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
     }
 
     // ── Deployment files ───────────────────────────────────────────────────
-
     let uploads_dir = format!("{}/uploads", install_dir);
-    let theme_dir = format!("{}/themes", install_dir);
-    let output_dir = std::path::Path::new(&args.output_dir);
+    let theme_dir   = format!("{}/themes", install_dir);
+    let output_dir  = std::path::Path::new(&args.output_dir);
 
     println!("\n── Deployment Files ─────────────────────────────────────");
 
@@ -257,8 +344,6 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
     write_systemd_service(output_dir, &install_dir)?;
 
     // ── Write / update .env ────────────────────────────────────────────────
-    // Record INSTALL_DIR so `synaptic-cli dev reset` can clean up filesystem
-    // artefacts (themes/sites/, uploads/) without needing an explicit flag.
     let env_path = std::path::Path::new(&install_dir).join(".env");
     write_env_key(&env_path, "INSTALL_DIR", &install_dir);
     write_env_key(&env_path, "MAX_UPLOAD_MB", "25");
@@ -267,20 +352,17 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
     }
 
     // ── Install Summary ────────────────────────────────────────────────────
-
     println!("\n── Installation Summary ─────────────────────────────────");
     println!("  App name    : {}", app_name);
     println!("  Site name   : {}", domain);
     println!("  Domain      : {}", domain);
     println!("  Install dir : {}", install_dir);
-    if let Some(uid) = admin_id {
-        let _ = uid; // already used above
+    if admin_id.is_some() {
         println!("  Admin user  : seeded (see credentials you entered above)");
     }
     println!("  Site URL    : {}", site_url);
 
     // ── Next Steps ─────────────────────────────────────────────────────────
-
     let pid_file = std::path::Path::new(&install_dir).join(".synaptic.pid");
     let rebuild_note = if pid_file.exists() {
         "⚠️  App is already running — rebuild will restart it"
@@ -289,10 +371,7 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
     };
 
     println!("\n── Next Steps ───────────────────────────────────────────");
-    println!(
-        "  1. Copy the binary and files to {}",
-        install_dir
-    );
+    println!("  1. Copy the binary and files to {}", install_dir);
     println!("  2. Copy {} to /etc/caddy/Caddyfile (or include it)",
         output_dir.join("Caddyfile").display()
     );
@@ -309,6 +388,51 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
     Ok(())
 }
 
+// ── Helpers ────────────────────────────────────────────────────────────────
+
+/// In non-interactive mode, return the provided value (error if missing and required).
+/// In interactive mode, run the dialoguer closure.
+fn prompt_or<T, F>(non_interactive: bool, provided: Option<T>, interactive: F) -> anyhow::Result<T>
+where
+    F: FnOnce() -> anyhow::Result<T>,
+{
+    if let Some(val) = provided {
+        return Ok(val);
+    }
+    if non_interactive {
+        return Err(anyhow::anyhow!(
+            "Required value missing in --non-interactive mode. \
+             Pass it as a CLI flag or environment variable."
+        ));
+    }
+    interactive()
+}
+
+/// Generate a password that satisfies validate_password():
+/// 8-12 chars, ≥1 uppercase, ≥1 digit, ≥1 symbol from !@#$%&
+fn generate_password() -> String {
+    use rand::seq::SliceRandom;
+    use rand::Rng;
+
+    let mut rng = rand::thread_rng();
+    let lower:   Vec<char> = ('a'..='z').collect();
+    let upper:   Vec<char> = ('A'..='Z').collect();
+    let digits:  Vec<char> = ('0'..='9').collect();
+    let symbols: &[char]   = &['!', '@', '#', '$', '%', '&'];
+
+    // Guarantee one of each required class within the 10-char budget.
+    let mut chars: Vec<char> = Vec::with_capacity(10);
+    chars.push(upper[rng.gen_range(0..upper.len())]);
+    chars.push(digits[rng.gen_range(0..digits.len())]);
+    chars.push(symbols[rng.gen_range(0..symbols.len())]);
+    // Fill remaining 7 slots with lowercase.
+    for _ in 0..7 {
+        chars.push(lower[rng.gen_range(0..lower.len())]);
+    }
+    chars.shuffle(&mut rng);
+    chars.into_iter().collect()
+}
+
 fn write_caddyfile(
     output_dir: &std::path::Path,
     domain: &str,
@@ -316,7 +440,6 @@ fn write_caddyfile(
     uploads_dir: &str,
     theme_dir: &str,
 ) -> anyhow::Result<()> {
-    // Try to read the template from the deployment directory relative to CWD
     let template = find_template("deployment/Caddyfile.template")
         .unwrap_or_else(|| include_str!("../../deployment_templates/Caddyfile.template").to_string());
 
@@ -346,8 +469,6 @@ fn write_systemd_service(output_dir: &std::path::Path, install_dir: &str) -> any
     Ok(())
 }
 
-/// Try to read a template file from the filesystem (relative to CWD).
-/// Returns None if the file doesn't exist.
 fn find_template(path: &str) -> Option<String> {
     std::fs::read_to_string(path).ok()
 }
@@ -398,11 +519,8 @@ fn hash_password(password: &str) -> anyhow::Result<String> {
 }
 
 /// Write (or update) a single `KEY=value` line in a .env file.
-/// Creates the file if it does not exist. If the key is already present its
-/// value is updated in-place; otherwise the line is appended.
 fn write_env_key(path: &std::path::Path, key: &str, value: &str) {
     let line = format!("{}={}", key, value);
-
     let existing = std::fs::read_to_string(path).unwrap_or_default();
     let prefix = format!("{}=", key);
 
@@ -412,7 +530,6 @@ fn write_env_key(path: &std::path::Path, key: &str, value: &str) {
             .collect::<Vec<_>>()
             .join("\n") + "\n"
     } else {
-        // Append, ensuring file ends with a newline before the new line.
         if existing.is_empty() {
             format!("{line}\n")
         } else if existing.ends_with('\n') {
@@ -425,7 +542,7 @@ fn write_env_key(path: &std::path::Path, key: &str, value: &str) {
     if let Err(e) = std::fs::write(path, &updated) {
         println!(
             "Warning: could not write {}={} to {} ({}). \
-             Add it manually so 'dev reset' can clean up artefacts.",
+             Add it manually.",
             key, value, path.display(), e
         );
     }

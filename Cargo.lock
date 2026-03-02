@@ -3927,6 +3927,7 @@ dependencies = [
  "clap",
  "dialoguer",
  "dotenvy",
+ "rand 0.8.5",
  "sqlx",
  "tokio",
  "toml 0.8.23",

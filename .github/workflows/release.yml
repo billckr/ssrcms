@@ -1,0 +1,140 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v[0-9]*'
+
+env:
+  CARGO_TERM_COLOR: always
+  SQLX_OFFLINE: "true"
+
+jobs:
+  build-x86_64:
+    name: Build x86_64
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-x86_64-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-x86_64-
+
+      - name: Build release binaries
+        run: cargo build --release --bin synaptic --bin synaptic-cli
+
+      - name: Assemble tarball
+        run: |
+          VERSION="${{ github.ref_name }}"
+          STAGING="synaptic-signals-${VERSION}"
+          mkdir -p "${STAGING}"
+
+          cp target/release/synaptic      "${STAGING}/"
+          cp target/release/synaptic-cli  "${STAGING}/"
+          cp -r themes                    "${STAGING}/"
+          cp -r plugins                   "${STAGING}/"
+          echo "${VERSION}" > "${STAGING}/VERSION"
+
+          # Remove dev/test artefacts from the tarball
+          rm -rf "${STAGING}/themes/sites"
+          rm -rf "${STAGING}/plugins/sites"
+          mkdir  "${STAGING}/themes/sites"
+          mkdir  "${STAGING}/plugins/sites"
+
+          TARBALL="synaptic-signals-${VERSION}-x86_64-linux.tar.gz"
+          tar czf "${TARBALL}" "${STAGING}"
+          sha256sum "${TARBALL}" > "${TARBALL}.sha256"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-x86_64
+          path: synaptic-signals-*.tar.gz*
+
+  build-aarch64:
+    name: Build aarch64
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-unknown-linux-gnu
+
+      - name: Install cross
+        run: cargo install cross --git https://github.com/cross-rs/cross
+
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-aarch64-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-aarch64-
+
+      - name: Build release binaries (cross)
+        run: cross build --release --target aarch64-unknown-linux-gnu --bin synaptic --bin synaptic-cli
+
+      - name: Assemble tarball
+        run: |
+          VERSION="${{ github.ref_name }}"
+          STAGING="synaptic-signals-${VERSION}"
+          mkdir -p "${STAGING}"
+
+          cp target/aarch64-unknown-linux-gnu/release/synaptic      "${STAGING}/"
+          cp target/aarch64-unknown-linux-gnu/release/synaptic-cli  "${STAGING}/"
+          cp -r themes                                               "${STAGING}/"
+          cp -r plugins                                              "${STAGING}/"
+          echo "${VERSION}" > "${STAGING}/VERSION"
+
+          rm -rf "${STAGING}/themes/sites"
+          rm -rf "${STAGING}/plugins/sites"
+          mkdir  "${STAGING}/themes/sites"
+          mkdir  "${STAGING}/plugins/sites"
+
+          TARBALL="synaptic-signals-${VERSION}-aarch64-linux.tar.gz"
+          tar czf "${TARBALL}" "${STAGING}"
+          sha256sum "${TARBALL}" > "${TARBALL}.sha256"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-aarch64
+          path: synaptic-signals-*.tar.gz*
+
+  create-release:
+    name: Create GitHub Release
+    needs: [build-x86_64, build-aarch64]
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-x86_64
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-aarch64
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Synaptic Signals ${{ github.ref_name }}
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          generate_release_notes: true
+          files: |
+            synaptic-signals-*.tar.gz
+            synaptic-signals-*.tar.gz.sha256
