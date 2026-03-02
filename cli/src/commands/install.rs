@@ -363,28 +363,30 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
     }
     println!("  Site URL    : {}", site_url);
 
-    // ── Next Steps ─────────────────────────────────────────────────────────
-    let pid_file = std::path::Path::new(&install_dir).join(".synaptic.pid");
-    let rebuild_note = if pid_file.exists() {
-        "⚠️  App is already running — rebuild will restart it"
-    } else {
-        "Builds and starts the app for the first time"
-    };
+    // In non-interactive mode the install script handles deployment — skip the manual steps.
+    if !ni {
+        let pid_file = std::path::Path::new(&install_dir).join(".synaptic.pid");
+        let rebuild_note = if pid_file.exists() {
+            "⚠️  App is already running — rebuild will restart it"
+        } else {
+            "Builds and starts the app for the first time"
+        };
 
-    println!("\n── Next Steps ───────────────────────────────────────────");
-    println!("  1. Copy the binary and files to {}", install_dir);
-    println!("  2. Copy {} to /etc/caddy/Caddyfile (or include it)",
-        output_dir.join("Caddyfile").display()
-    );
-    println!("     Then run: caddy reload");
-    println!("  3. Copy {} to /etc/systemd/system/",
-        output_dir.join("synaptic-signals.service").display()
-    );
-    println!("     Then run: systemctl daemon-reload && systemctl enable --now synaptic-signals");
-    println!("  4. Ensure {install_dir}/.env contains DATABASE_URL and SECRET_KEY");
-    println!("     (INSTALL_DIR has been written automatically)");
-    println!("  5. Run './app.sh rebuild'   — {rebuild_note}");
-    println!("\nSite will be live at: https://{}", domain);
+        println!("\n── Next Steps ───────────────────────────────────────────");
+        println!("  1. Copy the binary and files to {}", install_dir);
+        println!("  2. Copy {} to /etc/caddy/Caddyfile (or include it)",
+            output_dir.join("Caddyfile").display()
+        );
+        println!("     Then run: caddy reload");
+        println!("  3. Copy {} to /etc/systemd/system/",
+            output_dir.join("synaptic-signals.service").display()
+        );
+        println!("     Then run: systemctl daemon-reload && systemctl enable --now synaptic-signals");
+        println!("  4. Ensure {install_dir}/.env contains DATABASE_URL and SECRET_KEY");
+        println!("     (INSTALL_DIR has been written automatically)");
+        println!("  5. Run './app.sh rebuild'   — {rebuild_note}");
+        println!("\nSite will be live at: https://{}", domain);
+    }
 
     Ok(())
 }
