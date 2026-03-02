@@ -328,22 +328,36 @@ info "── Synaptic Signals ────────────────�
 
 if [[ "$SYNAPTIC_VERSION" == "latest" ]]; then
   info "Fetching latest release version..."
-  # Temporarily disable pipefail so grep returning no matches doesn't kill the script.
-  set +o pipefail
-  API_JSON=$(curl -sSL \
-    ${GITHUB_TOKEN:+-H "Authorization: Bearer ${GITHUB_TOKEN}"} \
-    "https://api.github.com/repos/${GITHUB_REPO}/releases/latest" 2>/dev/null || true)
-  SYNAPTIC_VERSION=$(echo "$API_JSON" | grep -m1 '"tag_name"' | cut -d'"' -f4 || true)
-  if [[ -z "$SYNAPTIC_VERSION" ]]; then
-    API_JSON=$(curl -sSL \
+  # Use python3 for reliable JSON parsing — grep on minified JSON is fragile.
+  # Try /releases/latest first (stable releases), then /releases list (includes pre-releases).
+  _parse_tag() {
+    python3 - "$1" <<'PYEOF'
+import sys, json
+try:
+    data = json.loads(sys.argv[1])
+    if isinstance(data, dict) and data.get("tag_name"):
+        print(data["tag_name"])
+    elif isinstance(data, list):
+        for r in data:
+            if isinstance(r, dict) and r.get("tag_name"):
+                print(r["tag_name"])
+                break
+except Exception:
+    pass
+PYEOF
+  }
+  for _url in \
+    "https://api.github.com/repos/${GITHUB_REPO}/releases/latest" \
+    "https://api.github.com/repos/${GITHUB_REPO}/releases?per_page=10"; do
+    _json=$(curl -sSL \
       ${GITHUB_TOKEN:+-H "Authorization: Bearer ${GITHUB_TOKEN}"} \
-      "https://api.github.com/repos/${GITHUB_REPO}/releases?per_page=1" 2>/dev/null || true)
-    SYNAPTIC_VERSION=$(echo "$API_JSON" | grep -m1 '"tag_name"' | cut -d'"' -f4 || true)
-  fi
-  set -o pipefail
+      "$_url" 2>/dev/null) || true
+    SYNAPTIC_VERSION=$(_parse_tag "$_json" 2>/dev/null) || true
+    [[ -n "$SYNAPTIC_VERSION" ]] && break
+  done
   if [[ -z "$SYNAPTIC_VERSION" ]]; then
     warn "Could not auto-detect latest version (GitHub API may require authentication for this repo)."
-    read -rp "$(echo -e "${BOLD}Enter version to install (e.g. v0.1.0-alpha12):${RESET} ")" SYNAPTIC_VERSION
+    read -rp "$(echo -e "${BOLD}Enter version to install (e.g. v0.1.0-alpha13):${RESET} ")" SYNAPTIC_VERSION
     [[ -n "$SYNAPTIC_VERSION" ]] || die "Version is required."
   fi
 fi
