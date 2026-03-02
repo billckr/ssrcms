@@ -181,6 +181,9 @@ else
 DO \$\$ BEGIN
   IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '${DB_USER}') THEN
     EXECUTE format('CREATE ROLE ${DB_USER} LOGIN PASSWORD %L', '${DB_PASS}');
+  ELSE
+    -- Role exists from a previous install; update password to match new credentials.
+    EXECUTE format('ALTER ROLE ${DB_USER} WITH LOGIN PASSWORD %L', '${DB_PASS}');
   END IF;
 END \$\$;
 SELECT 'CREATE DATABASE ${DB_NAME} OWNER ${DB_USER}'
