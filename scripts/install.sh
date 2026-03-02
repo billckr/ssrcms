@@ -84,23 +84,39 @@ if ! id "$SYNAPTIC_USER" &>/dev/null; then
   useradd --system --no-create-home --shell /sbin/nologin "$SYNAPTIC_USER"
 fi
 
-# ── Collect domain + admin credentials (only interactive step) ─────────────────
+# ── Collect install configuration ─────────────────────────────────────────────
+echo ""
+info "── Installation Configuration ────────────────────────────"
+
+prompt_field() {
+  local var_name="$1" prompt_text="$2" default_val="${3:-}"
+  local current_val="${!var_name:-}"
+  if [[ -z "$current_val" ]]; then
+    if [[ -n "$default_val" ]]; then
+      read -rp "$(echo -e "${BOLD}${prompt_text}${RESET} [${default_val}]: ")" current_val
+      current_val="${current_val:-$default_val}"
+    else
+      read -rp "$(echo -e "${BOLD}${prompt_text}${RESET}: ")" current_val
+    fi
+  fi
+  printf -v "$var_name" '%s' "$current_val"
+}
+
 SYNAPTIC_DOMAIN="${SYNAPTIC_DOMAIN:-}"
 ADMIN_EMAIL="${ADMIN_EMAIL:-}"
+ADMIN_USERNAME="${ADMIN_USERNAME:-}"
+APP_NAME="${APP_NAME:-}"
 
-if [[ -z "$SYNAPTIC_DOMAIN" ]]; then
-  read -rp "$(echo -e "${BOLD}Domain name${RESET} (e.g. example.com): ")" SYNAPTIC_DOMAIN
-fi
+prompt_field SYNAPTIC_DOMAIN "Domain name (e.g. example.com)"
 [[ -n "$SYNAPTIC_DOMAIN" ]] || die "Domain name is required."
 
-if [[ -z "$ADMIN_EMAIL" ]]; then
-  read -rp "$(echo -e "${BOLD}Admin email address${RESET}: ")" ADMIN_EMAIL
-fi
+prompt_field ADMIN_EMAIL "Admin email address"
 [[ -n "$ADMIN_EMAIL" ]] || die "Admin email is required."
 
-export SYNAPTIC_DOMAIN ADMIN_EMAIL
-export ADMIN_USERNAME="${ADMIN_USERNAME:-admin}"
-export APP_NAME="${APP_NAME:-Synaptic Signals}"
+prompt_field ADMIN_USERNAME "Admin username" "admin"
+prompt_field APP_NAME "Site/app name" "Synaptic Signals"
+
+export SYNAPTIC_DOMAIN ADMIN_EMAIL ADMIN_USERNAME APP_NAME
 export NOTIFICATION_EMAIL="${NOTIFICATION_EMAIL:-$ADMIN_EMAIL}"
 
 # ── PostgreSQL ─────────────────────────────────────────────────────────────────
@@ -218,10 +234,17 @@ info "── Synaptic Signals ────────────────�
 
 if [[ "$SYNAPTIC_VERSION" == "latest" ]]; then
   info "Fetching latest release version..."
+  # /releases/latest returns 404 when all releases are pre-releases; fall back to /releases list.
   SYNAPTIC_VERSION=$(curl -sSL \
     ${GITHUB_TOKEN:+-H "Authorization: Bearer ${GITHUB_TOKEN}"} \
     "https://api.github.com/repos/${GITHUB_REPO}/releases/latest" \
-    | grep '"tag_name"' | cut -d'"' -f4)
+    | grep '"tag_name"' | head -1 | cut -d'"' -f4)
+  if [[ -z "$SYNAPTIC_VERSION" ]]; then
+    SYNAPTIC_VERSION=$(curl -sSL \
+      ${GITHUB_TOKEN:+-H "Authorization: Bearer ${GITHUB_TOKEN}"} \
+      "https://api.github.com/repos/${GITHUB_REPO}/releases?per_page=1" \
+      | grep '"tag_name"' | head -1 | cut -d'"' -f4)
+  fi
   [[ -n "$SYNAPTIC_VERSION" ]] || die "Could not determine latest release version."
 fi
 
@@ -303,12 +326,21 @@ mkdir -p "${INSTALL_DIR}/search-index"
 mkdir -p "${INSTALL_DIR}/themes/sites"
 mkdir -p "${INSTALL_DIR}/plugins/sites"
 
+# The app serves admin UI static files from admin/static relative to its working directory.
+# The tarball places them at admin/static — ensure the path exists.
+if [[ -d "${INSTALL_DIR}/admin/static" ]]; then
+  info "Admin static assets found."
+else
+  warn "Admin static assets not found at ${INSTALL_DIR}/admin/static — icons and editor may be missing."
+fi
+
 chmod +x "${INSTALL_DIR}/synaptic" "${INSTALL_DIR}/synaptic-cli"
 
 # ── Write .env ─────────────────────────────────────────────────────────────────
-if [[ ! -f "$ENV_FILE" ]] || ! grep -q "^SECRET_KEY=" "$ENV_FILE"; then
+# Write a fresh .env only on first install. On re-runs, preserve the existing file.
+if [[ ! -f "$ENV_FILE" ]]; then
   SECRET_KEY=$(openssl rand -hex 32)
-  cat >> "$ENV_FILE" <<ENVBLOCK
+  cat > "$ENV_FILE" <<ENVBLOCK
 DATABASE_URL=${DATABASE_URL}
 SECRET_KEY=${SECRET_KEY}
 HOST=0.0.0.0
@@ -319,7 +351,7 @@ ENVBLOCK
   chmod 600 "$ENV_FILE"
   info ".env written."
 else
-  info "Existing .env found — skipping SECRET_KEY generation."
+  info "Existing .env found — preserving credentials."
 fi
 
 # ── Run CLI installer ──────────────────────────────────────────────────────────
@@ -353,6 +385,10 @@ chown -R "${SYNAPTIC_USER}:${SYNAPTIC_USER}" "$INSTALL_DIR"
 # ── Install Caddyfile ──────────────────────────────────────────────────────────
 echo ""
 info "── Configuring Caddy ────────────────────────────────────"
+
+# Caddy needs /var/log/caddy to write access logs.
+mkdir -p /var/log/caddy
+chown caddy:caddy /var/log/caddy 2>/dev/null || chown "${SYNAPTIC_USER}:${SYNAPTIC_USER}" /var/log/caddy || true
 
 if [[ -f "${INSTALL_DIR}/Caddyfile" ]]; then
   cp "${INSTALL_DIR}/Caddyfile" /etc/caddy/Caddyfile

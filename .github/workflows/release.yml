@@ -42,6 +42,8 @@ jobs:
           cp target/release/synaptic-cli  "${STAGING}/"
           cp -r themes                    "${STAGING}/"
           cp -r plugins                   "${STAGING}/"
+          mkdir -p "${STAGING}/admin"
+          cp -r admin/static              "${STAGING}/admin/static"
           echo "${VERSION}" > "${STAGING}/VERSION"
 
           # Remove dev/test artefacts from the tarball
@@ -49,6 +51,9 @@ jobs:
           rm -rf "${STAGING}/plugins/sites"
           mkdir  "${STAGING}/themes/sites"
           mkdir  "${STAGING}/plugins/sites"
+
+          # Strip Windows Zone.Identifier alternate-stream files
+          find "${STAGING}" -name "*:Zone.Identifier" -delete
 
           TARBALL="synaptic-signals-${VERSION}-x86_64-linux.tar.gz"
           tar czf "${TARBALL}" "${STAGING}"

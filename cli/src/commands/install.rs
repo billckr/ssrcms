@@ -421,7 +421,8 @@ fn generate_password() -> String {
     let lower:   Vec<char> = ('a'..='z').collect();
     let upper:   Vec<char> = ('A'..='Z').collect();
     let digits:  Vec<char> = ('0'..='9').collect();
-    let symbols: &[char]   = &['!', '@', '#', '$', '%', '&'];
+    // Exclude $ and ! — they get mangled in shell env vars and URL strings.
+    let symbols: &[char]   = &['@', '#', '%', '&'];
 
     // Guarantee one of each required class within the 10-char budget.
     let mut chars: Vec<char> = Vec::with_capacity(10);
@@ -490,7 +491,7 @@ fn validate_password(password: &str) -> Result<(), &'static str> {
     if !password.chars().any(|c| c.is_ascii_digit()) {
         return Err("Password must contain at least one number");
     }
-    const ALLOWED_SYMBOLS: &[char] = &['!', '@', '#', '$', '%', '&'];
+    const ALLOWED_SYMBOLS: &[char] = &['!', '@', '#', '$', '%', '&', '*', '-', '_', '+'];
     if !password.chars().any(|c| ALLOWED_SYMBOLS.contains(&c)) {
         return Err("Password must contain at least one symbol: ! @ # $ % &");
     }
