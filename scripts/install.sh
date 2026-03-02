@@ -386,19 +386,23 @@ chown -R "${SYNAPTIC_USER}:${SYNAPTIC_USER}" "$INSTALL_DIR"
 echo ""
 info "── Configuring Caddy ────────────────────────────────────"
 
-# Caddy needs /var/log/caddy to write access logs.
-mkdir -p /var/log/caddy
-chown caddy:caddy /var/log/caddy 2>/dev/null || chown "${SYNAPTIC_USER}:${SYNAPTIC_USER}" /var/log/caddy || true
-
-if [[ -f "${INSTALL_DIR}/Caddyfile" ]]; then
-  cp "${INSTALL_DIR}/Caddyfile" /etc/caddy/Caddyfile
-  if systemctl is-active --quiet caddy; then
-    caddy reload --config /etc/caddy/Caddyfile && success "Caddy reloaded."
-  else
-    systemctl enable --now caddy && success "Caddy started."
-  fi
+if [[ -n "${SKIP_CADDY:-}" ]]; then
+  warn "SKIP_CADDY set — skipping Caddy setup. Access the site directly at http://<server-ip>:${PORT}"
 else
-  warn "Caddyfile not found at ${INSTALL_DIR}/Caddyfile — configure Caddy manually."
+  # Caddy needs /var/log/caddy to write access logs.
+  mkdir -p /var/log/caddy
+  chown caddy:caddy /var/log/caddy 2>/dev/null || chown "${SYNAPTIC_USER}:${SYNAPTIC_USER}" /var/log/caddy || true
+
+  if [[ -f "${INSTALL_DIR}/Caddyfile" ]]; then
+    cp "${INSTALL_DIR}/Caddyfile" /etc/caddy/Caddyfile
+    if systemctl is-active --quiet caddy; then
+      caddy reload --config /etc/caddy/Caddyfile && success "Caddy reloaded."
+    else
+      systemctl enable --now caddy && success "Caddy started."
+    fi
+  else
+    warn "Caddyfile not found at ${INSTALL_DIR}/Caddyfile — configure Caddy manually."
+  fi
 fi
 
 # ── Install systemd service ────────────────────────────────────────────────────
