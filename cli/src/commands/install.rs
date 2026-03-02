@@ -200,7 +200,6 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
 
         let hash = hash_password(&password)?;
         let id = Uuid::new_v4();
-        admin_id = Some(id);
 
         sqlx::query(
             "INSERT INTO users (id, username, email, display_name, password_hash, role, is_protected, created_at)
@@ -215,6 +214,15 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
         .execute(&pool)
         .await
         .map_err(|e| anyhow::anyhow!("Failed to create admin user: {e}"))?;
+
+        // Fetch the actual ID — the user may have already existed (ON CONFLICT DO NOTHING),
+        // in which case `id` above was never inserted and would break FK constraints.
+        let actual_id: Uuid = sqlx::query_scalar("SELECT id FROM users WHERE email = $1")
+            .bind(&email)
+            .fetch_one(&pool)
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to look up admin user: {e}"))?;
+        admin_id = Some(actual_id);
 
         println!("Admin user '{}' ({}) created.", username, email);
     }
