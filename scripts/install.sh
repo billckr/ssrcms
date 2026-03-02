@@ -441,6 +441,15 @@ fi
 
 chmod +x "${INSTALL_DIR}/synaptic" "${INSTALL_DIR}/synaptic-cli"
 
+# ── SELinux context (RHEL/AlmaLinux) ──────────────────────────────────────────
+# /var/www and similar paths have httpd_sys_content_t which blocks non-httpd
+# services. Relabel the install dir so systemd can run the service from there.
+if is_rhel_like && command -v chcon &>/dev/null; then
+  chcon -Rt var_t "$INSTALL_DIR" 2>/dev/null || true
+  chcon -t bin_t "${INSTALL_DIR}/synaptic" "${INSTALL_DIR}/synaptic-cli" 2>/dev/null || true
+  info "SELinux context set for ${INSTALL_DIR}."
+fi
+
 # ── Write .env ─────────────────────────────────────────────────────────────────
 # Write a fresh .env only on first install. On re-runs, preserve the existing file.
 if [[ ! -f "$ENV_FILE" ]]; then
