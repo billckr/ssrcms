@@ -39,8 +39,16 @@ warn()    { echo -e "${YELLOW}[install] WARNING:${RESET} $*"; }
 die()     { echo -e "${RED}[install] ERROR:${RESET} $*" >&2; exit 1; }
 
 # ── Root check ─────────────────────────────────────────────────────────────────
+# This script must run as root to install system packages, create users, and
+# configure Caddy/systemd. The app itself will run as a dedicated non-root user.
 if [[ $EUID -ne 0 ]]; then
-  die "This script must be run as root. Try: sudo bash"
+  die "This script must be run as root (e.g. sudo bash install.sh)"
+fi
+
+# ── Service user check ─────────────────────────────────────────────────────────
+# The app must not run as root. Catch the default or explicit SYNAPTIC_USER=root.
+if [[ "${SYNAPTIC_USER:-www-data}" == "root" ]]; then
+  die "SYNAPTIC_USER cannot be 'root'. Set SYNAPTIC_USER to a dedicated system user, e.g.:\n  SYNAPTIC_USER=synaptic bash install.sh"
 fi
 
 # ── OS + architecture detection ────────────────────────────────────────────────
@@ -359,14 +367,27 @@ else
   info "Existing .env found — preserving credentials."
 fi
 
+# ── Hand ownership to the service user before running the CLI ──────────────────
+# The CLI runs as $SYNAPTIC_USER so all files it creates are owned correctly.
+chown -R "${SYNAPTIC_USER}:${SYNAPTIC_USER}" "$INSTALL_DIR"
+
 # ── Run CLI installer ──────────────────────────────────────────────────────────
 echo ""
 info "── Running installer wizard ──────────────────────────────"
 
 export PORT INSTALL_DIR APP_NAME NOTIFICATION_EMAIL
 
-# Capture output so we can extract the generated password if needed.
-CLI_OUTPUT=$("${INSTALL_DIR}/synaptic-cli" install \
+# Run as the dedicated service user (not root).
+CLI_OUTPUT=$(sudo -u "${SYNAPTIC_USER}" \
+  DATABASE_URL="$DATABASE_URL" \
+  PORT="$PORT" \
+  INSTALL_DIR="$INSTALL_DIR" \
+  APP_NAME="$APP_NAME" \
+  NOTIFICATION_EMAIL="${NOTIFICATION_EMAIL:-}" \
+  SYNAPTIC_DOMAIN="$SYNAPTIC_DOMAIN" \
+  ADMIN_EMAIL="$ADMIN_EMAIL" \
+  ADMIN_USERNAME="${ADMIN_USERNAME:-}" \
+  "${INSTALL_DIR}/synaptic-cli" install \
   --non-interactive \
   --output-dir "${INSTALL_DIR}" 2>&1) || die "synaptic-cli install failed:\n$CLI_OUTPUT"
 
@@ -383,9 +404,6 @@ if echo "$CLI_OUTPUT" | grep -q "^GENERATED_ADMIN_PASSWORD="; then
   warn "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
   echo ""
 fi
-
-# ── Set ownership ──────────────────────────────────────────────────────────────
-chown -R "${SYNAPTIC_USER}:${SYNAPTIC_USER}" "$INSTALL_DIR"
 
 # ── Install Caddyfile ──────────────────────────────────────────────────────────
 echo ""
@@ -408,6 +426,13 @@ else
   else
     warn "Caddyfile not found at ${INSTALL_DIR}/Caddyfile — configure Caddy manually."
   fi
+
+  # Set up Caddy write permissions so the admin panel can provision SSL for
+  # additional sites without manual intervention.
+  info "Setting up Caddy permissions for '${SYNAPTIC_USER}'..."
+  "${INSTALL_DIR}/synaptic-cli" caddy setup --app-user "${SYNAPTIC_USER}" \
+    && success "Caddy permissions configured." \
+    || warn "Caddy permission setup failed — run manually: sudo synaptic-cli caddy setup --app-user ${SYNAPTIC_USER}"
 fi
 
 # ── Install systemd service ────────────────────────────────────────────────────

@@ -60,23 +60,6 @@ pub struct InstallArgs {
     pub app_user: Option<String>,
 }
 
-/// Returns true if the current process is running as root (uid 0).
-fn is_root() -> bool {
-    #[cfg(unix)]
-    {
-        // Read effective UID from /proc/self/status — no extra dependencies.
-        if let Ok(status) = std::fs::read_to_string("/proc/self/status") {
-            for line in status.lines() {
-                if line.starts_with("Uid:") {
-                    return line.split_whitespace().nth(1).map(|s| s == "0").unwrap_or(false);
-                }
-            }
-        }
-    }
-    // Fallback: check USER env var.
-    std::env::var("USER").map(|u| u == "root").unwrap_or(false)
-}
-
 /// Returns the current effective UID.
 #[cfg(unix)]
 fn current_uid() -> u32 {
@@ -102,22 +85,6 @@ fn current_username() -> String {
 pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
     println!("\nWelcome to Synaptic Signals CMS Installer");
     println!("==========================================\n");
-
-    // ── Root check ────────────────────────────────────────────────────────
-    if is_root() {
-        eprintln!("Error: Synaptic Signals must not be installed as root.");
-        eprintln!();
-        eprintln!("Running the application as root is a security risk — if the app is");
-        eprintln!("compromised, an attacker gains full control of the system.");
-        eprintln!();
-        eprintln!("Create a dedicated system user and run the installer as that user:");
-        eprintln!("  sudo useradd -r -m -d /opt/synaptic-signals -s /sbin/nologin synaptic");
-        eprintln!("  sudo -u synaptic synaptic-cli install");
-        eprintln!();
-        eprintln!("Then run the Caddy permission step as root afterwards:");
-        eprintln!("  sudo synaptic-cli caddy setup --app-user synaptic");
-        anyhow::bail!("Installation cancelled — do not run as root.");
-    }
 
     let ni = args.non_interactive;
 
