@@ -18,3 +18,4 @@ dotenvy.workspace = true
 dialoguer = "0.11"
 toml.workspace = true
 chrono.workspace = true
+rand.workspace = true
