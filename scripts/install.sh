@@ -328,16 +328,16 @@ info "── Synaptic Signals ────────────────�
 
 if [[ "$SYNAPTIC_VERSION" == "latest" ]]; then
   info "Fetching latest release version..."
-  # /releases/latest returns 404 when all releases are pre-releases; fall back to /releases list.
+  # Use grep -m1 with || true so a no-match never kills the script under pipefail.
   SYNAPTIC_VERSION=$(curl -sSL \
     ${GITHUB_TOKEN:+-H "Authorization: Bearer ${GITHUB_TOKEN}"} \
     "https://api.github.com/repos/${GITHUB_REPO}/releases/latest" \
-    | grep '"tag_name"' | head -1 | cut -d'"' -f4)
+    | grep -m1 '"tag_name"' | cut -d'"' -f4 || true)
   if [[ -z "$SYNAPTIC_VERSION" ]]; then
     SYNAPTIC_VERSION=$(curl -sSL \
       ${GITHUB_TOKEN:+-H "Authorization: Bearer ${GITHUB_TOKEN}"} \
       "https://api.github.com/repos/${GITHUB_REPO}/releases?per_page=1" \
-      | grep '"tag_name"' | head -1 | cut -d'"' -f4)
+      | grep -m1 '"tag_name"' | cut -d'"' -f4 || true)
   fi
   if [[ -z "$SYNAPTIC_VERSION" ]]; then
     warn "Could not auto-detect latest version (GitHub API may require authentication for this repo)."
