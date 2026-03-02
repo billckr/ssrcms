@@ -328,23 +328,14 @@ info "── Synaptic Signals ────────────────�
 
 if [[ "$SYNAPTIC_VERSION" == "latest" ]]; then
   info "Fetching latest release version..."
-  # Use python3 for reliable JSON parsing — grep on minified JSON is fragile.
-  # Try /releases/latest first (stable releases), then /releases list (includes pre-releases).
-  _parse_tag() {
-    python3 - "$1" <<'PYEOF'
-import sys, json
-try:
-    data = json.loads(sys.argv[1])
-    if isinstance(data, dict) and data.get("tag_name"):
-        print(data["tag_name"])
-    elif isinstance(data, list):
-        for r in data:
-            if isinstance(r, dict) and r.get("tag_name"):
-                print(r["tag_name"])
-                break
-except Exception:
-    pass
-PYEOF
+  # Pure-bash JSON tag extractor — no external tools required.
+  # Strips to the first "tag_name" value; works for both minified and pretty-printed JSON.
+  _extract_tag() {
+    local s="$1"
+    s="${s#*\"tag_name\"}"   # strip everything before "tag_name"
+    s="${s#*\"}"             # strip to the opening quote of the value
+    s="${s%%\"*}"            # strip from the closing quote onwards
+    [[ "$s" =~ ^v[0-9] ]] && printf '%s' "$s"
   }
   for _url in \
     "https://api.github.com/repos/${GITHUB_REPO}/releases/latest" \
@@ -352,7 +343,7 @@ PYEOF
     _json=$(curl -sSL \
       ${GITHUB_TOKEN:+-H "Authorization: Bearer ${GITHUB_TOKEN}"} \
       "$_url" 2>/dev/null) || true
-    SYNAPTIC_VERSION=$(_parse_tag "$_json" 2>/dev/null) || true
+    SYNAPTIC_VERSION=$(_extract_tag "$_json") || true
     [[ -n "$SYNAPTIC_VERSION" ]] && break
   done
   if [[ -z "$SYNAPTIC_VERSION" ]]; then
