@@ -339,7 +339,11 @@ if [[ "$SYNAPTIC_VERSION" == "latest" ]]; then
       "https://api.github.com/repos/${GITHUB_REPO}/releases?per_page=1" \
       | grep '"tag_name"' | head -1 | cut -d'"' -f4)
   fi
-  [[ -n "$SYNAPTIC_VERSION" ]] || die "Could not determine latest release version."
+  if [[ -z "$SYNAPTIC_VERSION" ]]; then
+    warn "Could not auto-detect latest version (GitHub API may require authentication for this repo)."
+    read -rp "$(echo -e "${BOLD}Enter version to install (e.g. v0.1.0-alpha12):${RESET} ")" SYNAPTIC_VERSION
+    [[ -n "$SYNAPTIC_VERSION" ]] || die "Version is required."
+  fi
 fi
 
 info "Installing Synaptic Signals ${SYNAPTIC_VERSION}..."
