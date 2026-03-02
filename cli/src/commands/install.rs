@@ -423,21 +423,20 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
 
         println!("\n── Next Steps ───────────────────────────────────────────");
         println!("  1. Copy the binary and files to {}", install_dir);
-        println!("  2. Copy {} to /etc/caddy/Caddyfile (or include it)",
-            output_dir.join("Caddyfile").display()
-        );
-        println!("     Then run: caddy reload");
-        println!("  3. Copy {} to /etc/systemd/system/",
+        println!("  2. Copy {} to /etc/systemd/system/",
             output_dir.join("synaptic-signals.service").display()
         );
-        println!("     Then run: systemctl daemon-reload && systemctl enable --now synaptic-signals");
-        println!("  4. Ensure {install_dir}/.env contains DATABASE_URL and SECRET_KEY");
+        println!("  3. Copy {} to /etc/caddy/Caddyfile (or include it)",
+            output_dir.join("Caddyfile").display()
+        );
+        println!("     Then run: sudo caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile");
+        let caddy_setup_user = app_user.as_deref().unwrap_or("www-data");
+        println!("  4. Run:  sudo synaptic-cli caddy setup --app-user {}",  caddy_setup_user);
+        println!("     Sets up Caddy write permissions + log directory for SSL provisioning.");
+        println!("  5. Ensure {install_dir}/.env contains DATABASE_URL and SECRET_KEY");
         println!("     (INSTALL_DIR has been written automatically)");
-        println!("  5. Run './app.sh rebuild'   — {rebuild_note}");
-        if app_user.is_none() {
-            println!("\n  To enable SSL provisioning from the admin panel, run as root:");
-            println!("    sudo synaptic-cli caddy setup --app-user <system-user>");
-        }
+        println!("  6. Run:  systemctl daemon-reload && systemctl enable --now synaptic-signals");
+        println!("  7. Run './app.sh rebuild'   — {rebuild_note}");
         println!("\nSite will be live at: https://{}", domain);
     }
 
