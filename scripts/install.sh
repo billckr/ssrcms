@@ -172,17 +172,20 @@ ENV_FILE="${INSTALL_DIR}/.env"
 if [[ -f "$ENV_FILE" ]] && grep -q "^DATABASE_URL=" "$ENV_FILE"; then
   info "Existing .env found — reusing DATABASE_URL."
   DATABASE_URL=$(grep "^DATABASE_URL=" "$ENV_FILE" | cut -d= -f2-)
+  # Extract the password from the existing DATABASE_URL so we can keep Postgres in sync.
+  DB_PASS=$(echo "$DATABASE_URL" | sed 's|.*://[^:]*:\([^@]*\)@.*|\1|')
 else
   DB_PASS=$(openssl rand -hex 16)
   DATABASE_URL="postgres://${DB_USER}:${DB_PASS}@localhost:5432/${DB_NAME}"
+fi
 
-  info "Creating PostgreSQL user '${DB_USER}' and database '${DB_NAME}'..."
-  sudo -u postgres psql <<SQL
+# Always ensure the Postgres role exists and its password matches DATABASE_URL.
+info "Syncing PostgreSQL user '${DB_USER}'..."
+sudo -u postgres psql <<SQL
 DO \$\$ BEGIN
   IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '${DB_USER}') THEN
     EXECUTE format('CREATE ROLE ${DB_USER} LOGIN PASSWORD %L', '${DB_PASS}');
   ELSE
-    -- Role exists from a previous install; update password to match new credentials.
     EXECUTE format('ALTER ROLE ${DB_USER} WITH LOGIN PASSWORD %L', '${DB_PASS}');
   END IF;
 END \$\$;
@@ -190,8 +193,7 @@ SELECT 'CREATE DATABASE ${DB_NAME} OWNER ${DB_USER}'
   WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = '${DB_NAME}') \gexec
 GRANT ALL PRIVILEGES ON DATABASE ${DB_NAME} TO ${DB_USER};
 SQL
-  success "Database ready."
-fi
+success "Database ready."
 
 export DATABASE_URL
 
