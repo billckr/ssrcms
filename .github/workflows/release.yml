@@ -137,7 +137,7 @@ jobs:
           tag_name: ${{ github.ref_name }}
           name: Synaptic Signals ${{ github.ref_name }}
           draft: false
-          prerelease: ${{ contains(github.ref_name, '-') }}
+          prerelease: false
           generate_release_notes: true
           files: |
             synaptic-signals-*.tar.gz

@@ -328,27 +328,16 @@ info "── Synaptic Signals ────────────────�
 
 if [[ "$SYNAPTIC_VERSION" == "latest" ]]; then
   info "Fetching latest release version..."
-  # Pure-bash JSON tag extractor — no external tools required.
-  # Strips to the first "tag_name" value; works for both minified and pretty-printed JSON.
-  _extract_tag() {
-    local s="$1"
-    s="${s#*\"tag_name\"}"   # strip everything before "tag_name"
-    s="${s#*\"}"             # strip to the opening quote of the value
-    s="${s%%\"*}"            # strip from the closing quote onwards
-    [[ "$s" =~ ^v[0-9] ]] && printf '%s' "$s"
-  }
-  for _url in \
-    "https://api.github.com/repos/${GITHUB_REPO}/releases/latest" \
-    "https://api.github.com/repos/${GITHUB_REPO}/releases?per_page=10"; do
-    _json=$(curl -sSL \
-      ${GITHUB_TOKEN:+-H "Authorization: Bearer ${GITHUB_TOKEN}"} \
-      "$_url" 2>/dev/null) || true
-    SYNAPTIC_VERSION=$(_extract_tag "$_json") || true
-    [[ -n "$SYNAPTIC_VERSION" ]] && break
-  done
+  _json=$(curl -sSL \
+    ${GITHUB_TOKEN:+-H "Authorization: Bearer ${GITHUB_TOKEN}"} \
+    "https://api.github.com/repos/${GITHUB_REPO}/releases/latest" 2>/dev/null) || true
+  _s="${_json#*\"tag_name\"}"
+  _s="${_s#*\"}"
+  SYNAPTIC_VERSION="${_s%%\"*}"
+  [[ "$SYNAPTIC_VERSION" =~ ^v[0-9] ]] || SYNAPTIC_VERSION=""
   if [[ -z "$SYNAPTIC_VERSION" ]]; then
     warn "Could not auto-detect latest version (GitHub API may require authentication for this repo)."
-    read -rp "$(echo -e "${BOLD}Enter version to install (e.g. v0.1.0-alpha13):${RESET} ")" SYNAPTIC_VERSION
+    read -rp "$(echo -e "${BOLD}Enter version to install (e.g. v0.1.0-alpha15):${RESET} ")" SYNAPTIC_VERSION
     [[ -n "$SYNAPTIC_VERSION" ]] || die "Version is required."
   fi
 fi
