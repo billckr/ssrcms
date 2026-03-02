@@ -234,18 +234,33 @@ trap 'rm -rf "$TMP_DIR"' EXIT
 
 info "Downloading ${TARBALL}..."
 
-# Private repos require downloading assets via the API (browser URLs return 404).
-# If no GITHUB_TOKEN is set, fall back to the direct URL (works for public repos).
-if [[ -n "${GITHUB_TOKEN:-}" ]]; then
-  # Look up the asset ID from the releases API, then download via API endpoint.
+DOWNLOAD_URL="https://github.com/${GITHUB_REPO}/releases/download/${SYNAPTIC_VERSION}/${TARBALL}"
+
+# Try direct download first (works for public repos).
+# Fall back to GitHub API asset download if GITHUB_TOKEN is set (private repos).
+if curl -fsSL --progress-bar "$DOWNLOAD_URL" -o "${TMP_DIR}/${TARBALL}" 2>/dev/null; then
+  if curl -fsSL "${DOWNLOAD_URL}.sha256" -o "${TMP_DIR}/${TARBALL}.sha256" 2>/dev/null; then
+    (cd "$TMP_DIR" && sha256sum -c "${TARBALL}.sha256") \
+      || die "Checksum verification failed — download may be corrupt."
+    success "Checksum verified."
+  fi
+elif [[ -n "${GITHUB_TOKEN:-}" ]]; then
+  info "Direct download failed; trying GitHub API (private repo)..."
+
   RELEASE_JSON=$(curl -fsSL \
     -H "Authorization: Bearer ${GITHUB_TOKEN}" \
     "https://api.github.com/repos/${GITHUB_REPO}/releases/tags/${SYNAPTIC_VERSION}") \
     || die "Could not fetch release metadata for ${SYNAPTIC_VERSION}."
 
-  ASSET_ID=$(echo "$RELEASE_JSON" \
-    | grep -A2 "\"name\": \"${TARBALL}\"" \
-    | grep '"id"' | head -1 | grep -o '[0-9]*')
+  # Use python3 for reliable JSON parsing (grep on minified JSON is fragile).
+  ASSET_ID=$(python3 -c "
+import sys, json
+data = json.loads(sys.stdin.read())
+for a in data.get('assets', []):
+    if a['name'] == '${TARBALL}':
+        print(a['id'])
+        break
+" <<< "$RELEASE_JSON")
   [[ -n "$ASSET_ID" ]] || die "Asset '${TARBALL}' not found in release ${SYNAPTIC_VERSION}."
 
   curl -fsSL --progress-bar \
@@ -256,9 +271,14 @@ if [[ -n "${GITHUB_TOKEN:-}" ]]; then
     || die "Download failed for asset ID ${ASSET_ID}."
 
   # Checksum (also via API).
-  SHA_ASSET_ID=$(echo "$RELEASE_JSON" \
-    | grep -A2 "\"name\": \"${TARBALL}.sha256\"" \
-    | grep '"id"' | head -1 | grep -o '[0-9]*')
+  SHA_ASSET_ID=$(python3 -c "
+import sys, json
+data = json.loads(sys.stdin.read())
+for a in data.get('assets', []):
+    if a['name'] == '${TARBALL}.sha256':
+        print(a['id'])
+        break
+" <<< "$RELEASE_JSON")
   if [[ -n "$SHA_ASSET_ID" ]]; then
     curl -fsSL \
       -H "Authorization: Bearer ${GITHUB_TOKEN}" \
@@ -270,15 +290,7 @@ if [[ -n "${GITHUB_TOKEN:-}" ]]; then
       || true
   fi
 else
-  # Public repo — direct download.
-  DOWNLOAD_URL="https://github.com/${GITHUB_REPO}/releases/download/${SYNAPTIC_VERSION}/${TARBALL}"
-  curl -fsSL --progress-bar "$DOWNLOAD_URL" -o "${TMP_DIR}/${TARBALL}" \
-    || die "Download failed. Check that release ${SYNAPTIC_VERSION} exists for ${ARCH_SLUG}."
-  if curl -fsSL "${DOWNLOAD_URL}.sha256" -o "${TMP_DIR}/${TARBALL}.sha256" 2>/dev/null; then
-    (cd "$TMP_DIR" && sha256sum -c "${TARBALL}.sha256") \
-      || die "Checksum verification failed — download may be corrupt."
-    success "Checksum verified."
-  fi
+  die "Download failed. Check that release ${SYNAPTIC_VERSION} exists and is public, or set GITHUB_TOKEN for private repos."
 fi
 
 mkdir -p "$INSTALL_DIR"
