@@ -162,13 +162,14 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
             });
         }
 
-        let display_name: String = prompt_or(ni, args.admin_display_name.clone(), || {
+        let display_name: String = if ni {
+            args.admin_display_name.clone().unwrap_or_else(|| username.clone())
+        } else {
             Input::new()
                 .with_prompt("Display name")
                 .default(username.clone())
-                .interact_text()
-                .map_err(Into::into)
-        })?;
+                .interact_text()?
+        };
 
         // Password: use provided value, generate one, or prompt interactively.
         let password = if ni {
