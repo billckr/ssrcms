@@ -37,6 +37,7 @@ metrics-exporter-prometheus.workspace = true
 config.workspace = true
 dotenvy.workspace = true
 once_cell.workspace = true
+imagesize.workspace = true
 notify.workspace = true
 ammonia.workspace = true
 glob.workspace = true

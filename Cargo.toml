@@ -58,6 +58,7 @@ dotenvy = { version = "0.15" }
 
 # Utilities
 once_cell = { version = "1" }
+imagesize = { version = "0.13" }
 notify = { version = "7" }
 slug = { version = "0.1" }
 ammonia = { version = "4" }

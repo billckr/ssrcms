@@ -65,6 +65,34 @@ pub async fn delete(
     Redirect::to("/admin/media").into_response()
 }
 
+/// POST /admin/api/media/{id}/meta — update alt text, title, and caption for a media item.
+pub async fn api_update_meta(
+    State(state): State<AppState>,
+    admin: AdminUser,
+    Path(id): Path<Uuid>,
+    axum::Json(body): axum::Json<serde_json::Value>,
+) -> impl IntoResponse {
+    let alt_text = body.get("alt_text").and_then(|v| v.as_str()).unwrap_or("");
+    let title    = body.get("title").and_then(|v| v.as_str()).unwrap_or("");
+    let caption  = body.get("caption").and_then(|v| v.as_str()).unwrap_or("");
+    // Verify site ownership before allowing update.
+    match crate::models::media::get_by_id(&state.db, id).await {
+        Ok(media) => {
+            if !admin.caps.is_global_admin && media.site_id != admin.site_id {
+                return (axum::http::StatusCode::FORBIDDEN, axum::Json(serde_json::json!({"error": "Forbidden"}))).into_response();
+            }
+        }
+        Err(_) => return (axum::http::StatusCode::NOT_FOUND, axum::Json(serde_json::json!({"error": "Not found"}))).into_response(),
+    }
+    match crate::models::media::update_media_meta(&state.db, id, alt_text, title, caption).await {
+        Ok(_) => axum::Json(serde_json::json!({"ok": true})).into_response(),
+        Err(e) => {
+            tracing::error!("failed to update meta for media {}: {:?}", id, e);
+            (axum::http::StatusCode::INTERNAL_SERVER_ERROR, axum::Json(serde_json::json!({"error": "Update failed"}))).into_response()
+        }
+    }
+}
+
 /// GET /admin/api/media — JSON list of images accessible to the current user.
 /// Authors see only their own uploads; admins/editors see all site media.
 pub async fn api_list(
@@ -77,6 +105,8 @@ pub async fn api_list(
         filename: String,
         url: String,
         alt_text: String,
+        title: String,
+        caption: String,
         mime_type: String,
     }
 
@@ -96,6 +126,8 @@ pub async fn api_list(
             filename: m.filename.clone(),
             url: format!("/uploads/{}", m.path),
             alt_text: m.alt_text.clone(),
+            title: m.title.clone(),
+            caption: m.caption.clone(),
             mime_type: m.mime_type.clone(),
         })
         .collect();

@@ -13,6 +13,8 @@ pub struct Media {
     pub mime_type: String,
     pub path: String,
     pub alt_text: String,
+    pub title: String,
+    pub caption: String,
     pub width: Option<i32>,
     pub height: Option<i32>,
     pub file_size: i64,
@@ -35,6 +37,8 @@ pub struct MediaContext {
     pub filename: String,
     pub mime_type: String,
     pub alt_text: String,
+    pub title: String,
+    pub caption: String,
     pub width: Option<i32>,
     pub height: Option<i32>,
 }
@@ -47,6 +51,8 @@ impl MediaContext {
             filename: media.filename.clone(),
             mime_type: media.mime_type.clone(),
             alt_text: media.alt_text.clone(),
+            title: media.title.clone(),
+            caption: media.caption.clone(),
             width: media.width,
             height: media.height,
         }
@@ -61,17 +67,37 @@ pub struct CreateMedia {
     pub mime_type: String,
     pub path: String,
     pub alt_text: String,
+    pub title: String,
+    pub caption: String,
     pub width: Option<i32>,
     pub height: Option<i32>,
     pub file_size: i64,
     pub uploaded_by: Uuid,
 }
 
+pub async fn update_media_meta(pool: &PgPool, id: Uuid, alt_text: &str, title: &str, caption: &str) -> Result<()> {
+    let affected = sqlx::query(
+        "UPDATE media SET alt_text = $1, title = $2, caption = $3 WHERE id = $4"
+    )
+    .bind(alt_text)
+    .bind(title)
+    .bind(caption)
+    .bind(id)
+    .execute(pool)
+    .await?
+    .rows_affected();
+
+    if affected == 0 {
+        return Err(AppError::NotFound(format!("media {id}")));
+    }
+    Ok(())
+}
+
 pub async fn create(pool: &PgPool, data: &CreateMedia) -> Result<Media> {
     let media = sqlx::query_as::<_, Media>(
         r#"
-        INSERT INTO media (site_id, filename, mime_type, path, alt_text, width, height, file_size, uploaded_by)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        INSERT INTO media (site_id, filename, mime_type, path, alt_text, title, caption, width, height, file_size, uploaded_by)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
         RETURNING *
         "#,
     )
@@ -80,6 +106,8 @@ pub async fn create(pool: &PgPool, data: &CreateMedia) -> Result<Media> {
     .bind(&data.mime_type)
     .bind(&data.path)
     .bind(&data.alt_text)
+    .bind(&data.title)
+    .bind(&data.caption)
     .bind(data.width)
     .bind(data.height)
     .bind(data.file_size)

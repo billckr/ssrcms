@@ -9,7 +9,10 @@
   </header>
 
   {% if page.featured_image %}
-    <img src="{{ page.featured_image.url }}" alt="{{ page.featured_image.alt_text }}" class="featured-image">
+    <figure class="featured-image-wrap">
+      <img src="{{ page.featured_image.url | safe }}" alt="{{ page.featured_image.alt_text }}"{% if page.featured_image.title %} title="{{ page.featured_image.title }}"{% endif %} class="featured-image" fetchpriority="high"{% if page.featured_image.width %} width="{{ page.featured_image.width }}" height="{{ page.featured_image.height }}"{% endif %}>
+      {% if page.featured_image.caption %}<figcaption class="featured-image-caption">{{ page.featured_image.caption }}</figcaption>{% endif %}
+    </figure>
   {% endif %}
 
   <div class="page-content">

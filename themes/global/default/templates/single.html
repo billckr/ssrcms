@@ -31,14 +31,17 @@
 <article class="single-post">
   <header class="post-header">
     {% if post.featured_image %}
-      <img src="{{ post.featured_image.url }}" alt="{{ post.featured_image.alt_text }}" class="featured-image">
+      <figure class="featured-image-wrap">
+        <img src="{{ post.featured_image.url | safe }}" alt="{{ post.featured_image.alt_text }}"{% if post.featured_image.title %} title="{{ post.featured_image.title }}"{% endif %} class="featured-image" fetchpriority="high"{% if post.featured_image.width %} width="{{ post.featured_image.width }}" height="{{ post.featured_image.height }}"{% endif %}>
+        {% if post.featured_image.caption %}<figcaption class="featured-image-caption">{{ post.featured_image.caption }}</figcaption>{% endif %}
+      </figure>
     {% endif %}
     <h1 class="post-title">{{ post.title }}</h1>
     <div class="post-meta">
       <time datetime="{{ post.published_at }}">
         {% if post.published_at %}{{ post.published_at | date_format }}{% endif %}
       </time>
-      <span class="post-author">by <a href="{{ post.author.url }}">{{ post.author.display_name }}</a></span>
+      <span class="post-author">by <a href="{{ post.author.url | safe }}">{{ post.author.display_name }}</a></span>
       {% if post.categories | length > 0 %}
         <span class="post-categories">
           in {% for cat in post.categories %}<a href="{{ cat.url }}">{{ cat.name }}</a>{% if not loop.last %}, {% endif %}{% endfor %}

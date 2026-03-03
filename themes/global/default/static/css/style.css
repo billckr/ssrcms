@@ -557,3 +557,13 @@ p { margin: 0 0 1rem; }
 
   .pagination { flex-direction: column; gap: 0.75rem; text-align: center; }
 }
+
+.featured-image-wrap { margin: 0 0 1.5rem; }
+.featured-image-caption { font-size: 0.85rem; color: var(--muted, #6b7280); text-align: center; margin-top: 0.5rem; font-style: italic; }
+
+.featured-image-wrap { margin: 0 0 1.5rem; }
+.featured-image-caption { font-size: 0.85rem; color: var(--muted, #6b7280); text-align: center; margin-top: 0.5rem; font-style: italic; }
+
+
+.featured-image-wrap { margin: 0 0 1.5rem; }
+.featured-image-caption { font-size: 0.85rem; color: var(--muted, #6b7280); text-align: center; margin-top: 0.5rem; font-style: italic; }

@@ -35,7 +35,7 @@ pub fn render_list(items: &[MediaItem], flash: Option<&str>, ctx: &crate::PageCo
         )
     }).collect::<Vec<_>>().join("\n");
 
-    let content = format!(
+    let mut content = format!(
         r#"<div class="form-section">
   <form method="POST" action="/admin/media/upload" enctype="multipart/form-data" id="upload-form">
     <div class="drop-zone" id="drop-zone">
@@ -53,6 +53,7 @@ pub fn render_list(items: &[MediaItem], flash: Option<&str>, ctx: &crate::PageCo
       <input type="text" name="alt_text" placeholder="Alt text (optional)">
     </div>
     <button type="submit" class="btn btn-primary">Upload</button>
+    <button type="button" class="btn btn-secondary" onclick="openMediaPicker('browse')" style="margin-left:0.5rem">Browse All Media</button>
   </form>
 </div>
 <div class="media-grid">{grid}</div>
@@ -123,6 +124,6 @@ function updateDropZone(file) {{
 </script>"#,
         grid = grid,
     );
-
+    content.push_str(&crate::media_picker_modal_html());
     crate::admin_page("Media Library", "/admin/media", flash, &content, ctx)
 }

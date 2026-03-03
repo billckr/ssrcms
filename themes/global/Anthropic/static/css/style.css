@@ -705,3 +705,13 @@ a:hover {
     width: 100%;
   }
 }
+
+.featured-image-wrap { margin: 0 0 1.5rem; }
+.featured-image-caption { font-size: 0.85rem; color: var(--muted, #6b7280); text-align: center; margin-top: 0.5rem; font-style: italic; }
+
+.featured-image-wrap { margin: 0 0 1.5rem; }
+.featured-image-caption { font-size: 0.85rem; color: var(--muted, #6b7280); text-align: center; margin-top: 0.5rem; font-style: italic; }
+
+
+.featured-image-wrap { margin: 0 0 1.5rem; }
+.featured-image-caption { font-size: 0.85rem; color: var(--muted, #6b7280); text-align: center; margin-top: 0.5rem; font-style: italic; }
