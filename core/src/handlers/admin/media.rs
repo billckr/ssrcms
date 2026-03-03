@@ -64,3 +64,41 @@ pub async fn delete(
     }
     Redirect::to("/admin/media").into_response()
 }
+
+/// GET /admin/api/media — JSON list of images accessible to the current user.
+/// Authors see only their own uploads; admins/editors see all site media.
+pub async fn api_list(
+    State(state): State<AppState>,
+    admin: AdminUser,
+) -> impl IntoResponse {
+    #[derive(serde::Serialize)]
+    struct Item {
+        id: String,
+        filename: String,
+        url: String,
+        alt_text: String,
+        mime_type: String,
+    }
+
+    let uploaded_by = if admin.site_role == "author" { Some(admin.user.id) } else { None };
+    let raw = crate::models::media::list(&state.db, admin.site_id, uploaded_by, 500, 0)
+        .await
+        .unwrap_or_else(|e| {
+            tracing::warn!("media api_list error: {:?}", e);
+            vec![]
+        });
+
+    let items: Vec<Item> = raw
+        .into_iter()
+        .filter(|m| m.mime_type.starts_with("image/"))
+        .map(|m| Item {
+            id: m.id.to_string(),
+            filename: m.filename.clone(),
+            url: format!("/uploads/{}", m.path),
+            alt_text: m.alt_text.clone(),
+            mime_type: m.mime_type.clone(),
+        })
+        .collect();
+
+    axum::Json(items)
+}

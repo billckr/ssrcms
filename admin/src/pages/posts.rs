@@ -27,6 +27,10 @@ pub struct PostEdit {
     pub template: Option<String>,
     /// Templates available in the active theme (relative paths without .html).
     pub available_templates: Vec<String>,
+    /// UUID of the selected featured image, if any.
+    pub featured_image_id: Option<String>,
+    /// Public URL for the featured image preview (e.g. "/uploads/abc.png").
+    pub featured_image_url: Option<String>,
 }
 
 pub struct TermOption {
@@ -273,7 +277,35 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
         String::new()
     };
 
-    let content = format!(
+    let featured_image_id_val = post.featured_image_id.as_deref().unwrap_or("");
+    let featured_image_url_val = post.featured_image_url.as_deref().unwrap_or("");
+    let fi_box_inner = if let Some(url) = &post.featured_image_url {
+        format!(
+            r#"<img src="{}" alt="Featured image" style="width:100%;height:100%;object-fit:cover;display:block">"#,
+            crate::html_escape(url)
+        )
+    } else {
+        r#"<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" style="opacity:.35"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10.5" r="1.5"/><path d="M3 16l4.5-4.5 3 3 2.5-2.5 5 5"/></svg><span style="color:var(--muted);font-size:12px">No image selected</span>"#.to_string()
+    };
+    let has_image_class = if post.featured_image_url.is_some() { " has-image" } else { "" };
+    let remove_display = if post.featured_image_url.is_some() { "" } else { "display:none" };
+    let featured_image_section = format!(
+        r#"<div class="form-section">
+      <h3>Featured Image</h3>
+      <input type="hidden" id="featured_image_id" name="featured_image_id" value="{id_val}">
+      <input type="hidden" id="featured_image_url_field" name="featured_image_url" value="{url_val}">
+      <div class="featured-image-box{has_image_class}" id="featured-image-box">{fi_box_inner}</div>
+      <button type="button" id="fi-remove-btn" class="featured-image-remove" onclick="removeFeaturedImage()" style="{remove_display}">&#x2715; Remove featured image</button>
+      <button type="button" class="btn btn-secondary" style="width:100%;font-size:12px;margin-top:.5rem" onclick="openMediaPicker()">Set Featured Image</button>
+    </div>"#,
+        id_val = crate::html_escape(featured_image_id_val),
+        url_val = crate::html_escape(featured_image_url_val),
+        has_image_class = has_image_class,
+        fi_box_inner = fi_box_inner,
+        remove_display = remove_display,
+    );
+
+    let mut content = format!(
         r#"<link rel="stylesheet" href="/admin/static/quill/quill.snow.css">
 <form method="POST" action="{action}">
   <div class="editor-layout">
@@ -315,6 +347,7 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
       </div>
       {template_section}
       {categories_section}
+      {featured_image_section}
     </div>
   </div>
 </form>
@@ -348,6 +381,15 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
   document.querySelector('form').addEventListener('submit', function() {{
     document.getElementById('content').value = quill.root.innerHTML;
   }});
+
+  // Override Quill's image button to open the media library instead of file picker
+  window._quillInstance = quill;
+  window._quillRange = null;
+  var toolbar = quill.getModule('toolbar');
+  toolbar.addHandler('image', function() {{
+    window._quillRange = quill.getSelection(true);
+    openMediaPicker('inline');
+  }});
 }})();
 </script>"#,
         action = action,
@@ -361,9 +403,128 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
         post_type = crate::html_escape(&post.post_type),
         template_section = template_section,
         categories_section = categories_section,
+        featured_image_section = featured_image_section,
     );
 
     let path = if post.post_type == "page" { "/admin/pages" } else { "/admin/posts" };
+    content.push_str(r#"<div id="media-picker-modal" class="mpicker-overlay" style="display:none" onclick="if(event.target===this)closeMediaPicker()">
+  <div class="mpicker-dialog">
+    <div class="mpicker-header">
+      <span class="mpicker-title">Featured Image</span>
+      <input type="text" id="mpicker-search" class="mpicker-search" placeholder="Search images&#x2026;" oninput="filterMedia(this.value)" autocomplete="off">
+      <button type="button" class="mpicker-close" onclick="closeMediaPicker()" title="Close">&#x2715;</button>
+    </div>
+    <div class="mpicker-body">
+      <div class="mpicker-grid" id="mpicker-grid"><p class="mpicker-loading">Loading&#x2026;</p></div>
+      <div class="mpicker-detail" id="mpicker-detail"><div class="mpicker-detail-empty">Select an image to see details<br><small style="display:block;margin-top:0.75rem;color:#6b7280;line-height:1.5;">Recommended: 1920 &times; 1080 px<br>Minimum: 1200 &times; 675 px<br>Format: JPEG or PNG</small></div></div>
+    </div>
+  </div>
+</div>
+<script>
+(function() {
+  var allMedia = [];
+  var selectedId = null;
+  var selectedUrl = null;
+  var selectedAlt = null;
+  var loaded = false;
+  var pickerMode = 'featured'; // 'featured' or 'inline'
+  window.openMediaPicker = function(mode) {
+    pickerMode = mode || 'featured';
+    if (pickerMode === 'featured') {
+      selectedId = document.getElementById('featured_image_id').value || null;
+      selectedUrl = document.getElementById('featured_image_url_field').value || null;
+    } else {
+      selectedId = null;
+      selectedUrl = null;
+    }
+    document.getElementById('media-picker-modal').style.display = '';
+    document.getElementById('mpicker-search').value = '';
+    if (!loaded) {
+      loaded = true;
+      fetch('/admin/api/media')
+        .then(function(r) { return r.json(); })
+        .then(function(data) { allMedia = data; renderGrid(data); })
+        .catch(function() {
+          document.getElementById('mpicker-grid').innerHTML = '<p class="mpicker-loading">Failed to load images.</p>';
+        });
+    } else {
+      renderGrid(allMedia);
+    }
+  };
+  window.closeMediaPicker = function() {
+    document.getElementById('media-picker-modal').style.display = 'none';
+  };
+  window.filterMedia = function(q) {
+    var lower = q.toLowerCase();
+    renderGrid(lower ? allMedia.filter(function(m) { return m.filename.toLowerCase().indexOf(lower) !== -1; }) : allMedia);
+  };
+  function escHtml(s) {
+    return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+  function renderGrid(items) {
+    var grid = document.getElementById('mpicker-grid');
+    if (!items.length) { grid.innerHTML = '<p class="mpicker-loading">No images found.</p>'; return; }
+    grid.innerHTML = items.map(function(m) {
+      var sel = m.id === selectedId ? ' mpicker-thumb-selected' : '';
+      return '<div class="mpicker-thumb' + sel + '" onclick="pickThumb(this)"'
+        + ' data-id="' + escHtml(m.id) + '"'
+        + ' data-url="' + escHtml(m.url) + '"'
+        + ' data-filename="' + escHtml(m.filename) + '"'
+        + ' data-alt="' + escHtml(m.alt_text) + '">'
+        + '<img src="' + escHtml(m.url) + '" alt="' + escHtml(m.alt_text || m.filename) + '" loading="lazy">'
+        + '</div>';
+    }).join('');
+  }
+  window.pickThumb = function(el) {
+    selectedId = el.dataset.id;
+    selectedUrl = el.dataset.url;
+    selectedAlt = el.dataset.alt || el.dataset.filename;
+    document.querySelectorAll('.mpicker-thumb').forEach(function(t) { t.classList.remove('mpicker-thumb-selected'); });
+    el.classList.add('mpicker-thumb-selected');
+    document.getElementById('mpicker-detail').innerHTML =
+      '<div class="mpicker-detail-img"><img src="' + escHtml(selectedUrl) + '" alt="' + escHtml(el.dataset.alt || el.dataset.filename) + '"></div>'
+      + '<p class="mpicker-detail-filename">' + escHtml(el.dataset.filename) + '</p>'
+      + '<button type="button" class="btn btn-primary" style="width:100%;margin-top:1rem" onclick="confirmPick()">' + (pickerMode === 'inline' ? 'Insert Image' : 'Set Featured Image') + '</button>';
+  };
+  window.confirmFeaturedImage = function() {
+    if (!selectedId) return;
+    document.getElementById('featured_image_id').value = selectedId;
+    document.getElementById('featured_image_url_field').value = selectedUrl;
+    var box = document.getElementById('featured-image-box');
+    box.innerHTML = '<img src="' + escHtml(selectedUrl) + '" alt="Featured image" style="width:100%;height:100%;object-fit:cover;display:block">';
+    box.classList.add('has-image');
+    var rb = document.getElementById('fi-remove-btn');
+    if (rb) rb.style.display = '';
+    closeMediaPicker();
+  };
+  window.confirmPick = function() {
+    if (!selectedId) return;
+    if (pickerMode === 'inline') {
+      var q = window._quillInstance;
+      if (q) {
+        var range = window._quillRange || q.getSelection(true);
+        var imgHtml = '<img src="' + selectedUrl + '" alt="' + (selectedAlt || '').replace(/"/g, '&quot;') + '">';
+        q.clipboard.dangerouslyPasteHTML(range.index, imgHtml, 'user');
+        q.setSelection(range.index + 1, 0, 'silent');
+      }
+      closeMediaPicker();
+    } else {
+      confirmFeaturedImage();
+    }
+  };
+  window.removeFeaturedImage = function() {
+    selectedId = null;
+    selectedUrl = null;
+    document.getElementById('featured_image_id').value = '';
+    document.getElementById('featured_image_url_field').value = '';
+    var box = document.getElementById('featured-image-box');
+    box.classList.remove('has-image');
+    box.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" style="opacity:.35"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10.5" r="1.5"/><path d="M3 16l4.5-4.5 3 3 2.5-2.5 5 5"/></svg><span style="color:var(--muted);font-size:12px">No image selected</span>';
+    var rb = document.getElementById('fi-remove-btn');
+    if (rb) rb.style.display = 'none';
+  };
+})();
+</script>"#);
     crate::admin_page(&title, path, flash, &content, ctx)
 }
 

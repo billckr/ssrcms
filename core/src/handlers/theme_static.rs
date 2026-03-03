@@ -19,16 +19,16 @@ pub async fn serve(
 ) -> Response {
     // Resolve per-site active theme from the Host header; fall back to the
     // global active_theme for single-site / pre-migration setups.
-    let active_theme = headers
+    let (active_theme, site_id) = headers
         .get(header::HOST)
         .and_then(|v| v.to_str().ok())
         .map(|h| h.split(':').next().unwrap_or(h).to_string())
         .and_then(|hostname| state.resolve_site(&hostname))
-        .map(|(_, settings)| settings.active_theme.clone())
-        .unwrap_or_else(|| state.active_theme.read().unwrap().clone());
+        .map(|(site, settings)| (settings.active_theme.clone(), Some(site.id)))
+        .unwrap_or_else(|| (state.active_theme.read().unwrap().clone(), None));
 
-    // Resolve theme directory: global/, then sites/*/, then legacy flat layout.
-    let static_base = if let Some(theme_dir) = state.templates.resolve_theme_dir(&active_theme) {
+    // Resolve theme directory: site-specific first, then global, then legacy flat layout.
+    let static_base = if let Some(theme_dir) = state.templates.resolve_theme_dir_for_site(&active_theme, site_id) {
         theme_dir.join("static")
     } else {
         // Fallback for legacy flat layout (themes/<name>/static/).

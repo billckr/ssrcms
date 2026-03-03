@@ -210,11 +210,44 @@ a:hover {
 
 .featured-image {
   width: 100%;
-  max-height: 400px;
-  object-fit: cover;
+  height: auto;
+  display: block;
   border-radius: 8px;
-  margin-bottom: 1rem;
   border: 2px solid var(--border-color);
+}
+
+/* Hero treatment on single post and static pages */
+.single-post .featured-image,
+.single-page .featured-image {
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  max-height: 520px;
+  margin-bottom: 1.75rem;
+  background: var(--bg-secondary);
+}
+
+/* Thumbnail treatment in post lists (home + archive) */
+.post-item .featured-image {
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  max-height: 280px;
+  margin-bottom: 0.75rem;
+  background: var(--bg-secondary);
+  transition: opacity 0.15s;
+}
+
+.post-item .featured-image:hover {
+  opacity: 0.88;
+}
+
+/* Square-edge variant — add this class to any featured image to remove rounded corners.
+   Usage in template: <img ... class="featured-image featured-image--sharp"> */
+.featured-image--sharp,
+.single-post .featured-image--sharp,
+.single-page .featured-image--sharp,
+.post-item .featured-image--sharp {
+  border-radius: 0;
+  border: none;
 }
 
 .post-excerpt {

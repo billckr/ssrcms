@@ -135,6 +135,8 @@ async fn new_post_type(state: AppState, post_type: &str, site_id: Option<Uuid>, 
         selected_tags: vec![],
         template: None,
         available_templates,
+        featured_image_id: None,
+        featured_image_url: None,
     };
     Html(admin::pages::posts::render_editor(&edit, None, &ctx))
 }
@@ -201,6 +203,14 @@ async fn edit_post_type(state: AppState, id: Uuid, site_id: Option<Uuid>, is_aut
         .map(|t| t.id.to_string())
         .collect();
 
+    let featured_image_url = if let Some(img_id) = post.featured_image_id {
+        crate::models::media::get_by_id(&state.db, img_id).await
+            .ok()
+            .map(|m| format!("/uploads/{}", m.path))
+    } else {
+        None
+    };
+
     let edit = PostEdit {
         id: Some(post.id.to_string()),
         title: post.title.clone(),
@@ -216,6 +226,8 @@ async fn edit_post_type(state: AppState, id: Uuid, site_id: Option<Uuid>, is_aut
         selected_tags,
         template: post.template.clone(),
         available_templates,
+        featured_image_id: post.featured_image_id.map(|id| id.to_string()),
+        featured_image_url,
     };
 
     Html(admin::pages::posts::render_editor(&edit, None, &ctx)).into_response()
@@ -269,6 +281,8 @@ pub struct PostForm {
     pub categories: Vec<String>,
     #[serde(default, deserialize_with = "deserialize_string_or_vec")]
     pub tags: Vec<String>,
+    pub featured_image_id: Option<String>,
+    pub featured_image_url: Option<String>,
 }
 
 pub async fn save_new(
@@ -300,6 +314,8 @@ pub async fn save_new(
             selected_tags: form.tags,
             template: form.template.clone().filter(|s| !s.is_empty()),
             available_templates: if form.post_type == "page" { scan_templates(&state, admin.site_id) } else { vec![] },
+            featured_image_id: form.featured_image_id.clone(),
+            featured_image_url: form.featured_image_url.clone(),
         };
         return Html(admin::pages::posts::render_editor(&edit, Some("Content is required before publishing."), &ctx)).into_response();
     }
@@ -314,7 +330,7 @@ pub async fn save_new(
         status,
         post_type,
         author_id: admin.user.id,
-        featured_image_id: None,
+        featured_image_id: form.featured_image_id.as_deref().and_then(|s| s.parse::<Uuid>().ok()),
         published_at,
         template: form.template.clone().filter(|s| !s.is_empty()),
     };
@@ -348,6 +364,8 @@ pub async fn save_new(
                 selected_tags: form.tags,
                 template: form.template.clone().filter(|s| !s.is_empty()),
                 available_templates: if form.post_type == "page" { scan_templates(&state, admin.site_id) } else { vec![] },
+                featured_image_id: form.featured_image_id,
+                featured_image_url: form.featured_image_url,
             };
             let msg = friendly_save_error(&e);
             Html(admin::pages::posts::render_editor(&edit, Some(&msg), &ctx)).into_response()
@@ -407,6 +425,8 @@ pub async fn save_edit(
             selected_tags: form.tags,
             template: form.template.clone().filter(|s| !s.is_empty()),
             available_templates: if form.post_type == "page" { scan_templates(&state, admin.site_id) } else { vec![] },
+            featured_image_id: form.featured_image_id.clone(),
+            featured_image_url: form.featured_image_url.clone(),
         };
         return Html(admin::pages::posts::render_editor(&edit, Some("Content is required before publishing."), &ctx)).into_response();
     }
@@ -418,7 +438,8 @@ pub async fn save_edit(
         content_format: None,
         excerpt: form.excerpt.clone(),
         status: Some(status),
-        featured_image_id: None,
+        clear_featured_image: form.featured_image_id.as_deref() == Some(""),
+        featured_image_id: form.featured_image_id.as_deref().and_then(|s| s.parse::<Uuid>().ok()),
         published_at,
         template: form.template.clone().filter(|s| !s.is_empty()),
     };
@@ -463,6 +484,8 @@ pub async fn save_edit(
                 selected_tags,
                 template: form.template.clone().filter(|s| !s.is_empty()),
                 available_templates: if form.post_type == "page" { scan_templates(&state, admin.site_id) } else { vec![] },
+                featured_image_id: form.featured_image_id,
+                featured_image_url: form.featured_image_url,
             };
             let msg = friendly_save_error(&e);
             Html(admin::pages::posts::render_editor(&edit, Some(&msg), &ctx)).into_response()

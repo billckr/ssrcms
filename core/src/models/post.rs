@@ -179,6 +179,8 @@ pub struct UpdatePost {
     pub excerpt: Option<String>,
     pub status: Option<PostStatus>,
     pub featured_image_id: Option<Uuid>,
+    /// When true, set featured_image_id to NULL regardless of featured_image_id value.
+    pub clear_featured_image: bool,
     pub published_at: Option<DateTime<Utc>>,
     pub template: Option<String>,
 }
@@ -648,7 +650,9 @@ pub async fn update(pool: &PgPool, id: Uuid, data: &UpdatePost) -> Result<Post> 
     let new_format = data.content_format.clone().unwrap_or(current.content_format.clone());
     let new_excerpt = data.excerpt.clone().or(current.excerpt.clone());
     let new_status = data.status.as_ref().map(|s| s.as_str().to_string()).unwrap_or(current.status.clone());
-    let new_image = if data.featured_image_id.is_some() {
+    let new_image = if data.clear_featured_image {
+        None
+    } else if data.featured_image_id.is_some() {
         data.featured_image_id
     } else {
         current.featured_image_id

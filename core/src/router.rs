@@ -86,6 +86,8 @@ pub fn build(
         .route("/admin/pages/{id}/edit", get(posts::edit_page).post(posts::save_edit))
         .route("/admin/pages/{id}/delete", post(posts::delete_page))
         .route("/admin/pages/bulk-delete", post(posts::bulk_delete_pages))
+        // ── Admin media API (JSON) ─────────────────────────────────────────
+        .route("/admin/api/media", get(media::api_list))
         // ── Admin media ────────────────────────────────────────────────────
         .route("/admin/media", get(media::list))
         .route("/admin/media/upload", post(upload::upload).layer(upload_limit.clone()))

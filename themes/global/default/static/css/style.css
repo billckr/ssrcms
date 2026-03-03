@@ -263,12 +263,48 @@ p { margin: 0 0 1rem; }
 
 .read-more:hover { text-decoration: underline; }
 
+/* ── Featured image ── */
+
+/* Base — applies everywhere */
 .featured-image {
   width: 100%;
   height: auto;
-  margin-bottom: 1rem;
-  border-radius: var(--radius);
   display: block;
+  border-radius: var(--radius);
+}
+
+/* Hero treatment on single post and static pages — fixed aspect ratio, cover crop */
+.single-post .featured-image,
+.single-page .featured-image {
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  border-radius: var(--radius);
+  margin-bottom: 1.75rem;
+  background: var(--color-surface);
+}
+
+/* Thumbnail treatment in post lists (home + archive) */
+.post-item .featured-image {
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  max-height: 280px;
+  border-radius: var(--radius);
+  margin-bottom: 0.75rem;
+  background: var(--bg-subtle, #f3f4f6);
+  transition: opacity 0.15s;
+}
+
+.post-item .featured-image:hover {
+  opacity: 0.9;
+}
+
+/* Square-edge variant — add this class to any featured image to remove rounded corners.
+   Usage in template: <img ... class="featured-image featured-image--sharp"> */
+.featured-image--sharp,
+.single-post .featured-image--sharp,
+.single-page .featured-image--sharp,
+.post-item .featured-image--sharp {
+  border-radius: 0;
 }
 
 /* ── Single post ── */

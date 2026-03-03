@@ -426,3 +426,149 @@ legend {
 .theme-upload-section h2 { font-size: 1.1rem; font-weight: 600; margin-bottom: .4rem; }
 .theme-upload-section .muted { color: var(--muted); font-size: .875rem; margin-bottom: 1.25rem; }
 
+/* ── Featured image ────────────────────────────────────────────────────────── */
+.featured-image-box {
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  border: 2px dashed var(--border);
+  border-radius: var(--radius);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: .5rem;
+  background: #f8fafc;
+  color: var(--muted);
+  font-size: 13px;
+  text-align: center;
+  padding: 1rem;
+  margin-bottom: .75rem;
+}
+.featured-image-box img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: calc(var(--radius) - 2px);
+  display: block;
+}
+.featured-image-box.has-image {
+  border-style: solid;
+  border-color: var(--border);
+  padding: 0;
+  overflow: hidden;
+  background: #000;
+}
+.featured-image-remove {
+  display: block;
+  font-size: 12px;
+  color: var(--danger);
+  text-align: center;
+  cursor: pointer;
+  background: none;
+  border: none;
+  padding: 0;
+  width: 100%;
+}
+.featured-image-remove:hover { text-decoration: underline; }
+
+/* ── Media picker modal ─────────────────────────────────────────────────── */
+.mpicker-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.55);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+}
+.mpicker-dialog {
+  background: var(--surface);
+  border-radius: var(--radius);
+  box-shadow: 0 20px 60px rgba(0,0,0,.35);
+  display: flex;
+  flex-direction: column;
+  width: 80vw;
+  max-width: 1400px;
+  height: 80vh;
+  max-height: 900px;
+  overflow: hidden;
+}
+.mpicker-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.mpicker-title { font-size: 1rem; font-weight: 600; flex: 1; }
+.mpicker-search {
+  padding: .4rem .75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 13px;
+  width: 220px;
+}
+.mpicker-close {
+  background: none;
+  border: none;
+  font-size: 1.2rem;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--muted);
+  padding: .25rem .4rem;
+  border-radius: var(--radius);
+  flex-shrink: 0;
+}
+.mpicker-close:hover { background: #f1f5f9; color: var(--text); }
+.mpicker-body { display: flex; flex: 1; overflow: hidden; }
+.mpicker-grid {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1rem;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: .75rem;
+  align-content: start;
+}
+.mpicker-thumb {
+  aspect-ratio: 1;
+  border-radius: var(--radius);
+  overflow: hidden;
+  cursor: pointer;
+  border: 2px solid transparent;
+  transition: border-color .15s;
+  background: #f8fafc;
+}
+.mpicker-thumb:hover { border-color: var(--primary); }
+.mpicker-thumb-selected { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(79,70,229,.2); }
+.mpicker-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.mpicker-loading { grid-column: 1/-1; text-align: center; color: var(--muted); padding: 3rem; font-size: 13px; }
+.mpicker-detail {
+  width: 280px;
+  flex-shrink: 0;
+  border-left: 1px solid var(--border);
+  padding: 1.25rem;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+.mpicker-detail-empty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  font-size: 13px;
+  text-align: center;
+}
+.mpicker-detail-img { margin-bottom: .75rem; }
+.mpicker-detail-img img { width: 100%; border-radius: var(--radius); display: block; }
+.mpicker-detail-filename { font-size: 12px; font-weight: 500; word-break: break-all; color: var(--text); }
+@media (max-width: 640px) {
+  .mpicker-body { flex-direction: column; }
+  .mpicker-detail { width: 100%; border-left: none; border-top: 1px solid var(--border); max-height: 180px; }
+  .mpicker-grid { grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)); }
+}
+

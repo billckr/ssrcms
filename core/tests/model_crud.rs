@@ -99,6 +99,7 @@ async fn test_post_update() {
         excerpt: None,
         status: Some(PostStatus::Published),
         featured_image_id: None,
+        clear_featured_image: false,
         published_at: None,
         template: None,
     })
