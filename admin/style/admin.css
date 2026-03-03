@@ -572,3 +572,7 @@ legend {
   .mpicker-grid { grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)); }
 }
 
+/* Editor-only UX: reduce the visual gap between paragraph breaks so the editor
+   feels less spaced-out. The live page is unaffected — it uses theme CSS. */
+.ql-editor p { margin-bottom: 0.15rem; }
+
