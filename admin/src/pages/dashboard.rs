@@ -8,8 +8,13 @@ pub struct DashboardData {
 }
 
 pub fn render(data: &DashboardData, flash: Option<&str>, ctx: &crate::PageContext) -> String {
-    let content = format!(
-        r#"<div class="stats-grid">
+    let content = if ctx.user_role.eq_ignore_ascii_case("author") {
+        r#"<p class="author-stats-soon">Author Stats coming soon!</p>"#.to_string()
+    } else if ctx.user_role.eq_ignore_ascii_case("editor") {
+        r#"<p class="editor-tools-soon">Editor tools coming soon!</p>"#.to_string()
+    } else {
+        format!(
+            r#"<div class="stats-grid">
   <div class="stat-card">
     <div class="stat-num">{published_posts}</div>
     <div class="stat-label">Published Posts</div>
@@ -27,11 +32,12 @@ pub fn render(data: &DashboardData, flash: Option<&str>, ctx: &crate::PageContex
     <div class="stat-label">Users</div>
   </div>
 </div>"#,
-        published_posts = data.published_posts,
-        draft_posts = data.draft_posts,
-        total_pages = data.total_pages,
-        total_users = data.total_users,
-    );
+            published_posts = data.published_posts,
+            draft_posts = data.draft_posts,
+            total_pages = data.total_pages,
+            total_users = data.total_users,
+        )
+    };
 
     crate::admin_page("Dashboard", "/admin", flash, &content, ctx)
 }
