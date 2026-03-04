@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+
+{% block title %}{{ page.title }} — {{ site.name }}{% endblock title %}
+
+{% block content %}
+<article class="single-page subscribe-page">
+  <header class="page-header">
+    <h1 class="page-title">{{ page.title }}</h1>
+  </header>
+
+  {% if page.content %}
+  <div class="page-content">
+    {{ page.content | safe }}
+  </div>
+  {% endif %}
+
+  <form class="subscribe-form" method="POST" action="/subscribe">
+    <div class="subscribe-field">
+      <label for="sf-name">Your name <span class="subscribe-required" aria-hidden="true">*</span></label>
+      <input type="text" id="sf-name" name="display_name" required autocomplete="name" placeholder="Jane Smith">
+    </div>
+
+    <div class="subscribe-field">
+      <label for="sf-email">Email address <span class="subscribe-required" aria-hidden="true">*</span></label>
+      <input type="email" id="sf-email" name="email" required autocomplete="email" placeholder="jane@example.com">
+    </div>
+
+    <div class="subscribe-field">
+      <label for="sf-password">Password <span class="subscribe-required" aria-hidden="true">*</span></label>
+      <input type="password" id="sf-password" name="password" required autocomplete="new-password">
+      <span class="subscribe-field-hint">8–12 characters &middot; uppercase &middot; number &middot; symbol (! @ # $ % &amp;)</span>
+    </div>
+
+    <div class="subscribe-field">
+      <label for="sf-confirm">Confirm password <span class="subscribe-required" aria-hidden="true">*</span></label>
+      <input type="password" id="sf-confirm" name="confirm_password" required autocomplete="new-password">
+    </div>
+
+    <button type="submit" class="subscribe-submit">Create account</button>
+  </form>
+</article>
+
+<style>
+/* ── Subscribe page ── */
+.subscribe-page { max-width: 540px; }
+
+.subscribe-form {
+  margin-top: 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.subscribe-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.subscribe-field label {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.subscribe-required { color: #e63946; }
+
+.subscribe-field input {
+  padding: 0.6rem 0.85rem;
+  font-size: 1rem;
+  font-family: inherit;
+  border: 1.5px solid var(--color-border);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--color-text);
+  transition: border-color 0.15s, box-shadow 0.15s;
+  outline: none;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.subscribe-field input:focus {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.subscribe-field-hint {
+  font-size: 0.75rem;
+  color: #9ca3af;
+}
+
+.subscribe-submit {
+  align-self: flex-start;
+  padding: 0.65rem 1.5rem;
+  font-size: 1rem;
+  font-weight: 600;
+  font-family: inherit;
+  background: var(--color-accent);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: opacity 0.15s, transform 0.1s;
+}
+
+.subscribe-submit:hover { opacity: 0.88; }
+.subscribe-submit:active { transform: scale(0.98); }
+</style>
+{% endblock content %}
