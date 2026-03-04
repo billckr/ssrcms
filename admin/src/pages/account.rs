@@ -135,11 +135,10 @@ pub struct ProfileData {
 pub fn render_profile(data: &ProfileData, flash: Option<&str>, ctx: &AccountContext) -> String {
     let content = format!(
         r#"<div class="profile-container">
-  <h2>Profile</h2>
+  <h2>Profile Management</h2>
 
   <form method="POST" action="/account/profile/update" class="profile-form">
     <fieldset>
-      <legend>Account Information</legend>
 
       <div class="form-group">
         <label>Username</label>
@@ -163,11 +162,10 @@ pub fn render_profile(data: &ProfileData, flash: Option<&str>, ctx: &AccountCont
 </div>
 
 <div class="profile-container">
-  <h2>Change Password</h2>
+  <h2>Password Management</h2>
 
   <form method="POST" action="/account/profile/change-password" class="password-form">
     <fieldset>
-      <legend>Password Management</legend>
 
       <div class="form-group">
         <label for="current_password">Current Password</label>

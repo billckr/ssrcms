@@ -10,11 +10,10 @@ pub struct ProfileForm {
 pub fn render_profile(profile: &ProfileForm, flash: Option<&str>, ctx: &crate::PageContext) -> String {
     let content = format!(
         r#"<div class="profile-container">
-  <h2>My Profile</h2>
+  <h2>Profile Management</h2>
   
   <form method="POST" action="/admin/profile/update" class="profile-form">
     <fieldset>
-      <legend>Profile Information</legend>
       
       <div class="form-group">
         <label>Username</label>
@@ -43,11 +42,10 @@ pub fn render_profile(profile: &ProfileForm, flash: Option<&str>, ctx: &crate::P
 </div>
 
 <div class="profile-container">
-  <h2>Change Password</h2>
+  <h2>Password Management</h2>
   
   <form method="POST" action="/admin/profile/change-password" class="password-form">
     <fieldset>
-      <legend>Password Management</legend>
       
       <div class="form-group">
         <label for="current_password">Current Password</label>
@@ -84,5 +82,5 @@ pub fn render_profile(profile: &ProfileForm, flash: Option<&str>, ctx: &crate::P
         bio = crate::html_escape(&profile.bio),
     );
 
-    crate::admin_page("My Profile", "/admin/profile", flash, &content, ctx)
+    crate::admin_page("Profile Management", "/admin/profile", flash, &content, ctx)
 }
