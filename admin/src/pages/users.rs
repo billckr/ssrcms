@@ -199,7 +199,13 @@ pub fn render_list(staff: &[UserRow], subscribers: &[UserRow], flash: Option<&st
 }
 
 pub fn render_editor(user: &UserEdit, flash: Option<&str>, ctx: &crate::PageContext) -> String {
-    let title = if user.id.is_none() { "New User" } else { "Edit User" };
+    let title = if user.id.is_none() {
+        "New User"
+    } else if user.role == "subscriber" {
+        "Edit Subscriber"
+    } else {
+        "Edit User"
+    };
     let action = match &user.id {
         Some(id) => format!("/admin/users/{}/edit", id),
         None => "/admin/users/new".to_string(),
@@ -381,6 +387,16 @@ function toggleSiteFields() {{
   var pwInput = form.querySelector('#password');
   var isNew   = {is_new_js};
   form.addEventListener('submit', function (e) {{
+    // Role-change confirmation — only fires when the checkbox is checked.
+    var roleCheckbox = form.querySelector('#role-enable');
+    if (roleCheckbox && roleCheckbox.checked) {{
+      var sel = form.querySelector('#role-select');
+      var newRole = sel ? sel.options[sel.selectedIndex].text : '';
+      if (!confirm('Role change: set to "' + newRole + '". Continue?')) {{
+        e.preventDefault();
+        return;
+      }}
+    }}
     var pw = pwInput ? pwInput.value : '';
     if (!pw && !isNew) return; // blank on edit = keep current, no validation needed
     if (!pw && isNew) {{ e.preventDefault(); alert('Password is required.'); return; }}
