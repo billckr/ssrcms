@@ -1,12 +1,10 @@
 //! Account session guard — accepts any authenticated user (subscriber or above).
 //!
-//! `AccountUser` is an Axum extractor that reads the existing session
-//! (shared with the admin session — same key), validates the stored user_id,
-//! and returns `Err(Redirect to /login)` if not present.
-//!
-//! Unlike `AdminUser` this extractor accepts *all* roles including subscriber.
-//! The site is resolved from the Host header so no site_id has to be stored in
-//! the subscriber's session.
+//! Uses its own session key (`account_user_id`) entirely separate from the
+//! admin session key (`admin_user_id`). This means logging in as a subscriber
+//! via /login never touches the admin session, and vice-versa — two different
+//! users can be "logged in" in different contexts in the same browser without
+//! interfering with each other.
 
 use axum::{
     extract::FromRequestParts,
@@ -17,8 +15,10 @@ use tower_sessions::Session;
 use uuid::Uuid;
 
 use crate::app_state::AppState;
-use crate::middleware::admin_auth::SESSION_USER_ID_KEY;
 use crate::models::user::User;
+
+/// Session key for the account area — kept separate from SESSION_USER_ID_KEY.
+pub const SESSION_ACCOUNT_USER_ID_KEY: &str = "account_user_id";
 
 /// An authenticated account user (any role) extracted from the session.
 pub struct AccountUser {
@@ -59,7 +59,7 @@ impl FromRequestParts<AppState> for AccountUser {
             .clone();
 
         let user_id_str: Option<String> = session
-            .get(SESSION_USER_ID_KEY)
+            .get(SESSION_ACCOUNT_USER_ID_KEY)
             .await
             .map_err(|e| AccountAuthError::Internal(format!("session get error: {e}")))?;
 

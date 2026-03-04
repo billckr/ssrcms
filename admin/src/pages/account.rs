@@ -75,7 +75,7 @@ pub fn account_page(
         <span>{user_email}</span>
         <span class="sidebar-user-role">{user_role}</span>
         <a href="{back_url}">&larr; Back to site</a>
-        <a href="/admin/logout">Log out</a>
+        <a href="/account/logout">Log out</a>
       </div>
     </nav>
     <main class="admin-main">

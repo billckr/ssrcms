@@ -10,6 +10,7 @@ use serde::Deserialize;
 use tower_sessions::Session;
 
 use crate::app_state::AppState;
+use crate::middleware::account_auth::SESSION_ACCOUNT_USER_ID_KEY;
 use crate::middleware::admin_auth::{SESSION_CURRENT_SITE_KEY, SESSION_USER_ID_KEY};
 
 /// Extract bare hostname from a Host header value (strips port if present).
@@ -99,8 +100,11 @@ pub async fn login_post(
         }
     }
 
-    // Store user ID in session.
-    if let Err(e) = session.insert(SESSION_USER_ID_KEY, user.id.to_string()).await {
+    // Store user ID in the correct session key based on role.
+    // Subscribers use SESSION_ACCOUNT_USER_ID_KEY so their login never
+    // overwrites an admin session open in another tab (same browser/cookie).
+    let session_key = if is_subscriber { SESSION_ACCOUNT_USER_ID_KEY } else { SESSION_USER_ID_KEY };
+    if let Err(e) = session.insert(session_key, user.id.to_string()).await {
         tracing::error!("session insert error: {}", e);
         return Html(admin::pages::login::render(Some("Session error. Please try again."))).into_response();
     }
@@ -127,8 +131,15 @@ pub async fn public_login_form() -> impl IntoResponse {
     Html(admin::pages::login::render_public(None))
 }
 
-/// GET /admin/logout — clear session, redirect to login.
+/// GET /admin/logout — clear admin session key only, redirect to admin login.
 pub async fn logout(session: Session) -> impl IntoResponse {
-    let _ = session.flush().await;
+    let _ = session.remove::<String>(SESSION_USER_ID_KEY).await;
+    let _ = session.remove::<String>(SESSION_CURRENT_SITE_KEY).await;
     Redirect::to("/admin/login")
+}
+
+/// GET /account/logout — clear account session key only, redirect to /login.
+pub async fn account_logout(session: Session) -> impl IntoResponse {
+    let _ = session.remove::<String>(SESSION_ACCOUNT_USER_ID_KEY).await;
+    Redirect::to("/login")
 }
