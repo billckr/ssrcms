@@ -3,7 +3,7 @@
 
 use axum::{
     extract::State,
-    response::{Html, IntoResponse, Redirect, Response},
+    response::Html,
     Form,
 };
 use serde::Deserialize;
