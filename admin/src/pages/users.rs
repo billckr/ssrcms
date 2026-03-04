@@ -225,8 +225,9 @@ pub fn render_editor(user: &UserEdit, flash: Option<&str>, ctx: &crate::PageCont
             ]
         } else {
             &[
-                ("editor", "Editor"),
-                ("author", "Author"),
+                ("editor",     "Editor"),
+                ("author",     "Author"),
+                ("subscriber", "Subscriber"),
             ]
         };
         // On new-user form: prepend a disabled placeholder; on edit: pre-select current role.
@@ -239,10 +240,34 @@ pub fn render_editor(user: &UserEdit, flash: Option<&str>, ctx: &crate::PageCont
             let selected = if !is_new && *value == user.role { " selected" } else { "" };
             format!(r#"<option value="{value}"{selected}>{label}</option>"#)
         }).collect::<Vec<_>>().join("");
-        format!(r#"<div class="form-group">
+
+        if is_new {
+            // New user: plain dropdown, no lock needed.
+            format!(r#"<div class="form-group">
   <label for="role">Role</label>
   <select id="role" name="role" required>{placeholder}{role_options}</select>
 </div>"#)
+        } else {
+            // Edit: lock the dropdown behind a checkbox to prevent accidental role changes.
+            // A hidden input always submits the current role; the checkbox + select
+            // override it only when the admin explicitly opts in.
+            let current_role = crate::html_escape(&user.role);
+            format!(r#"<div class="form-group">
+  <label for="role-enable">Role</label>
+  <input type="hidden" id="role-hidden" name="role" value="{current_role}">
+  <div style="display:flex;align-items:center;gap:0.6rem;margin-bottom:0.4rem">
+    <input type="checkbox" id="role-enable" onchange="
+      var sel = document.getElementById('role-select');
+      var hid = document.getElementById('role-hidden');
+      sel.disabled = !this.checked;
+      hid.disabled = this.checked;
+    ">
+    <label for="role-enable" style="font-weight:400;margin:0;cursor:pointer">Change role</label>
+  </div>
+  <select id="role-select" name="role" disabled>{role_options}</select>
+  <small>Role is locked to prevent accidental changes. Check the box above to edit it.</small>
+</div>"#)
+        }
     };
 
     let password_hint = if user.id.is_some() {
