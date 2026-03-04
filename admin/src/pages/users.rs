@@ -393,8 +393,7 @@ function toggleSiteFields() {{
       var sel = form.querySelector('#role-select');
       var newRole = sel ? sel.options[sel.selectedIndex].text : '';
       if (!confirm('Role change: set to "' + newRole + '". Continue?')) {{
-        e.preventDefault();
-        return;
+        e.preventDefault(); window.location.reload(); return;
       }}
     }}
     var pw = pwInput ? pwInput.value : '';
