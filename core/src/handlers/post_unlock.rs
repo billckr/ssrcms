@@ -3,13 +3,14 @@
 //! When a post or page has `post_password` set, the public handlers redirect
 //! here instead of rendering content. The visitor must submit the correct
 //! plain-text password; on success a browser-session cookie (no Max-Age) is
-//! set for the post so the visitor can view the content until they close their
-//! browser or use a different browser.
+//! set so the visitor can view the content until they close the browser.
 //!
 //! Cookie name:  `post_pw_{post_uuid}`
-//! Cookie value: first 16 chars of the current argon2 hash ("fingerprint")
-//!               — changes whenever the admin sets a new password, instantly
-//!               invalidating any existing unlock cookies for that post.
+//! Cookie value: the full argon2 hash stored in the DB for this post.
+//!               is_unlocked() compares the cookie value against the current
+//!               DB hash — if the admin sets a new password (new hash) or
+//!               removes and re-adds protection (new salt) the values diverge
+//!               and the visitor is immediately re-gated.
 //! Lifetime: browser session (no Max-Age / no Expires → deleted on browser close)
 
 use axum::{
@@ -25,18 +26,9 @@ use crate::middleware::site::CurrentSite;
 use crate::models::post;
 
 const COOKIE_PREFIX: &str = "post_pw_";
-/// How many characters of the argon2 hash to use as a version fingerprint.
-const FINGERPRINT_LEN: usize = 16;
 
 fn unlock_cookie_name(post_id: uuid::Uuid) -> String {
     format!("{}{}", COOKIE_PREFIX, post_id)
-}
-
-/// Returns a short fingerprint of the current password hash.
-/// When the admin changes the password the hash changes, so the fingerprint
-/// changes and any existing unlock cookie becomes invalid.
-fn pw_fingerprint(hash: &str) -> &str {
-    &hash[..FINGERPRINT_LEN.min(hash.len())]
 }
 
 #[derive(Deserialize)]
@@ -54,10 +46,11 @@ pub struct UnlockForm {
 /// Returns `false` if:
 /// - no cookie present (fresh browser / different device)
 /// - cookie HMAC is invalid (tampered / forged)
-/// - cookie fingerprint doesn't match the current hash (admin changed password)
+/// - cookie value doesn't exactly match the current DB hash
+///   (admin changed password, removed then re-added protection, etc.)
 pub fn is_unlocked(jar: &SignedCookieJar, post_id: uuid::Uuid, current_hash: &str) -> bool {
     jar.get(&unlock_cookie_name(post_id))
-        .map(|c| c.value() == pw_fingerprint(current_hash))
+        .map(|c| c.value() == current_hash)
         .unwrap_or(false)
 }
 
@@ -139,11 +132,11 @@ async fn unlock_inner(
     };
 
     if crate::models::user::verify_password(password, &hash) {
-        // Store a fingerprint of the current hash as the cookie value.
-        // If the admin later changes the password, the fingerprint changes and
-        // this cookie is automatically rejected by is_unlocked().
-        let fingerprint = pw_fingerprint(&hash).to_owned();
-        let cookie = Cookie::build((unlock_cookie_name(post_record.id), fingerprint))
+        // Store the full current hash as the cookie value.
+        // If the admin later changes the password (new hash + new salt) or
+        // removes/re-adds protection, the stored value will differ from the
+        // current DB hash and is_unlocked() will re-gate the visitor.
+        let cookie = Cookie::build((unlock_cookie_name(post_record.id), hash.clone()))
             .http_only(true)
             .same_site(SameSite::Lax)
             .path("/")
