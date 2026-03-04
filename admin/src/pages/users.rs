@@ -94,6 +94,7 @@ pub fn render_list(staff: &[UserRow], subscribers: &[UserRow], flash: Option<&st
             );
             format!(
                 r#"<form method="POST" action="/admin/users/{id}/delete" style="display:inline" data-confirm="{warn_msg}" onsubmit="return confirm(this.dataset.confirm)">
+                  <input type="hidden" name="tab" value="site-users">
                   <button class="icon-btn icon-danger" title="Delete user" type="submit">
                     <img src="/admin/static/icons/delete.svg" alt="Delete">
                   </button>
@@ -138,6 +139,7 @@ pub fn render_list(staff: &[UserRow], subscribers: &[UserRow], flash: Option<&st
             );
             format!(
                 r#"<form method="POST" action="/admin/users/{id}/delete" style="display:inline" data-confirm="{warn_msg}" onsubmit="return confirm(this.dataset.confirm)">
+                  <input type="hidden" name="tab" value="subscribers">
                   <button class="icon-btn icon-danger" title="Delete" type="submit">
                     <img src="/admin/static/icons/delete.svg" alt="Delete">
                   </button>

@@ -485,7 +485,10 @@ pub async fn delete_user(
     State(state): State<AppState>,
     admin: AdminUser,
     Path(id): Path<Uuid>,
+    Form(form): Form<std::collections::HashMap<String, String>>,
 ) -> impl IntoResponse {
+    let tab = form.get("tab").map(|s| s.as_str()).unwrap_or("site-users");
+    let redirect_url = format!("/admin/users?tab={}", tab);
     let cs = state.site_hostname(admin.site_id);
     let current_user_id = admin.user.id.to_string();
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
@@ -568,7 +571,7 @@ pub async fn delete_user(
         tracing::error!("delete user {} error: {:?}", id, e);
         deny!("Failed to delete user. Please try again.");
     }
-    Redirect::to("/admin/users").into_response()
+    Redirect::to(&redirect_url).into_response()
 }
 
 fn friendly_user_error(e: &crate::errors::AppError) -> String {
