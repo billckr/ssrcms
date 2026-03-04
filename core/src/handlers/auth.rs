@@ -54,13 +54,18 @@ pub async fn login_post(
         return Html(admin::pages::login::render(Some("Invalid email or password."))).into_response();
     }
 
-    // Check role — subscriber goes to /account; staff go to /admin.
-    // Any other unknown role is rejected.
-    let is_subscriber = user.role.as_str() == "subscriber";
+    // Check role — staff only. Subscribers must use /login.
     match user.role.as_str() {
-        "super_admin" | "site_admin" | "editor" | "author" | "subscriber" => {}
+        "super_admin" | "site_admin" | "editor" | "author" => {}
+        "subscriber" => {
+            return Html(admin::pages::login::render(
+                Some("Subscriber accounts sign in at /login."),
+            )).into_response();
+        }
         _ => {
-            return Html(admin::pages::login::render(Some("Your account does not have access."))).into_response();
+            return Html(admin::pages::login::render(
+                Some("Your account does not have admin access."),
+            )).into_response();
         }
     }
 
@@ -100,11 +105,8 @@ pub async fn login_post(
         }
     }
 
-    // Store user ID in the correct session key based on role.
-    // Subscribers use SESSION_ACCOUNT_USER_ID_KEY so their login never
-    // overwrites an admin session open in another tab (same browser/cookie).
-    let session_key = if is_subscriber { SESSION_ACCOUNT_USER_ID_KEY } else { SESSION_USER_ID_KEY };
-    if let Err(e) = session.insert(session_key, user.id.to_string()).await {
+    // Store user ID in session.
+    if let Err(e) = session.insert(SESSION_USER_ID_KEY, user.id.to_string()).await {
         tracing::error!("session insert error: {}", e);
         return Html(admin::pages::login::render(Some("Session error. Please try again."))).into_response();
     }
@@ -119,16 +121,66 @@ pub async fn login_post(
         tracing::warn!("login: no site resolved for hostname '{}' — session will have no site_id", hostname);
     }
 
-    if is_subscriber {
-        Redirect::to("/account").into_response()
-    } else {
-        Redirect::to("/admin").into_response()
-    }
+    Redirect::to("/admin").into_response()
 }
 
 /// GET /login — public-facing login form (for subscribers).
 pub async fn public_login_form() -> impl IntoResponse {
     Html(admin::pages::login::render_public(None))
+}
+
+/// POST /login — subscriber login only.
+/// Staff who try here get a message pointing them to /admin/login.
+pub async fn public_login_post(
+    State(state): State<AppState>,
+    session: Session,
+    headers: HeaderMap,
+    Form(form): Form<LoginForm>,
+) -> impl IntoResponse {
+    let user = match crate::models::user::get_by_email(&state.db, &form.email).await {
+        Ok(u) => u,
+        Err(_) => return Html(admin::pages::login::render_public(Some("Invalid email or password."))).into_response(),
+    };
+    if !user.verify_password(&form.password) {
+        return Html(admin::pages::login::render_public(Some("Invalid email or password."))).into_response();
+    }
+    match user.role.as_str() {
+        "subscriber" => {}
+        "super_admin" | "site_admin" | "editor" | "author" => {
+            return Html(admin::pages::login::render_public(
+                Some("Staff accounts sign in at /admin/login."),
+            )).into_response();
+        }
+        _ => return Html(admin::pages::login::render_public(Some("Invalid email or password."))).into_response(),
+    }
+
+    let raw_host = headers
+        .get(axum::http::header::HOST)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("localhost")
+        .to_string();
+    let hostname = host_to_hostname(&raw_host);
+    let resolved_site = state.resolve_site(&hostname);
+
+    match &resolved_site {
+        Some((site, _)) => {
+            match crate::models::site_user::get_role(&state.db, site.id, user.id).await {
+                Ok(Some(_)) => {}
+                _ => return Html(admin::pages::login::render_public(
+                    Some("Your account does not have access to this site."),
+                )).into_response(),
+            }
+        }
+        None => return Html(admin::pages::login::render_public(
+            Some("No site found for this domain."),
+        )).into_response(),
+    }
+
+    if let Err(e) = session.insert(SESSION_ACCOUNT_USER_ID_KEY, user.id.to_string()).await {
+        tracing::error!("account login session insert error: {}", e);
+        return Html(admin::pages::login::render_public(Some("Session error. Please try again."))).into_response();
+    }
+    Redirect::to("/account").into_response()
 }
 
 /// GET /admin/logout — clear admin session key only, redirect to admin login.

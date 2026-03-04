@@ -69,7 +69,7 @@ pub fn build(
         // ── Subscriber signup ──────────────────────────────────────────────
         .route("/subscribe", get(subscribe::subscribe_form).post(subscribe::subscribe_post))
         // ── Public login (subscriber-facing) ───────────────────────────────
-        .route("/login", get(auth::public_login_form).post(auth::login_post))
+        .route("/login", get(auth::public_login_form).post(auth::public_login_post))
         // ── Admin auth ─────────────────────────────────────────────────────
         .route("/admin/login", get(auth::login_form).post(auth::login_post))
         .route("/admin/logout", get(auth::logout))
