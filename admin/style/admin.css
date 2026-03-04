@@ -108,6 +108,11 @@ tr.muted td { opacity: .55; }
 .badge-super-admin { background: #1e293b; color: #f8fafc; }
 .badge-site-admin  { background: #ede9fe; color: #5b21b6; }
 .badge-admin       { background: #dbeafe; color: #1e40af; }
+/* Page tabs */
+.page-tabs { display: flex; gap: 0; border-bottom: 2px solid var(--border); margin-bottom: 1.25rem; }
+.page-tab  { padding: .5rem 1.1rem; font-size: .9rem; font-weight: 500; color: var(--muted); text-decoration: none; border-bottom: 2px solid transparent; margin-bottom: -2px; transition: color .15s, border-bottom-color .15s; white-space: nowrap; }
+.page-tab:hover { color: var(--text); }
+.page-tab.active  { color: var(--primary); border-bottom-color: var(--primary); }
 .badge-unread {
   display: inline-flex;
   align-items: center;

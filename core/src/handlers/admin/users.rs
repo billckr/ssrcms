@@ -1,5 +1,5 @@
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     response::{Html, IntoResponse, Redirect},
     Form,
 };
@@ -11,9 +11,27 @@ use crate::middleware::admin_auth::AdminUser;
 use crate::models::user::{CreateUser, UpdateUser, UserRole};
 use admin::pages::users::{SiteOption, UserEdit, UserRow};
 
+#[derive(Deserialize, Default)]
+pub struct UsersTabQuery {
+    #[serde(default)]
+    pub tab: String,
+}
+
+/// Split a flat list of UserRows into (staff, subscribers).
+/// Staff = any role that is not "subscriber".
+fn split_by_role(rows: Vec<UserRow>) -> (Vec<UserRow>, Vec<UserRow>) {
+    let mut staff = Vec::new();
+    let mut subs  = Vec::new();
+    for r in rows {
+        if r.role == "subscriber" { subs.push(r); } else { staff.push(r); }
+    }
+    (staff, subs)
+}
+
 pub async fn list(
     State(state): State<AppState>,
     admin: AdminUser,
+    Query(q): Query<UsersTabQuery>,
 ) -> impl IntoResponse {
     if !admin.caps.can_manage_users {
         return Html("<h1>403 Forbidden</h1>".to_string()).into_response();
@@ -67,8 +85,10 @@ pub async fn list(
     // Exclude the currently logged-in user — they manage their own account via /admin/profile.
     let rows: Vec<_> = rows.into_iter().filter(|u| u.id != current_user_id).collect();
     let can_manage_access = admin.caps.can_manage_users;
+    let active_tab = if q.tab == "subscribers" { "subscribers" } else { "site-users" };
+    let (staff, subscribers) = split_by_role(rows);
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
-    Html(admin::pages::users::render_list(&rows, None, &current_user_id, can_manage_access, &ctx)).into_response()
+    Html(admin::pages::users::render_list(&staff, &subscribers, None, &current_user_id, can_manage_access, active_tab, &ctx)).into_response()
 }
 
 pub async fn new_user(
@@ -499,11 +519,14 @@ pub async fn delete_user(
                 vec![]
             };
             let can_manage_access = admin.caps.can_manage_users;
+            let (staff, subscribers) = split_by_role(rows);
             return Html(admin::pages::users::render_list(
-                &rows,
+                &staff,
+                &subscribers,
                 Some($msg),
                 &current_user_id,
                 can_manage_access,
+                "site-users",
                 &ctx,
             )).into_response();
         }};

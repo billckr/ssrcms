@@ -58,8 +58,25 @@ pub struct UserEdit {
     pub is_super_admin_target: bool,
 }
 
-pub fn render_list(users: &[UserRow], flash: Option<&str>, current_user_id: &str, can_manage_access: bool, ctx: &crate::PageContext) -> String {
-    let rows = users.iter().map(|u| {
+pub fn render_list(staff: &[UserRow], subscribers: &[UserRow], flash: Option<&str>, current_user_id: &str, can_manage_access: bool, active_tab: &str, ctx: &crate::PageContext) -> String {
+    let is_subscribers = active_tab == "subscribers";
+
+    // ── Tab bar ───────────────────────────────────────────────────────────────
+    let staff_active     = if !is_subscribers { " active" } else { "" };
+    let sub_active       = if  is_subscribers { " active" } else { "" };
+    let tabs = format!(
+        r#"<div class="page-tabs">
+  <a href="/admin/users?tab=site-users" class="page-tab{staff_active}">Site Users <span class="badge" style="margin-left:.35rem;font-size:.75rem;padding:.1rem .45rem">{staff_count}</span></a>
+  <a href="/admin/users?tab=subscribers" class="page-tab{sub_active}">Subscribers <span class="badge" style="margin-left:.35rem;font-size:.75rem;padding:.1rem .45rem">{sub_count}</span></a>
+</div>"#,
+        staff_active = staff_active,
+        sub_active   = sub_active,
+        staff_count  = staff.len(),
+        sub_count    = subscribers.len(),
+    );
+
+    // ── Site Users table ──────────────────────────────────────────────────────
+    let staff_rows = staff.iter().map(|u| {
         let site_access_btn = if can_manage_access && !u.is_super_admin {
             format!(
                 r#"<a href="/admin/users/{id}/site-access" class="icon-btn" title="Manage site access">
@@ -112,14 +129,71 @@ pub fn render_list(users: &[UserRow], flash: Option<&str>, current_user_id: &str
         )
     }).collect::<Vec<_>>().join("\n");
 
-    let content = format!(
-        r#"<p style="margin-bottom:1rem"><a href="/admin/users/new" class="btn btn-primary">New User</a></p>
+    // ── Subscribers table ─────────────────────────────────────────────────────
+    let sub_rows = subscribers.iter().map(|u| {
+        let delete_btn = if u.id != current_user_id && !u.is_protected {
+            let warn_msg = format!(
+                "Delete subscriber \\u2018{}\\u2019? This cannot be undone.",
+                u.display_name.replace('\'', "\\'"),
+            );
+            format!(
+                r#"<form method="POST" action="/admin/users/{id}/delete" style="display:inline" data-confirm="{warn_msg}" onsubmit="return confirm(this.dataset.confirm)">
+                  <button class="icon-btn icon-danger" title="Delete" type="submit">
+                    <img src="/admin/static/icons/delete.svg" alt="Delete">
+                  </button>
+                </form>"#,
+                id = crate::html_escape(&u.id),
+                warn_msg = crate::html_escape(&warn_msg),
+            )
+        } else {
+            String::new()
+        };
+        format!(
+            r#"<tr>
+              <td><a href="/admin/users/{id}/edit">{display_name}</a></td>
+              <td>{username}</td>
+              <td>{email}</td>
+              <td class="actions">
+                <a href="/admin/users/{id}/edit" class="icon-btn" title="Edit">
+                  <img src="/admin/static/icons/edit.svg" alt="Edit">
+                </a>
+                {delete_btn}
+              </td>
+            </tr>"#,
+            id = crate::html_escape(&u.id),
+            display_name = crate::html_escape(&u.display_name),
+            username = crate::html_escape(&u.username),
+            email = crate::html_escape(&u.email),
+            delete_btn = delete_btn,
+        )
+    }).collect::<Vec<_>>().join("\n");
+
+    let content = if !is_subscribers {
+        format!(
+            r#"{tabs}
+<p style="margin-bottom:1rem"><a href="/admin/users/new" class="btn btn-primary">New User</a></p>
 <table class="data-table">
   <thead><tr><th>Name</th><th>Username</th><th>Email</th><th>Role</th><th>Actions</th></tr></thead>
-  <tbody>{rows}</tbody>
+  <tbody>{staff_rows}</tbody>
 </table>"#,
-        rows = rows,
-    );
+            tabs = tabs,
+            staff_rows = staff_rows,
+        )
+    } else {
+        let empty_msg = if subscribers.is_empty() {
+            r#"<tr><td colspan="4" style="text-align:center;color:var(--muted);padding:2rem">No subscribers yet.</td></tr>"#
+        } else { "" };
+        format!(
+            r#"{tabs}
+<table class="data-table">
+  <thead><tr><th>Name</th><th>Username</th><th>Email</th><th>Actions</th></tr></thead>
+  <tbody>{sub_rows}{empty_msg}</tbody>
+</table>"#,
+            tabs = tabs,
+            sub_rows = sub_rows,
+            empty_msg = empty_msg,
+        )
+    };
 
     crate::admin_page("Users", "/admin/users", flash, &content, ctx)
 }
