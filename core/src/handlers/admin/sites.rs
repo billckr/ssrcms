@@ -439,6 +439,18 @@ pub async fn delete(
                 tracing::info!("removed theme dir for deleted site {}", id);
             }
         }
+        // Remove the site's plugin directory (plugins/sites/{id}/).
+        // The site_plugins DB rows are cleaned up automatically via ON DELETE CASCADE.
+        let site_plugin_dir = std::path::Path::new(&state.config.plugins_dir)
+            .join("sites")
+            .join(id.to_string());
+        if site_plugin_dir.exists() {
+            if let Err(e) = std::fs::remove_dir_all(&site_plugin_dir) {
+                tracing::warn!("failed to remove plugin dir for site {}: {:?}", id, e);
+            } else {
+                tracing::info!("removed plugin dir for deleted site {}", id);
+            }
+        }
         if let Err(e) = state.reload_site_cache().await {
             tracing::warn!("site cache reload failed after delete: {:?}", e);
         }
