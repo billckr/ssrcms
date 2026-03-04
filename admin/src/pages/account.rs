@@ -127,7 +127,6 @@ pub struct AccountProfileForm {
 }
 
 pub struct ProfileData {
-    pub username: String,
     pub email: String,
     pub display_name: String,
 }
@@ -139,12 +138,6 @@ pub fn render_profile(data: &ProfileData, flash: Option<&str>, ctx: &AccountCont
 
   <form method="POST" action="/account/profile/update" class="profile-form">
     <fieldset>
-
-      <div class="form-group">
-        <label>Username</label>
-        <p class="form-static-value">{username}</p>
-        <small>Username cannot be changed.</small>
-      </div>
 
       <div class="form-group">
         <label for="email">Email</label>
@@ -196,7 +189,6 @@ pub fn render_profile(data: &ProfileData, flash: Option<&str>, ctx: &AccountCont
     <button type="submit" class="btn btn-primary">Change Password</button>
   </form>
 </div>"#,
-        username     = crate::html_escape(&data.username),
         email        = crate::html_escape(&data.email),
         display_name = crate::html_escape(&data.display_name),
     );

@@ -36,7 +36,6 @@ pub async fn dashboard(account: AccountUser) -> Html<String> {
 pub async fn profile_view(account: AccountUser) -> Html<String> {
     let ctx = build_ctx(&account);
     let data = ProfileData {
-        username:     account.user.username.clone(),
         email:        account.user.email.clone(),
         display_name: account.user.display_name.clone(),
     };
@@ -57,7 +56,6 @@ pub async fn profile_update(
 ) -> Html<String> {
     let ctx = build_ctx(&account);
     let data = ProfileData {
-        username:     account.user.username.clone(),
         email:        form.email.clone(),
         display_name: form.display_name.clone().unwrap_or_default(),
     };
@@ -95,7 +93,6 @@ pub async fn profile_change_password(
 ) -> Html<String> {
     let ctx = build_ctx(&account);
     let data = ProfileData {
-        username:     account.user.username.clone(),
         email:        account.user.email.clone(),
         display_name: account.user.display_name.clone(),
     };
