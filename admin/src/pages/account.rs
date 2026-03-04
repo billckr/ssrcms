@@ -44,9 +44,10 @@ pub fn account_page(
         format!(r#"<li><a href="{}"{}>{}</a></li>"#, href, active, label)
     };
 
-    let profile_link    = nav_link("/account",              "Profile");
+    let dashboard_link  = nav_link("/account",              "Dashboard");
     let saved_link      = nav_link("/account/saved-posts",  "Saved Posts");
     let comments_link   = nav_link("/account/my-comments",  "My Comments");
+    let profile_link    = nav_link("/account/profile",      "Profile");
 
     let site_name   = crate::html_escape(&ctx.site_name);
     let user_email  = crate::html_escape(&ctx.user_email);
@@ -67,9 +68,10 @@ pub fn account_page(
     <nav class="admin-sidebar">
       <div class="brand">{site_name}</div>
       <ul>
-        {profile_link}
+        {dashboard_link}
         {saved_link}
         {comments_link}
+        {profile_link}
       </ul>
       <div class="sidebar-footer">
         <span>{user_email}</span>
@@ -89,16 +91,31 @@ pub fn account_page(
 </html>"#,
         title       = crate::html_escape(title),
         site_name   = site_name,
-        css         = crate::ADMIN_CSS,
-        profile_link  = profile_link,
+        css           = crate::ADMIN_CSS,
+        dashboard_link = dashboard_link,
         saved_link    = saved_link,
         comments_link = comments_link,
+        profile_link  = profile_link,
         user_email  = user_email,
         user_role   = user_role,
         back_url    = back_url,
         flash_html  = flash_html,
         content     = content,
     )
+}
+
+// ── Dashboard ──────────────────────────────────────────────────────────────
+
+pub fn render_dashboard(ctx: &AccountContext) -> String {
+    let display_name = crate::html_escape(&ctx.user_display_name);
+    let content = format!(
+        r#"<div class="profile-container">
+  <h2>Dashboard</h2>
+  <p>Welcome back, <strong>{display_name}</strong>!</p>
+</div>"#,
+        display_name = display_name,
+    );
+    account_page("Dashboard", "/account", None, &content, ctx)
 }
 
 // ── Profile ─────────────────────────────────────────────────────────────────
@@ -117,53 +134,68 @@ pub struct ProfileData {
 
 pub fn render_profile(data: &ProfileData, flash: Option<&str>, ctx: &AccountContext) -> String {
     let content = format!(
-        r#"<h2>Profile</h2>
+        r#"<div class="profile-container">
+  <h2>Profile</h2>
 
-<form method="POST" action="/account/profile/update" class="profile-form">
-  <fieldset>
-    <legend>Account Information</legend>
+  <form method="POST" action="/account/profile/update" class="profile-form">
+    <fieldset>
+      <legend>Account Information</legend>
 
-    <div class="form-group">
-      <label>Username</label>
-      <p class="form-static-value">{username}</p>
-      <small>Username cannot be changed.</small>
-    </div>
+      <div class="form-group">
+        <label>Username</label>
+        <p class="form-static-value">{username}</p>
+        <small>Username cannot be changed.</small>
+      </div>
 
-    <div class="form-group">
-      <label for="email">Email</label>
-      <input type="email" id="email" name="email" value="{email}" required>
-    </div>
+      <div class="form-group">
+        <label for="email">Email</label>
+        <input type="email" id="email" name="email" value="{email}" required>
+      </div>
 
-    <div class="form-group">
-      <label for="display_name">Display Name</label>
-      <input type="text" id="display_name" name="display_name" value="{display_name}">
-    </div>
-  </fieldset>
-  <button type="submit" class="btn btn-primary">Save changes</button>
-</form>
+      <div class="form-group">
+        <label for="display_name">Display Name</label>
+        <input type="text" id="display_name" name="display_name" value="{display_name}">
+      </div>
+    </fieldset>
 
-<div style="margin-top: 2rem;">
+    <button type="submit" class="btn btn-primary">Save Changes</button>
+  </form>
+</div>
+
+<div class="profile-container">
   <h2>Change Password</h2>
+
   <form method="POST" action="/account/profile/change-password" class="password-form">
     <fieldset>
-      <legend>Password</legend>
+      <legend>Password Management</legend>
+
       <div class="form-group">
         <label for="current_password">Current Password</label>
         <input type="password" id="current_password" name="current_password" required>
       </div>
+
       <div class="form-group">
         <label for="new_password">New Password</label>
         <input type="password" id="new_password" name="new_password" required>
       </div>
+
       <div class="form-group">
         <label for="confirm_password">Confirm New Password</label>
         <input type="password" id="confirm_password" name="confirm_password" required>
       </div>
+
       <div class="form-note">
-        <p><strong>Requirements:</strong> 8–12 characters &middot; uppercase &middot; number &middot; symbol (! @ # $ % &amp;)</p>
+        <p><strong>Password requirements:</strong></p>
+        <ul>
+          <li>8&ndash;12 characters</li>
+          <li>At least one uppercase letter</li>
+          <li>At least one number</li>
+          <li>At least one symbol: ! @ # $ % &amp;</li>
+        </ul>
       </div>
     </fieldset>
-    <button type="submit" class="btn btn-primary">Change password</button>
+
+    <button type="submit" class="btn btn-primary">Change Password</button>
   </form>
 </div>"#,
         username     = crate::html_escape(&data.username),
@@ -171,7 +203,7 @@ pub fn render_profile(data: &ProfileData, flash: Option<&str>, ctx: &AccountCont
         display_name = crate::html_escape(&data.display_name),
     );
 
-    account_page("Profile", "/account", flash, &content, ctx)
+    account_page("Profile", "/account/profile", flash, &content, ctx)
 }
 
 // ── Saved Posts (stub) ───────────────────────────────────────────────────────

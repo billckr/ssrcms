@@ -22,9 +22,17 @@ fn build_ctx(account: &AccountUser) -> AccountContext {
     }
 }
 
-// ── Profile ──────────────────────────────────────────────────────────────────
+// ── Dashboard ────────────────────────────────────────────────────────
 
-/// GET /account — profile view.
+/// GET /account — dashboard (default landing page).
+pub async fn dashboard(account: AccountUser) -> Html<String> {
+    let ctx = build_ctx(&account);
+    Html(admin::pages::account::render_dashboard(&ctx))
+}
+
+// ── Profile ────────────────────────────────────────────────────────
+
+/// GET /account/profile — profile view.
 pub async fn profile_view(account: AccountUser) -> Html<String> {
     let ctx = build_ctx(&account);
     let data = ProfileData {

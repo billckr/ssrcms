@@ -74,7 +74,8 @@ pub fn build(
         .route("/admin/login", get(auth::login_form).post(auth::login_post))
         .route("/admin/logout", get(auth::logout))
         // ── Account area (any authenticated user) ───────────────────────────
-        .route("/account",                        get(account::profile_view))
+        .route("/account",                        get(account::dashboard))
+        .route("/account/profile",                get(account::profile_view))
         .route("/account/profile/update",         post(account::profile_update))
         .route("/account/profile/change-password",post(account::profile_change_password))
         .route("/account/saved-posts",            get(account::saved_posts))
