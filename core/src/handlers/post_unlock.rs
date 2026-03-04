@@ -7,7 +7,9 @@
 //! browser or use a different browser.
 //!
 //! Cookie name:  `post_pw_{post_uuid}`
-//! Cookie value: `1`  (presence = unlocked)
+//! Cookie value: first 16 chars of the current argon2 hash ("fingerprint")
+//!               — changes whenever the admin sets a new password, instantly
+//!               invalidating any existing unlock cookies for that post.
 //! Lifetime: browser session (no Max-Age / no Expires → deleted on browser close)
 
 use axum::{
@@ -23,9 +25,18 @@ use crate::middleware::site::CurrentSite;
 use crate::models::post;
 
 const COOKIE_PREFIX: &str = "post_pw_";
+/// How many characters of the argon2 hash to use as a version fingerprint.
+const FINGERPRINT_LEN: usize = 16;
 
 fn unlock_cookie_name(post_id: uuid::Uuid) -> String {
     format!("{}{}", COOKIE_PREFIX, post_id)
+}
+
+/// Returns a short fingerprint of the current password hash.
+/// When the admin changes the password the hash changes, so the fingerprint
+/// changes and any existing unlock cookie becomes invalid.
+fn pw_fingerprint(hash: &str) -> &str {
+    &hash[..FINGERPRINT_LEN.min(hash.len())]
 }
 
 #[derive(Deserialize)]
@@ -37,12 +48,17 @@ pub struct UnlockForm {
 
 // ── Public helpers ────────────────────────────────────────────────────────────
 
-/// Check whether the visitor has a valid signed browser-session unlock for `post_id`.
+/// Check whether the visitor has a valid signed browser-session unlock for `post_id`
+/// that still matches the *current* password (`current_hash`).
 ///
-/// Returns `true` only when the signed cookie is present and its HMAC is valid.
-/// A fresh browser, a different device, or a forged cookie will always return `false`.
-pub fn is_unlocked(jar: &SignedCookieJar, post_id: uuid::Uuid) -> bool {
-    jar.get(&unlock_cookie_name(post_id)).is_some()
+/// Returns `false` if:
+/// - no cookie present (fresh browser / different device)
+/// - cookie HMAC is invalid (tampered / forged)
+/// - cookie fingerprint doesn't match the current hash (admin changed password)
+pub fn is_unlocked(jar: &SignedCookieJar, post_id: uuid::Uuid, current_hash: &str) -> bool {
+    jar.get(&unlock_cookie_name(post_id))
+        .map(|c| c.value() == pw_fingerprint(current_hash))
+        .unwrap_or(false)
 }
 
 /// Return a full-page password gate `Response`.
@@ -123,9 +139,11 @@ async fn unlock_inner(
     };
 
     if crate::models::user::verify_password(password, &hash) {
-        // Set a browser-session signed cookie (no Max-Age → deleted when browser closes).
-        // HttpOnly + SameSite=Lax prevents JS access and CSRF.
-        let cookie = Cookie::build((unlock_cookie_name(post_record.id), "1"))
+        // Store a fingerprint of the current hash as the cookie value.
+        // If the admin later changes the password, the fingerprint changes and
+        // this cookie is automatically rejected by is_unlocked().
+        let fingerprint = pw_fingerprint(&hash).to_owned();
+        let cookie = Cookie::build((unlock_cookie_name(post_record.id), fingerprint))
             .http_only(true)
             .same_site(SameSite::Lax)
             .path("/")

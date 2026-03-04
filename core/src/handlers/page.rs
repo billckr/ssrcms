@@ -27,14 +27,14 @@ pub async fn single_page(
 
     // Password gate: check before full render.
     if let Ok(post_record) = post::get_published_by_slug(&state.db, Some(site_id), &slug).await {
-        if post_record.post_password.is_some()
-            && !super::post_unlock::is_unlocked(&jar, post_record.id)
-        {
-            return super::post_unlock::gate_response(
-                &post_record.title,
-                &format!("/{}/unlock", slug),
-                None,
-            );
+        if let Some(ref hash) = post_record.post_password {
+            if !super::post_unlock::is_unlocked(&jar, post_record.id, hash) {
+                return super::post_unlock::gate_response(
+                    &post_record.title,
+                    &format!("/{}/unlock", slug),
+                    None,
+                );
+            }
         }
     }
 
