@@ -31,6 +31,8 @@ pub struct PostEdit {
     pub featured_image_id: Option<String>,
     /// Public URL for the featured image preview (e.g. "/uploads/abc.png").
     pub featured_image_url: Option<String>,
+    /// True if the post currently has a password hash stored (so UI shows checkbox pre-checked).
+    pub post_password_set: bool,
 }
 
 pub struct TermOption {
@@ -305,6 +307,13 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
         remove_display = remove_display,
     );
 
+    let protected_checked = if post.post_password_set { "checked" } else { "" };
+    let pw_group_display  = if post.post_password_set { "" } else { "display:none" };
+    let pw_placeholder = if post.post_password_set { "Leave blank to keep current password" } else { "Enter password" };
+    let pw_hint = if post.post_password_set {
+        r#"<small style="color:var(--muted)">Leave blank to keep existing password.</small>"#
+    } else { "" };
+
     let mut content = format!(
         r#"<link rel="stylesheet" href="/admin/static/quill/quill.snow.css">
 <form method="POST" action="{action}">
@@ -341,6 +350,18 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
         <div class="form-group">
           <label for="published_at">Published At</label>
           <input type="datetime-local" id="published_at" name="published_at" value="{published_at}">
+        </div>
+        <div class="form-group" style="margin-bottom:.5rem">
+          <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;font-weight:400">
+            <input type="checkbox" id="post-protected-cb" name="post_protected" value="on" {protected_checked}
+              onchange="document.getElementById('post-pw-group').style.display=this.checked?'':'none'">
+            Password Protected
+          </label>
+        </div>
+        <div class="form-group" id="post-pw-group" style="{pw_group_display}">
+          <label for="post-password" style="font-size:12px">Password</label>
+          <input type="password" id="post-password" name="post_password" autocomplete="new-password" placeholder="{pw_placeholder}" style="font-size:13px">
+          {pw_hint}
         </div>
         <input type="hidden" name="post_type" value="{post_type}">
         <button type="submit" class="btn btn-primary">Save</button>
@@ -413,6 +434,10 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
         template_section = template_section,
         categories_section = categories_section,
         featured_image_section = featured_image_section,
+        protected_checked = protected_checked,
+        pw_group_display = pw_group_display,
+        pw_placeholder = pw_placeholder,
+        pw_hint = pw_hint,
     );
 
     let path = if post.post_type == "page" { "/admin/pages" } else { "/admin/posts" };

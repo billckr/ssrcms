@@ -225,6 +225,12 @@ pub fn media_picker_modal_html() -> String {
       selectedId = null;
       selectedUrl = null;
     }
+    selectedAlt = null;
+    // Reset the detail panel whenever there is no already-confirmed selection,
+    // so a previously clicked-but-not-confirmed image is never shown again.
+    if (!selectedId) {
+      document.getElementById('mpicker-detail').innerHTML = '<div class="mpicker-detail-empty">Select an image to see details</div>';
+    }
     document.getElementById('media-picker-modal').style.display = '';
     document.getElementById('mpicker-search').value = '';
     if (!loaded) {

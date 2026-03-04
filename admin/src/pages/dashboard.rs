@@ -26,8 +26,7 @@ pub fn render(data: &DashboardData, flash: Option<&str>, ctx: &crate::PageContex
     <div class="stat-num">{total_users}</div>
     <div class="stat-label">Users</div>
   </div>
-</div>
-<p style="margin-top:1.5rem"><a href="/admin/posts/new" class="btn btn-primary">New Post</a></p>"#,
+</div>"#,
         published_posts = data.published_posts,
         draft_posts = data.draft_posts,
         total_pages = data.total_pages,

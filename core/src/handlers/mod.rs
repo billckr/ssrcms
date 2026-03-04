@@ -7,5 +7,6 @@ pub mod metrics;
 pub mod page;
 pub mod plugin_route;
 pub mod post;
+pub mod post_unlock;
 pub mod search;
 pub mod theme_static;

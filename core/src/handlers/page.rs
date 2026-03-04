@@ -2,6 +2,7 @@ use axum::{
     extract::{Path, State},
     response::{Html, IntoResponse, Response},
 };
+use axum_extra::extract::cookie::CookieJar;
 
 use uuid::Uuid;
 
@@ -17,11 +18,26 @@ pub async fn single_page(
     State(state): State<AppState>,
     current_site: CurrentSite,
     Path(slug): Path<String>,
+    jar: CookieJar,
     axum::extract::OriginalUri(uri): axum::extract::OriginalUri,
 ) -> Response {
     let path = uri.path().to_string();
     let site_id = current_site.site.id;
     let base_url = current_site.base_url.clone();
+
+    // Password gate: check before full render.
+    if let Ok(post_record) = post::get_published_by_slug(&state.db, Some(site_id), &slug).await {
+        if post_record.post_password.is_some()
+            && !super::post_unlock::is_unlocked(&jar, post_record.id)
+        {
+            return super::post_unlock::gate_response(
+                &post_record.title,
+                &format!("/{}/unlock", slug),
+                None,
+            );
+        }
+    }
+
     match render_page(state.clone(), slug, uri, site_id, &base_url).await {
         Ok(html) => Html(html).into_response(),
         Err(e) => render_error_page(e, &state, &path, Some(current_site.site.id)).await,

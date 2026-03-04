@@ -137,6 +137,7 @@ async fn new_post_type(state: AppState, post_type: &str, site_id: Option<Uuid>, 
         available_templates,
         featured_image_id: None,
         featured_image_url: None,
+        post_password_set: false,
     };
     Html(admin::pages::posts::render_editor(&edit, None, &ctx))
 }
@@ -228,6 +229,7 @@ async fn edit_post_type(state: AppState, id: Uuid, site_id: Option<Uuid>, is_aut
         available_templates,
         featured_image_id: post.featured_image_id.map(|id| id.to_string()),
         featured_image_url,
+        post_password_set: post.post_password.is_some(),
     };
 
     Html(admin::pages::posts::render_editor(&edit, None, &ctx)).into_response()
@@ -283,6 +285,10 @@ pub struct PostForm {
     pub tags: Vec<String>,
     pub featured_image_id: Option<String>,
     pub featured_image_url: Option<String>,
+    /// "on" when the Protected checkbox is ticked.
+    pub post_protected: Option<String>,
+    /// Plain-text password from the admin form (never stored; hashed before insert/update).
+    pub post_password: Option<String>,
 }
 
 pub async fn save_new(
@@ -316,9 +322,18 @@ pub async fn save_new(
             available_templates: if form.post_type == "page" { scan_templates(&state, admin.site_id) } else { vec![] },
             featured_image_id: form.featured_image_id.clone(),
             featured_image_url: form.featured_image_url.clone(),
+            post_password_set: false,
         };
         return Html(admin::pages::posts::render_editor(&edit, Some("Content is required before publishing."), &ctx)).into_response();
     }
+
+    let post_password_hash = if form.post_protected.as_deref() == Some("on") {
+        form.post_password.as_deref()
+            .filter(|s| !s.is_empty())
+            .and_then(|pw| crate::models::user::hash_password(pw).ok())
+    } else {
+        None
+    };
 
     let create = CreatePost {
         site_id: admin.site_id,
@@ -333,6 +348,7 @@ pub async fn save_new(
         featured_image_id: form.featured_image_id.as_deref().and_then(|s| s.parse::<Uuid>().ok()),
         published_at,
         template: form.template.clone().filter(|s| !s.is_empty()),
+        post_password_hash,
     };
 
     match crate::models::post::create(&state.db, &create).await {
@@ -366,6 +382,7 @@ pub async fn save_new(
                 available_templates: if form.post_type == "page" { scan_templates(&state, admin.site_id) } else { vec![] },
                 featured_image_id: form.featured_image_id,
                 featured_image_url: form.featured_image_url,
+                post_password_set: false,
             };
             let msg = friendly_save_error(&e);
             Html(admin::pages::posts::render_editor(&edit, Some(&msg), &ctx)).into_response()
@@ -427,9 +444,20 @@ pub async fn save_edit(
             available_templates: if form.post_type == "page" { scan_templates(&state, admin.site_id) } else { vec![] },
             featured_image_id: form.featured_image_id.clone(),
             featured_image_url: form.featured_image_url.clone(),
+            post_password_set: false,
         };
         return Html(admin::pages::posts::render_editor(&edit, Some("Content is required before publishing."), &ctx)).into_response();
     }
+
+    let (clear_post_password, new_post_password_hash) =
+        if form.post_protected.as_deref() == Some("on") {
+            let new_hash = form.post_password.as_deref()
+                .filter(|s| !s.is_empty())
+                .and_then(|pw| crate::models::user::hash_password(pw).ok());
+            (false, new_hash) // keep existing if no new password typed
+        } else {
+            (true, None) // unchecked = clear
+        };
 
     let update = UpdatePost {
         title: Some(form.title.clone()),
@@ -442,6 +470,8 @@ pub async fn save_edit(
         featured_image_id: form.featured_image_id.as_deref().and_then(|s| s.parse::<Uuid>().ok()),
         published_at,
         template: form.template.clone().filter(|s| !s.is_empty()),
+        clear_post_password,
+        new_post_password_hash,
     };
 
     match crate::models::post::update(&state.db, id, &update).await {
@@ -486,6 +516,7 @@ pub async fn save_edit(
                 available_templates: if form.post_type == "page" { scan_templates(&state, admin.site_id) } else { vec![] },
                 featured_image_id: form.featured_image_id,
                 featured_image_url: form.featured_image_url,
+                post_password_set: form.post_protected.as_deref() == Some("on"),
             };
             let msg = friendly_save_error(&e);
             Html(admin::pages::posts::render_editor(&edit, Some(&msg), &ctx)).into_response()

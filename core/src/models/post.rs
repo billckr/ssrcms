@@ -61,6 +61,7 @@ pub struct Post {
     pub published_at: Option<DateTime<Utc>>,
     pub scheduled_at: Option<DateTime<Utc>>,
     pub template: Option<String>,
+    pub post_password: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -167,6 +168,8 @@ pub struct CreatePost {
     pub featured_image_id: Option<Uuid>,
     pub published_at: Option<DateTime<Utc>>,
     pub template: Option<String>,
+    /// Argon2 hash of the page/post password. None = no protection.
+    pub post_password_hash: Option<String>,
 }
 
 /// Data for updating an existing post.
@@ -183,6 +186,10 @@ pub struct UpdatePost {
     pub clear_featured_image: bool,
     pub published_at: Option<DateTime<Utc>>,
     pub template: Option<String>,
+    /// When true, remove password protection entirely.
+    pub clear_post_password: bool,
+    /// New Argon2 hash to set. None = leave existing password unchanged.
+    pub new_post_password_hash: Option<String>,
 }
 
 /// Strip all HTML tags, returning plain text content.
@@ -412,8 +419,9 @@ pub async fn create(pool: &PgPool, data: &CreatePost) -> Result<Post> {
     let post = sqlx::query_as::<_, Post>(
         r#"
         INSERT INTO posts (site_id, title, slug, content, content_format, excerpt, status,
-                           post_type, author_id, featured_image_id, published_at, template)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+                           post_type, author_id, featured_image_id, published_at, template,
+                           post_password)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
         RETURNING *
         "#,
     )
@@ -429,6 +437,7 @@ pub async fn create(pool: &PgPool, data: &CreatePost) -> Result<Post> {
     .bind(data.featured_image_id)
     .bind(data.published_at)
     .bind(data.template.as_deref())
+    .bind(data.post_password_hash.as_deref())
     .fetch_one(pool)
     .await?;
 
@@ -663,12 +672,24 @@ pub async fn update(pool: &PgPool, id: Uuid, data: &UpdatePost) -> Result<Post> 
         current.published_at
     };
 
+    let new_password: Option<Option<&str>> = if data.clear_post_password {
+        Some(None) // explicitly NULL
+    } else if let Some(ref hash) = data.new_post_password_hash {
+        Some(Some(hash.as_str())) // new hash
+    } else {
+        None // leave unchanged
+    };
+
     let post = sqlx::query_as::<_, Post>(
         r#"
         UPDATE posts
         SET title = $1, slug = $2, content = $3, content_format = $4, excerpt = $5,
-            status = $6, featured_image_id = $7, published_at = $8, template = $9, updated_at = NOW()
-        WHERE id = $10
+            status = $6, featured_image_id = $7, published_at = $8, template = $9,
+            post_password = CASE WHEN $10 THEN NULL
+                                 WHEN $11::text IS NOT NULL THEN $11
+                                 ELSE post_password END,
+            updated_at = NOW()
+        WHERE id = $12
         RETURNING *
         "#,
     )
@@ -681,9 +702,12 @@ pub async fn update(pool: &PgPool, id: Uuid, data: &UpdatePost) -> Result<Post> 
     .bind(new_image)
     .bind(new_published_at)
     .bind(data.template.as_deref())
+    .bind(data.clear_post_password)
+    .bind(data.new_post_password_hash.as_deref())
     .bind(id)
     .fetch_one(pool)
     .await?;
+    let _ = new_password; // silence unused warning
 
     Ok(post)
 }
