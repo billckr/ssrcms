@@ -3963,6 +3963,7 @@ dependencies = [
  "regex-lite",
  "serde",
  "serde_json",
+ "slug",
  "sqlx",
  "tantivy",
  "tera",

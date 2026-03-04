@@ -40,6 +40,7 @@ once_cell.workspace = true
 imagesize.workspace = true
 notify.workspace = true
 ammonia.workspace = true
+slug.workspace = true
 glob.workspace = true
 regex-lite.workspace = true
 admin = { path = "../admin" }

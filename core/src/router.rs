@@ -12,7 +12,7 @@ use tower_sessions::SessionManagerLayer;
 use tower_sessions_sqlx_store::PostgresStore;
 
 use crate::app_state::AppState;
-use crate::handlers::{archive, auth, form as form_handler, home, metrics as metrics_handler, page, plugin_route, post as post_handler, post_unlock, search, theme_static};
+use crate::handlers::{archive, auth, form as form_handler, home, metrics as metrics_handler, page, plugin_route, post as post_handler, post_unlock, search, subscribe, theme_static};
 use crate::handlers::admin::{appearance, dashboard, forms as admin_forms, media, plugins, posts, profile, settings, sites as admin_sites, taxonomy, upload, users};
 
 /// Tower middleware that records per-request HTTP metrics.
@@ -66,6 +66,8 @@ pub fn build(
         .route("/sitemap.xml", get(plugin_route::sitemap))
         // ── Public form submissions ────────────────────────────────────────
         .route("/form/{name}", post(form_handler::submit))
+        // ── Subscriber signup ──────────────────────────────────────────────
+        .route("/subscribe", get(subscribe::subscribe_form).post(subscribe::subscribe_post))
         // ── Admin auth ─────────────────────────────────────────────────────
         .route("/admin/login", get(auth::login_form).post(auth::login_post))
         .route("/admin/logout", get(auth::logout))
