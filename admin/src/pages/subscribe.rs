@@ -68,7 +68,7 @@ pub fn render_success(site_name: &str) -> String {
     <h2>You&rsquo;re subscribed!</h2>
     <p style="color:var(--muted);margin-top:.5rem">
       Your account has been created. You can now
-      <a href="/admin/login">sign in</a>.
+      <a href="/login">sign in</a>.
     </p>
   </div>
 </body>

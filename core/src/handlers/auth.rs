@@ -53,11 +53,13 @@ pub async fn login_post(
         return Html(admin::pages::login::render(Some("Invalid email or password."))).into_response();
     }
 
-    // Check role — super_admin, site_admin, editor, and author can log in to admin.
+    // Check role — subscriber goes to /account; staff go to /admin.
+    // Any other unknown role is rejected.
+    let is_subscriber = user.role.as_str() == "subscriber";
     match user.role.as_str() {
-        "super_admin" | "site_admin" | "editor" | "author" => {}
+        "super_admin" | "site_admin" | "editor" | "author" | "subscriber" => {}
         _ => {
-            return Html(admin::pages::login::render(Some("Your account does not have admin access."))).into_response();
+            return Html(admin::pages::login::render(Some("Your account does not have access."))).into_response();
         }
     }
 
@@ -113,7 +115,16 @@ pub async fn login_post(
         tracing::warn!("login: no site resolved for hostname '{}' — session will have no site_id", hostname);
     }
 
-    Redirect::to("/admin").into_response()
+    if is_subscriber {
+        Redirect::to("/account").into_response()
+    } else {
+        Redirect::to("/admin").into_response()
+    }
+}
+
+/// GET /login — public-facing login form (for subscribers).
+pub async fn public_login_form() -> impl IntoResponse {
+    Html(admin::pages::login::render_public(None))
 }
 
 /// GET /admin/logout — clear session, redirect to login.

@@ -1,7 +1,17 @@
 //! Admin login page.
 
 /// Render the standalone login page (no sidebar).
+/// `action` is the form POST target — "/admin/login" for staff, "/login" for the public page.
 pub fn render(error: Option<&str>) -> String {
+    render_with_action(error, "/admin/login")
+}
+
+/// Same form rendered for the public-facing /login page.
+pub fn render_public(error: Option<&str>) -> String {
+    render_with_action(error, "/login")
+}
+
+fn render_with_action(error: Option<&str>, action: &str) -> String {
     let error_html = match error {
         Some(msg) => format!(r#"<div class="error">{}</div>"#, crate::html_escape(msg)),
         None => String::new(),
@@ -13,7 +23,7 @@ pub fn render(error: Option<&str>) -> String {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Admin Login — Synaptic</title>
+  <title>Sign in</title>
   <style>{css}</style>
 </head>
 <body class="login-body">
@@ -21,7 +31,7 @@ pub fn render(error: Option<&str>) -> String {
     <h1 class="login-brand">Synaptic</h1>
     <h2>Sign in</h2>
     {error_html}
-    <form method="POST" action="/admin/login">
+    <form method="POST" action="{action}">
       <label for="email">Email</label>
       <input type="email" id="email" name="email" required autofocus>
       <label for="password">Password</label>
@@ -31,7 +41,8 @@ pub fn render(error: Option<&str>) -> String {
   </div>
 </body>
 </html>"#,
-        css = crate::ADMIN_CSS,
+        css        = crate::ADMIN_CSS,
         error_html = error_html,
+        action     = action,
     )
 }

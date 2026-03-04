@@ -12,7 +12,7 @@ use tower_sessions::SessionManagerLayer;
 use tower_sessions_sqlx_store::PostgresStore;
 
 use crate::app_state::AppState;
-use crate::handlers::{archive, auth, form as form_handler, home, metrics as metrics_handler, page, plugin_route, post as post_handler, post_unlock, search, subscribe, theme_static};
+use crate::handlers::{account, archive, auth, form as form_handler, home, metrics as metrics_handler, page, plugin_route, post as post_handler, post_unlock, search, subscribe, theme_static};
 use crate::handlers::admin::{appearance, dashboard, forms as admin_forms, media, plugins, posts, profile, settings, sites as admin_sites, taxonomy, upload, users};
 
 /// Tower middleware that records per-request HTTP metrics.
@@ -68,9 +68,17 @@ pub fn build(
         .route("/form/{name}", post(form_handler::submit))
         // ── Subscriber signup ──────────────────────────────────────────────
         .route("/subscribe", get(subscribe::subscribe_form).post(subscribe::subscribe_post))
+        // ── Public login (subscriber-facing) ───────────────────────────────
+        .route("/login", get(auth::public_login_form).post(auth::login_post))
         // ── Admin auth ─────────────────────────────────────────────────────
         .route("/admin/login", get(auth::login_form).post(auth::login_post))
         .route("/admin/logout", get(auth::logout))
+        // ── Account area (any authenticated user) ───────────────────────────
+        .route("/account",                        get(account::profile_view))
+        .route("/account/profile/update",         post(account::profile_update))
+        .route("/account/profile/change-password",post(account::profile_change_password))
+        .route("/account/saved-posts",            get(account::saved_posts))
+        .route("/account/my-comments",            get(account::my_comments))
         // ── Admin profile ──────────────────────────────────────────────────
         .route("/admin/profile", get(profile::view))
         .route("/admin/profile/update", post(profile::update_profile))

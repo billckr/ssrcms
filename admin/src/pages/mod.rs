@@ -1,3 +1,4 @@
+pub mod account;
 pub mod appearance;
 pub mod dashboard;
 pub mod forms;
