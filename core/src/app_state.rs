@@ -6,6 +6,8 @@ use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 use uuid::Uuid;
 
+use axum_extra::extract::cookie::Key;
+
 use crate::config::AppConfig;
 use crate::models::site::Site;
 use crate::plugins::loader::LoadedPlugin;
@@ -195,6 +197,8 @@ pub struct AppState {
     /// Default/fallback site settings (used when site_cache is empty or pre-migration).
     pub settings: Arc<SiteSettings>,
     pub config: Arc<AppConfig>,
+    /// HMAC signing key for post-unlock browser-session cookies.
+    pub cookie_key: Key,
     /// Routes registered by plugins (e.g. "/sitemap.xml" → seo/sitemap.xml).
     pub plugin_routes: PluginRoutes,
     /// Tantivy full-text search index.
@@ -211,6 +215,12 @@ pub struct AppState {
     pub metrics_token: Option<String>,
     /// App-wide settings (app_name, timezone, max_upload_mb) — hot-reloadable.
     pub app_settings: Arc<RwLock<AppSettings>>,
+}
+
+impl axum::extract::FromRef<AppState> for axum_extra::extract::cookie::Key {
+    fn from_ref(state: &AppState) -> Self {
+        state.cookie_key.clone()
+    }
 }
 
 impl AppState {

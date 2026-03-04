@@ -8,6 +8,7 @@ pub struct PostRow {
     pub post_type: String,
     pub author_name: String,
     pub published_at: Option<String>,
+    pub post_password_set: bool,
 }
 
 pub struct PostEdit {
@@ -66,7 +67,7 @@ pub fn render_list(posts: &[PostRow], post_type: &str, page: i64, total_pages: i
                 <input type="checkbox" class="bulk-cb" value="{id}" aria-label="Select">
               </td>
               <td><a href="{prefix}/{id}/edit">{title}</a></td>
-              <td><span class="badge badge-{status}">{status}</span></td>
+              <td><span class="badge badge-{status}">{status}</span>{protected_badge}</td>
               <td>{author}</td>
               <td>{published}</td>
               <td class="actions">
@@ -87,6 +88,7 @@ pub fn render_list(posts: &[PostRow], post_type: &str, page: i64, total_pages: i
             id = crate::html_escape(&p.id),
             title = crate::html_escape(&p.title),
             status = crate::html_escape(&p.status),
+            protected_badge = if p.post_password_set { r#" <span class="badge badge-protected" title="Protected">&#x1F512;</span>"# } else { "" },
             author = crate::html_escape(&p.author_name),
             published = p.published_at.as_deref().map(|d| crate::html_escape(d)).unwrap_or_default(),
             view_href = crate::html_escape(&view_href),

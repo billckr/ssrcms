@@ -2,7 +2,7 @@ use axum::{
     extract::{Path, State},
     response::{Html, IntoResponse, Response},
 };
-use axum_extra::extract::cookie::CookieJar;
+use axum_extra::extract::cookie::SignedCookieJar;
 
 use uuid::Uuid;
 
@@ -18,7 +18,7 @@ pub async fn single_page(
     State(state): State<AppState>,
     current_site: CurrentSite,
     Path(slug): Path<String>,
-    jar: CookieJar,
+    jar: SignedCookieJar,
     axum::extract::OriginalUri(uri): axum::extract::OriginalUri,
 ) -> Response {
     let path = uri.path().to_string();

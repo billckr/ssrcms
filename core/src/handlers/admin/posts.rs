@@ -93,6 +93,7 @@ async fn list_type(state: AppState, post_type: &str, page: Option<i64>, site_id:
             post_type: p.post_type.clone(),
             author_name,
             published_at: p.published_at.map(|d| d.format("%Y-%m-%d").to_string()),
+            post_password_set: p.post_password.is_some(),
         });
     }
 

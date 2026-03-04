@@ -203,11 +203,13 @@ async fn main() -> anyhow::Result<()> {
 
     // ── Application state ─────────────────────────────────────────────────────
     let active_theme = Arc::new(std::sync::RwLock::new(startup_theme));
+    let cookie_key = axum_extra::extract::cookie::Key::generate();
     let state = AppState {
         db: pool.clone(),
         templates: engine,
         settings: Arc::new(settings),
         config: Arc::new(cfg.clone()),
+        cookie_key,
         plugin_routes: Arc::new(plugin_routes),
         search_index,
         loaded_plugins: Arc::new(loaded_plugins),

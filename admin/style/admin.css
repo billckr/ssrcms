@@ -102,6 +102,7 @@ tr.muted td { opacity: .55; }
 .badge-draft { background: #fef9c3; color: #854d0e; }
 .badge-trashed { background: #fee2e2; color: #991b1b; }
 .badge-scheduled { background: #dbeafe; color: #1e40af; }
+.badge-protected { background: #f3e8ff; color: #6b21a8; }
 .badge-in-use   { background: #fef3c7; color: #92400e; cursor: help; }
 .badge-private  { background: #e0e7ff; color: #3730a3; }
 .badge-super-admin { background: #1e293b; color: #f8fafc; }

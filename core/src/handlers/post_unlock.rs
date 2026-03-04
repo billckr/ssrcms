@@ -15,7 +15,7 @@ use axum::{
     response::{Html, IntoResponse, Redirect, Response},
     Form,
 };
-use axum_extra::extract::cookie::{Cookie, CookieJar, SameSite};
+use axum_extra::extract::cookie::{Cookie, SameSite, SignedCookieJar};
 use serde::Deserialize;
 
 use crate::app_state::AppState;
@@ -31,15 +31,17 @@ fn unlock_cookie_name(post_id: uuid::Uuid) -> String {
 #[derive(Deserialize)]
 pub struct UnlockForm {
     pub post_password: String,
+    /// "on" when the "I am human" checkbox is ticked.
+    pub human_check: Option<String>,
 }
 
 // ── Public helpers ────────────────────────────────────────────────────────────
 
-/// Check whether the visitor has an active browser-session unlock for `post_id`.
+/// Check whether the visitor has a valid signed browser-session unlock for `post_id`.
 ///
-/// Returns `true` only when the browser-session cookie is present in `jar`.
-/// A fresh browser (no cookies) or a different device will always return `false`.
-pub fn is_unlocked(jar: &CookieJar, post_id: uuid::Uuid) -> bool {
+/// Returns `true` only when the signed cookie is present and its HMAC is valid.
+/// A fresh browser, a different device, or a forged cookie will always return `false`.
+pub fn is_unlocked(jar: &SignedCookieJar, post_id: uuid::Uuid) -> bool {
     jar.get(&unlock_cookie_name(post_id)).is_some()
 }
 
@@ -55,7 +57,7 @@ pub async fn unlock_post(
     State(state): State<AppState>,
     current_site: CurrentSite,
     Path(slug): Path<String>,
-    jar: CookieJar,
+    jar: SignedCookieJar,
     Form(form): Form<UnlockForm>,
 ) -> Response {
     unlock_inner(
@@ -63,6 +65,7 @@ pub async fn unlock_post(
         current_site,
         &slug,
         &form.post_password,
+        form.human_check.as_deref(),
         jar,
         &format!("/blog/{}/unlock", slug),
         &format!("/blog/{}", slug),
@@ -75,7 +78,7 @@ pub async fn unlock_page(
     State(state): State<AppState>,
     current_site: CurrentSite,
     Path(slug): Path<String>,
-    jar: CookieJar,
+    jar: SignedCookieJar,
     Form(form): Form<UnlockForm>,
 ) -> Response {
     unlock_inner(
@@ -83,6 +86,7 @@ pub async fn unlock_page(
         current_site,
         &slug,
         &form.post_password,
+        form.human_check.as_deref(),
         jar,
         &format!("/{}/unlock", slug),
         &format!("/{}", slug),
@@ -97,10 +101,15 @@ async fn unlock_inner(
     current_site: CurrentSite,
     slug: &str,
     password: &str,
-    jar: CookieJar,
+    human_check: Option<&str>,
+    jar: SignedCookieJar,
     form_action: &str,
     redirect_to: &str,
 ) -> Response {
+    // Reject immediately if the human checkbox wasn't ticked.
+    if human_check.as_deref() != Some("on") {
+        return gate_response("Protected Content", form_action, Some("Please confirm you are human."));
+    }
     let site_id = current_site.site.id;
 
     let post_record = match post::get_published_by_slug(&state.db, Some(site_id), slug).await {
@@ -114,7 +123,7 @@ async fn unlock_inner(
     };
 
     if crate::models::user::verify_password(password, &hash) {
-        // Set a browser-session cookie (no Max-Age → deleted when browser closes).
+        // Set a browser-session signed cookie (no Max-Age → deleted when browser closes).
         // HttpOnly + SameSite=Lax prevents JS access and CSRF.
         let cookie = Cookie::build((unlock_cookie_name(post_record.id), "1"))
             .http_only(true)
@@ -129,7 +138,7 @@ async fn unlock_inner(
 
 // ── Gate HTML ─────────────────────────────────────────────────────────────────
 
-fn gate_html(post_title: &str, action: &str, error: Option<&str>) -> String {
+fn gate_html(_post_title: &str, action: &str, error: Option<&str>) -> String {
     let error_html = error.map(|e| {
         format!(
             r#"<div class="error">{}</div>"#,
@@ -143,7 +152,7 @@ fn gate_html(post_title: &str, action: &str, error: Option<&str>) -> String {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Protected Content — {title}</title>
+  <title>Protected Content</title>
   <style>
     *, *::before, *::after {{ box-sizing: border-box; }}
     body {{
@@ -166,8 +175,7 @@ fn gate_html(post_title: &str, action: &str, error: Option<&str>) -> String {
       text-align: center;
     }}
     .gate .lock {{ font-size: 2.5rem; margin-bottom: .5rem; }}
-    .gate h1 {{ font-size: 1.25rem; margin: 0 0 .4rem; }}
-    .gate .subtitle {{ color: #666; font-size: .9rem; margin: 0 0 1.5rem; }}
+    .gate h1 {{ font-size: 1.25rem; margin: 0 0 1.5rem; }}
     .gate .error {{
       color: #b91c1c;
       background: #fef2f2;
@@ -188,6 +196,16 @@ fn gate_html(post_title: &str, action: &str, error: Option<&str>) -> String {
       transition: border-color .15s;
     }}
     .gate input[type=password]:focus {{ border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,.15); }}
+    .gate .human-row {{
+      display: flex;
+      align-items: center;
+      gap: .5rem;
+      justify-content: center;
+      margin-bottom: .75rem;
+      font-size: .9rem;
+      color: #444;
+    }}
+    .gate .human-row input[type=checkbox] {{ width: 1.1rem; height: 1.1rem; cursor: pointer; accent-color: #3b82f6; }}
     .gate button {{
       width: 100%;
       padding: .65rem;
@@ -206,17 +224,19 @@ fn gate_html(post_title: &str, action: &str, error: Option<&str>) -> String {
 <body>
   <div class="gate">
     <div class="lock">&#x1F512;</div>
-    <h1>Protected Content</h1>
-    <p class="subtitle">Enter the password to view <strong>{title}</strong>.</p>
+    <h1>This content is password protected.</h1>
     {error_html}
     <form method="POST" action="{action}">
       <input type="password" name="post_password" placeholder="Password" autofocus required>
+      <div class="human-row">
+        <input type="checkbox" id="human_check" name="human_check" value="on" required>
+        <label for="human_check">I am human</label>
+      </div>
       <button type="submit">View Content</button>
     </form>
   </div>
 </body>
 </html>"#,
-        title = html_escape(post_title),
         action = html_escape(action),
         error_html = error_html,
     )
