@@ -220,6 +220,10 @@ async fn main() -> anyhow::Result<()> {
         app_settings: Arc::new(std::sync::RwLock::new(app_settings)),
     };
 
+    // ── Scheduled post publisher ─────────────────────────────────────────────
+    synaptic_core::scheduler::spawn_scheduled_publisher(pool.clone());
+    info!("scheduler: scheduled post publisher started (60 s interval)");
+
     // ── Router ────────────────────────────────────────────────────────────────
     let app = router::build(state.clone(), &cfg.uploads_dir, session_layer);
 

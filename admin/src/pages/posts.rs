@@ -34,6 +34,10 @@ pub struct PostEdit {
     pub featured_image_url: Option<String>,
     /// True if the post currently has a password hash stored (so UI shows checkbox pre-checked).
     pub post_password_set: bool,
+    /// Display name of the post author (empty string for new posts).
+    pub author_name: String,
+    /// Hostname of the site this post belongs to (empty for new posts / global admin context).
+    pub site_name: String,
 }
 
 pub struct TermOption {
@@ -41,7 +45,7 @@ pub struct TermOption {
     pub name: String,
 }
 
-pub fn render_list(posts: &[PostRow], post_type: &str, page: i64, total_pages: i64, flash: Option<&str>, ctx: &crate::PageContext) -> String {
+pub fn render_list(posts: &[PostRow], post_type: &str, page: i64, total_pages: i64, flash: Option<&str>, ctx: &crate::PageContext, status_filter: Option<&str>, pending_count: i64, author_scheduled_count: i64) -> String {
     let title = if post_type == "page" { "Pages" } else { "Posts" };
     let new_label = if post_type == "page" { "New Page" } else { "New Post" };
     let new_href = if post_type == "page" { "/admin/pages/new" } else { "/admin/posts/new" };
@@ -49,6 +53,14 @@ pub fn render_list(posts: &[PostRow], post_type: &str, page: i64, total_pages: i
     let base_path = if post_type == "page" { "/admin/pages" } else { "/admin/posts" };
 
     let bulk_action = if post_type == "page" { "/admin/pages/bulk-delete" } else { "/admin/posts/bulk-delete" };
+
+    // Only published/scheduled (and the mixed "all") views show a date column.
+    let show_date_col = matches!(status_filter, None | Some("") | Some("published") | Some("scheduled"));
+    let date_col_label = match status_filter {
+        Some("scheduled") => "Scheduled (UTC)",
+        Some("published") => "Published (UTC)",
+        _ => "Date (UTC)",
+    };
 
     let rows = posts.iter().map(|p| {
         let path = if p.post_type == "page" {
@@ -59,54 +71,97 @@ pub fn render_list(posts: &[PostRow], post_type: &str, page: i64, total_pages: i
         let view_href = if ctx.current_site.is_empty() {
             path
         } else {
-            format!("//{}{}", ctx.current_site, path)
+            format!("//{}{}" , ctx.current_site, path)
+        };
+        // Authors cannot edit scheduled or published posts — show view only.
+        let author_read_only = ctx.user_role.eq_ignore_ascii_case("author")
+            && (p.status == "scheduled" || p.status == "published");
+        let title_cell = if author_read_only {
+            format!(r#"<span>{}</span>"#, crate::html_escape(&p.title))
+        } else {
+            format!(r#"<a href="{prefix}/{id}/edit">{title}</a>"#,
+                prefix = edit_prefix, id = crate::html_escape(&p.id), title = crate::html_escape(&p.title))
+        };
+        let edit_btn = if author_read_only {
+            String::new()
+        } else {
+            format!(r#"<a href="{prefix}/{id}/edit" class="icon-btn" title="Edit">
+                  <img src="/admin/static/icons/edit.svg" alt="Edit">
+                </a>"#,
+                prefix = edit_prefix, id = crate::html_escape(&p.id))
+        };
+        // Date cell: only for tabs where it's meaningful, with UTC suffix.
+        let date_td = if show_date_col {
+            let val = if p.status == "published" || p.status == "scheduled" {
+                p.published_at.as_deref()
+                    .map(|d| crate::html_escape(d))
+                    .unwrap_or_else(|| "\u{2014}".to_string())
+            } else {
+                "\u{2014}".to_string()
+            };
+            format!("<td>{}</td>", val)
+        } else {
+            String::new()
         };
         format!(
             r#"<tr>
               <td style="width:2rem;text-align:center">
                 <input type="checkbox" class="bulk-cb" value="{id}" aria-label="Select">
               </td>
-              <td><a href="{prefix}/{id}/edit">{title}</a></td>
-              <td><span class="badge badge-{status}">{status}</span>{protected_badge}</td>
+              <td>{title_cell}</td>
+              <td><span class="badge badge-{status_cls}">{status_label}</span>{protected_badge}</td>
               <td>{author}</td>
-              <td>{published}</td>
+              {date_td}
               <td class="actions">
                 <a href="{view_href}" class="icon-btn" title="View" target="_blank" rel="noopener noreferrer">
                   <img src="/admin/static/icons/eye.svg" alt="View">
                 </a>
-                <a href="{prefix}/{id}/edit" class="icon-btn" title="Edit">
-                  <img src="/admin/static/icons/edit.svg" alt="Edit">
-                </a>
-                <form method="POST" action="{prefix}/{id}/delete" style="display:inline" onsubmit="return confirm('Delete this?')">
+                {edit_btn}
+                {delete_btn}
+              </td>
+            </tr>"#,
+            id = crate::html_escape(&p.id),
+            title_cell = title_cell,
+            status_cls = crate::html_escape(&p.status),
+            status_label = crate::html_escape(if p.status == "pending" { "Pending Review" } else { &p.status }),
+            protected_badge = if p.post_password_set { r#" <span class="badge badge-protected" title="Protected">&#x1F512;</span>"# } else { "" },
+            author = crate::html_escape(&p.author_name),
+            date_td = date_td,
+            view_href = crate::html_escape(&view_href),
+            edit_btn = edit_btn,
+            delete_btn = if ctx.user_role.eq_ignore_ascii_case("author") {
+                String::new()
+            } else {
+                format!(
+                    r#"<form method="POST" action="{prefix}/{id}/delete" style="display:inline" onsubmit="return confirm('Delete this?')">
                   <button class="icon-btn icon-danger" title="Delete" type="submit">
                     <img src="/admin/static/icons/delete.svg" alt="Delete">
                   </button>
-                </form>
-              </td>
-            </tr>"#,
-            prefix = edit_prefix,
-            id = crate::html_escape(&p.id),
-            title = crate::html_escape(&p.title),
-            status = crate::html_escape(&p.status),
-            protected_badge = if p.post_password_set { r#" <span class="badge badge-protected" title="Protected">&#x1F512;</span>"# } else { "" },
-            author = crate::html_escape(&p.author_name),
-            published = p.published_at.as_deref().map(|d| crate::html_escape(d)).unwrap_or_default(),
-            view_href = crate::html_escape(&view_href),
+                </form>"#,
+                    prefix = edit_prefix,
+                    id = crate::html_escape(&p.id),
+                )
+            },
         )
     }).collect::<Vec<_>>().join("\n");
 
+    // Build status_qs: query string fragment to preserve status= across page nav
+    let status_qs = match status_filter {
+        Some(s) if !s.is_empty() => format!("&status={}", s),
+        _ => String::new(),
+    };
+
     let pagination = if total_pages > 1 {
         let prev = if page > 1 {
-            format!(r#"<a href="{}?page={}" class="page-btn">&laquo; Prev</a>"#, base_path, page - 1)
+            format!(r#"<a href="{}?page={}{status_qs}" class="page-btn">&laquo; Prev</a>"#, base_path, page - 1, status_qs = status_qs)
         } else {
             r#"<span class="page-btn page-btn-disabled">&laquo; Prev</span>"#.to_string()
         };
         let next = if page < total_pages {
-            format!(r#"<a href="{}?page={}" class="page-btn">Next &raquo;</a>"#, base_path, page + 1)
+            format!(r#"<a href="{}?page={}{status_qs}" class="page-btn">Next &raquo;</a>"#, base_path, page + 1, status_qs = status_qs)
         } else {
             r#"<span class="page-btn page-btn-disabled">Next &raquo;</span>"#.to_string()
         };
-        // Show up to 7 page number links centred around the current page.
         let start = (page - 3).max(1);
         let end = (page + 3).min(total_pages);
         let mut nums = String::new();
@@ -114,7 +169,7 @@ pub fn render_list(posts: &[PostRow], post_type: &str, page: i64, total_pages: i
             if p == page {
                 nums.push_str(&format!(r#"<span class="page-btn page-btn-active">{}</span>"#, p));
             } else {
-                nums.push_str(&format!(r#"<a href="{}?page={}" class="page-btn">{}</a>"#, base_path, p, p));
+                nums.push_str(&format!(r#"<a href="{}?page={}{status_qs}" class="page-btn">{}</a>"#, base_path, p, p, status_qs = status_qs));
             }
         }
         format!(r#"<div class="pagination">{prev}{nums}{next}</div>"#)
@@ -122,8 +177,45 @@ pub fn render_list(posts: &[PostRow], post_type: &str, page: i64, total_pages: i
         String::new()
     };
 
+    // Filter tabs — pages have fewer meaningful statuses; authors don't see Trash,
+    // and only see Scheduled when they actually have scheduled posts.
+    let tab_specs: &[(&str, &str)] = if post_type == "page" {
+        &[("all", "All"), ("published", "Published"), ("draft", "Draft"), ("trashed", "Trashed")]
+    } else if ctx.user_role.eq_ignore_ascii_case("author") {
+        if author_scheduled_count > 0 {
+            &[("all", "All"), ("published", "Published"), ("draft", "Draft"), ("pending", "Pending Review"), ("scheduled", "Scheduled")]
+        } else {
+            &[("all", "All"), ("published", "Published"), ("draft", "Draft"), ("pending", "Pending Review")]
+        }
+    } else {
+        &[("all", "All"), ("published", "Published"), ("draft", "Draft"), ("pending", "Pending Review"), ("scheduled", "Scheduled"), ("trashed", "Trashed")]
+    };
+    let tabs: String = tab_specs.iter().map(|(val, label)| {
+        let is_active = match status_filter {
+            None | Some("") => *val == "all",
+            Some(sf) => *val == sf,
+        };
+        let active_class = if is_active { " active" } else { "" };
+        let href = if *val == "all" {
+            base_path.to_string()
+        } else {
+            format!("{}?status={}", base_path, val)
+        };
+        // Show pending count inline on the Pending Review tab
+        let extra = if *val == "pending" && pending_count > 0 {
+            format!(
+                r#" <span class="badge badge-pending" style="font-size:10px;padding:.05rem .35rem;vertical-align:middle">{}</span>"#,
+                pending_count
+            )
+        } else {
+            String::new()
+        };
+        format!(r#"<a href="{}" class="page-tab{}">{}{}</a>"#, href, active_class, label, extra)
+    }).collect();
+    let tabs_html = format!(r#"<div class="page-tabs" style="margin-bottom:1.25rem">{}</div>"#, tabs);
+
     let content = format!(
-        r#"<div style="display:flex;align-items:center;gap:.75rem;margin-bottom:1rem">
+        r#"{tabs_html}<div style="display:flex;align-items:center;gap:.75rem;margin-bottom:1rem">
   <a href="{new_href}" class="btn btn-primary">{new_label}</a>
   <button id="bulk-delete-btn" type="button" class="btn btn-danger" style="display:none"
           onclick="bulkDelete()">Delete Selected (<span id="bulk-count">0</span>)</button>
@@ -131,7 +223,7 @@ pub fn render_list(posts: &[PostRow], post_type: &str, page: i64, total_pages: i
 <table class="data-table">
   <thead><tr>
     <th style="width:2rem"><input type="checkbox" id="select-all" title="Select all" aria-label="Select all"></th>
-    <th>Title</th><th>Status</th><th>Author</th><th>Published</th><th>Actions</th>
+    <th>Title</th><th>Status</th><th>Author</th>{date_col_th}<th>Actions</th>
   </tr></thead>
   <tbody>{rows}</tbody>
 </table>
@@ -182,6 +274,8 @@ pub fn render_list(posts: &[PostRow], post_type: &str, page: i64, total_pages: i
         rows = rows,
         pagination = pagination,
         bulk_action = bulk_action,
+        tabs_html = tabs_html,
+        date_col_th = if show_date_col { format!("<th>{}</th>", date_col_label) } else { String::new() },
     );
 
     let path = if post_type == "page" { "/admin/pages" } else { "/admin/posts" };
@@ -233,19 +327,52 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
         )
     }).collect::<Vec<_>>().join("\n");
 
-    let status_options = ["draft", "published", "scheduled", "trashed"].iter().map(|s| {
-        let selected = if *s == post.status { " selected" } else { "" };
-        format!(r#"<option value="{s}"{selected}>{s}</option>"#, s = s, selected = selected)
-    }).collect::<Vec<_>>().join("");
-
-    // Default published_at to now if empty (for new posts)
-    let published_at = if let Some(val) = &post.published_at {
-        val.clone()
-    } else if post.id.is_none() {
-        // Set to current date/time for new posts
-        chrono::Utc::now().format("%Y-%m-%dT%H:%M").to_string()
+    let status_options = if ctx.user_role.eq_ignore_ascii_case("author") {
+        [("draft", "Draft"), ("pending", "Submit for Review")].iter().map(|(val, label)| {
+            let selected = if *val == post.status { " selected" } else { "" };
+            format!(r#"<option value="{val}"{selected}>{label}</option>"#, val = val, label = label, selected = selected)
+        }).collect::<Vec<_>>().join("")
     } else {
+        // Editors/admins: include pending so they can see/change it too
+        [("draft", "Draft"), ("pending", "Pending Review"), ("published", "Published"), ("scheduled", "Scheduled"), ("trashed", "Trashed")].iter().map(|(val, label)| {
+            let selected = if *val == post.status { " selected" } else { "" };
+            format!(r#"<option value="{val}"{selected}>{label}</option>"#, val = val, label = label, selected = selected)
+        }).collect::<Vec<_>>().join("")
+    };
+
+    // Hint displayed below the status dropdown for authors
+    let status_hint = if ctx.user_role.eq_ignore_ascii_case("author") {
+        r#"<small id="status-hint" style="color:var(--muted);display:block;margin-top:.3rem"></small>
+<script>
+(function(){
+  var sel = document.getElementById('status');
+  var hint = document.getElementById('status-hint');
+  function update(){hint.textContent=sel.value==='pending'?'An editor will review this post before it goes live.':'';}
+  sel.addEventListener('change',update); update();
+})();
+</script>"#
+    } else {
+        ""
+    };
+
+    // Default published_at:
+    // - Authors: always empty (field is hidden, value not user-controlled)
+    // - Editors/admins opening a pending post: default to now so they can publish immediately
+    // - New posts (non-author): prefill with now
+    // - Existing non-pending posts: use stored value
+    let published_at = if ctx.user_role.eq_ignore_ascii_case("author") {
+        // Authors don't control publish time; send an empty hidden value
         String::new()
+    } else if let Some(val) = &post.published_at {
+        if post.status == "pending" {
+            // Override stale author-set time with current UTC for reviewer convenience
+            chrono::Utc::now().format("%Y-%m-%dT%H:%M").to_string()
+        } else {
+            val.clone()
+        }
+    } else {
+        // New post or no stored time — prefill with now
+        chrono::Utc::now().format("%Y-%m-%dT%H:%M").to_string()
     };
 
     let template_section = if post.post_type == "page" && !post.available_templates.is_empty() {
@@ -316,6 +443,52 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
         r#"<small style="color:var(--muted)">Leave blank to keep existing password.</small>"#
     } else { "" };
 
+    let password_section = if ctx.user_role.eq_ignore_ascii_case("author") {
+        String::new()
+    } else {
+        format!(
+            r#"<div class="form-group" style="margin-bottom:.5rem">
+          <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;font-weight:400">
+            <input type="checkbox" id="post-protected-cb" name="post_protected" value="on" {protected_checked}
+              onchange="document.getElementById('post-pw-group').style.display=this.checked?'':'none'">
+            Password Protected
+          </label>
+        </div>
+        <div class="form-group" id="post-pw-group" style="{pw_group_display}">
+          <label for="post-password" style="font-size:12px">Password</label>
+          <input type="password" id="post-password" name="post_password" autocomplete="new-password" placeholder="{pw_placeholder}" style="font-size:13px">
+          {pw_hint}
+        </div>"#,
+            protected_checked = protected_checked,
+            pw_group_display = pw_group_display,
+            pw_placeholder = pw_placeholder,
+            pw_hint = pw_hint,
+        )
+    };
+
+    // Author card: shown to editors/admins when viewing an existing post written by someone else.
+    let author_card = if !ctx.user_role.eq_ignore_ascii_case("author") && !post.author_name.is_empty() {
+        let site_line = if !post.site_name.is_empty() {
+            format!(
+                r#"<div class="author-card-site">{}</div>"#,
+                crate::html_escape(&post.site_name)
+            )
+        } else {
+            String::new()
+        };
+        format!(
+            r#"<div class="form-section author-card">
+      <h3>Author</h3>
+      <div class="author-card-name">{name}</div>
+      {site_line}
+    </div>"#,
+            name = crate::html_escape(&post.author_name),
+            site_line = site_line,
+        )
+    } else {
+        String::new()
+    };
+
     let mut content = format!(
         r#"<link rel="stylesheet" href="/admin/static/quill/quill.snow.css">
 <form method="POST" action="{action}">
@@ -343,28 +516,18 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
       </div>
     </div>
     <div class="editor-sidebar">
+      {author_card}
       <div class="form-section">
         <h3>Publish</h3>
         <div class="form-group">
           <label for="status">Status</label>
           <select id="status" name="status">{status_options}</select>
+          {status_hint}
         </div>
         <div class="form-group">
-          <label for="published_at">Published At</label>
-          <input type="datetime-local" id="published_at" name="published_at" value="{published_at}">
+          {datetime_field}
         </div>
-        <div class="form-group" style="margin-bottom:.5rem">
-          <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;font-weight:400">
-            <input type="checkbox" id="post-protected-cb" name="post_protected" value="on" {protected_checked}
-              onchange="document.getElementById('post-pw-group').style.display=this.checked?'':'none'">
-            Password Protected
-          </label>
-        </div>
-        <div class="form-group" id="post-pw-group" style="{pw_group_display}">
-          <label for="post-password" style="font-size:12px">Password</label>
-          <input type="password" id="post-password" name="post_password" autocomplete="new-password" placeholder="{pw_placeholder}" style="font-size:13px">
-          {pw_hint}
-        </div>
+        {password_section}
         <input type="hidden" name="post_type" value="{post_type}">
         <button type="submit" class="btn btn-primary">Save</button>
       </div>
@@ -431,15 +594,22 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
         content_js = serde_json::to_string(&post.content).unwrap_or_else(|_| "\"\"".into()),
         excerpt = crate::html_escape(&post.excerpt),
         status_options = status_options,
-        published_at = crate::html_escape(&published_at),
+        status_hint = status_hint,
+        datetime_field = if ctx.user_role.eq_ignore_ascii_case("author") {
+            format!(r#"<input type="hidden" name="published_at" value="{}">"#, crate::html_escape(&published_at))
+        } else {
+            format!(
+                r#"<label for="published_at">Date and Time (UTC)</label>
+          <input type="datetime-local" id="published_at" name="published_at" value="{}">"#,
+                crate::html_escape(&published_at)
+            )
+        },
         post_type = crate::html_escape(&post.post_type),
         template_section = template_section,
         categories_section = categories_section,
         featured_image_section = featured_image_section,
-        protected_checked = protected_checked,
-        pw_group_display = pw_group_display,
-        pw_placeholder = pw_placeholder,
-        pw_hint = pw_hint,
+        password_section = password_section,
+        author_card = author_card,
     );
 
     let path = if post.post_type == "page" { "/admin/pages" } else { "/admin/posts" };
@@ -478,6 +648,7 @@ mod tests {
             can_manage_appearance: false,
             can_manage_taxonomies: false,
             can_manage_forms: false,
+            can_manage_pages: true,
             unread_forms_count: 0,
             app_name: "Synaptic".to_string(),
         }

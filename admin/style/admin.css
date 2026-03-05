@@ -64,8 +64,13 @@ a:hover { text-decoration: underline; }
 /* Stats grid */
 .stats-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
 .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.25rem; box-shadow: var(--shadow); }
+.stat-card-pending { border-color: #fcd34d; background: #fffbeb; }
+.stat-card-pending .stat-num { color: #92400e; }
 .stat-num { font-size: 2rem; font-weight: 700; color: var(--primary); }
 .stat-label { color: var(--muted); font-size: 12px; margin-top: .25rem; }
+.stat-action { display: inline-block; margin-top: .6rem; font-size: 12px; font-weight: 600; color: #92400e; text-decoration: none; }
+.stat-action:hover { text-decoration: underline; }
+.stat-hint { margin: .5rem 0 0; font-size: 11px; color: var(--muted); }
 
 /* Tables */
 .data-table { width: 100%; border-collapse: collapse; background: var(--surface); border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow); }
@@ -100,6 +105,7 @@ tr.muted td { opacity: .55; }
 .editor-hint { padding: 3rem; text-align: center; color: var(--muted); background: var(--surface); border: 1px dashed var(--border); border-radius: var(--radius); }
 .badge-published { background: #dcfce7; color: #166534; }
 .badge-draft { background: #fef9c3; color: #854d0e; }
+.badge-pending { background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; }
 .badge-trashed { background: #fee2e2; color: #991b1b; }
 .badge-scheduled { background: #dbeafe; color: #1e40af; }
 .badge-protected { background: #f3e8ff; color: #6b21a8; }
@@ -186,6 +192,9 @@ tr.muted td { opacity: .55; }
 .site-context-banner strong { font-weight: 700; }
 .form-section { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem; margin-bottom: 1rem; }
 .form-section h3 { font-size: 13px; font-weight: 600; margin-bottom: .75rem; }
+.author-card { border-color: var(--border); }
+.author-card-name { font-weight: 600; font-size: 14px; color: var(--text); }
+.author-card-site { font-size: 12px; color: var(--muted); margin-top: .2rem; }
 .checkbox-group { display: flex; flex-direction: column; gap: .35rem; font-size: 13px; max-height: 200px; overflow-y: auto; }
 .radio-group { display: flex; flex-direction: column; gap: .6rem; margin-top: .25rem; }
 .radio-label { display: flex; align-items: flex-start; gap: .6rem; font-size: 13px; font-weight: normal; cursor: pointer; }

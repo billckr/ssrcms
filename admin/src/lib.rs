@@ -31,8 +31,13 @@ pub struct PageContext {
     pub can_manage_taxonomies: bool,
     /// Can view, export, and delete form submissions.
     pub can_manage_forms: bool,
+    /// Can create, edit, and delete pages (not available to the author role).
+    pub can_manage_pages: bool,
     /// Number of unread form submissions across all forms on this site.
     pub unread_forms_count: i64,
+    /// Number of posts in "pending review" state on this site (shown as a sidebar badge).
+    /// For editors/admins: all pending posts on the site. For authors: their own pending posts.
+    pub pending_review_count: i64,
     /// Admin chrome brand label — from app_settings.app_name.
     pub app_name: String,
 }
@@ -151,8 +156,19 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
         css = ADMIN_CSS,
         app_name = html_escape(&ctx.app_name),
         dash = nav_link("/admin", "Dashboard"),
-        posts = nav_link("/admin/posts", "Posts"),
-        pages = nav_link("/admin/pages", "Pages"),
+        posts = {
+            let pending_badge = if ctx.pending_review_count > 0 {
+                format!(
+                    r#" <span class="badge-unread" style="margin-left:.4rem;font-size:10px;padding:.1rem .45rem;box-shadow:none;background:#fef3c7;color:#92400e;border:1px solid #fcd34d;border-radius:3px;animation:none">{}</span>"#,
+                    ctx.pending_review_count
+                )
+            } else {
+                String::new()
+            };
+            let active = if current_path.starts_with("/admin/posts") { " class=\"active\"" } else { "" };
+            format!(r#"<li><a href="/admin/posts"{}>{}</a></li>"#, active, format!("Posts{}", pending_badge))
+        },
+        pages = if ctx.can_manage_pages { nav_link("/admin/pages", "Pages") } else { String::new() },
         media = nav_link("/admin/media", "Media"),
         cats = if ctx.can_manage_taxonomies { nav_link("/admin/categories", "Categories") } else { String::new() },
         tags = if ctx.can_manage_taxonomies { nav_link("/admin/tags", "Tags") } else { String::new() },

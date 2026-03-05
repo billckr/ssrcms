@@ -33,7 +33,9 @@ pub fn page_ctx(state: &AppState, admin: &AdminUser, current_site: &str) -> admi
         can_manage_appearance: admin.caps.can_manage_appearance,
         can_manage_taxonomies: admin.caps.can_manage_taxonomies,
         can_manage_forms: admin.caps.can_manage_forms,
+        can_manage_pages: admin.caps.can_manage_pages,
         unread_forms_count: 0,
+        pending_review_count: 0,
         app_name,
     }
 }
@@ -48,6 +50,22 @@ pub async fn page_ctx_full(state: &AppState, admin: &AdminUser, current_site: &s
                 .await
                 .unwrap_or(0);
         }
+    }
+    // Pending review badge: editors/admins see all site pending posts; authors see their own.
+    if admin.caps.can_manage_content {
+        let author_filter = if admin.site_role == "author" { Some(admin.user.id) } else { None };
+        let count: i64 = sqlx::query_scalar(
+            r#"SELECT COUNT(*) FROM posts
+               WHERE status = 'pending'
+                 AND ($1::uuid IS NULL OR site_id = $1)
+                 AND ($2::uuid IS NULL OR author_id = $2)"#
+        )
+        .bind(admin.site_id)
+        .bind(author_filter)
+        .fetch_one(&state.db)
+        .await
+        .unwrap_or(0);
+        ctx.pending_review_count = count;
     }
     ctx
 }

@@ -10,6 +10,7 @@ pub mod middleware;
 pub mod models;
 pub mod plugins;
 pub mod router;
+pub mod scheduler;
 pub mod search;
 pub mod templates;
 pub mod utils;

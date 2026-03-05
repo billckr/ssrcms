@@ -13,6 +13,7 @@ use crate::models::user::{User, UserContext};
 #[serde(rename_all = "lowercase")]
 pub enum PostStatus {
     Draft,
+    Pending,
     Published,
     Scheduled,
     Trashed,
@@ -22,6 +23,7 @@ impl PostStatus {
     pub fn as_str(&self) -> &'static str {
         match self {
             PostStatus::Draft => "draft",
+            PostStatus::Pending => "pending",
             PostStatus::Published => "published",
             PostStatus::Scheduled => "scheduled",
             PostStatus::Trashed => "trashed",
@@ -60,6 +62,7 @@ pub struct Post {
     pub featured_image_id: Option<Uuid>,
     pub published_at: Option<DateTime<Utc>>,
     pub scheduled_at: Option<DateTime<Utc>>,
+    pub submitted_at: Option<DateTime<Utc>>,
     pub template: Option<String>,
     pub post_password: Option<String>,
     pub created_at: DateTime<Utc>,
@@ -253,6 +256,7 @@ mod tests {
             featured_image_id: None,
             published_at: Some(Utc::now()),
             scheduled_at: None,
+            submitted_at: None,
             template: None,
             created_at: Utc::now(),
             updated_at: Utc::now(),
@@ -420,8 +424,9 @@ pub async fn create(pool: &PgPool, data: &CreatePost) -> Result<Post> {
         r#"
         INSERT INTO posts (site_id, title, slug, content, content_format, excerpt, status,
                            post_type, author_id, featured_image_id, published_at, template,
-                           post_password)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+                           post_password, submitted_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
+                CASE WHEN $7 = 'pending' THEN NOW() ELSE NULL END)
         RETURNING *
         "#,
     )
@@ -688,6 +693,8 @@ pub async fn update(pool: &PgPool, id: Uuid, data: &UpdatePost) -> Result<Post> 
             post_password = CASE WHEN $10 THEN NULL
                                  WHEN $11::text IS NOT NULL THEN $11
                                  ELSE post_password END,
+            submitted_at = CASE WHEN $6 = 'pending' THEN COALESCE(submitted_at, NOW())
+                                ELSE submitted_at END,
             updated_at = NOW()
         WHERE id = $12
         RETURNING *

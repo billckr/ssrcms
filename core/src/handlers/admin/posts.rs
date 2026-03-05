@@ -15,6 +15,7 @@ use admin::pages::posts::{PostEdit, PostRow, TermOption};
 #[derive(Deserialize, Default)]
 pub struct PostsQuery {
     pub page: Option<i64>,
+    pub status: Option<String>,
 }
 
 pub async fn list(
@@ -25,44 +26,93 @@ pub async fn list(
     let cs = state.site_hostname(admin.site_id);
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
     let author_filter = if admin.site_role == "author" { Some(admin.user.id) } else { None };
-    list_type(state, "post", q.page, admin.site_id, author_filter, ctx).await
+    list_type(state, "post", q.page, q.status.as_deref(), admin.site_id, author_filter, ctx).await
 }
 
 pub async fn list_pages(
     State(state): State<AppState>,
     admin: AdminUser,
     Query(q): Query<PostsQuery>,
-) -> Html<String> {
+) -> impl IntoResponse {
+    if !admin.caps.can_manage_pages {
+        return Redirect::to("/admin").into_response();
+    }
     let cs = state.site_hostname(admin.site_id);
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
-    let author_filter = if admin.site_role == "author" { Some(admin.user.id) } else { None };
-    list_type(state, "page", q.page, admin.site_id, author_filter, ctx).await
+    list_type(state, "page", q.page, q.status.as_deref(), admin.site_id, None, ctx).await.into_response()
 }
 
-async fn list_type(state: AppState, post_type: &str, page: Option<i64>, site_id: Option<Uuid>, author_id: Option<Uuid>, ctx: admin::PageContext) -> Html<String> {
+async fn list_type(state: AppState, post_type: &str, page: Option<i64>, status_filter: Option<&str>, site_id: Option<Uuid>, author_id: Option<Uuid>, ctx: admin::PageContext) -> Html<String> {
     let per_page = 20i64;
     let page = page.unwrap_or(1).max(1);
     let offset = (page - 1) * per_page;
 
-    // Count uses the same site_id + author_id filters so per-user totals are accurate.
+    // Resolve the PostStatus filter (None = all statuses)
+    let status_enum: Option<PostStatus> = match status_filter {
+        Some("draft")     => Some(PostStatus::Draft),
+        Some("pending")   => Some(PostStatus::Pending),
+        Some("published") => Some(PostStatus::Published),
+        Some("scheduled") => Some(PostStatus::Scheduled),
+        Some("trashed")   => Some(PostStatus::Trashed),
+        _                 => None,
+    };
+    let status_sql = status_enum.as_ref().map(|s| s.as_str());
+
+    // Count uses the same site_id + author_id + status filters.
     let total: i64 = sqlx::query_scalar(
         r#"SELECT COUNT(*) FROM posts
            WHERE ($1::uuid IS NULL OR site_id = $1)
              AND post_type = $2
-             AND ($3::uuid IS NULL OR author_id = $3)"#,
+             AND ($3::uuid IS NULL OR author_id = $3)
+             AND ($4::text IS NULL OR status = $4)"#,
     )
     .bind(site_id)
     .bind(post_type)
     .bind(author_id)
+    .bind(status_sql)
     .fetch_one(&state.db)
     .await
     .unwrap_or(0);
 
     let total_pages = ((total + per_page - 1) / per_page).max(1);
 
+    // Count of all pending posts for this site (for the tab badge regardless of current filter)
+    let pending_count: i64 = sqlx::query_scalar(
+        r#"SELECT COUNT(*) FROM posts
+           WHERE status = 'pending'
+             AND post_type = $1
+             AND ($2::uuid IS NULL OR site_id = $2)
+             AND ($3::uuid IS NULL OR author_id = $3)"#,
+    )
+    .bind(post_type)
+    .bind(site_id)
+    .bind(author_id)
+    .fetch_one(&state.db)
+    .await
+    .unwrap_or(0);
+
+    // Count of scheduled posts for this author (so we can conditionally show the Scheduled tab)
+    let author_scheduled_count: i64 = if author_id.is_some() {
+        sqlx::query_scalar(
+            r#"SELECT COUNT(*) FROM posts
+               WHERE status = 'scheduled'
+                 AND post_type = $1
+                 AND ($2::uuid IS NULL OR site_id = $2)
+                 AND ($3::uuid IS NULL OR author_id = $3)"#,
+        )
+        .bind(post_type)
+        .bind(site_id)
+        .bind(author_id)
+        .fetch_one(&state.db)
+        .await
+        .unwrap_or(0)
+    } else {
+        0
+    };
+
     let filter = ListFilter {
         site_id,
-        status: None,
+        status: status_enum,
         post_type: Some(if post_type == "page" { PostType::Page } else { PostType::Post }),
         author_id,
         limit: per_page,
@@ -92,12 +142,12 @@ async fn list_type(state: AppState, post_type: &str, page: Option<i64>, site_id:
             slug: p.slug.clone(),
             post_type: p.post_type.clone(),
             author_name,
-            published_at: p.published_at.map(|d| d.format("%Y-%m-%d").to_string()),
+            published_at: p.published_at.map(|d| d.format("%Y-%m-%d %H:%M").to_string()),
             post_password_set: p.post_password.is_some(),
         });
     }
 
-    Html(admin::pages::posts::render_list(&rows, post_type, page, total_pages, None, &ctx))
+    Html(admin::pages::posts::render_list(&rows, post_type, page, total_pages, None, &ctx, status_filter, pending_count, author_scheduled_count))
 }
 
 pub async fn new_post(
@@ -112,10 +162,13 @@ pub async fn new_post(
 pub async fn new_page(
     State(state): State<AppState>,
     admin: AdminUser,
-) -> Html<String> {
+) -> impl IntoResponse {
+    if !admin.caps.can_manage_pages {
+        return Redirect::to("/admin").into_response();
+    }
     let cs = state.site_hostname(admin.site_id);
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
-    new_post_type(state, "page", admin.site_id, ctx).await
+    new_post_type(state, "page", admin.site_id, ctx).await.into_response()
 }
 
 async fn new_post_type(state: AppState, post_type: &str, site_id: Option<Uuid>, ctx: admin::PageContext) -> Html<String> {
@@ -139,6 +192,8 @@ async fn new_post_type(state: AppState, post_type: &str, site_id: Option<Uuid>, 
         featured_image_id: None,
         featured_image_url: None,
         post_password_set: false,
+        author_name: String::new(),
+        site_name: String::new(),
     };
     Html(admin::pages::posts::render_editor(&edit, None, &ctx))
 }
@@ -158,9 +213,12 @@ pub async fn edit_page(
     admin: AdminUser,
     Path(id): Path<Uuid>,
 ) -> impl IntoResponse {
+    if !admin.caps.can_manage_pages {
+        return Redirect::to("/admin").into_response();
+    }
     let cs = state.site_hostname(admin.site_id);
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
-    edit_post_type(state, id, admin.site_id, admin.site_role == "author", admin.user.id, ctx).await
+    edit_post_type(state, id, admin.site_id, false, admin.user.id, ctx).await.into_response()
 }
 
 async fn edit_post_type(state: AppState, id: Uuid, site_id: Option<Uuid>, is_author: bool, user_id: Uuid, ctx: admin::PageContext) -> impl IntoResponse {
@@ -177,13 +235,13 @@ async fn edit_post_type(state: AppState, id: Uuid, site_id: Option<Uuid>, is_aut
         return Redirect::to("/admin/posts").into_response();
     }
 
-    // Author restriction: authors can only edit their own unpublished content.
+    // Author restriction: authors can only edit their own draft/pending content.
     if is_author {
         if post.author_id != user_id {
             let redirect = if post.post_type == "page" { "/admin/pages" } else { "/admin/posts" };
             return Redirect::to(redirect).into_response();
         }
-        if post.status == "published" {
+        if post.status == "published" || post.status == "scheduled" {
             let redirect = if post.post_type == "page" { "/admin/pages" } else { "/admin/posts" };
             return Redirect::to(redirect).into_response();
         }
@@ -213,6 +271,18 @@ async fn edit_post_type(state: AppState, id: Uuid, site_id: Option<Uuid>, is_aut
         None
     };
 
+    let author_name = crate::models::user::get_by_id(&state.db, post.author_id)
+        .await
+        .map(|u| u.display_name)
+        .unwrap_or_else(|_| "Unknown".to_string());
+
+    let site_name = post.site_id
+        .and_then(|sid| {
+            state.site_cache.read().ok()
+                .and_then(|cache| cache.values().find(|(s, _)| s.id == sid).map(|(s, _)| s.hostname.clone()))
+        })
+        .unwrap_or_default();
+
     let edit = PostEdit {
         id: Some(post.id.to_string()),
         title: post.title.clone(),
@@ -231,6 +301,8 @@ async fn edit_post_type(state: AppState, id: Uuid, site_id: Option<Uuid>, is_aut
         featured_image_id: post.featured_image_id.map(|id| id.to_string()),
         featured_image_url,
         post_password_set: post.post_password.is_some(),
+        author_name,
+        site_name,
     };
 
     Html(admin::pages::posts::render_editor(&edit, None, &ctx)).into_response()
@@ -297,7 +369,18 @@ pub async fn save_new(
     admin: AdminUser,
     Form(form): Form<PostForm>,
 ) -> impl IntoResponse {
-    let status = parse_status(&form.status);
+    if form.post_type == "page" && !admin.caps.can_manage_pages {
+        return Redirect::to("/admin").into_response();
+    }
+    // Authors may only save as draft or pending — clamp anything else to draft.
+    let status = if admin.site_role == "author" {
+        match parse_status(&form.status) {
+            PostStatus::Pending => PostStatus::Pending,
+            _ => PostStatus::Draft,
+        }
+    } else {
+        parse_status(&form.status)
+    };
     let post_type = if form.post_type == "page" { PostType::Page } else { PostType::Post };
     let published_at = parse_datetime(form.published_at.as_deref());
 
@@ -324,6 +407,8 @@ pub async fn save_new(
             featured_image_id: form.featured_image_id.clone(),
             featured_image_url: form.featured_image_url.clone(),
             post_password_set: false,
+            author_name: String::new(),
+            site_name: String::new(),
         };
         return Html(admin::pages::posts::render_editor(&edit, Some("Content is required before publishing."), &ctx)).into_response();
     }
@@ -384,6 +469,8 @@ pub async fn save_new(
                 featured_image_id: form.featured_image_id,
                 featured_image_url: form.featured_image_url,
                 post_password_set: false,
+                author_name: String::new(),
+                site_name: String::new(),
             };
             let msg = friendly_save_error(&e);
             Html(admin::pages::posts::render_editor(&edit, Some(&msg), &ctx)).into_response()
@@ -398,6 +485,9 @@ pub async fn save_edit(
     Form(form): Form<PostForm>,
 ) -> impl IntoResponse {
     let redirect = if form.post_type == "page" { "/admin/pages" } else { "/admin/posts" };
+    if form.post_type == "page" && !admin.caps.can_manage_pages {
+        return Redirect::to("/admin").into_response();
+    }
     // Site isolation: verify the post belongs to the admin's site before updating.
     if !admin.caps.is_global_admin {
         let post = crate::models::post::get_by_id(&state.db, id).await;
@@ -406,12 +496,12 @@ pub async fn save_edit(
                 if p.site_id != admin.site_id {
                     return Redirect::to(redirect).into_response();
                 }
-                // Author restriction: authors can only edit their own unpublished posts.
+                // Author restriction: authors can only edit their own draft/pending posts.
                 if admin.site_role == "author" {
                     if p.author_id != admin.user.id {
                         return Redirect::to(redirect).into_response();
                     }
-                    if p.status == "published" {
+                    if p.status == "published" || p.status == "scheduled" {
                         return Redirect::to(redirect).into_response();
                     }
                 }
@@ -420,7 +510,15 @@ pub async fn save_edit(
         }
     }
 
-    let status = parse_status(&form.status);
+    // Authors may only save as draft or pending — clamp anything else to draft.
+    let status = if admin.site_role == "author" {
+        match parse_status(&form.status) {
+            PostStatus::Pending => PostStatus::Pending,
+            _ => PostStatus::Draft,
+        }
+    } else {
+        parse_status(&form.status)
+    };
     let published_at = parse_datetime(form.published_at.as_deref());
 
     // Require content when publishing.
@@ -446,6 +544,8 @@ pub async fn save_edit(
             featured_image_id: form.featured_image_id.clone(),
             featured_image_url: form.featured_image_url.clone(),
             post_password_set: false,
+            author_name: String::new(),
+            site_name: String::new(),
         };
         return Html(admin::pages::posts::render_editor(&edit, Some("Content is required before publishing."), &ctx)).into_response();
     }
@@ -518,6 +618,8 @@ pub async fn save_edit(
                 featured_image_id: form.featured_image_id,
                 featured_image_url: form.featured_image_url,
                 post_password_set: form.post_protected.as_deref() == Some("on"),
+                author_name: String::new(),
+                site_name: String::new(),
             };
             let msg = friendly_save_error(&e);
             Html(admin::pages::posts::render_editor(&edit, Some(&msg), &ctx)).into_response()
@@ -558,6 +660,9 @@ pub async fn delete_page(
     admin: AdminUser,
     Path(id): Path<Uuid>,
 ) -> impl IntoResponse {
+    if !admin.caps.can_manage_pages {
+        return Redirect::to("/admin").into_response();
+    }
     if !admin.caps.is_global_admin {
         match crate::models::post::get_by_id(&state.db, id).await {
             Ok(p) => {
@@ -601,8 +706,11 @@ pub async fn bulk_delete_pages(
     admin: AdminUser,
     Form(form): Form<BulkDeleteForm>,
 ) -> impl IntoResponse {
+    if !admin.caps.can_manage_pages {
+        return Redirect::to("/admin").into_response();
+    }
     let ids: Vec<String> = form.ids.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect();
-    bulk_delete_type(state, admin, ids, "/admin/pages").await
+    bulk_delete_type(state, admin, ids, "/admin/pages").await.into_response()
 }
 
 async fn bulk_delete_type(state: AppState, admin: AdminUser, ids: Vec<String>, redirect: &str) -> impl IntoResponse {
@@ -758,9 +866,10 @@ fn content_is_empty(html: &str) -> bool {
 
 fn parse_status(s: &str) -> PostStatus {
     match s {
+        "pending"   => PostStatus::Pending,
         "published" => PostStatus::Published,
         "scheduled" => PostStatus::Scheduled,
-        "trashed" => PostStatus::Trashed,
+        "trashed"   => PostStatus::Trashed,
         _ => PostStatus::Draft,
     }
 }
