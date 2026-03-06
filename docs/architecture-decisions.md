@@ -178,3 +178,77 @@ Migration to Leptos/WASM is a planned future step.
 **Rationale:** Gets a working admin UI shipped faster. The full Leptos/WASM admin is the
 long-term goal (single language across backend, frontend, and plugins) but is deferred until
 the content model and API surface are stable.
+
+---
+
+## Editorial Workflow: Pending Review + Scheduled Publishing
+
+**Decision:** Posts and pages support five statuses: `draft`, `pending`, `published`,
+`scheduled`, `trashed`. Authors cannot publish directly — they submit for review
+(`pending`). Editors and admins promote to `published` or `scheduled`.
+
+**Author restrictions (enforced in handlers and render functions, not just UI):**
+- Status dropdown for authors shows only `draft` and `pending` ("Submit for Review").
+- Published and scheduled posts are read-only for the author who wrote them — edit links
+  are hidden; the author sees only a view link.
+- Authors cannot delete any post (delete button is suppressed).
+- Authors cannot set a publish date/time — the datetime field is a hidden input; the
+  value is not user-controlled.
+- Authors cannot set post passwords — the password protection section is hidden.
+- The "Pending Review" tab shows a badge with the count of posts awaiting review
+  (editors/admins see all; authors see only their own).
+
+**Scheduled publishing** is handled by `scheduler.rs` — a Tokio background task that
+runs every 60 seconds and flips `status = 'published'` for any post where
+`status = 'scheduled' AND published_at <= NOW()`. No cron job or systemd timer required.
+
+**`submitted_at` column** is set to `NOW()` when a post transitions to `pending` and is
+preserved on subsequent saves. This tracks when the author requested review; it is distinct
+from `published_at` and `scheduled_at`.
+
+**Rationale:** Matches the WordPress editorial model that agencies and clients already
+understand. The hard restrictions on the author role prevent content from bypassing review
+even if someone hand-crafts a POST request.
+
+---
+
+## Per-Post/Page Password Protection
+
+**Decision:** Individual posts and pages can be password-protected. The password is stored
+as an Argon2 hash in `posts.post_password`. Access is gated by a public unlock route
+(`/post-unlock`) that verifies the plaintext password, then sets an HMAC-signed cookie
+scoped to that post's ID. Subsequent requests check the cookie rather than re-prompting.
+
+**Security properties:**
+- Cookie value is HMAC-signed with the server's `SECRET_KEY` — cannot be forged.
+- Changing the post password invalidates all existing unlock cookies for that post.
+- The post title is not leaked on the password prompt page.
+- A honeypot checkbox field blocks naive bot submissions.
+
+**Author restriction:** Authors cannot set or clear post passwords. The password section
+is hidden from the editor UI for the author role; the handler enforces this server-side.
+
+**Rationale:** Common agency requirement — gating client-review content, member-only posts,
+or draft previews behind a simple password without building a full membership system.
+
+---
+
+## Subscriber Role: Self-Registration and Account Area
+
+**Decision:** The `subscriber` role is a public-facing-only role. Subscribers:
+- Register via the public `/subscribe` route (displayed as "Subscribe" in themes).
+- Log in via `/login` — a **separate** route and session from `/admin/login`.
+- Manage their account at `/account` (profile, password change).
+- Never see the admin panel — `subscriber` is rejected at the `AdminUser` extractor boundary.
+
+**Session separation:** Admin and subscriber sessions use different keys
+(`admin_user_id` vs `account_user_id`) and different `tower-sessions` stores to prevent
+session bleed between the two areas.
+
+**Username:** Subscriber profiles do not display a username publicly — only display name
+and email are shown in the account area.
+
+**Rationale:** Agencies need a lightweight subscription/membership tier for client sites
+(newsletter sign-up, gated content) without the overhead of a full WordPress membership
+plugin. The hard session separation prevents a subscriber cookie from ever granting admin
+access even if session handling has a bug.
