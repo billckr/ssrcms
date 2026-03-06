@@ -92,4 +92,91 @@
     </ul>
   </section>
 {% endif %}
+
+{% if post.comments_enabled %}
+<section class="comments" id="comments">
+  <h2 class="comments-heading">
+    {% if comments | length == 1 %}1 comment{% elif comments | length > 1 %}{{ comments | length }} comments{% else %}No comments yet{% endif %}
+  </h2>
+
+  {% if comments | length > 0 %}
+    <ol class="comment-list">
+      {% for comment in comments %}
+        <li class="comment" id="comment-{{ comment.id }}">
+          <div class="comment-meta">
+            <strong class="comment-author">{{ comment.author_name }}</strong>
+            <time class="comment-date">{{ comment.created_at }}</time>
+            {% if session.is_logged_in and (session.user.role == "editor" or session.user.role == "site_admin" or session.user.role == "super_admin") %}
+              <form method="post" action="/admin/comments/{{ comment.id }}/delete" class="comment-delete-form">
+                <input type="hidden" name="redirect" value="{{ request.url }}#comments">
+                <button type="submit" class="comment-delete-btn" onclick="return confirm('Delete this comment?')">Delete</button>
+              </form>
+            {% endif %}
+          </div>
+          <div class="comment-body">{{ comment.body }}</div>
+          {% if session.is_logged_in %}
+            <a href="#" class="reply-toggle comment-reply-link" data-parent="{{ comment.id }}">Reply</a>
+            <div class="reply-form" id="reply-form-{{ comment.id }}">
+              <form method="post" action="/blog/{{ post.slug }}/comment">
+                <input type="hidden" name="parent_id" value="{{ comment.id }}">
+                <textarea name="body" class="comment-textarea" rows="3" maxlength="2000" placeholder="Write a reply…" required></textarea>
+                <button type="submit" class="comment-submit">Post reply</button>
+              </form>
+            </div>
+          {% endif %}
+
+          {% if comment.replies | length > 0 %}
+            <ol class="comment-replies">
+              {% for reply in comment.replies %}
+                <li class="comment comment-reply" id="comment-{{ reply.id }}">
+                  <div class="comment-meta">
+                    <strong class="comment-author">{{ reply.author_name }}</strong>
+                    <time class="comment-date">{{ reply.created_at }}</time>
+                    {% if session.is_logged_in and (session.user.role == "editor" or session.user.role == "site_admin" or session.user.role == "super_admin") %}
+                      <form method="post" action="/admin/comments/{{ reply.id }}/delete" class="comment-delete-form">
+                        <input type="hidden" name="redirect" value="{{ request.url }}#comments">
+                        <button type="submit" class="comment-delete-btn" onclick="return confirm('Delete this comment?')">Delete</button>
+                      </form>
+                    {% endif %}
+                  </div>
+                  <div class="comment-body">{{ reply.body }}</div>
+                </li>
+              {% endfor %}
+            </ol>
+          {% endif %}
+        </li>
+      {% endfor %}
+    </ol>
+  {% endif %}
+
+  <div class="comment-form-wrap" id="comment-form">
+    {% if session.is_logged_in %}
+      <h3>Leave a comment</h3>
+      <form method="post" action="/blog/{{ post.slug }}/comment">
+        <input type="hidden" name="parent_id" value="">
+        <textarea name="body" class="comment-textarea" rows="5" maxlength="2000" placeholder="Write a comment…" required></textarea>
+        <button type="submit" class="comment-submit">Post comment</button>
+      </form>
+    {% else %}
+      <p class="comment-login-prompt">
+        <a href="/login?redirect={{ request.path }}">Sign in</a> to leave a comment.
+      </p>
+    {% endif %}
+  </div>
+</section>
+
+<script>
+  document.querySelectorAll('.reply-toggle').forEach(function(link) {
+    link.addEventListener('click', function(e) {
+      e.preventDefault();
+      var form = document.getElementById('reply-form-' + link.dataset.parent);
+      if (form) {
+        var visible = form.style.display === 'block';
+        form.style.display = visible ? 'none' : 'block';
+        link.textContent = visible ? 'Reply' : 'Cancel';
+      }
+    });
+  });
+</script>
+{% endif %}
 {% endblock content %}

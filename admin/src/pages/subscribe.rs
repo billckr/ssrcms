@@ -38,6 +38,22 @@ pub fn render(error: Option<&str>, site_name: &str) -> String {
       <label for="confirm_password" style="margin-top:.75rem">Confirm password</label>
       <input type="password" id="confirm_password" name="confirm_password" required autocomplete="new-password">
 
+      <!-- Honeypot: hidden from real users; bots fill it; handler rejects if non-empty -->
+      <div style="display:none" aria-hidden="true">
+        <label for="website">Website</label>
+        <input type="text" id="website" name="website" tabindex="-1" autocomplete="off">
+      </div>
+
+      <label style="display:flex;align-items:center;gap:.5rem;font-weight:400;margin-top:1rem;cursor:pointer">
+        <input type="checkbox" name="human_check" value="on" required style="width:auto;flex-shrink:0;margin:0">
+        <span>I&#x2019;m Human</span>
+      </label>
+
+      <label style="display:flex;align-items:center;gap:.5rem;font-weight:400;margin-top:.6rem;cursor:pointer">
+        <input type="checkbox" name="terms" value="on" required style="width:auto;flex-shrink:0;margin:0">
+        <span>Agree to <a href="/terms" target="_blank" rel="noopener noreferrer">Terms of Service</a></span>
+      </label>
+
       <button type="submit" style="margin-top:1rem">Subscribe</button>
     </form>
   </div>

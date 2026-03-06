@@ -43,6 +43,8 @@ pub struct UserRow {
     /// True when the user's global role is super_admin.
     /// Used to hide the site-access button regardless of site role display.
     pub is_super_admin: bool,
+    /// Sites this user belongs to (hostnames). Populated only for subscribers.
+    pub site_hostnames: Vec<String>,
 }
 
 pub struct UserEdit {
@@ -150,11 +152,22 @@ pub fn render_list(staff: &[UserRow], subscribers: &[UserRow], flash: Option<&st
         } else {
             String::new()
         };
+        let domain_badges = if u.site_hostnames.is_empty() {
+            r#"<span style="color:var(--muted);font-size:0.8rem">—</span>"#.to_string()
+        } else {
+            u.site_hostnames.iter().map(|h| {
+                format!(
+                    r#"<span style="display:inline-block;background:#dbeafe;color:#1d4ed8;border-radius:4px;padding:.15rem .5rem;font-size:.78rem;font-weight:500;margin:.1rem .15rem .1rem 0;white-space:nowrap">{}</span>"#,
+                    crate::html_escape(h),
+                )
+            }).collect::<Vec<_>>().join("")
+        };
         format!(
             r#"<tr>
               <td><a href="/admin/users/{id}/edit">{display_name}</a></td>
               <td>{username}</td>
               <td>{email}</td>
+              <td>{domain_badges}</td>
               <td class="actions">
                 <a href="/admin/users/{id}/edit" class="icon-btn" title="Edit">
                   <img src="/admin/static/icons/edit.svg" alt="Edit">
@@ -166,6 +179,7 @@ pub fn render_list(staff: &[UserRow], subscribers: &[UserRow], flash: Option<&st
             display_name = crate::html_escape(&u.display_name),
             username = crate::html_escape(&u.username),
             email = crate::html_escape(&u.email),
+            domain_badges = domain_badges,
             delete_btn = delete_btn,
         )
     }).collect::<Vec<_>>().join("\n");
@@ -183,12 +197,12 @@ pub fn render_list(staff: &[UserRow], subscribers: &[UserRow], flash: Option<&st
         )
     } else {
         let empty_msg = if subscribers.is_empty() {
-            r#"<tr><td colspan="4" style="text-align:center;color:var(--muted);padding:2rem">No subscribers yet.</td></tr>"#
+            r#"<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:2rem">No subscribers yet.</td></tr>"#
         } else { "" };
         format!(
             r#"{tabs}
 <table class="data-table">
-  <thead><tr><th>Name</th><th>Username</th><th>Email</th><th>Actions</th></tr></thead>
+  <thead><tr><th>Name</th><th>Username</th><th>Email</th><th>Domain</th><th>Actions</th></tr></thead>
   <tbody>{sub_rows}{empty_msg}</tbody>
 </table>"#,
             tabs = tabs,

@@ -65,6 +65,7 @@ pub struct Post {
     pub submitted_at: Option<DateTime<Utc>>,
     pub template: Option<String>,
     pub post_password: Option<String>,
+    pub comments_enabled: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -89,6 +90,8 @@ pub struct PostContext {
     pub featured_image: Option<MediaContext>,
     pub reading_time: u32,
     pub comment_count: i64,
+    /// Whether readers can post comments on this post.
+    pub comments_enabled: bool,
     /// Plugin-registered custom fields, keyed by meta_key.
     pub meta: HashMap<String, String>,
 }
@@ -144,6 +147,7 @@ impl PostContext {
             featured_image,
             reading_time,
             comment_count,
+            comments_enabled: post.comments_enabled,
             meta,
         }
     }
@@ -173,6 +177,8 @@ pub struct CreatePost {
     pub template: Option<String>,
     /// Argon2 hash of the page/post password. None = no protection.
     pub post_password_hash: Option<String>,
+    /// Whether readers can post comments on this post.
+    pub comments_enabled: bool,
 }
 
 /// Data for updating an existing post.
@@ -193,6 +199,8 @@ pub struct UpdatePost {
     pub clear_post_password: bool,
     /// New Argon2 hash to set. None = leave existing password unchanged.
     pub new_post_password_hash: Option<String>,
+    /// None = leave unchanged; Some(v) = update comments_enabled.
+    pub comments_enabled: Option<bool>,
 }
 
 /// Strip all HTML tags, returning plain text content.
@@ -258,6 +266,8 @@ mod tests {
             scheduled_at: None,
             submitted_at: None,
             template: None,
+            post_password: None,
+            comments_enabled: false,
             created_at: Utc::now(),
             updated_at: Utc::now(),
         }
@@ -424,8 +434,8 @@ pub async fn create(pool: &PgPool, data: &CreatePost) -> Result<Post> {
         r#"
         INSERT INTO posts (site_id, title, slug, content, content_format, excerpt, status,
                            post_type, author_id, featured_image_id, published_at, template,
-                           post_password, submitted_at)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
+                           post_password, comments_enabled, submitted_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
                 CASE WHEN $7 = 'pending' THEN NOW() ELSE NULL END)
         RETURNING *
         "#,
@@ -443,6 +453,7 @@ pub async fn create(pool: &PgPool, data: &CreatePost) -> Result<Post> {
     .bind(data.published_at)
     .bind(data.template.as_deref())
     .bind(data.post_password_hash.as_deref())
+    .bind(data.comments_enabled)
     .fetch_one(pool)
     .await?;
 
@@ -685,6 +696,8 @@ pub async fn update(pool: &PgPool, id: Uuid, data: &UpdatePost) -> Result<Post> 
         None // leave unchanged
     };
 
+    let new_comments_enabled = data.comments_enabled.unwrap_or(current.comments_enabled);
+
     let post = sqlx::query_as::<_, Post>(
         r#"
         UPDATE posts
@@ -693,6 +706,7 @@ pub async fn update(pool: &PgPool, id: Uuid, data: &UpdatePost) -> Result<Post> 
             post_password = CASE WHEN $10 THEN NULL
                                  WHEN $11::text IS NOT NULL THEN $11
                                  ELSE post_password END,
+            comments_enabled = $13,
             submitted_at = CASE WHEN $6 = 'pending' THEN COALESCE(submitted_at, NOW())
                                 ELSE submitted_at END,
             updated_at = NOW()
@@ -712,6 +726,7 @@ pub async fn update(pool: &PgPool, id: Uuid, data: &UpdatePost) -> Result<Post> 
     .bind(data.clear_post_password)
     .bind(data.new_post_password_hash.as_deref())
     .bind(id)
+    .bind(new_comments_enabled)
     .fetch_one(pool)
     .await?;
     let _ = new_password; // silence unused warning

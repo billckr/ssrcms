@@ -517,6 +517,199 @@ p { margin: 0 0 1rem; }
   border: 1px solid var(--color-border);
 }
 
+/* ── Comments ── */
+.comments {
+  margin-top: 2.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--color-border);
+  font-size: 0.9375rem;
+}
+
+.comments-heading {
+  font-size: 1.1rem;
+  margin: 0 0 1.25rem;
+}
+
+.comment-list,
+.comment-replies {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.comment {
+  padding: 1rem 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.comment:last-child { border-bottom: none; }
+
+.comment-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.85rem;
+  margin-bottom: 0.35rem;
+  font-size: 0.8125rem;
+  color: var(--color-muted);
+}
+
+.comment-author {
+  color: var(--color-text);
+  font-weight: 600;
+}
+
+.comment-body {
+  line-height: 1.6;
+  color: var(--color-text);
+  word-break: break-word;
+}
+
+.comment-replies {
+  margin-top: 0.75rem;
+  margin-left: 1.5rem;
+  padding-left: 1rem;
+  border-left: 2px solid var(--color-border);
+}
+
+.comment-reply-link {
+  font-size: 0.8125rem;
+  color: var(--color-muted);
+  text-decoration: none;
+  margin-top: 0.35rem;
+  display: inline-block;
+}
+
+.comment-reply-link:hover { color: var(--color-accent); }
+
+.reply-form { display: none; margin-top: 0.75rem; }
+
+.comment-delete-form { display: inline; margin: 0; padding: 0; }
+
+.comment-delete-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  color: var(--color-muted);
+  font-size: 0.8125rem;
+  font-family: var(--font-sans);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.comment-delete-btn:hover { color: #dc2626; }
+
+.comment-form-wrap {
+  margin-top: 1.5rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--color-border);
+}
+
+.comment-form-wrap h3 {
+  font-size: 1rem;
+  margin: 0 0 0.65rem;
+}
+
+.comment-textarea {
+  width: 100%;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  font-size: 0.9375rem;
+  font-family: var(--font-sans);
+  line-height: 1.6;
+  resize: vertical;
+  min-height: 90px;
+  background: var(--color-surface);
+  color: var(--color-text);
+  outline: none;
+  box-sizing: border-box;
+  transition: border-color 0.15s;
+}
+
+.comment-textarea:focus { border-color: var(--color-accent); }
+
+.comment-submit {
+  margin-top: 0.5rem;
+  padding: 0.4rem 1rem;
+  background: var(--color-accent);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-family: var(--font-sans);
+  font-weight: 500;
+  transition: background 0.15s;
+}
+
+.comment-submit:hover { background: var(--color-accent-dark); }
+
+.comment-login-prompt {
+  color: var(--color-muted);
+  font-size: 0.9375rem;
+  margin: 0;
+}
+
+@media (max-width: 640px) {
+  .comment-replies {
+    margin-left: 0.75rem;
+    padding-left: 0.75rem;
+  }
+}
+
+/* ── Cookie consent banner ── */
+.cookie-banner {
+  display: none;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 9999;
+  background: #1a1a1a;
+  color: #fff;
+  padding: 1rem 1.5rem;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.cookie-banner p {
+  margin: 0;
+  flex: 1;
+  min-width: 200px;
+}
+
+.cookie-banner-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+.cookie-accept-btn {
+  background: #e8530a;
+  color: #fff;
+  border: none;
+  padding: 0.5rem 1.25rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.875rem;
+}
+
+.cookie-dismiss-btn {
+  background: transparent;
+  color: #ccc;
+  border: 1px solid #555;
+  padding: 0.5rem 1.25rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.875rem;
+}
+
+/* ── Honeypot (spam prevention — must stay visually hidden) ── */
+.honeypot { display: none; }
+
 /* ── Accessibility ── */
 .sr-only {
   position: absolute;

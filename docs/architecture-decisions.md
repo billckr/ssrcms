@@ -248,6 +248,25 @@ session bleed between the two areas.
 **Username:** Subscriber profiles do not display a username publicly — only display name
 and email are shown in the account area.
 
+**Theme template (`subscribe-page.html`):** The default theme ships a `subscribe-page.html`
+template that theme authors can apply to any CMS page to get a custom-styled signup page.
+The slug `subscribe` is reserved by the system route and cannot be used for a CMS page —
+Axum's static route always wins over the `/{slug}` catch-all, so a page with that slug is
+unreachable. Theme authors should use a different slug (e.g. `join`, `sign-up`).
+
+The form's `action="/subscribe"` is hardcoded in the provided template, so submissions
+always go to the system handler regardless of the page's slug. All validation (password
+strength, email uniqueness, site scoping) happens in the system handler, not the template.
+
+**Security note for custom signup templates:** Because Tera templates are sandboxed (no DB
+access, no network calls, no filesystem access), a malicious template cannot directly steal
+credentials or create users outside the normal flow. However, a theme could modify the form
+`action` to point to a different URL — redirecting signup data away from the system handler
+and bypassing all validation. Site admins reviewing third-party themes should verify that
+any signup form's `action` attribute still points to `/subscribe`. Templates sourced from
+outside the agency's own control should be treated with the same scrutiny as any
+third-party code.
+
 **Rationale:** Agencies need a lightweight subscription/membership tier for client sites
 (newsletter sign-up, gated content) without the overhead of a full WordPress membership
 plugin. The hard session separation prevents a subscriber cookie from ever granting admin

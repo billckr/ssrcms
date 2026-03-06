@@ -192,6 +192,8 @@ async fn new_post_type(state: AppState, post_type: &str, site_id: Option<Uuid>, 
         featured_image_id: None,
         featured_image_url: None,
         post_password_set: false,
+        comments_enabled: false,
+        comment_count: 0,
         author_name: String::new(),
         site_name: String::new(),
     };
@@ -283,6 +285,10 @@ async fn edit_post_type(state: AppState, id: Uuid, site_id: Option<Uuid>, is_aut
         })
         .unwrap_or_default();
 
+    let comment_count = crate::models::comment::count_for_post(&state.db, post.id)
+        .await
+        .unwrap_or(0) as u64;
+
     let edit = PostEdit {
         id: Some(post.id.to_string()),
         title: post.title.clone(),
@@ -297,6 +303,8 @@ async fn edit_post_type(state: AppState, id: Uuid, site_id: Option<Uuid>, is_aut
         selected_categories,
         selected_tags,
         template: post.template.clone(),
+        comments_enabled: post.comments_enabled,
+        comment_count,
         available_templates,
         featured_image_id: post.featured_image_id.map(|id| id.to_string()),
         featured_image_url,
@@ -362,6 +370,9 @@ pub struct PostForm {
     pub post_protected: Option<String>,
     /// Plain-text password from the admin form (never stored; hashed before insert/update).
     pub post_password: Option<String>,
+    /// "true" when comments are enabled, "false" or absent to disable.
+    #[serde(default)]
+    pub comments_enabled: String,
 }
 
 pub async fn save_new(
@@ -383,6 +394,8 @@ pub async fn save_new(
     };
     let post_type = if form.post_type == "page" { PostType::Page } else { PostType::Post };
     let published_at = parse_datetime(form.published_at.as_deref());
+
+    let form_comments_enabled = form.comments_enabled == "true";
 
     // Require content when publishing.
     if matches!(status, PostStatus::Published) && content_is_empty(&form.content) {
@@ -407,6 +420,8 @@ pub async fn save_new(
             featured_image_id: form.featured_image_id.clone(),
             featured_image_url: form.featured_image_url.clone(),
             post_password_set: false,
+            comments_enabled: form_comments_enabled,
+            comment_count: 0,
             author_name: String::new(),
             site_name: String::new(),
         };
@@ -435,6 +450,7 @@ pub async fn save_new(
         published_at,
         template: form.template.clone().filter(|s| !s.is_empty()),
         post_password_hash,
+        comments_enabled: form_comments_enabled,
     };
 
     match crate::models::post::create(&state.db, &create).await {
@@ -469,6 +485,8 @@ pub async fn save_new(
                 featured_image_id: form.featured_image_id,
                 featured_image_url: form.featured_image_url,
                 post_password_set: false,
+                comments_enabled: form_comments_enabled,
+                comment_count: 0,
                 author_name: String::new(),
                 site_name: String::new(),
             };
@@ -520,6 +538,7 @@ pub async fn save_edit(
         parse_status(&form.status)
     };
     let published_at = parse_datetime(form.published_at.as_deref());
+    let form_comments_enabled = form.comments_enabled == "true";
 
     // Require content when publishing.
     if matches!(status, PostStatus::Published) && content_is_empty(&form.content) {
@@ -544,6 +563,8 @@ pub async fn save_edit(
             featured_image_id: form.featured_image_id.clone(),
             featured_image_url: form.featured_image_url.clone(),
             post_password_set: false,
+            comments_enabled: form_comments_enabled,
+            comment_count: 0,
             author_name: String::new(),
             site_name: String::new(),
         };
@@ -573,6 +594,7 @@ pub async fn save_edit(
         template: form.template.clone().filter(|s| !s.is_empty()),
         clear_post_password,
         new_post_password_hash,
+        comments_enabled: Some(form_comments_enabled),
     };
 
     match crate::models::post::update(&state.db, id, &update).await {
@@ -618,6 +640,8 @@ pub async fn save_edit(
                 featured_image_id: form.featured_image_id,
                 featured_image_url: form.featured_image_url,
                 post_password_set: form.post_protected.as_deref() == Some("on"),
+                comments_enabled: form_comments_enabled,
+                comment_count: 0,
                 author_name: String::new(),
                 site_name: String::new(),
             };

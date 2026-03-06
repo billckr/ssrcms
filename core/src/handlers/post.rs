@@ -3,13 +3,15 @@ use axum::{
     response::{Html, IntoResponse, Response},
 };
 use axum_extra::extract::cookie::SignedCookieJar;
+use tower_sessions::Session;
 
 use uuid::Uuid;
 
 use crate::app_state::AppState;
+use crate::middleware::account_auth::SESSION_ACCOUNT_USER_ID_KEY;
 use crate::middleware::site::CurrentSite;
 use crate::models::post;
-use crate::templates::context::{ContextBuilder, NavContext, RequestContext, SessionContext};
+use crate::templates::context::{ContextBuilder, NavContext, RequestContext, SessionContext, SessionUserContext};
 
 use super::home::{build_post_context, build_site_context, render_error_page};
 
@@ -19,6 +21,7 @@ pub async fn single_post(
     current_site: CurrentSite,
     Path(slug): Path<String>,
     jar: SignedCookieJar,
+    session: Session,
     axum::extract::OriginalUri(uri): axum::extract::OriginalUri,
 ) -> Response {
     let path = uri.path().to_string();
@@ -38,10 +41,37 @@ pub async fn single_post(
         }
     }
 
-    match render_post(state.clone(), slug, uri, site_id, &base_url).await {
+    // Resolve subscriber session (optional — never fails).
+    let session_ctx = resolve_session(&state, &session).await;
+
+    match render_post(state.clone(), slug, uri, site_id, &base_url, session_ctx).await {
         Ok(html) => Html(html).into_response(),
         Err(e) => render_error_page(e, &state, &path, Some(current_site.site.id)).await,
     }
+}
+
+/// Read the account session and build a SessionContext — never redirects.
+async fn resolve_session(state: &AppState, session: &Session) -> SessionContext {
+    let user_id_str: Option<String> = session
+        .get(SESSION_ACCOUNT_USER_ID_KEY)
+        .await
+        .unwrap_or(None);
+    if let Some(id_str) = user_id_str {
+        if let Ok(uid) = id_str.parse::<Uuid>() {
+            if let Ok(user) = crate::models::user::get_by_id(&state.db, uid).await {
+                return SessionContext {
+                    is_logged_in: true,
+                    user: Some(SessionUserContext {
+                        id: user.id.to_string(),
+                        username: user.username.clone(),
+                        display_name: user.display_name.clone(),
+                        role: user.role.as_str().to_string(),
+                    }),
+                };
+            }
+        }
+    }
+    SessionContext { is_logged_in: false, user: None }
 }
 
 async fn render_post(
@@ -50,6 +80,7 @@ async fn render_post(
     uri: axum::http::Uri,
     site_id: Uuid,
     base_url: &str,
+    session_ctx: SessionContext,
 ) -> crate::errors::Result<String> {
     let post_record = post::get_published_by_slug(&state.db, Some(site_id), &slug).await?;
 
@@ -79,6 +110,15 @@ async fn render_post(
         related.push(build_post_context(&state, p, base_url).await?);
     }
 
+    // Fetch comments if enabled.
+    let comments = if post_record.comments_enabled {
+        crate::models::comment::list_for_post(&state.db, post_record.id)
+            .await
+            .unwrap_or_default()
+    } else {
+        vec![]
+    };
+
     let site_ctx = build_site_context(&state, Some(site_id), base_url).await?;
 
     let mut ctx = ContextBuilder {
@@ -88,7 +128,7 @@ async fn render_post(
             path: uri.path().to_string(),
             query: std::collections::HashMap::new(),
         },
-        session: SessionContext { is_logged_in: false, user: None },
+        session: session_ctx,
         nav: NavContext::default(),
     }
     .into_tera_context();
@@ -97,6 +137,7 @@ async fn render_post(
     ctx.insert("prev_post", &prev);
     ctx.insert("next_post", &next);
     ctx.insert("related_posts", &related);
+    ctx.insert("comments", &comments);
 
     let active_plugins = crate::models::site_plugin::active_plugin_names(&state.db, site_id)
         .await

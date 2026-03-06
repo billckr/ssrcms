@@ -29,6 +29,15 @@ pub struct SubscribeForm {
     pub email: String,
     pub password: String,
     pub confirm_password: String,
+    /// Honeypot: must be absent/empty. Bots fill hidden fields; real users leave this blank.
+    #[serde(default)]
+    pub website: String,
+    /// "I am human" checkbox — must be "on".
+    #[serde(default)]
+    pub human_check: String,
+    /// Terms of Service agreement checkbox — must be "on".
+    #[serde(default)]
+    pub terms: String,
 }
 
 /// GET /subscribe — show the signup form (or success page after redirect).
@@ -56,6 +65,19 @@ pub async fn subscribe_post(
         ($msg:expr) => {
             return Html(admin::pages::subscribe::render(Some($msg), &site_name)).into_response()
         };
+    }
+
+    // ── Bot / spam checks ─────────────────────────────────────────────────────
+    // Honeypot: hidden field must be empty. Bots that auto-fill forms will populate it.
+    if !form.website.trim().is_empty() {
+        // Silently redirect — don't tell bots they were caught.
+        return Redirect::to("/subscribe?subscribed=1").into_response();
+    }
+    if form.human_check.as_str() != "on" {
+        err!("Please confirm you are human.");
+    }
+    if form.terms.as_str() != "on" {
+        err!("You must agree to the Terms of Service to create an account.");
     }
 
     // ── Validation ────────────────────────────────────────────────────────────

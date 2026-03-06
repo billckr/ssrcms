@@ -34,6 +34,10 @@ pub struct PostEdit {
     pub featured_image_url: Option<String>,
     /// True if the post currently has a password hash stored (so UI shows checkbox pre-checked).
     pub post_password_set: bool,
+    /// Whether comments are currently enabled on this post.
+    pub comments_enabled: bool,
+    /// Total number of comments on this post (0 for new posts).
+    pub comment_count: u64,
     /// Display name of the post author (empty string for new posts).
     pub author_name: String,
     /// Hostname of the site this post belongs to (empty for new posts / global admin context).
@@ -466,6 +470,35 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
         )
     };
 
+    // Comments control: only editors/admins can toggle; authors see nothing here.
+    let comments_section = if ctx.user_role.eq_ignore_ascii_case("author") {
+        String::new()
+    } else {
+        let enabled_sel  = if post.comments_enabled  { " selected" } else { "" };
+        let disabled_sel = if !post.comments_enabled { " selected" } else { "" };
+        let count_badge = if post.comment_count > 0 {
+            format!(
+                r#" <span class="badge badge-pending" title="{n} comment{s}">{n}</span>"#,
+                n = post.comment_count,
+                s = if post.comment_count == 1 { "" } else { "s" },
+            )
+        } else {
+            String::new()
+        };
+        format!(
+            r#"<div class="form-group" style="margin-top:.75rem">
+          <label for="comments-enabled" style="font-size:12px">Comments{count_badge}</label>
+          <select id="comments-enabled" name="comments_enabled" style="font-size:13px">
+            <option value="false"{disabled_sel}>Disabled</option>
+            <option value="true"{enabled_sel}>Allowed</option>
+          </select>
+        </div>"#,
+            count_badge  = count_badge,
+            disabled_sel = disabled_sel,
+            enabled_sel  = enabled_sel,
+        )
+    };
+
     // Author card: shown to editors/admins when viewing an existing post written by someone else.
     let author_card = if !ctx.user_role.eq_ignore_ascii_case("author") && !post.author_name.is_empty() {
         let site_line = if !post.site_name.is_empty() {
@@ -528,6 +561,7 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
           {datetime_field}
         </div>
         {password_section}
+        {comments_section}
         <input type="hidden" name="post_type" value="{post_type}">
         <button type="submit" class="btn btn-primary">Save</button>
       </div>
@@ -609,6 +643,7 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
         categories_section = categories_section,
         featured_image_section = featured_image_section,
         password_section = password_section,
+        comments_section = comments_section,
         author_card = author_card,
     );
 

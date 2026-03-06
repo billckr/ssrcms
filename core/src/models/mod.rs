@@ -1,3 +1,4 @@
+pub mod comment;
 pub mod form_submission;
 pub mod media;
 pub mod post;

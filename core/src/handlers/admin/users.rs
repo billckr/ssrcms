@@ -64,6 +64,7 @@ pub async fn list(
             display_name: u.display_name.clone(),
             is_protected: u.is_protected,
             is_super_admin: u.role == "super_admin",
+            site_hostnames: vec![],
         }).collect()
     } else if let Some(site_id) = admin.site_id {
         crate::models::site_user::list_for_site(&state.db, site_id).await.unwrap_or_else(|e| {
@@ -77,6 +78,7 @@ pub async fn list(
             display_name: u.display_name.clone(),
             is_protected: u.is_protected,
             is_super_admin: false,
+            site_hostnames: vec![],
         }).collect()
     } else {
         vec![]
@@ -86,7 +88,36 @@ pub async fn list(
     let rows: Vec<_> = rows.into_iter().filter(|u| u.id != current_user_id).collect();
     let can_manage_access = admin.caps.can_manage_users;
     let active_tab = if q.tab == "subscribers" { "subscribers" } else { "site-users" };
-    let (staff, subscribers) = split_by_role(rows);
+    let (staff, mut subscribers) = split_by_role(rows);
+
+    // Populate site_hostnames for subscribers: fetch all site memberships in one query.
+    if !subscribers.is_empty() {
+        let sub_ids: Vec<Uuid> = subscribers.iter()
+            .filter_map(|u| u.id.parse::<Uuid>().ok())
+            .collect();
+        let hostname_rows: Vec<(Uuid, String)> = sqlx::query_as(
+            "SELECT su.user_id, s.hostname \
+             FROM site_users su \
+             JOIN sites s ON s.id = su.site_id \
+             WHERE su.user_id = ANY($1) \
+             ORDER BY s.created_at ASC",
+        )
+        .bind(&sub_ids)
+        .fetch_all(&state.db)
+        .await
+        .unwrap_or_else(|e| { tracing::warn!("failed to fetch subscriber sites: {:?}", e); vec![] });
+
+        let mut hostname_map: std::collections::HashMap<String, Vec<String>> = std::collections::HashMap::new();
+        for (uid, hostname) in hostname_rows {
+            hostname_map.entry(uid.to_string()).or_default().push(hostname);
+        }
+        for sub in &mut subscribers {
+            if let Some(hostnames) = hostname_map.remove(&sub.id) {
+                sub.site_hostnames = hostnames;
+            }
+        }
+    }
+
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
     Html(admin::pages::users::render_list(&staff, &subscribers, None, &current_user_id, can_manage_access, active_tab, &ctx)).into_response()
 }
@@ -506,6 +537,7 @@ pub async fn delete_user(
                         display_name: u.display_name.clone(),
                         is_protected: u.is_protected,
                         is_super_admin: u.role == "super_admin",
+                        site_hostnames: vec![],
                     }).collect()
             } else if let Some(site_id) = admin.site_id {
                 crate::models::site_user::list_for_site(&state.db, site_id).await.unwrap_or_default()
@@ -517,6 +549,7 @@ pub async fn delete_user(
                         display_name: u.display_name.clone(),
                         is_protected: u.is_protected,
                         is_super_admin: false,
+                        site_hostnames: vec![],
                     }).collect()
             } else {
                 vec![]

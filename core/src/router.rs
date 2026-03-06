@@ -12,8 +12,8 @@ use tower_sessions::SessionManagerLayer;
 use tower_sessions_sqlx_store::PostgresStore;
 
 use crate::app_state::AppState;
-use crate::handlers::{account, archive, auth, form as form_handler, home, metrics as metrics_handler, page, plugin_route, post as post_handler, post_unlock, search, subscribe, theme_static};
-use crate::handlers::admin::{appearance, dashboard, forms as admin_forms, media, plugins, posts, profile, settings, sites as admin_sites, taxonomy, upload, users};
+use crate::handlers::{account, archive, auth, comment as comment_handler, form as form_handler, home, metrics as metrics_handler, page, plugin_route, post as post_handler, post_unlock, search, subscribe, theme_static};
+use crate::handlers::admin::{appearance, comments as admin_comments, dashboard, forms as admin_forms, media, plugins, posts, profile, settings, sites as admin_sites, taxonomy, upload, users};
 
 /// Tower middleware that records per-request HTTP metrics.
 async fn track_http_metrics(req: Request, next: Next) -> Response {
@@ -59,6 +59,7 @@ pub fn build(
         .route("/", get(home::home))
         .route("/blog/{slug}", get(post_handler::single_post))
         .route("/blog/{slug}/unlock", post(post_unlock::unlock_post))
+        .route("/blog/{slug}/comment", post(comment_handler::submit))
         .route("/category/{slug}", get(archive::category_archive))
         .route("/tag/{slug}", get(archive::tag_archive))
         .route("/author/{username}", get(archive::author_archive))
@@ -92,6 +93,7 @@ pub fn build(
         .route("/admin/posts/new", get(posts::new_post).post(posts::save_new))
         .route("/admin/posts/{id}/edit", get(posts::edit_post).post(posts::save_edit))
         .route("/admin/posts/{id}/delete", post(posts::delete_post))
+        .route("/admin/comments/{id}/delete", post(admin_comments::delete))
         .route("/admin/posts/bulk-delete", post(posts::bulk_delete_posts))
         // ── Admin pages ────────────────────────────────────────────────────
         .route("/admin/pages", get(posts::list_pages))
