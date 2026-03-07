@@ -120,9 +120,12 @@ pub fn build(
         .route("/admin/users", get(users::list))
         .route("/admin/users/new", get(users::new_user).post(users::save_new))
         .route("/admin/users/{id}/edit", get(users::edit_user).post(users::save_edit))
-        .route("/admin/users/{id}/delete", post(users::delete_user))        .route("/admin/users/{id}/site-access", get(users::site_access_page))
+        .route("/admin/users/{id}/delete", post(users::delete_user))
+        .route("/admin/users/bulk-delete", post(users::bulk_delete_users))
+        .route("/admin/users/{id}/site-access", get(users::site_access_page))
         .route("/admin/users/{id}/site-access/add", post(users::add_site_access))
-        .route("/admin/users/{id}/site-access/remove", post(users::remove_site_access))        // ── Admin plugins ──────────────────────────────────────────────────
+        .route("/admin/users/{id}/site-access/remove", post(users::remove_site_access))
+        // ── Admin plugins ──────────────────────────────────────────────────
         .route("/admin/plugins", get(plugins::list))
         .route("/admin/plugins/install",    post(plugins::install))
         .route("/admin/plugins/upload",     post(plugins::upload).layer(upload_limit.clone()))

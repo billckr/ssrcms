@@ -60,12 +60,22 @@ pub struct UserEdit {
     pub is_super_admin_target: bool,
 }
 
-pub fn render_list(staff: &[UserRow], subscribers: &[UserRow], flash: Option<&str>, current_user_id: &str, can_manage_access: bool, active_tab: &str, ctx: &crate::PageContext) -> String {
+pub fn render_list(
+    staff: &[UserRow],
+    subscribers: &[UserRow],
+    flash: Option<&str>,
+    current_user_id: &str,
+    can_manage_access: bool,
+    active_tab: &str,
+    available_sites: &[SiteOption],
+    selected_site_id: &str,
+    ctx: &crate::PageContext,
+) -> String {
     let is_subscribers = active_tab == "subscribers";
 
     // ── Tab bar ───────────────────────────────────────────────────────────────
-    let staff_active     = if !is_subscribers { " active" } else { "" };
-    let sub_active       = if  is_subscribers { " active" } else { "" };
+    let staff_active = if !is_subscribers { " active" } else { "" };
+    let sub_active   = if  is_subscribers { " active" } else { "" };
     let tabs = format!(
         r#"<div class="page-tabs">
   <a href="/admin/users?tab=site-users" class="page-tab{staff_active}">Site Users <span class="badge" style="margin-left:.35rem;font-size:.75rem;padding:.1rem .45rem">{staff_count}</span></a>
@@ -76,6 +86,55 @@ pub fn render_list(staff: &[UserRow], subscribers: &[UserRow], flash: Option<&st
         staff_count  = staff.len(),
         sub_count    = subscribers.len(),
     );
+
+    // ── Site filter dropdowns (global admin only) ─────────────────────────────
+    let site_filter_staff = if ctx.is_global_admin && !available_sites.is_empty() {
+        let opts = available_sites.iter().map(|s| {
+            let sel = if s.id == selected_site_id { " selected" } else { "" };
+            format!(
+                r#"<option value="{id}"{sel}>{hostname}</option>"#,
+                id = crate::html_escape(&s.id),
+                hostname = crate::html_escape(&s.hostname),
+                sel = sel,
+            )
+        }).collect::<Vec<_>>().join("\n");
+        format!(
+            r#"<form method="GET" action="/admin/users" style="display:inline-flex;align-items:center;margin:0">
+  <input type="hidden" name="tab" value="site-users">
+  <select name="site" onchange="this.form.submit()" style="height:2.25rem;padding:0 .5rem;border:1px solid var(--border,#e5e7eb);border-radius:6px;font-size:.875rem;background:#fff;cursor:pointer">
+    <option value="">All Sites</option>
+    {opts}
+  </select>
+</form>"#,
+            opts = opts,
+        )
+    } else {
+        String::new()
+    };
+
+    let site_filter_subs = if ctx.is_global_admin && !available_sites.is_empty() {
+        let opts = available_sites.iter().map(|s| {
+            let sel = if s.id == selected_site_id { " selected" } else { "" };
+            format!(
+                r#"<option value="{id}"{sel}>{hostname}</option>"#,
+                id = crate::html_escape(&s.id),
+                hostname = crate::html_escape(&s.hostname),
+                sel = sel,
+            )
+        }).collect::<Vec<_>>().join("\n");
+        format!(
+            r#"<form method="GET" action="/admin/users" style="display:inline-flex;align-items:center;margin:0">
+  <input type="hidden" name="tab" value="subscribers">
+  <select name="site" onchange="this.form.submit()" style="height:2.25rem;padding:0 .5rem;border:1px solid var(--border,#e5e7eb);border-radius:6px;font-size:.875rem;background:#fff;cursor:pointer">
+    <option value="">All Sites</option>
+    {opts}
+  </select>
+</form>"#,
+            opts = opts,
+        )
+    } else {
+        String::new()
+    };
 
     // ── Site Users table ──────────────────────────────────────────────────────
     let staff_rows = staff.iter().map(|u| {
@@ -107,8 +166,17 @@ pub fn render_list(staff: &[UserRow], subscribers: &[UserRow], flash: Option<&st
         } else {
             String::new()
         };
+        let cb = if u.id != current_user_id && !u.is_protected {
+            format!(
+                r#"<input type="checkbox" class="bulk-cb-staff" value="{}" aria-label="Select">"#,
+                crate::html_escape(&u.id),
+            )
+        } else {
+            String::new()
+        };
         format!(
             r#"<tr>
+              <td style="width:2rem;text-align:center">{cb}</td>
               <td><a href="/admin/users/{id}/edit">{display_name}</a></td>
               <td>{username}</td>
               <td>{email}</td>
@@ -121,6 +189,7 @@ pub fn render_list(staff: &[UserRow], subscribers: &[UserRow], flash: Option<&st
                 {delete_btn}
               </td>
             </tr>"#,
+            cb = cb,
             id = crate::html_escape(&u.id),
             display_name = crate::html_escape(&u.display_name),
             username = crate::html_escape(&u.username),
@@ -162,8 +231,17 @@ pub fn render_list(staff: &[UserRow], subscribers: &[UserRow], flash: Option<&st
                 )
             }).collect::<Vec<_>>().join("")
         };
+        let cb = if u.id != current_user_id && !u.is_protected {
+            format!(
+                r#"<input type="checkbox" class="bulk-cb-subs" value="{}" aria-label="Select">"#,
+                crate::html_escape(&u.id),
+            )
+        } else {
+            String::new()
+        };
         format!(
             r#"<tr>
+              <td style="width:2rem;text-align:center">{cb}</td>
               <td><a href="/admin/users/{id}/edit">{display_name}</a></td>
               <td>{username}</td>
               <td>{email}</td>
@@ -175,6 +253,7 @@ pub fn render_list(staff: &[UserRow], subscribers: &[UserRow], flash: Option<&st
                 {delete_btn}
               </td>
             </tr>"#,
+            cb = cb,
             id = crate::html_escape(&u.id),
             display_name = crate::html_escape(&u.display_name),
             username = crate::html_escape(&u.username),
@@ -184,30 +263,114 @@ pub fn render_list(staff: &[UserRow], subscribers: &[UserRow], flash: Option<&st
         )
     }).collect::<Vec<_>>().join("\n");
 
+    // Shared bulk-delete + select-all script (handles both tabs).
+    let bulk_script = r#"<script>
+(function() {
+  var selAll = document.getElementById('select-all-staff');
+  var btnS   = document.getElementById('bulk-delete-btn-staff');
+  var cntS   = document.getElementById('bulk-count-staff');
+  function syncStaff() {
+    var n = document.querySelectorAll('.bulk-cb-staff:checked').length;
+    if (btnS) { btnS.style.display = n > 0 ? '' : 'none'; }
+    if (cntS) { cntS.textContent = n; }
+  }
+  if (selAll) {
+    selAll.addEventListener('change', function() {
+      document.querySelectorAll('.bulk-cb-staff').forEach(function(c) { c.checked = selAll.checked; });
+      syncStaff();
+    });
+  }
+  document.querySelectorAll('.bulk-cb-staff').forEach(function(c) {
+    c.addEventListener('change', function() { if (!c.checked && selAll) selAll.checked = false; syncStaff(); });
+  });
+
+  var selAllS = document.getElementById('select-all-subs');
+  var btnSu   = document.getElementById('bulk-delete-btn-subs');
+  var cntSu   = document.getElementById('bulk-count-subs');
+  function syncSubs() {
+    var n = document.querySelectorAll('.bulk-cb-subs:checked').length;
+    if (btnSu) { btnSu.style.display = n > 0 ? '' : 'none'; }
+    if (cntSu) { cntSu.textContent = n; }
+  }
+  if (selAllS) {
+    selAllS.addEventListener('change', function() {
+      document.querySelectorAll('.bulk-cb-subs').forEach(function(c) { c.checked = selAllS.checked; });
+      syncSubs();
+    });
+  }
+  document.querySelectorAll('.bulk-cb-subs').forEach(function(c) {
+    c.addEventListener('change', function() { if (!c.checked && selAllS) selAllS.checked = false; syncSubs(); });
+  });
+})();
+
+function bulkDeleteUsers(tab) {
+  var cls = tab === 'subscribers' ? '.bulk-cb-subs:checked' : '.bulk-cb-staff:checked';
+  var checked = document.querySelectorAll(cls);
+  if (!checked.length) return;
+  if (!confirm('Delete ' + checked.length + ' user(s)? This cannot be undone.')) return;
+  var ids = Array.from(checked).map(function(c) { return c.value; }).join(',');
+  var f = document.createElement('form');
+  f.method = 'POST'; f.action = '/admin/users/bulk-delete';
+  [['ids', ids], ['tab', tab]].forEach(function(pair) {
+    var i = document.createElement('input');
+    i.type = 'hidden'; i.name = pair[0]; i.value = pair[1];
+    f.appendChild(i);
+  });
+  document.body.appendChild(f);
+  f.submit();
+}
+</script>"#;
+
     let content = if !is_subscribers {
-        format!(
-            r#"{tabs}
-<p style="margin-bottom:1rem"><a href="/admin/users/new" class="btn btn-primary">New User</a></p>
-<table class="data-table">
-  <thead><tr><th>Name</th><th>Username</th><th>Email</th><th>Role</th><th>Actions</th></tr></thead>
-  <tbody>{staff_rows}</tbody>
-</table>"#,
-            tabs = tabs,
-            staff_rows = staff_rows,
-        )
-    } else {
-        let empty_msg = if subscribers.is_empty() {
-            r#"<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:2rem">No subscribers yet.</td></tr>"#
+        let empty_msg = if staff.is_empty() {
+            r#"<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:2rem">No users yet.</td></tr>"#
         } else { "" };
         format!(
             r#"{tabs}
+<div style="display:flex;align-items:center;gap:.75rem;margin-bottom:1rem;flex-wrap:wrap">
+  <a href="/admin/users/new" class="btn btn-primary">New User</a>
+  {site_filter_staff}
+  <button id="bulk-delete-btn-staff" type="button" class="btn btn-danger" style="display:none"
+          onclick="bulkDeleteUsers('site-users')">Delete Selected (<span id="bulk-count-staff">0</span>)</button>
+</div>
 <table class="data-table">
-  <thead><tr><th>Name</th><th>Username</th><th>Email</th><th>Domain</th><th>Actions</th></tr></thead>
-  <tbody>{sub_rows}{empty_msg}</tbody>
-</table>"#,
+  <thead><tr>
+    <th style="width:2rem"><input type="checkbox" id="select-all-staff" title="Select all" aria-label="Select all"></th>
+    <th>Name</th><th>Username</th><th>Email</th><th>Role</th><th>Actions</th>
+  </tr></thead>
+  <tbody>{staff_rows}{empty_msg}</tbody>
+</table>
+{bulk_script}"#,
             tabs = tabs,
+            site_filter_staff = site_filter_staff,
+            staff_rows = staff_rows,
+            empty_msg = empty_msg,
+            bulk_script = bulk_script,
+        )
+    } else {
+        let empty_msg = if subscribers.is_empty() {
+            r#"<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:2rem">No subscribers yet.</td></tr>"#
+        } else { "" };
+        format!(
+            r#"{tabs}
+<div style="display:flex;align-items:center;gap:.75rem;margin-bottom:1rem;flex-wrap:wrap">
+  {site_filter_subs}
+  <button id="bulk-delete-btn-subs" type="button" class="btn btn-danger" style="display:none"
+          onclick="bulkDeleteUsers('subscribers')">Delete Selected (<span id="bulk-count-subs">0</span>)</button>
+</div>
+<table class="data-table">
+  <thead><tr>
+    <th style="width:2rem"><input type="checkbox" id="select-all-subs" title="Select all" aria-label="Select all"></th>
+    <th>Name</th><th>Username</th><th>Email</th><th>Domain</th><th>Actions</th>
+  </tr></thead>
+  <tbody>{sub_rows}{empty_msg}</tbody>
+</table>
+{bulk_script}"#,
+            tabs = tabs,
+            site_filter_subs = site_filter_subs,
             sub_rows = sub_rows,
             empty_msg = empty_msg,
+            bulk_script = bulk_script,
         )
     };
 

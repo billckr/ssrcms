@@ -15,6 +15,9 @@ use admin::pages::users::{SiteOption, UserEdit, UserRow};
 pub struct UsersTabQuery {
     #[serde(default)]
     pub tab: String,
+    /// Optional site UUID to filter the user list (super_admin only).
+    #[serde(default)]
+    pub site: String,
 }
 
 /// Split a flat list of UserRows into (staff, subscribers).
@@ -37,35 +40,63 @@ pub async fn list(
         return Html("<h1>403 Forbidden</h1>".to_string()).into_response();
     }
     let cs = state.site_hostname(admin.site_id);
+
+    // Fetch available sites for the filter dropdown (global admin only).
+    let available_sites = if admin.caps.is_global_admin {
+        fetch_site_options(&state).await
+    } else {
+        vec![]
+    };
+
     let rows: Vec<UserRow> = if admin.caps.is_global_admin {
-        // For super_admin: fetch all users, but show their role in the current
-        // site context (site_users) when available, else fall back to users.role.
-        let users = crate::models::user::list(&state.db).await.unwrap_or_else(|e| {
-            tracing::warn!("failed to list users: {:?}", e);
-            vec![]
-        });
-        // Build a site_users map for the current site if one is set.
-        let site_role_map: std::collections::HashMap<uuid::Uuid, String> =
-            if let Some(sid) = admin.site_id {
-                crate::models::site_user::list_for_site(&state.db, sid)
-                    .await
-                    .unwrap_or_default()
-                    .into_iter()
-                    .map(|(u, r)| (u.id, r))
-                    .collect()
-            } else {
-                std::collections::HashMap::new()
-            };
-        users.iter().map(|u| UserRow {
-            id: u.id.to_string(),
-            username: u.username.clone(),
-            email: u.email.clone(),
-            role: site_role_map.get(&u.id).cloned().unwrap_or_else(|| u.role.clone()),
-            display_name: u.display_name.clone(),
-            is_protected: u.is_protected,
-            is_super_admin: u.role == "super_admin",
-            site_hostnames: vec![],
-        }).collect()
+        let filter_site = q.site.parse::<Uuid>().ok();
+        if let Some(filter_site_id) = filter_site {
+            // Filtered: show only users assigned to this specific site.
+            crate::models::site_user::list_for_site(&state.db, filter_site_id)
+                .await.unwrap_or_else(|e| {
+                    tracing::warn!("failed to list site users for filter: {:?}", e);
+                    vec![]
+                })
+                .into_iter()
+                .map(|(u, site_role)| UserRow {
+                    id: u.id.to_string(),
+                    username: u.username.clone(),
+                    email: u.email.clone(),
+                    role: site_role,
+                    display_name: u.display_name.clone(),
+                    is_protected: u.is_protected,
+                    is_super_admin: u.role == "super_admin",
+                    site_hostnames: vec![],
+                })
+                .collect()
+        } else {
+            // All sites: show every user, with site-context role when available.
+            let users = crate::models::user::list(&state.db).await.unwrap_or_else(|e| {
+                tracing::warn!("failed to list users: {:?}", e);
+                vec![]
+            });
+            let site_role_map: std::collections::HashMap<uuid::Uuid, String> =
+                if let Some(sid) = admin.site_id {
+                    crate::models::site_user::list_for_site(&state.db, sid)
+                        .await
+                        .unwrap_or_default()
+                        .into_iter()
+                        .map(|(u, r)| (u.id, r))
+                        .collect()
+                } else {
+                    std::collections::HashMap::new()
+                };
+            users.iter().map(|u| UserRow {
+                id: u.id.to_string(),
+                username: u.username.clone(),
+                email: u.email.clone(),
+                role: site_role_map.get(&u.id).cloned().unwrap_or_else(|| u.role.clone()),
+                display_name: u.display_name.clone(),
+                is_protected: u.is_protected,
+                is_super_admin: u.role == "super_admin",
+                site_hostnames: vec![],
+            }).collect()
+        }
     } else if let Some(site_id) = admin.site_id {
         crate::models::site_user::list_for_site(&state.db, site_id).await.unwrap_or_else(|e| {
             tracing::warn!("failed to list site users: {:?}", e);
@@ -83,6 +114,7 @@ pub async fn list(
     } else {
         vec![]
     };
+
     let current_user_id = admin.user.id.to_string();
     // Exclude the currently logged-in user — they manage their own account via /admin/profile.
     let rows: Vec<_> = rows.into_iter().filter(|u| u.id != current_user_id).collect();
@@ -119,7 +151,10 @@ pub async fn list(
     }
 
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
-    Html(admin::pages::users::render_list(&staff, &subscribers, None, &current_user_id, can_manage_access, active_tab, &ctx)).into_response()
+    Html(admin::pages::users::render_list(
+        &staff, &subscribers, None, &current_user_id,
+        can_manage_access, active_tab, &available_sites, &q.site, &ctx,
+    )).into_response()
 }
 
 pub async fn new_user(
@@ -563,6 +598,8 @@ pub async fn delete_user(
                 &current_user_id,
                 can_manage_access,
                 "site-users",
+                &[],
+                "",
                 &ctx,
             )).into_response();
         }};
@@ -603,6 +640,51 @@ pub async fn delete_user(
     if let Err(e) = crate::models::user::delete_and_reassign(&state.db, id, admin.user.id).await {
         tracing::error!("delete user {} error: {:?}", id, e);
         deny!("Failed to delete user. Please try again.");
+    }
+    Redirect::to(&redirect_url).into_response()
+}
+
+#[derive(Deserialize)]
+pub struct BulkDeleteUsersForm {
+    pub ids: String,
+    pub tab: Option<String>,
+}
+
+pub async fn bulk_delete_users(
+    State(state): State<AppState>,
+    admin: AdminUser,
+    Form(form): Form<BulkDeleteUsersForm>,
+) -> impl IntoResponse {
+    if !admin.caps.can_manage_users {
+        return Redirect::to("/admin/users").into_response();
+    }
+    let tab = form.tab.as_deref().unwrap_or("site-users");
+    let redirect_url = format!("/admin/users?tab={}", tab);
+    let ids: Vec<String> = form.ids.split(',')
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect();
+
+    for raw_id in &ids {
+        let id = match raw_id.parse::<Uuid>() {
+            Ok(u) => u,
+            Err(_) => continue,
+        };
+        // Never self-delete.
+        if id == admin.user.id { continue; }
+        let target = match crate::models::user::get_by_id(&state.db, id).await {
+            Ok(t) => t,
+            Err(_) => continue,
+        };
+        if target.is_protected { continue; }
+        if target.role == "super_admin" && !admin.caps.is_global_admin { continue; }
+        if target.role == "super_admin" {
+            let remaining = crate::models::user::count_global_admins(&state.db).await.unwrap_or(2);
+            if remaining <= 1 { continue; }
+        }
+        if let Err(e) = crate::models::user::delete_and_reassign(&state.db, id, admin.user.id).await {
+            tracing::error!("bulk delete users: failed to delete {}: {:?}", id, e);
+        }
     }
     Redirect::to(&redirect_url).into_response()
 }
