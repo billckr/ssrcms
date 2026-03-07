@@ -174,12 +174,23 @@ pub fn render_list(
         } else {
             String::new()
         };
+        let domain_badges = if u.site_hostnames.is_empty() {
+            r#"<span style="color:var(--muted);font-size:0.8rem">—</span>"#.to_string()
+        } else {
+            u.site_hostnames.iter().map(|h| {
+                format!(
+                    r#"<span style="display:inline-block;background:#dbeafe;color:#1d4ed8;border-radius:4px;padding:.15rem .5rem;font-size:.78rem;font-weight:500;margin:.1rem .15rem .1rem 0;white-space:nowrap">{}</span>"#,
+                    crate::html_escape(h),
+                )
+            }).collect::<Vec<_>>().join("")
+        };
         format!(
             r#"<tr>
               <td style="width:2rem;text-align:center">{cb}</td>
               <td><a href="/admin/users/{id}/edit">{display_name}</a></td>
               <td>{username}</td>
               <td>{email}</td>
+              <td>{domain_badges}</td>
               <td><span class="badge {badge_class}">{role}</span></td>
               <td class="actions">
                 <a href="/admin/users/{id}/edit" class="icon-btn" title="Edit">
@@ -194,6 +205,7 @@ pub fn render_list(
             display_name = crate::html_escape(&u.display_name),
             username = crate::html_escape(&u.username),
             email = crate::html_escape(&u.email),
+            domain_badges = domain_badges,
             role = crate::html_escape(role_display(&u.role)),
             badge_class = role_badge_class(&u.role),
             site_access_btn = site_access_btn,
@@ -323,7 +335,7 @@ function bulkDeleteUsers(tab) {
 
     let content = if !is_subscribers {
         let empty_msg = if staff.is_empty() {
-            r#"<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:2rem">No users yet.</td></tr>"#
+            r#"<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:2rem">No users yet.</td></tr>"#
         } else { "" };
         format!(
             r#"{tabs}
@@ -336,7 +348,7 @@ function bulkDeleteUsers(tab) {
 <table class="data-table">
   <thead><tr>
     <th style="width:2rem"><input type="checkbox" id="select-all-staff" title="Select all" aria-label="Select all"></th>
-    <th>Name</th><th>Username</th><th>Email</th><th>Role</th><th>Actions</th>
+    <th>Name</th><th>Username</th><th>Email</th><th>Domain</th><th>Role</th><th>Actions</th>
   </tr></thead>
   <tbody>{staff_rows}{empty_msg}</tbody>
 </table>
