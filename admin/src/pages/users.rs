@@ -680,6 +680,8 @@ function toggleSiteFields() {{
       if (!uname || !dname || !email || !pw) return false;
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return false;
       if (validatePw(pw)) return false;
+      var roleEl = document.getElementById('role');
+      if (roleEl && !roleEl.value) return false;
       var assign = document.querySelector('input[name="site_assignment"]:checked');
       if (assign && assign.value === 'existing') {{
         var siteSel = document.getElementById('site-existing-select');
@@ -699,6 +701,8 @@ function toggleSiteFields() {{
       var el = document.getElementById(fid);
       if (el) el.addEventListener('input', syncSaveBtn);
     }});
+    var roleEl = document.getElementById('role');
+    if (roleEl) roleEl.addEventListener('change', syncSaveBtn);
     document.querySelectorAll('input[name="site_assignment"]').forEach(function(r) {{
       r.addEventListener('change', syncSaveBtn);
     }});
