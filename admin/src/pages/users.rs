@@ -537,6 +537,7 @@ function toggleSiteFields() {{
       <div class="form-group">
         <label for="email">Email</label>
         <input type="email" id="email" name="email" value="{email}" required autocomplete="off">
+        <small id="email-hint" style="color:#dc2626;display:none">Please enter a valid email address.</small>
       </div>
       <div class="form-group">
         <label for="password">Password</label>
@@ -550,11 +551,11 @@ function toggleSiteFields() {{
     </div>
     <div class="form-note" style="margin-bottom:1.25rem">
       <p><strong>Password requirements:</strong></p>
-      <ul>
-        <li>8–12 characters</li>
-        <li>At least one uppercase letter</li>
-        <li>At least one number</li>
-        <li>At least one symbol: ! @ # $ % &amp;</li>
+      <ul style="list-style:none;padding-left:0;margin:0.25rem 0 0">
+        <li id="pw-req-len"><span class="pw-dot" style="display:inline-block;width:1.1rem;font-style:normal">·</span>8–12 characters</li>
+        <li id="pw-req-upper"><span class="pw-dot" style="display:inline-block;width:1.1rem;font-style:normal">·</span>At least one uppercase letter</li>
+        <li id="pw-req-num"><span class="pw-dot" style="display:inline-block;width:1.1rem;font-style:normal">·</span>At least one number</li>
+        <li id="pw-req-sym"><span class="pw-dot" style="display:inline-block;width:1.1rem;font-style:normal">·</span>At least one symbol: ! @ # $ % &amp;</li>
       </ul>
     </div>
     <div style="display:flex;gap:0.75rem">
@@ -595,6 +596,37 @@ function toggleSiteFields() {{
   // ── Real-time validation (new user form only) ────────────────────────────
   if (isNew) {{
     var saveBtn = document.getElementById('save-btn');
+
+    // Password requirements checklist.
+    var pwReqs = [
+      {{ id: 'pw-req-len',   test: function(p) {{ return p.length >= 8 && p.length <= 12; }} }},
+      {{ id: 'pw-req-upper', test: function(p) {{ return /[A-Z]/.test(p); }} }},
+      {{ id: 'pw-req-num',   test: function(p) {{ return /[0-9]/.test(p); }} }},
+      {{ id: 'pw-req-sym',   test: function(p) {{ return /[!@#$%&]/.test(p); }} }},
+    ];
+    var updateFeedback = function() {{
+      var pw = pwInput ? pwInput.value : '';
+      pwReqs.forEach(function(req) {{
+        var li  = document.getElementById(req.id);
+        var dot = li ? li.querySelector('.pw-dot') : null;
+        if (!li) return;
+        if (!pw) {{
+          li.style.color = ''; if (dot) dot.textContent = '·';
+        }} else if (req.test(pw)) {{
+          li.style.color = '#16a34a'; if (dot) dot.textContent = '✓';
+        }} else {{
+          li.style.color = '#dc2626'; if (dot) dot.textContent = '✗';
+        }}
+      }});
+      // Email hint — show only when field has content but is invalid.
+      var emailEl = document.getElementById('email');
+      var emailVal = emailEl ? emailEl.value.trim() : '';
+      var hint = document.getElementById('email-hint');
+      if (hint) {{
+        hint.style.display = (emailVal && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailVal)) ? '' : 'none';
+      }}
+    }};
+
     var checkComplete = function() {{
       var unameEl = document.getElementById('username');
       var dnameEl = document.getElementById('display_name');
@@ -617,6 +649,7 @@ function toggleSiteFields() {{
       return true;
     }};
     var syncSaveBtn = function() {{
+      updateFeedback();
       if (saveBtn) saveBtn.disabled = !checkComplete();
     }};
     ['username', 'display_name', 'email', 'password'].forEach(function(fid) {{
