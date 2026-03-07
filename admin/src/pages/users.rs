@@ -488,10 +488,11 @@ pub fn render_editor(user: &UserEdit, flash: Option<&str>, ctx: &crate::PageCont
         ""
     };
 
-    // Site-assignment section — shown for new users when there are sites to select.
-    // Global admin: full radio UI (None / Existing / New site).
-    // Site admin with 2+ owned sites: simple dropdown (backend limits choices to owned sites).
-    let site_section = if is_new && ctx.is_global_admin {
+    // Site-assignment section — shown for new users when the admin has sites to offer.
+    // Global admin: always shown (can also create new sites).
+    // Site admin: only shown when they own 2+ sites (single-site admins auto-assign).
+    // Both see the same UI; the dropdown is populated with their respective site list.
+    let site_section = if is_new && (ctx.is_global_admin || !user.sites.is_empty()) {
         let site_opts = user.sites.iter().map(|s| {
             format!(
                 r#"<option value="{}">{}</option>"#,
@@ -503,24 +504,24 @@ pub fn render_editor(user: &UserEdit, flash: Option<&str>, ctx: &crate::PageCont
 <div class="form-group" style="margin-top:0.5rem">
   <label>Site Assignment</label>
   <div style="display:flex;gap:1.5rem;margin:0.4rem 0 0.75rem;flex-wrap:wrap">
-    <label style="display:flex;align-items:center;gap:0.4rem;cursor:pointer;font-weight:400">
+    <label class="radio-label">
       <input type="radio" name="site_assignment" value="none" checked onchange="toggleSiteFields()"> None
     </label>
-    <label style="display:flex;align-items:center;gap:0.4rem;cursor:pointer;font-weight:400">
+    <label class="radio-label">
       <input type="radio" name="site_assignment" value="existing" onchange="toggleSiteFields()"> Existing site
     </label>
-    <label style="display:flex;align-items:center;gap:0.4rem;cursor:pointer;font-weight:400">
+    <label class="radio-label">
       <input type="radio" name="site_assignment" value="new" onchange="toggleSiteFields()"> New site
     </label>
   </div>
   <div id="site-existing" style="display:none">
-    <select name="existing_site_id" id="site-existing-select" style="width:100%">
+    <select name="existing_site_id" id="site-existing-select">
       <option value="" disabled selected>Select Site</option>
       {site_opts}
     </select>
   </div>
   <div id="site-new" style="display:none">
-    <input type="text" name="new_hostname" placeholder="example.com" style="width:100%">
+    <input type="text" name="new_hostname" placeholder="example.com">
     <small>The domain this site will respond to (e.g. client.example.com)</small>
   </div>
 </div>
@@ -531,26 +532,6 @@ function toggleSiteFields() {{
   document.getElementById('site-new').style.display     = val === 'new'      ? '' : 'none';
 }}
 </script>"#,
-            site_opts = site_opts,
-        )
-    } else if is_new && !user.sites.is_empty() {
-        // Site admin with multiple owned sites: simple site selector.
-        let site_opts = user.sites.iter().map(|s| {
-            format!(
-                r#"<option value="{}">{}</option>"#,
-                crate::html_escape(&s.id),
-                crate::html_escape(&s.hostname),
-            )
-        }).collect::<Vec<_>>().join("\n");
-        format!(r#"
-<div class="form-group" style="margin-top:0.5rem">
-  <input type="hidden" name="site_assignment" value="existing">
-  <label for="site-existing-select">Assign to Site</label>
-  <select name="existing_site_id" id="site-existing-select" style="width:100%" required>
-    <option value="" disabled selected>Select Site</option>
-    {site_opts}
-  </select>
-</div>"#,
             site_opts = site_opts,
         )
     } else {
@@ -694,10 +675,6 @@ function toggleSiteFields() {{
       }} else if (assign && assign.value === 'new') {{
         var hnInput = document.querySelector('input[name="new_hostname"]');
         if (!hnInput || !hnInput.value.trim()) return false;
-      }} else if (!assign) {{
-        // No radio group: site admin with a required site dropdown.
-        var siteSel = document.getElementById('site-existing-select');
-        if (siteSel && !siteSel.value) return false;
       }}
       return true;
     }};

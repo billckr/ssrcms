@@ -388,23 +388,46 @@ pub async fn save_new(
                     }
                 }
             } else {
-                // Site admin: use selected site if provided and owned, else current site.
-                let selected = form.existing_site_id
-                    .as_deref()
-                    .and_then(|s| s.parse::<Uuid>().ok());
-                let target_site_id = if let Some(sid) = selected {
-                    let is_owner = crate::models::site::get_by_id(&state.db, sid).await
-                        .map(|s| s.owner_user_id == Some(admin.user.id))
-                        .unwrap_or(false);
-                    if is_owner { Some(sid) } else { admin.site_id }
-                } else {
-                    admin.site_id
+                // Site admin: handle same assignment options as global admin,
+                // but scoped to sites they own.
+                let target_site_id: Option<Uuid> = match form.site_assignment.as_deref() {
+                    Some("none") | None => None,
+                    Some("new") => {
+                        let hostname = form.new_hostname.as_deref().unwrap_or("").trim().to_lowercase();
+                        if hostname.is_empty() {
+                            tracing::warn!("new user {} created but no hostname for new site", new_user.id);
+                            None
+                        } else {
+                            match crate::models::site::create_with_defaults(&state.db, &hostname, admin.user.id).await {
+                                Ok(site) => {
+                                    if let Err(e) = state.reload_site_cache().await {
+                                        tracing::warn!("site cache reload failed: {:?}", e);
+                                    }
+                                    Some(site.id)
+                                }
+                                Err(e) => {
+                                    tracing::error!("site admin failed to create site '{}': {:?}", hostname, e);
+                                    None
+                                }
+                            }
+                        }
+                    }
+                    _ => {
+                        // "existing" — verify the site is owned by this admin.
+                        if let Some(Ok(sid)) = form.existing_site_id.as_deref().map(|s| s.parse::<Uuid>()) {
+                            let is_owner = crate::models::site::get_by_id(&state.db, sid).await
+                                .map(|s| s.owner_user_id == Some(admin.user.id))
+                                .unwrap_or(false);
+                            if is_owner { Some(sid) } else { admin.site_id }
+                        } else {
+                            admin.site_id
+                        }
+                    }
                 };
                 if let Some(site_id) = target_site_id {
                     if let Err(e) = crate::models::site_user::add(&state.db, site_id, new_user.id, site_role, Some(admin.user.id)).await {
                         tracing::warn!("failed to add new user {} to site {}: {:?}", new_user.id, site_id, e);
                     }
-                    // If new user is an admin, set their default site.
                     if site_role == "admin" {
                         let _ = crate::models::user::set_default_site(&state.db, new_user.id, Some(site_id)).await;
                     }
