@@ -9,6 +9,7 @@ pub struct PostRow {
     pub author_name: String,
     pub published_at: Option<String>,
     pub post_password_set: bool,
+    pub site_hostname: String,
 }
 
 pub struct PostEdit {
@@ -107,6 +108,23 @@ pub fn render_list(posts: &[PostRow], post_type: &str, page: i64, total_pages: i
         } else {
             String::new()
         };
+        // Domain badge — same gray pill style as the users list.
+        let domain_td = {
+            let h = crate::html_escape(&p.site_hostname);
+            if h.is_empty() {
+                r#"<td><span style="color:var(--muted);font-size:0.8rem">—</span></td>"#.to_string()
+            } else {
+                format!(r#"<td><span style="display:inline-block;background:#e2e8f0;color:#64748b;border-radius:4px;padding:.15rem .5rem;font-size:.78rem;font-weight:500;white-space:nowrap">{h}</span></td>"#)
+            }
+        };
+        // Column order varies by tab:
+        //   Drafts / Pending review: Status → Domain → Author
+        //   All / Published / Scheduled / Trashed: Author → Domain → [Date]
+        let author_td = format!("<td>{}</td>", crate::html_escape(&p.author_name));
+        let middle_tds = match status_filter {
+            Some("draft") | Some("pending") => format!("{author_td}{domain_td}"),
+            _ => format!("{author_td}{domain_td}{date_td}"),
+        };
         format!(
             r#"<tr>
               <td style="width:2rem;text-align:center">
@@ -114,8 +132,7 @@ pub fn render_list(posts: &[PostRow], post_type: &str, page: i64, total_pages: i
               </td>
               <td>{title_cell}</td>
               <td><span class="badge badge-{status_cls}">{status_label}</span>{protected_badge}</td>
-              <td>{author}</td>
-              {date_td}
+              {middle_tds}
               <td class="actions">
                 <a href="{view_href}" class="icon-btn" title="View" target="_blank" rel="noopener noreferrer">
                   <img src="/admin/static/icons/eye.svg" alt="View">
@@ -129,8 +146,7 @@ pub fn render_list(posts: &[PostRow], post_type: &str, page: i64, total_pages: i
             status_cls = crate::html_escape(&p.status),
             status_label = crate::html_escape(if p.status == "pending" { "Pending Review" } else { &p.status }),
             protected_badge = if p.post_password_set { r#" <span class="badge badge-protected" title="Protected">&#x1F512;</span>"# } else { "" },
-            author = crate::html_escape(&p.author_name),
-            date_td = date_td,
+            middle_tds = middle_tds,
             view_href = crate::html_escape(&view_href),
             edit_btn = edit_btn,
             delete_btn = if ctx.user_role.eq_ignore_ascii_case("author") {
@@ -218,6 +234,15 @@ pub fn render_list(posts: &[PostRow], post_type: &str, page: i64, total_pages: i
     }).collect();
     let tabs_html = format!(r#"<div class="page-tabs" style="margin-bottom:1.25rem">{}</div>"#, tabs);
 
+    // Thead middle columns mirror the tbody ordering.
+    let middle_ths = match status_filter {
+        Some("draft") | Some("pending") => "<th>Author</th><th>Domain</th>".to_string(),
+        _ => {
+            let date_th = if show_date_col { format!("<th>{}</th>", date_col_label) } else { String::new() };
+            format!("<th>Author</th><th>Domain</th>{}", date_th)
+        },
+    };
+
     let content = format!(
         r#"{tabs_html}<div style="display:flex;align-items:center;gap:.75rem;margin-bottom:1rem">
   <a href="{new_href}" class="btn btn-primary">{new_label}</a>
@@ -227,7 +252,7 @@ pub fn render_list(posts: &[PostRow], post_type: &str, page: i64, total_pages: i
 <table class="data-table">
   <thead><tr>
     <th style="width:2rem"><input type="checkbox" id="select-all" title="Select all" aria-label="Select all"></th>
-    <th>Title</th><th>Status</th><th>Author</th>{date_col_th}<th>Actions</th>
+    <th>Title</th><th>Status</th>{middle_ths}<th>Actions</th>
   </tr></thead>
   <tbody>{rows}</tbody>
 </table>
@@ -279,7 +304,7 @@ pub fn render_list(posts: &[PostRow], post_type: &str, page: i64, total_pages: i
         pagination = pagination,
         bulk_action = bulk_action,
         tabs_html = tabs_html,
-        date_col_th = if show_date_col { format!("<th>{}</th>", date_col_label) } else { String::new() },
+        middle_ths = middle_ths,
     );
 
     let path = if post_type == "page" { "/admin/pages" } else { "/admin/posts" };
@@ -665,6 +690,8 @@ mod tests {
             post_type: post_type.to_string(),
             author_name: "Author".to_string(),
             published_at: None,
+            post_password_set: false,
+            site_hostname: String::new(),
         }
     }
 

@@ -124,6 +124,12 @@ async fn list_type(state: AppState, post_type: &str, page: Option<i64>, status_f
         tracing::warn!("failed to list {} items: {:?}", post_type, e);
         vec![]
     });
+
+    // Snapshot site hostname map once so we don't hold the lock per-row.
+    let site_hostnames: std::collections::HashMap<Uuid, String> = state.site_cache.read()
+        .map(|cache| cache.values().map(|(s, _)| (s.id, s.hostname.clone())).collect())
+        .unwrap_or_default();
+
     let mut rows: Vec<PostRow> = Vec::new();
 
     for p in raw.iter() {
@@ -135,6 +141,10 @@ async fn list_type(state: AppState, post_type: &str, page: Option<i64>, status_f
                 "Unknown".to_string()
             });
 
+        let site_hostname = p.site_id
+            .and_then(|sid| site_hostnames.get(&sid).cloned())
+            .unwrap_or_default();
+
         rows.push(PostRow {
             id: p.id.to_string(),
             title: p.title.clone(),
@@ -144,6 +154,7 @@ async fn list_type(state: AppState, post_type: &str, page: Option<i64>, status_f
             author_name,
             published_at: p.published_at.map(|d| d.format("%Y-%m-%d %H:%M").to_string()),
             post_password_set: p.post_password.is_some(),
+            site_hostname,
         });
     }
 
