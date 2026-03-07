@@ -500,7 +500,7 @@ pub fn render_editor(user: &UserEdit, flash: Option<&str>, ctx: &crate::PageCont
             )
         }).collect::<Vec<_>>().join("\n");
         format!(r#"
-<div class="form-group" style="grid-column:1/-1;margin-top:0.5rem">
+<div class="form-group" style="margin-top:0.5rem">
   <label>Site Assignment</label>
   <div style="display:flex;gap:1.5rem;margin:0.4rem 0 0.75rem;flex-wrap:wrap">
     <label style="display:flex;align-items:center;gap:0.4rem;cursor:pointer;font-weight:400">
@@ -514,13 +514,13 @@ pub fn render_editor(user: &UserEdit, flash: Option<&str>, ctx: &crate::PageCont
     </label>
   </div>
   <div id="site-existing" style="display:none">
-    <select name="existing_site_id" id="site-existing-select" style="width:100%;max-width:360px">
+    <select name="existing_site_id" id="site-existing-select" style="width:100%">
       <option value="" disabled selected>Select Site</option>
       {site_opts}
     </select>
   </div>
   <div id="site-new" style="display:none">
-    <input type="text" name="new_hostname" placeholder="example.com" style="width:100%;max-width:360px">
+    <input type="text" name="new_hostname" placeholder="example.com" style="width:100%">
     <small>The domain this site will respond to (e.g. client.example.com)</small>
   </div>
 </div>
@@ -543,10 +543,10 @@ function toggleSiteFields() {{
             )
         }).collect::<Vec<_>>().join("\n");
         format!(r#"
-<div class="form-group" style="grid-column:1/-1;margin-top:0.5rem">
+<div class="form-group" style="margin-top:0.5rem">
   <input type="hidden" name="site_assignment" value="existing">
   <label for="site-existing-select">Assign to Site</label>
-  <select name="existing_site_id" id="site-existing-select" style="width:100%;max-width:360px" required>
+  <select name="existing_site_id" id="site-existing-select" style="width:100%" required>
     <option value="" disabled selected>Select Site</option>
     {site_opts}
   </select>
@@ -593,7 +593,7 @@ function toggleSiteFields() {{
         <input type="password" id="password" name="password" autocomplete="new-password">
         {password_hint}
       </div>
-      <div class="form-group span-2">
+      <div class="form-group">
         {role_field_inner}
       </div>
       {site_section}
