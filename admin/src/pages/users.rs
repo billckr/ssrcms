@@ -175,7 +175,7 @@ pub fn render_list(
             String::new()
         };
         let domain_badges = if u.site_hostnames.is_empty() {
-            r#"<span style="color:var(--muted);font-size:0.8rem">—</span>"#.to_string()
+            r#"<span style="display:inline-block;background:#fed7aa;color:#c2410c;border-radius:4px;padding:.15rem .5rem;font-size:.78rem;font-weight:500;white-space:nowrap">Unassigned</span>"#.to_string()
         } else {
             u.site_hostnames.iter().map(|h| {
                 format!(
