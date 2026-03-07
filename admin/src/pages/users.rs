@@ -485,7 +485,10 @@ pub fn render_editor(user: &UserEdit, flash: Option<&str>, ctx: &crate::PageCont
     </label>
   </div>
   <div id="site-existing" style="display:none">
-    <select name="existing_site_id" style="width:100%;max-width:360px">{site_opts}</select>
+    <select name="existing_site_id" id="site-existing-select" style="width:100%;max-width:360px">
+      <option value="" disabled selected>Select Site</option>
+      {site_opts}
+    </select>
   </div>
   <div id="site-new" style="display:none">
     <input type="text" name="new_hostname" placeholder="example.com" style="width:100%;max-width:360px">
@@ -555,7 +558,7 @@ function toggleSiteFields() {{
       </ul>
     </div>
     <div style="display:flex;gap:0.75rem">
-      <button type="submit" class="btn btn-primary">Save</button>
+      <button type="submit" id="save-btn" class="btn btn-primary"{save_disabled}>Save</button>
       <a href="/admin/users" class="btn btn-secondary">Cancel</a>
     </div>
   </form>
@@ -589,6 +592,46 @@ function toggleSiteFields() {{
     if (!/[!@#$%&]/.test(pw))    return 'Password must contain at least one symbol: ! @ # $ % &';
     return null;
   }}
+  // ── Real-time validation (new user form only) ────────────────────────────
+  if (isNew) {{
+    var saveBtn = document.getElementById('save-btn');
+    var checkComplete = function() {{
+      var unameEl = document.getElementById('username');
+      var dnameEl = document.getElementById('display_name');
+      var emailEl = document.getElementById('email');
+      var uname = unameEl ? unameEl.value.trim() : '';
+      var dname = dnameEl ? dnameEl.value.trim() : '';
+      var email = emailEl ? emailEl.value.trim() : '';
+      var pw    = pwInput ? pwInput.value : '';
+      if (!uname || !dname || !email || !pw) return false;
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return false;
+      if (validatePw(pw)) return false;
+      var assign = document.querySelector('input[name="site_assignment"]:checked');
+      if (assign && assign.value === 'existing') {{
+        var siteSel = document.getElementById('site-existing-select');
+        if (!siteSel || !siteSel.value) return false;
+      }} else if (assign && assign.value === 'new') {{
+        var hnInput = document.querySelector('input[name="new_hostname"]');
+        if (!hnInput || !hnInput.value.trim()) return false;
+      }}
+      return true;
+    }};
+    var syncSaveBtn = function() {{
+      if (saveBtn) saveBtn.disabled = !checkComplete();
+    }};
+    ['username', 'display_name', 'email', 'password'].forEach(function(fid) {{
+      var el = document.getElementById(fid);
+      if (el) el.addEventListener('input', syncSaveBtn);
+    }});
+    document.querySelectorAll('input[name="site_assignment"]').forEach(function(r) {{
+      r.addEventListener('change', syncSaveBtn);
+    }});
+    var siteSel = document.getElementById('site-existing-select');
+    if (siteSel) siteSel.addEventListener('change', syncSaveBtn);
+    var hnInput = document.querySelector('input[name="new_hostname"]');
+    if (hnInput) hnInput.addEventListener('input', syncSaveBtn);
+    syncSaveBtn();
+  }}
 }}());
 </script>
 </div>"#,
@@ -602,6 +645,7 @@ function toggleSiteFields() {{
         password_hint     = password_hint,
         is_new_js         = if is_new { "true" } else { "false" },
         autofocus         = if is_new { " autofocus" } else { "" },
+        save_disabled     = if is_new { " disabled" } else { "" },
     );
 
     crate::admin_page(title, "/admin/users", flash, &content, ctx)
