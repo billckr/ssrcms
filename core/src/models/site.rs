@@ -183,6 +183,7 @@ pub async fn admin_email(pool: &PgPool, site_id: Uuid) -> Result<Option<String>>
 }
 
 /// Count of non-subscriber users assigned to a site (editors, authors, admins).
+/// Excludes super_admins — they have global access and are not site members.
 pub async fn user_count(pool: &PgPool, site_id: Uuid) -> Result<i64> {
     let count: i64 = sqlx::query_scalar(
         r#"SELECT COUNT(*)
@@ -190,6 +191,7 @@ pub async fn user_count(pool: &PgPool, site_id: Uuid) -> Result<i64> {
            JOIN users u ON u.id = su.user_id
            WHERE su.site_id = $1
              AND su.role != 'subscriber'
+             AND u.role != 'super_admin'
              AND u.deleted_at IS NULL"#,
     )
     .bind(site_id)

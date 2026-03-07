@@ -378,19 +378,10 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
         );
     }
 
-    // Link the admin user to their site.
+    // Set the super admin's default site (controls home site and visiting badge).
+    // No site_users row is needed — global admins have full access on every site
+    // via the middleware and do not need a site_users entry.
     if let Some(uid) = admin_id {
-        sqlx::query(
-            "INSERT INTO site_users (site_id, user_id, role)
-             VALUES ($1, $2, 'admin')
-             ON CONFLICT DO NOTHING"
-        )
-        .bind(site_id)
-        .bind(uid)
-        .execute(&pool)
-        .await
-        .map_err(|e| anyhow::anyhow!("Failed to link admin to site: {e}"))?;
-
         sqlx::query(
             "UPDATE users SET default_site_id = $1, updated_at = NOW() WHERE id = $2 AND default_site_id IS NULL"
         )
