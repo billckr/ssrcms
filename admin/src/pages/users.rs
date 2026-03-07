@@ -183,7 +183,7 @@ pub fn render_list(
                 format!(
                     r#"<form method="POST" action="/admin/sites/switch" style="display:inline;margin:.1rem .15rem .1rem 0">
                       <input type="hidden" name="site_id" value="{sid}">
-                      <button type="submit" title="Switch to {h}" style="display:inline-block;background:#dbeafe;color:#1d4ed8;border-radius:4px;padding:.15rem .5rem;font-size:.78rem;font-weight:500;white-space:nowrap;border:none;cursor:pointer;font-family:inherit;line-height:1.4">
+                      <button type="submit" title="Switch to {h}" style="display:inline-block;background:#f3f4f6;color:#374151;border-radius:4px;padding:.15rem .5rem;font-size:.78rem;font-weight:500;white-space:nowrap;border:none;cursor:pointer;font-family:inherit;line-height:1.4">
                         {h}
                       </button>
                     </form>"#,
@@ -194,7 +194,7 @@ pub fn render_list(
         } else {
             u.site_hostnames.iter().map(|h| {
                 format!(
-                    r#"<span style="display:inline-block;background:#dbeafe;color:#1d4ed8;border-radius:4px;padding:.15rem .5rem;font-size:.78rem;font-weight:500;margin:.1rem .15rem .1rem 0;white-space:nowrap">{}</span>"#,
+                    r#"<span style="display:inline-block;background:#f3f4f6;color:#374151;border-radius:4px;padding:.15rem .5rem;font-size:.78rem;font-weight:500;margin:.1rem .15rem .1rem 0;white-space:nowrap">{}</span>"#,
                     crate::html_escape(h),
                 )
             }).collect::<Vec<_>>().join("")
@@ -253,7 +253,7 @@ pub fn render_list(
         } else {
             u.site_hostnames.iter().map(|h| {
                 format!(
-                    r#"<span style="display:inline-block;background:#dbeafe;color:#1d4ed8;border-radius:4px;padding:.15rem .5rem;font-size:.78rem;font-weight:500;margin:.1rem .15rem .1rem 0;white-space:nowrap">{}</span>"#,
+                    r#"<span style="display:inline-block;background:#f3f4f6;color:#374151;border-radius:4px;padding:.15rem .5rem;font-size:.78rem;font-weight:500;margin:.1rem .15rem .1rem 0;white-space:nowrap">{}</span>"#,
                     crate::html_escape(h),
                 )
             }).collect::<Vec<_>>().join("")

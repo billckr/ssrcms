@@ -138,10 +138,55 @@ pub async fn list(pool: &PgPool) -> Result<Vec<Site>> {
 
 
 pub async fn delete(pool: &PgPool, id: Uuid) -> Result<()> {
+    let mut tx = pool.begin().await?;
+
+    // Identify users who will become orphaned: they only belong to this site
+    // and have no other site assignments. Exclude super_admins (they have
+    // global access and no site_users rows).
+    let orphan_ids: Vec<Uuid> = sqlx::query_scalar(
+        r#"SELECT su.user_id
+           FROM site_users su
+           JOIN users u ON u.id = su.user_id
+           WHERE su.site_id = $1
+             AND u.role != 'super_admin'
+             AND u.deleted_at IS NULL
+             AND NOT EXISTS (
+               SELECT 1 FROM site_users su2
+               WHERE su2.user_id = su.user_id
+                 AND su2.site_id != $1
+             )"#,
+    )
+    .bind(id)
+    .fetch_all(&mut *tx)
+    .await?;
+
+    // Delete the site. ON DELETE CASCADE handles: posts, pages, media,
+    // taxonomies, site_settings, site_users, comments, form_submissions,
+    // site_plugins for this site.
     sqlx::query("DELETE FROM sites WHERE id = $1")
         .bind(id)
-        .execute(pool)
+        .execute(&mut *tx)
         .await?;
+
+    // Delete users who only belonged to this site (now fully orphaned).
+    // Multi-site users survive — their other site_users rows are untouched.
+    if !orphan_ids.is_empty() {
+        sqlx::query("DELETE FROM users WHERE id = ANY($1)")
+            .bind(&orphan_ids)
+            .execute(&mut *tx)
+            .await?;
+    }
+
+    // Clear default_site_id for any surviving users who still point to the
+    // now-deleted site (multi-site users who had it as their home).
+    sqlx::query(
+        "UPDATE users SET default_site_id = NULL, updated_at = NOW() WHERE default_site_id = $1",
+    )
+    .bind(id)
+    .execute(&mut *tx)
+    .await?;
+
+    tx.commit().await?;
     Ok(())
 }
 

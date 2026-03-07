@@ -332,12 +332,16 @@ pub async fn count_global_admins(pool: &PgPool) -> Result<i64> {
     Ok(count)
 }
 
-/// Returns the number of users assigned to a specific site via site_users.
+/// Returns the number of users assigned to a specific site via site_users,
+/// excluding super_admins and the site admin (role = 'admin' in site_users).
 pub async fn count_for_site(pool: &PgPool, site_id: Uuid) -> Result<i64> {
     let count: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM site_users su
          JOIN users u ON u.id = su.user_id
-         WHERE su.site_id = $1 AND u.role != 'super_admin'",
+         WHERE su.site_id = $1
+           AND su.role != 'admin'
+           AND u.role != 'super_admin'
+           AND u.deleted_at IS NULL",
     )
     .bind(site_id)
     .fetch_one(pool)
