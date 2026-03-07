@@ -78,10 +78,10 @@ pub fn render_list(
             r#"<tr>
               <td>{hostname}{default_badge} {ssl_badge}</td>
               <td style="color:var(--muted);font-size:0.875rem">{admin_email}</td>
-              <td>{user_count}</td>
-              <td>{subscriber_count}</td>
-              <td>{post_count}</td>
-              <td>{page_count}</td>
+              <td><span style="display:inline-block;background:#dbeafe;color:#1d4ed8;border-radius:4px;padding:.15rem .5rem;font-size:.78rem;font-weight:500">{user_count}</span></td>
+              <td><span style="display:inline-block;background:#dbeafe;color:#1d4ed8;border-radius:4px;padding:.15rem .5rem;font-size:.78rem;font-weight:500">{subscriber_count}</span></td>
+              <td><span style="display:inline-block;background:#dbeafe;color:#1d4ed8;border-radius:4px;padding:.15rem .5rem;font-size:.78rem;font-weight:500">{post_count}</span></td>
+              <td><span style="display:inline-block;background:#dbeafe;color:#1d4ed8;border-radius:4px;padding:.15rem .5rem;font-size:.78rem;font-weight:500">{page_count}</span></td>
               <td class="actions">
                 <form method="post" action="/admin/sites/switch" style="display:inline">
                   <input type="hidden" name="site_id" value="{id}">
