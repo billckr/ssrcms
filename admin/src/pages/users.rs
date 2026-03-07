@@ -43,8 +43,10 @@ pub struct UserRow {
     /// True when the user's global role is super_admin.
     /// Used to hide the site-access button regardless of site role display.
     pub is_super_admin: bool,
-    /// Sites this user belongs to (hostnames). Populated only for subscribers.
+    /// Site hostnames this user belongs to. Populated for both staff and subscribers.
     pub site_hostnames: Vec<String>,
+    /// Site UUIDs parallel to site_hostnames. Used to render switch-site links for admins.
+    pub site_ids: Vec<String>,
 }
 
 pub struct UserEdit {
@@ -176,6 +178,19 @@ pub fn render_list(
         };
         let domain_badges = if u.site_hostnames.is_empty() {
             r#"<span style="display:inline-block;background:#fed7aa;color:#c2410c;border-radius:4px;padding:.15rem .5rem;font-size:.78rem;font-weight:500;white-space:nowrap">Unassigned</span>"#.to_string()
+        } else if can_manage_access {
+            u.site_hostnames.iter().zip(u.site_ids.iter()).map(|(h, sid)| {
+                format!(
+                    r#"<form method="POST" action="/admin/sites/switch" style="display:inline;margin:.1rem .15rem .1rem 0">
+                      <input type="hidden" name="site_id" value="{sid}">
+                      <button type="submit" title="Switch to {h}" style="display:inline-block;background:#dbeafe;color:#1d4ed8;border-radius:4px;padding:.15rem .5rem;font-size:.78rem;font-weight:500;white-space:nowrap;border:none;cursor:pointer;font-family:inherit;line-height:1.4">
+                        {h}
+                      </button>
+                    </form>"#,
+                    sid = crate::html_escape(sid),
+                    h = crate::html_escape(h),
+                )
+            }).collect::<Vec<_>>().join("")
         } else {
             u.site_hostnames.iter().map(|h| {
                 format!(
