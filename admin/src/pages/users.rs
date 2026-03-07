@@ -521,7 +521,8 @@ pub fn render_editor(user: &UserEdit, flash: Option<&str>, ctx: &crate::PageCont
     </select>
   </div>
   <div id="site-new" style="display:none">
-    <input type="text" name="new_hostname" placeholder="example.com">
+    <input type="text" name="new_hostname" id="new-hostname-input" placeholder="example.com">
+    <small id="hostname-hint" style="color:#dc2626;display:none">Must be a valid domain (e.g. example.com, my-site.com, sub.example.com)</small>
     <small>The domain this site will respond to (e.g. client.example.com)</small>
   </div>
 </div>
@@ -655,7 +656,18 @@ function toggleSiteFields() {{
       if (hint) {{
         hint.style.display = (emailVal && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailVal)) ? '' : 'none';
       }}
+      // Hostname hint — show when "new site" is selected and value is not a valid domain.
+      var assignEl = document.querySelector('input[name="site_assignment"]:checked');
+      var hnEl = document.getElementById('new-hostname-input');
+      var hnHint = document.getElementById('hostname-hint');
+      if (hnHint && hnEl) {{
+        var hnVal = hnEl.value.trim();
+        hnHint.style.display = (assignEl && assignEl.value === 'new' && hnVal && !isValidHostname(hnVal)) ? '' : 'none';
+      }}
     }};
+    function isValidHostname(h) {{
+      return /^(?:[a-z0-9](?:[a-z0-9\-]*[a-z0-9])?\.)+[a-z]{{2,}}$/i.test(h);
+    }}
 
     var checkComplete = function() {{
       var unameEl = document.getElementById('username');
@@ -675,6 +687,7 @@ function toggleSiteFields() {{
       }} else if (assign && assign.value === 'new') {{
         var hnInput = document.querySelector('input[name="new_hostname"]');
         if (!hnInput || !hnInput.value.trim()) return false;
+        if (!isValidHostname(hnInput.value.trim())) return false;
       }}
       return true;
     }};

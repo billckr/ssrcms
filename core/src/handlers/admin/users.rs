@@ -288,6 +288,29 @@ pub async fn save_new(
         }
     };
 
+    // Validate hostname format when creating a new site.
+    if form.site_assignment.as_deref() == Some("new") {
+        let hostname = form.new_hostname.as_deref().unwrap_or("").trim().to_lowercase();
+        if hostname.is_empty() || !is_valid_hostname(&hostname) {
+            let sites = fetch_sites_for_admin(&state, &admin).await;
+            let edit = UserEdit {
+                id: None,
+                username: form.username.clone(),
+                email: form.email.clone(),
+                display_name: form.display_name.clone().unwrap_or_default(),
+                role: form.role.clone(),
+                bio: form.bio.clone().unwrap_or_default(),
+                sites,
+                is_super_admin_target: false,
+            };
+            return Html(admin::pages::users::render_editor(
+                &edit,
+                Some("Invalid hostname. Use a format like example.com or sub.example.com."),
+                &ctx,
+            )).into_response();
+        }
+    }
+
     // Validate password requirements.
     if let Err(msg) = crate::models::user::validate_password(&password) {
         let sites = fetch_sites_for_admin(&state, &admin).await;
@@ -732,6 +755,21 @@ fn friendly_user_error(e: &crate::errors::AppError) -> String {
     } else {
         "Failed to save user. Please try again.".to_string()
     }
+}
+
+/// Returns true if `hostname` looks like a valid domain (e.g. example.com, sub.my-site.org).
+/// Requires at least one dot, alphabetic-only TLD of 2+ chars, and valid labels.
+fn is_valid_hostname(hostname: &str) -> bool {
+    let parts: Vec<&str> = hostname.split('.').collect();
+    if parts.len() < 2 { return false; }
+    let tld = parts.last().unwrap();
+    if tld.len() < 2 || !tld.chars().all(|c| c.is_ascii_alphabetic()) { return false; }
+    for label in &parts[..parts.len() - 1] {
+        if label.is_empty() { return false; }
+        if label.starts_with('-') || label.ends_with('-') { return false; }
+        if !label.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') { return false; }
+    }
+    true
 }
 
 fn parse_role(s: &str) -> UserRole {
