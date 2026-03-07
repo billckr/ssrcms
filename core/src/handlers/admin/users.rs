@@ -170,11 +170,7 @@ pub async fn new_user(
     }
     let cs = state.site_hostname(admin.site_id);
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
-    let sites = if admin.caps.is_global_admin {
-        fetch_site_options(&state).await
-    } else {
-        vec![]
-    };
+    let sites = fetch_sites_for_admin(&state, &admin).await;
     let edit = UserEdit {
         id: None,
         username: String::new(),
@@ -273,7 +269,7 @@ pub async fn save_new(
     let password = match form.password.as_deref().filter(|p| !p.is_empty()) {
         Some(p) => p.to_string(),
         None => {
-            let sites = if admin.caps.is_global_admin { fetch_site_options(&state).await } else { vec![] };
+            let sites = fetch_sites_for_admin(&state, &admin).await;
             let edit = UserEdit {
                 id: None,
                 username: form.username,
@@ -294,7 +290,7 @@ pub async fn save_new(
 
     // Validate password requirements.
     if let Err(msg) = crate::models::user::validate_password(&password) {
-        let sites = if admin.caps.is_global_admin { fetch_site_options(&state).await } else { vec![] };
+        let sites = fetch_sites_for_admin(&state, &admin).await;
         let edit = UserEdit {
             id: None,
             username: form.username.clone(),
@@ -392,8 +388,19 @@ pub async fn save_new(
                     }
                 }
             } else {
-                // Site admin: auto-scope to their site, record who invited.
-                if let Some(site_id) = admin.site_id {
+                // Site admin: use selected site if provided and owned, else current site.
+                let selected = form.existing_site_id
+                    .as_deref()
+                    .and_then(|s| s.parse::<Uuid>().ok());
+                let target_site_id = if let Some(sid) = selected {
+                    let is_owner = crate::models::site::get_by_id(&state.db, sid).await
+                        .map(|s| s.owner_user_id == Some(admin.user.id))
+                        .unwrap_or(false);
+                    if is_owner { Some(sid) } else { admin.site_id }
+                } else {
+                    admin.site_id
+                };
+                if let Some(site_id) = target_site_id {
                     if let Err(e) = crate::models::site_user::add(&state.db, site_id, new_user.id, site_role, Some(admin.user.id)).await {
                         tracing::warn!("failed to add new user {} to site {}: {:?}", new_user.id, site_id, e);
                     }
@@ -407,7 +414,7 @@ pub async fn save_new(
         }
         Err(e) => {
             tracing::error!("create user error: {:?}", e);
-            let sites = if admin.caps.is_global_admin { fetch_site_options(&state).await } else { vec![] };
+            let sites = fetch_sites_for_admin(&state, &admin).await;
             let edit = UserEdit {
                 id: None,
                 username: form.username,
@@ -711,6 +718,30 @@ fn parse_role(s: &str) -> UserRole {
         "editor" => UserRole::Editor,
         "author" => UserRole::Author,
         _ => UserRole::Subscriber,
+    }
+}
+
+/// Fetch site options for the new-user form.
+/// Global admin: all sites with admin info.
+/// Site admin: only their owned sites, and only when they own more than one
+/// (a single-site owner gets no selector — the backend auto-assigns).
+async fn fetch_sites_for_admin(state: &AppState, admin: &AdminUser) -> Vec<SiteOption> {
+    if admin.caps.is_global_admin {
+        fetch_site_options(state).await
+    } else {
+        let owned = crate::models::site::list_by_owner(&state.db, admin.user.id)
+            .await
+            .unwrap_or_default();
+        if owned.len() > 1 {
+            owned.into_iter().map(|s| SiteOption {
+                id: s.id.to_string(),
+                hostname: s.hostname,
+                existing_admin_id:   None,
+                existing_admin_name: None,
+            }).collect()
+        } else {
+            vec![]
+        }
     }
 }
 

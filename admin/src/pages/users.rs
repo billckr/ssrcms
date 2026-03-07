@@ -488,7 +488,9 @@ pub fn render_editor(user: &UserEdit, flash: Option<&str>, ctx: &crate::PageCont
         ""
     };
 
-    // Site-assignment section — only for global admins creating a new user.
+    // Site-assignment section — shown for new users when there are sites to select.
+    // Global admin: full radio UI (None / Existing / New site).
+    // Site admin with 2+ owned sites: simple dropdown (backend limits choices to owned sites).
     let site_section = if is_new && ctx.is_global_admin {
         let site_opts = user.sites.iter().map(|s| {
             format!(
@@ -529,6 +531,26 @@ function toggleSiteFields() {{
   document.getElementById('site-new').style.display     = val === 'new'      ? '' : 'none';
 }}
 </script>"#,
+            site_opts = site_opts,
+        )
+    } else if is_new && !user.sites.is_empty() {
+        // Site admin with multiple owned sites: simple site selector.
+        let site_opts = user.sites.iter().map(|s| {
+            format!(
+                r#"<option value="{}">{}</option>"#,
+                crate::html_escape(&s.id),
+                crate::html_escape(&s.hostname),
+            )
+        }).collect::<Vec<_>>().join("\n");
+        format!(r#"
+<div class="form-group" style="grid-column:1/-1;margin-top:0.5rem">
+  <input type="hidden" name="site_assignment" value="existing">
+  <label for="site-existing-select">Assign to Site</label>
+  <select name="existing_site_id" id="site-existing-select" style="width:100%;max-width:360px" required>
+    <option value="" disabled selected>Select Site</option>
+    {site_opts}
+  </select>
+</div>"#,
             site_opts = site_opts,
         )
     } else {
@@ -672,6 +694,10 @@ function toggleSiteFields() {{
       }} else if (assign && assign.value === 'new') {{
         var hnInput = document.querySelector('input[name="new_hostname"]');
         if (!hnInput || !hnInput.value.trim()) return false;
+      }} else if (!assign) {{
+        // No radio group: site admin with a required site dropdown.
+        var siteSel = document.getElementById('site-existing-select');
+        if (siteSel && !siteSel.value) return false;
       }}
       return true;
     }};
