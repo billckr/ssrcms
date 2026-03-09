@@ -12,7 +12,8 @@
 <header class="search-header">
   <h1>Search</h1>
   <form method="get" action="/search" class="search-form">
-    <input type="text" name="q" placeholder="Search posts..." value="{{ query }}" class="search-input">
+    {# Search query is capped at 25 characters — enforced here and server-side. #}
+    <input type="text" name="q" placeholder="Search posts..." value="{{ query }}" class="search-input" maxlength="25">
     <button type="submit" class="search-button">Search</button>
   </form>
 </header>

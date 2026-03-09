@@ -68,7 +68,8 @@
     <div class="sidebar-widget">
       <h3 class="sidebar-widget-title">Search</h3>
       <form method="get" action="/search" class="search-form sidebar-search-form">
-        <input type="text" name="q" placeholder="Search posts..." class="search-input">
+        {# Search query is capped at 25 characters — enforced here and server-side. #}
+        <input type="text" name="q" placeholder="Search posts..." class="search-input" maxlength="25">
         <button type="submit" class="search-button">Search</button>
       </form>
     </div>

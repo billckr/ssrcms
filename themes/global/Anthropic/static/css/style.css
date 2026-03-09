@@ -461,6 +461,7 @@ a:hover {
 }
 
 /* --- Search --- */
+/* Search inputs (page and sidebar) are limited to 25 characters (maxlength on the input element). */
 
 .search-header {
   background: linear-gradient(135deg, var(--orange-pale), white);
@@ -677,6 +678,7 @@ a:hover {
   margin: 0 0 1rem 0;
 }
 
+/* Sidebar search shares the 25-character maxlength limit set on the input element. */
 .sidebar-search-form {
   flex-direction: column;
   margin-top: 0;

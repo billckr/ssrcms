@@ -41,6 +41,13 @@ async fn render_search(
     site_id: Uuid,
     base_url: &str,
 ) -> crate::errors::Result<String> {
+    // Enforce 25-character query limit server-side (mirrors maxlength on the HTML input).
+    let query = if query.chars().count() > 25 {
+        query.chars().take(25).collect::<String>()
+    } else {
+        query
+    };
+
     let site_id_str = site_id.to_string();
     // Query Tantivy for matching post IDs, then fetch full records from DB.
     let search_results = if query.is_empty() {

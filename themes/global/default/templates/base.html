@@ -54,7 +54,8 @@
       </ul>
     </nav>
     <form method="get" action="/search" class="header-search" role="search">
-      <input type="search" name="q" placeholder="Search…" aria-label="Search posts">
+      {# Search query is capped at 25 characters — enforced here and server-side. #}
+      <input type="search" name="q" placeholder="Search…" aria-label="Search posts" maxlength="25">
       <button type="submit">Search</button>
     </form>
   </header>
