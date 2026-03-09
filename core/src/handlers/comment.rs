@@ -50,7 +50,7 @@ pub async fn submit(
 
     // Validate body.
     let body = form.body.trim().to_string();
-    if body.is_empty() || body.len() > 2000 {
+    if body.is_empty() || body.len() > 400 {
         return Redirect::to(&format!("{}#comments", post_url)).into_response();
     }
 

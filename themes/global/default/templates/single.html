@@ -119,7 +119,8 @@
             <div class="reply-form" id="reply-form-{{ comment.id }}">
               <form method="post" action="/blog/{{ post.slug }}/comment">
                 <input type="hidden" name="parent_id" value="{{ comment.id }}">
-                <textarea name="body" class="comment-textarea" rows="3" maxlength="2000" placeholder="Write a reply…" required></textarea>
+                <textarea name="body" class="comment-textarea" rows="3" maxlength="400" placeholder="Write a reply…" required></textarea>
+                <small class="comment-char-count">400 remaining</small>
                 <button type="submit" class="comment-submit">Post reply</button>
               </form>
             </div>
@@ -154,7 +155,8 @@
       <h3>Leave a comment</h3>
       <form method="post" action="/blog/{{ post.slug }}/comment">
         <input type="hidden" name="parent_id" value="">
-        <textarea name="body" class="comment-textarea" rows="5" maxlength="2000" placeholder="Write a comment…" required></textarea>
+        <textarea name="body" class="comment-textarea" rows="5" maxlength="400" placeholder="Write a comment…" required></textarea>
+        <small class="comment-char-count">400 remaining</small>
         <button type="submit" class="comment-submit">Post comment</button>
       </form>
     {% else %}
@@ -175,6 +177,17 @@
         form.style.display = visible ? 'none' : 'block';
         link.textContent = visible ? 'Reply' : 'Cancel';
       }
+    });
+  });
+
+  document.querySelectorAll('.comment-textarea').forEach(function(ta) {
+    var counter = ta.nextElementSibling;
+    if (!counter || !counter.classList.contains('comment-char-count')) return;
+    var max = parseInt(ta.getAttribute('maxlength'), 10);
+    ta.addEventListener('input', function() {
+      var remaining = max - ta.value.length;
+      counter.textContent = remaining + ' remaining';
+      counter.style.color = remaining < 20 ? '#dc2626' : remaining < 50 ? '#d97706' : '';
     });
   });
 </script>
