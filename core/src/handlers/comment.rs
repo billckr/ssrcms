@@ -20,6 +20,9 @@ pub struct CommentForm {
     pub body: String,
     #[serde(default)]
     pub parent_id: String,
+    /// Present (any value) when the "I'm human" checkbox is checked; absent when unchecked.
+    #[serde(default)]
+    pub human_check: Option<String>,
 }
 
 /// POST /blog/:slug/comment
@@ -47,6 +50,11 @@ pub async fn submit(
             return Redirect::to(&format!("/login?redirect={}", post_url)).into_response();
         }
     };
+
+    // Human check — reject if checkbox was not ticked.
+    if form.human_check.is_none() {
+        return Redirect::to(&format!("{}#comments", post_url)).into_response();
+    }
 
     // Validate body.
     let body = form.body.trim().to_string();

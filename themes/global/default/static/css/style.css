@@ -658,6 +658,17 @@ p { margin: 0 0 1rem; }
   margin: 0 0 1rem;
 }
 
+.human-check-label {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.875rem;
+  color: var(--color-muted);
+  margin: 0.5rem 0 0;
+  cursor: pointer;
+  user-select: none;
+}
+
 .comment-login-prompt {
   color: var(--color-muted);
   font-size: 0.9375rem;

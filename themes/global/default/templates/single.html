@@ -120,6 +120,9 @@
               <form method="post" action="/blog/{{ post.slug }}/comment">
                 <input type="hidden" name="parent_id" value="{{ comment.id }}">
                 <textarea name="body" class="comment-textarea" rows="3" maxlength="400" placeholder="Write a reply…" required></textarea>
+                <label class="human-check-label">
+                  <input type="checkbox" name="human_check" value="1" required> I'm human
+                </label>
                 <div class="comment-form-footer">
                   <small class="comment-char-count">400 remaining</small>
                   <button type="submit" class="comment-submit">Post reply</button>
@@ -177,6 +180,9 @@
       <form method="post" action="/blog/{{ post.slug }}/comment">
         <input type="hidden" name="parent_id" value="">
         <textarea name="body" class="comment-textarea" rows="5" maxlength="400" placeholder="Write a comment…" required></textarea>
+        <label class="human-check-label">
+          <input type="checkbox" name="human_check" value="1" required> I'm human
+        </label>
         <div class="comment-form-footer">
           <small class="comment-char-count">400 remaining</small>
           <button type="submit" class="comment-submit">Post comment</button>
