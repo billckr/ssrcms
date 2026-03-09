@@ -96,7 +96,7 @@
 {% if post.comments_enabled %}
 <section class="comments" id="comments">
   <h2 class="comments-heading">
-    {% if comments | length == 1 %}1 comment{% elif comments | length > 1 %}{{ comments | length }} comments{% else %}No comments yet{% endif %}
+    {% if comment_pagination.total_count == 1 %}1 comment{% elif comment_pagination.total_count > 1 %}{{ comment_pagination.total_count }} comments{% else %}No comments yet{% endif %}
   </h2>
 
   {% if comments | length > 0 %}
@@ -113,8 +113,8 @@
               </form>
             {% endif %}
           </div>
-          <div class="comment-body">{{ comment.body }}</div>
-          {% if session.is_logged_in %}
+          <div class="comment-body">{% if comment.is_deleted %}<em class="muted">[deleted]</em>{% else %}{{ comment.body }}{% endif %}</div>
+          {% if session.is_logged_in and not comment.is_deleted %}
             <a href="#" class="reply-toggle comment-reply-link" data-parent="{{ comment.id }}">Reply</a>
             <div class="reply-form" id="reply-form-{{ comment.id }}">
               <form method="post" action="/blog/{{ post.slug }}/comment">
@@ -148,6 +148,22 @@
         </li>
       {% endfor %}
     </ol>
+  {% endif %}
+
+  {% if comment_pagination.total_pages > 1 %}
+  <nav class="pagination" aria-label="Comment pages">
+    {% if comment_pagination.prev_page %}
+      <a class="pagination-prev" href="{{ comment_pagination.post_url }}?cpage={{ comment_pagination.prev_page }}#comments">&larr; Older</a>
+    {% else %}
+      <span class="pagination-prev" style="opacity:0.4;pointer-events:none">&larr; Older</span>
+    {% endif %}
+    <span class="pagination-info">Page {{ comment_pagination.current_page }} of {{ comment_pagination.total_pages }}</span>
+    {% if comment_pagination.next_page %}
+      <a class="pagination-next" href="{{ comment_pagination.post_url }}?cpage={{ comment_pagination.next_page }}#comments">Newer &rarr;</a>
+    {% else %}
+      <span class="pagination-next" style="opacity:0.4;pointer-events:none">Newer &rarr;</span>
+    {% endif %}
+  </nav>
   {% endif %}
 
   <div class="comment-form-wrap" id="comment-form">

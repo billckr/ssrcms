@@ -204,10 +204,80 @@ pub fn render_saved_posts(ctx: &AccountContext) -> String {
     account_page("Saved Posts", "/account/saved-posts", None, content, ctx)
 }
 
-// ── My Comments (stub) ───────────────────────────────────────────────────────
+// ── My Comments ──────────────────────────────────────────────────────────────
 
-pub fn render_my_comments(ctx: &AccountContext) -> String {
-    let content = r#"<h2>My Comments</h2>
-<p class="muted">You haven&rsquo;t made any comments yet.</p>"#;
-    account_page("My Comments", "/account/my-comments", None, content, ctx)
+pub struct MyCommentRow {
+    pub id:            String,
+    pub body_preview:  String,
+    pub post_title:    String,
+    pub post_slug:     String,
+    pub site_hostname: String,
+    pub created_at:    String,
+    pub can_delete:    bool,
+}
+
+pub fn render_my_comments(rows: &[MyCommentRow], ctx: &AccountContext) -> String {
+    let content = if rows.is_empty() {
+        r#"<h2>My Comments</h2>
+<p class="muted">You haven&rsquo;t made any comments yet.</p>"#
+            .to_string()
+    } else {
+        let row_html = rows.iter().map(|r| {
+            let delete_btn = if r.can_delete {
+                format!(
+                    r#"<form method="POST" action="/account/comments/{id}/delete" style="display:inline"
+                         onsubmit="return confirm('Delete this comment? This cannot be undone.')">
+                      <button class="icon-btn icon-danger" title="Delete" type="submit">
+                        <img src="/admin/static/icons/trash-2.svg" alt="Delete">
+                      </button>
+                    </form>"#,
+                    id = crate::html_escape(&r.id),
+                )
+            } else {
+                String::new()
+            };
+            format!(
+                r#"<tr>
+                  <td><span class="badge">{hostname}</span></td>
+                  <td>{post_title}</td>
+                  <td class="muted" style="font-size:0.85rem">{preview}</td>
+                  <td style="white-space:nowrap">{date}</td>
+                  <td class="actions">
+                    <a href="/blog/{slug}#comments" class="icon-btn" title="View post" target="_blank" rel="noopener noreferrer">
+                      <img src="/admin/static/icons/eye.svg" alt="View">
+                    </a>
+                    {delete_btn}
+                  </td>
+                </tr>"#,
+                hostname   = crate::html_escape(&r.site_hostname),
+                post_title = crate::html_escape(&r.post_title),
+                preview    = crate::html_escape(&r.body_preview),
+                date       = crate::html_escape(&r.created_at),
+                slug       = crate::html_escape(&r.post_slug),
+                delete_btn = delete_btn,
+            )
+        }).collect::<Vec<_>>().join("\n");
+
+        format!(
+            r#"<h2>My Comments</h2>
+<table class="data-table">
+  <thead><tr>
+    <th>Site</th>
+    <th>Post</th>
+    <th>Comment</th>
+    <th>Date</th>
+    <th>Actions</th>
+  </tr></thead>
+  <tbody>
+    {rows}
+  </tbody>
+</table>
+<p class="muted" style="margin-top:0.75rem;font-size:0.8rem">
+  Comments can be deleted within 15&nbsp;minutes of posting.
+</p>"#,
+            rows = row_html,
+        )
+    };
+
+    account_page("My Comments", "/account/my-comments", None, &content, ctx)
 }

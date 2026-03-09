@@ -81,6 +81,7 @@ pub fn build(
         .route("/account/profile/change-password",post(account::profile_change_password))
         .route("/account/saved-posts",            get(account::saved_posts))
         .route("/account/my-comments",            get(account::my_comments))
+        .route("/account/comments/{id}/delete",    post(account::delete_comment))
         .route("/account/logout",                 get(auth::account_logout))
         // ── Admin profile ──────────────────────────────────────────────────
         .route("/admin/profile", get(profile::view))

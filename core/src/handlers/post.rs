@@ -1,5 +1,5 @@
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     response::{Html, IntoResponse, Response},
 };
 use axum_extra::extract::cookie::SignedCookieJar;
@@ -23,10 +23,12 @@ pub async fn single_post(
     jar: SignedCookieJar,
     session: Session,
     axum::extract::OriginalUri(uri): axum::extract::OriginalUri,
+    Query(params): Query<std::collections::HashMap<String, String>>,
 ) -> Response {
     let path = uri.path().to_string();
     let site_id = current_site.site.id;
     let base_url = current_site.base_url.clone();
+    let cpage: usize = params.get("cpage").and_then(|v| v.parse().ok()).unwrap_or(1);
 
     // Password gate: check before full render.
     if let Ok(post_record) = post::get_published_by_slug(&state.db, Some(site_id), &slug).await {
@@ -44,7 +46,7 @@ pub async fn single_post(
     // Resolve subscriber session (optional — never fails).
     let session_ctx = resolve_session(&state, &session).await;
 
-    match render_post(state.clone(), slug, uri, site_id, &base_url, session_ctx).await {
+    match render_post(state.clone(), slug, uri, site_id, &base_url, session_ctx, cpage).await {
         Ok(html) => Html(html).into_response(),
         Err(e) => render_error_page(e, &state, &path, Some(current_site.site.id)).await,
     }
@@ -81,6 +83,7 @@ async fn render_post(
     site_id: Uuid,
     base_url: &str,
     session_ctx: SessionContext,
+    cpage: usize,
 ) -> crate::errors::Result<String> {
     let post_record = post::get_published_by_slug(&state.db, Some(site_id), &slug).await?;
 
@@ -111,13 +114,34 @@ async fn render_post(
     }
 
     // Fetch comments if enabled.
-    let comments = if post_record.comments_enabled {
-        crate::models::comment::list_for_post(&state.db, post_record.id)
+    const PER_PAGE: usize = 10;
+    let comment_page = if post_record.comments_enabled {
+        crate::models::comment::list_for_post(&state.db, post_record.id, cpage, PER_PAGE)
             .await
-            .unwrap_or_default()
+            .unwrap_or_else(|_| crate::models::comment::CommentPage {
+                comments:     vec![],
+                current_page: 1,
+                total_pages:  1,
+                total_count:  0,
+            })
     } else {
-        vec![]
+        crate::models::comment::CommentPage {
+            comments:     vec![],
+            current_page: 1,
+            total_pages:  1,
+            total_count:  0,
+        }
     };
+
+    let post_url = format!("/blog/{}", slug);
+    let comment_pagination = serde_json::json!({
+        "current_page": comment_page.current_page,
+        "total_pages":  comment_page.total_pages,
+        "total_count":  comment_page.total_count,
+        "prev_page":    if comment_page.current_page > 1 { Some(comment_page.current_page - 1) } else { None },
+        "next_page":    if comment_page.current_page < comment_page.total_pages { Some(comment_page.current_page + 1) } else { None },
+        "post_url":     post_url,
+    });
 
     let site_ctx = build_site_context(&state, Some(site_id), base_url).await?;
 
@@ -137,7 +161,8 @@ async fn render_post(
     ctx.insert("prev_post", &prev);
     ctx.insert("next_post", &next);
     ctx.insert("related_posts", &related);
-    ctx.insert("comments", &comments);
+    ctx.insert("comments", &comment_page.comments);
+    ctx.insert("comment_pagination", &comment_pagination);
 
     let active_plugins = crate::models::site_plugin::active_plugin_names(&state.db, site_id)
         .await
