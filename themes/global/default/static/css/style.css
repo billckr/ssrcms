@@ -630,8 +630,14 @@ p { margin: 0 0 1rem; }
 
 .comment-textarea:focus { border-color: var(--color-accent); }
 
-.comment-submit {
+.comment-form-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   margin-top: 0.5rem;
+}
+
+.comment-submit {
   padding: 0.4rem 1rem;
   background: var(--color-accent);
   color: #fff;
@@ -645,6 +651,12 @@ p { margin: 0 0 1rem; }
 }
 
 .comment-submit:hover { background: var(--color-accent-dark); }
+
+.comment-error {
+  color: #dc2626;
+  font-size: 0.9375rem;
+  margin: 0 0 1rem;
+}
 
 .comment-login-prompt {
   color: var(--color-muted);

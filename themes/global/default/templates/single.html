@@ -120,8 +120,10 @@
               <form method="post" action="/blog/{{ post.slug }}/comment">
                 <input type="hidden" name="parent_id" value="{{ comment.id }}">
                 <textarea name="body" class="comment-textarea" rows="3" maxlength="400" placeholder="Write a reply…" required></textarea>
-                <small class="comment-char-count">400 remaining</small>
-                <button type="submit" class="comment-submit">Post reply</button>
+                <div class="comment-form-footer">
+                  <small class="comment-char-count">400 remaining</small>
+                  <button type="submit" class="comment-submit">Post reply</button>
+                </div>
               </form>
             </div>
           {% endif %}
@@ -167,13 +169,18 @@
   {% endif %}
 
   <div class="comment-form-wrap" id="comment-form">
+    {% if request.query.comment_error | default(value="") == "rate_limited" %}
+      <p class="comment-error">You can only post 2 comments every 10 minutes. Please wait a moment before trying again.</p>
+    {% endif %}
     {% if session.is_logged_in %}
       <h3>Leave a comment</h3>
       <form method="post" action="/blog/{{ post.slug }}/comment">
         <input type="hidden" name="parent_id" value="">
         <textarea name="body" class="comment-textarea" rows="5" maxlength="400" placeholder="Write a comment…" required></textarea>
-        <small class="comment-char-count">400 remaining</small>
-        <button type="submit" class="comment-submit">Post comment</button>
+        <div class="comment-form-footer">
+          <small class="comment-char-count">400 remaining</small>
+          <button type="submit" class="comment-submit">Post comment</button>
+        </div>
       </form>
     {% else %}
       <p class="comment-login-prompt">

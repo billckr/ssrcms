@@ -63,6 +63,20 @@ pub async fn submit(
         return Redirect::to(&post_url).into_response();
     }
 
+    // Rate limit: max 2 comments (top-level or reply) per 10 minutes per user.
+    let recent: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM comments \
+         WHERE author_id = $1 AND created_at > NOW() - INTERVAL '10 minutes'",
+    )
+    .bind(user_id)
+    .fetch_one(&state.db)
+    .await
+    .unwrap_or(0);
+
+    if recent >= 2 {
+        return Redirect::to(&format!("{}?comment_error=rate_limited#comments", post_url)).into_response();
+    }
+
     // Optional parent_id (only one level of threading — replies to top-level only).
     let parent_id = form.parent_id.trim().parse::<Uuid>().ok();
 

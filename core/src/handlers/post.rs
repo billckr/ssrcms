@@ -3,6 +3,7 @@ use axum::{
     response::{Html, IntoResponse, Response},
 };
 use axum_extra::extract::cookie::SignedCookieJar;
+use serde::Serialize;
 use tower_sessions::Session;
 
 use uuid::Uuid;
@@ -12,6 +13,16 @@ use crate::middleware::account_auth::SESSION_ACCOUNT_USER_ID_KEY;
 use crate::middleware::site::CurrentSite;
 use crate::models::post;
 use crate::templates::context::{ContextBuilder, NavContext, RequestContext, SessionContext, SessionUserContext};
+
+#[derive(Serialize)]
+struct CommentPaginationContext {
+    current_page: usize,
+    total_pages:  usize,
+    total_count:  usize,
+    prev_page:    Option<usize>,
+    next_page:    Option<usize>,
+    post_url:     String,
+}
 
 use super::home::{build_post_context, build_site_context, render_error_page};
 
@@ -133,24 +144,32 @@ async fn render_post(
         }
     };
 
-    let post_url = format!("/blog/{}", slug);
-    let comment_pagination = serde_json::json!({
-        "current_page": comment_page.current_page,
-        "total_pages":  comment_page.total_pages,
-        "total_count":  comment_page.total_count,
-        "prev_page":    if comment_page.current_page > 1 { Some(comment_page.current_page - 1) } else { None },
-        "next_page":    if comment_page.current_page < comment_page.total_pages { Some(comment_page.current_page + 1) } else { None },
-        "post_url":     post_url,
-    });
+    let comment_pagination = CommentPaginationContext {
+        current_page: comment_page.current_page,
+        total_pages:  comment_page.total_pages,
+        total_count:  comment_page.total_count,
+        prev_page:    if comment_page.current_page > 1 { Some(comment_page.current_page - 1) } else { None },
+        next_page:    if comment_page.current_page < comment_page.total_pages { Some(comment_page.current_page + 1) } else { None },
+        post_url:     format!("/blog/{}", slug),
+    };
 
     let site_ctx = build_site_context(&state, Some(site_id), base_url).await?;
+
+    let query_params: std::collections::HashMap<String, String> = uri.query()
+        .map(|q| q.split('&').filter_map(|pair| {
+            let mut parts = pair.splitn(2, '=');
+            let k = parts.next()?.to_string();
+            let v = parts.next().unwrap_or("").to_string();
+            Some((k, v))
+        }).collect())
+        .unwrap_or_default();
 
     let mut ctx = ContextBuilder {
         site: site_ctx,
         request: RequestContext {
             url: format!("{}{}", base_url, uri.path()),
             path: uri.path().to_string(),
-            query: std::collections::HashMap::new(),
+            query: query_params,
         },
         session: session_ctx,
         nav: NavContext::default(),
