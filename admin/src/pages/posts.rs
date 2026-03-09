@@ -712,28 +712,29 @@ mod tests {
             can_manage_forms: false,
             can_manage_pages: true,
             unread_forms_count: 0,
+            pending_review_count: 0,
             app_name: "Synaptic".to_string(),
         }
     }
 
     #[test]
     fn post_view_link_uses_blog_prefix() {
-        let html = render_list(&[make_row("post", "my-post")], "post", 1, 1, None, &make_ctx());
+        let html = render_list(&[make_row("post", "my-post")], "post", 1, 1, None, &make_ctx(), None, 0, 0);
         assert!(html.contains("href=\"/blog/my-post\""), "post view href should be /blog/{{slug}}");
         assert!(html.contains("target=\"_blank\""), "view link should open in new tab");
     }
 
     #[test]
     fn page_view_link_uses_root_prefix() {
-        let html = render_list(&[make_row("page", "about")], "page", 1, 1, None, &make_ctx());
+        let html = render_list(&[make_row("page", "about")], "page", 1, 1, None, &make_ctx(), None, 0, 0);
         assert!(html.contains("href=\"/about\""), "page view href should be /{{slug}}");
         assert!(html.contains("target=\"_blank\""), "view link should open in new tab");
     }
 
     #[test]
     fn view_icon_present_in_both_post_and_page_lists() {
-        let post_html = render_list(&[make_row("post", "hello")], "post", 1, 1, None, &make_ctx());
-        let page_html = render_list(&[make_row("page", "hello")], "page", 1, 1, None, &make_ctx());
+        let post_html = render_list(&[make_row("post", "hello")], "post", 1, 1, None, &make_ctx(), None, 0, 0);
+        let page_html = render_list(&[make_row("page", "hello")], "page", 1, 1, None, &make_ctx(), None, 0, 0);
         assert!(post_html.contains("eye.svg"), "post list should include eye icon");
         assert!(page_html.contains("eye.svg"), "page list should include eye icon");
     }

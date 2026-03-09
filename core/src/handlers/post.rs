@@ -1,9 +1,12 @@
 use axum::{
-    extract::{Path, Query, State},
+    extract::{ConnectInfo, Path, Query, State},
+    http::HeaderMap,
     response::{Html, IntoResponse, Response},
 };
 use axum_extra::extract::cookie::SignedCookieJar;
+use chrono::Local;
 use serde::Serialize;
+use std::net::SocketAddr;
 use tower_sessions::Session;
 
 use uuid::Uuid;
@@ -33,6 +36,8 @@ pub async fn single_post(
     Path(slug): Path<String>,
     jar: SignedCookieJar,
     session: Session,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
     axum::extract::OriginalUri(uri): axum::extract::OriginalUri,
     Query(params): Query<std::collections::HashMap<String, String>>,
 ) -> Response {
@@ -57,10 +62,79 @@ pub async fn single_post(
     // Resolve subscriber session (optional — never fails).
     let session_ctx = resolve_session(&state, &session).await;
 
+    // Record a unique view (skips bots and logged-in admin users).
+    if !session_ctx.is_logged_in {
+        let ua = headers
+            .get(axum::http::header::USER_AGENT)
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("");
+        if !is_bot(ua) {
+            let client_ip = real_ip(&headers, addr);
+            let ip_hash = anonymize_ip(&client_ip);
+            // Resolve post_id without a second DB query by re-fetching only if needed.
+            // We use a lightweight slug→id lookup path here.
+            if let Ok(post_record) = post::get_published_by_slug(&state.db, Some(site_id), &slug).await {
+                let today = Local::now().date_naive();
+                let key = (post_record.id, ip_hash, today);
+                if let Ok(mut buf) = state.view_buffer.lock() {
+                    buf.insert(key);
+                }
+            }
+        }
+    }
+
     match render_post(state.clone(), slug, uri, site_id, &base_url, session_ctx, cpage).await {
         Ok(html) => Html(html).into_response(),
         Err(e) => render_error_page(e, &state, &path, Some(current_site.site.id)).await,
     }
+}
+
+/// Return the real client IP, preferring the X-Real-IP header set by Caddy,
+/// then X-Forwarded-For, finally the socket address.
+fn real_ip(headers: &HeaderMap, addr: SocketAddr) -> String {
+    if let Some(v) = headers.get("x-real-ip").and_then(|v| v.to_str().ok()) {
+        return v.trim().to_string();
+    }
+    if let Some(v) = headers.get("x-forwarded-for").and_then(|v| v.to_str().ok()) {
+        if let Some(first) = v.split(',').next() {
+            return first.trim().to_string();
+        }
+    }
+    addr.ip().to_string()
+}
+
+/// Anonymize an IP address: zero the last IPv4 octet or the last 80 bits of
+/// an IPv6 address. No new crate required — pure string manipulation.
+fn anonymize_ip(ip: &str) -> String {
+    if let Ok(parsed) = ip.parse::<std::net::IpAddr>() {
+        match parsed {
+            std::net::IpAddr::V4(v4) => {
+                let o = v4.octets();
+                return format!("{}.{}.{}.0", o[0], o[1], o[2]);
+            }
+            std::net::IpAddr::V6(v6) => {
+                let mut segs = v6.segments();
+                // Zero the last 5 segments (80 bits).
+                for s in segs.iter_mut().skip(3) {
+                    *s = 0;
+                }
+                return std::net::Ipv6Addr::from(segs).to_string();
+            }
+        }
+    }
+    // Fallback: return as-is (shouldn't happen in practice).
+    ip.to_string()
+}
+
+/// Returns true if the User-Agent looks like a bot/crawler.
+fn is_bot(ua: &str) -> bool {
+    if ua.is_empty() {
+        return true;
+    }
+    let lower = ua.to_lowercase();
+    ["bot", "crawler", "spider", "slurp", "curl", "wget", "python", "go-http", "java/", "libwww"]
+        .iter()
+        .any(|kw| lower.contains(kw))
 }
 
 /// Read the account session and build a SessionContext — never redirects.

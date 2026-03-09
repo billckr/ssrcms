@@ -61,6 +61,10 @@ a:hover { text-decoration: underline; }
 .flash.error { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
 .error { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; padding: .75rem 1rem; border-radius: var(--radius); margin-bottom: 1rem; }
 
+/* Generic card */
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); }
+.card svg { display: block; width: 100%; height: auto; }
+
 /* Stats grid */
 .stats-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
 .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.25rem; box-shadow: var(--shadow); }

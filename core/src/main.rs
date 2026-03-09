@@ -204,6 +204,8 @@ async fn main() -> anyhow::Result<()> {
     // ── Application state ─────────────────────────────────────────────────────
     let active_theme = Arc::new(std::sync::RwLock::new(startup_theme));
     let cookie_key = axum_extra::extract::cookie::Key::generate();
+    let view_buffer: synaptic_core::app_state::ViewBuffer =
+        Arc::new(std::sync::Mutex::new(std::collections::HashSet::new()));
     let state = AppState {
         db: pool.clone(),
         templates: engine,
@@ -218,11 +220,16 @@ async fn main() -> anyhow::Result<()> {
         metrics_handle,
         metrics_token: cfg.metrics_token.clone(),
         app_settings: Arc::new(std::sync::RwLock::new(app_settings)),
+        view_buffer: view_buffer.clone(),
     };
 
     // ── Scheduled post publisher ─────────────────────────────────────────────
     synaptic_core::scheduler::spawn_scheduled_publisher(pool.clone());
     info!("scheduler: scheduled post publisher started (60 s interval)");
+
+    // ── View flush task ───────────────────────────────────────────────────────
+    synaptic_core::scheduler::spawn_view_flush(pool.clone(), view_buffer);
+    info!("scheduler: view flush task started (60 s interval)");
 
     // ── Router ────────────────────────────────────────────────────────────────
     let app = router::build(state.clone(), &cfg.uploads_dir, session_layer);

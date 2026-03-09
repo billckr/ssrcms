@@ -2,8 +2,8 @@
 
 use metrics_exporter_prometheus::PrometheusHandle;
 use sqlx::PgPool;
-use std::collections::HashMap;
-use std::sync::{Arc, RwLock};
+use std::collections::{HashMap, HashSet};
+use std::sync::{Arc, Mutex, RwLock};
 use uuid::Uuid;
 
 use axum_extra::extract::cookie::Key;
@@ -189,6 +189,10 @@ pub type SiteCache = Arc<RwLock<HashMap<String, (Site, SiteSettings)>>>;
 /// Plugin-registered routes: path → (template_name, content_type).
 pub type PluginRoutes = Arc<HashMap<String, RouteRegistration>>;
 
+/// In-memory buffer of pending view records flushed to the DB every 60 s.
+/// Tuple: (post_id, anonymized_ip, viewed_date).
+pub type ViewBuffer = Arc<Mutex<HashSet<(Uuid, String, chrono::NaiveDate)>>>;
+
 /// Cloneable application state shared across all handlers.
 #[derive(Clone)]
 pub struct AppState {
@@ -215,6 +219,8 @@ pub struct AppState {
     pub metrics_token: Option<String>,
     /// App-wide settings (app_name, timezone, max_upload_mb) — hot-reloadable.
     pub app_settings: Arc<RwLock<AppSettings>>,
+    /// In-memory buffer of pending view records; flushed to DB every 60 s.
+    pub view_buffer: ViewBuffer,
 }
 
 impl axum::extract::FromRef<AppState> for axum_extra::extract::cookie::Key {

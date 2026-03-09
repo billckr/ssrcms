@@ -229,14 +229,27 @@ cmd_build_release() {
 cmd_update_cli() {
     log "Reinstalling synaptic-cli..."
     cd "$SCRIPT_DIR"
-    cargo install --path cli
+    cargo install --path cli --force
     log "synaptic-cli updated: $(command -v synaptic-cli)"
+}
+
+# Returns 0 (true) if synaptic-cli is missing or older than any migration file.
+cli_is_stale() {
+    local cli_bin
+    cli_bin=$(command -v synaptic-cli 2>/dev/null) || return 0  # not installed = stale
+    local newer
+    newer=$(find "$SCRIPT_DIR/migrations" -name "*.sql" -newer "$cli_bin" 2>/dev/null | head -1)
+    [[ -n "$newer" ]]
 }
 
 cmd_dev_reset() {
     if ! command -v synaptic-cli &>/dev/null; then
         log "synaptic-cli not found — run './app.sh update-cli' first."
         exit 1
+    fi
+    if cli_is_stale; then
+        log "Migrations have changed since synaptic-cli was last built — rebuilding CLI..."
+        cmd_update_cli
     fi
     cd "$SCRIPT_DIR"
     synaptic-cli dev reset
@@ -246,6 +259,10 @@ cmd_migrate() {
     if ! command -v synaptic-cli &>/dev/null; then
         log "synaptic-cli not found — run './app.sh update-cli' first."
         exit 1
+    fi
+    if cli_is_stale; then
+        log "Migrations have changed since synaptic-cli was last built — rebuilding CLI..."
+        cmd_update_cli
     fi
     cd "$SCRIPT_DIR"
     log "Running database migrations..."
