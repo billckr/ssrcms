@@ -739,6 +739,11 @@ a:hover {
 .comment-submit { margin-top: 0.5rem; padding: 0.4rem 1rem; background: var(--orange-primary); color: #fff; border: none; border-radius: 6px; cursor: pointer; font-size: 0.9rem; font-family: inherit; font-weight: 500; transition: background 0.15s; }
 .comment-submit:hover { background: var(--orange-dark); }
 .comment-login-prompt { color: var(--text-light); font-size: 0.9375rem; margin: 0; }
+.comment-submit { margin-top: 0; }
+.comment-form-footer { display: flex; align-items: center; justify-content: space-between; margin-top: 0.5rem; }
+.comment-error { color: #dc2626; font-size: 0.9375rem; margin: 0 0 1rem; }
+.human-check-label { display: flex; align-items: center; gap: 0.4rem; font-size: 0.875rem; color: var(--text-light); margin: 0.5rem 0 0; cursor: pointer; user-select: none; }
+.muted { color: var(--text-light); }
 @media (max-width: 640px) { .comment-replies { margin-left: 0.75rem; padding-left: 0.75rem; } }
 
 /* ── Cookie consent banner ── */

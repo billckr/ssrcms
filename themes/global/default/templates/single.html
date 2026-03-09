@@ -210,8 +210,8 @@
   });
 
   document.querySelectorAll('.comment-textarea').forEach(function(ta) {
-    var counter = ta.nextElementSibling;
-    if (!counter || !counter.classList.contains('comment-char-count')) return;
+    var counter = ta.closest('form').querySelector('.comment-char-count');
+    if (!counter) return;
     var max = parseInt(ta.getAttribute('maxlength'), 10);
     ta.addEventListener('input', function() {
       var remaining = max - ta.value.length;
