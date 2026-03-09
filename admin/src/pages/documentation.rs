@@ -1,4 +1,18 @@
+use pulldown_cmark::{html as cm_html, Options, Parser};
+
 use crate::{html_escape, admin_page, PageContext};
+
+/// Render a markdown string to an HTML string.
+fn render_markdown(md: &str) -> String {
+    let opts = Options::ENABLE_TABLES
+        | Options::ENABLE_STRIKETHROUGH
+        | Options::ENABLE_TASKLISTS
+        | Options::ENABLE_FOOTNOTES;
+    let parser = Parser::new_ext(md, opts);
+    let mut html = String::new();
+    cm_html::push_html(&mut html, parser);
+    html
+}
 
 pub struct DocEntry {
     pub slug: String,
@@ -36,18 +50,18 @@ fn render_doc_section(e: &DocEntry) -> String {
         .map(|b| format!(" &middot; {}", html_escape(b)))
         .unwrap_or_default();
     format!(
-        r##"<div class="card doc-section" id="doc-{slug}" style="margin-bottom:2rem">
+        r##"<div class="card doc-section" id="doc-{slug}" style="margin-bottom:2rem;padding:1.25rem">
   <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:1rem;padding-bottom:.75rem;border-bottom:1px solid var(--border)">
     <h2 style="margin:0;font-size:1.1rem">{title}</h2>
     <span style="font-size:11px;color:var(--muted);white-space:nowrap;margin-left:1rem">Updated {updated}{by}</span>
   </div>
-  <pre style="white-space:pre-wrap;font-family:inherit;font-size:13.5px;line-height:1.7;margin:0;overflow-x:auto">{content}</pre>
+  <div class="doc-content">{content}</div>
 </div>"##,
         slug    = html_escape(&e.slug),
         title   = html_escape(&e.title),
         updated = html_escape(&e.last_updated),
         by      = by,
-        content = html_escape(&e.content),
+        content = render_markdown(&e.content),
     )
 }
 

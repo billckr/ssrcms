@@ -225,6 +225,27 @@ tr.muted td { opacity: .55; }
 .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; }
 .two-col h2 { font-size: 1rem; margin-bottom: 1rem; }
 
+/* Documentation markdown content */
+.doc-content { font-size: 13.5px; line-height: 1.75; color: var(--text); }
+.doc-content h1, .doc-content h2, .doc-content h3, .doc-content h4 { margin: 1.25rem 0 .5rem; font-weight: 600; line-height: 1.3; }
+.doc-content h1 { font-size: 1.2rem; }
+.doc-content h2 { font-size: 1rem; }
+.doc-content h3 { font-size: .9rem; }
+.doc-content h4 { font-size: .85rem; color: var(--muted); }
+.doc-content p { margin: 0 0 .75rem; }
+.doc-content ul, .doc-content ol { margin: 0 0 .75rem; padding-left: 1.5rem; }
+.doc-content li { margin-bottom: .25rem; }
+.doc-content code { font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace; font-size: .82em; background: #f1f5f9; border: 1px solid var(--border); border-radius: 3px; padding: .1em .35em; }
+.doc-content pre { background: #f8fafc; border: 1px solid var(--border); border-radius: var(--radius); padding: .85rem 1rem; overflow-x: auto; margin: 0 0 .75rem; }
+.doc-content pre code { background: none; border: none; padding: 0; font-size: .82rem; }
+.doc-content blockquote { margin: 0 0 .75rem; padding: .4rem .85rem; border-left: 3px solid var(--primary); background: #f8fafc; color: var(--muted); font-size: 13px; }
+.doc-content blockquote p { margin: 0; }
+.doc-content table { width: 100%; border-collapse: collapse; margin-bottom: .75rem; font-size: 13px; }
+.doc-content th { background: #f8fafc; text-align: left; padding: .4rem .75rem; border: 1px solid var(--border); font-weight: 600; }
+.doc-content td { padding: .4rem .75rem; border: 1px solid var(--border); }
+.doc-content a { color: var(--primary); }
+.doc-content hr { border: none; border-top: 1px solid var(--border); margin: 1rem 0; }
+
 /* Plugin list */
 .plugin-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(480px, 1fr)); gap: 1.5rem; margin-top: 1rem; }
 .plugin-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.25rem 1.5rem; box-shadow: var(--shadow); }

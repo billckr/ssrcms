@@ -13,3 +13,4 @@ serde_json = { workspace = true }
 chrono = { workspace = true }
 uuid = { workspace = true }
 charts-rs = "0.3"
+pulldown-cmark = { version = "0.12", default-features = false, features = ["html"] }
