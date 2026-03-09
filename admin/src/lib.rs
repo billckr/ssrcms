@@ -115,6 +115,7 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
         {sites}
         {forms}
         {plugins}
+        {documentation}
         {appearance}
         {settings}
       </ul>
@@ -190,6 +191,7 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
             )
         } else { String::new() },
         plugins = if ctx.can_manage_plugins { nav_link("/admin/plugins", "Plugins") } else { String::new() },
+        documentation = if ctx.can_manage_settings || ctx.is_global_admin { nav_link("/admin/documentation", "Documentation") } else { String::new() },
         appearance = if ctx.can_manage_appearance { nav_link("/admin/appearance", "Appearance") } else { String::new() },
         settings = if ctx.can_manage_settings { nav_link("/admin/settings", "System Settings") } else { String::new() },
         flash_html = flash_html,

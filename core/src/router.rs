@@ -13,7 +13,7 @@ use tower_sessions_sqlx_store::PostgresStore;
 
 use crate::app_state::AppState;
 use crate::handlers::{account, archive, auth, comment as comment_handler, form as form_handler, home, metrics as metrics_handler, page, plugin_route, post as post_handler, post_unlock, search, subscribe, theme_static};
-use crate::handlers::admin::{appearance, comments as admin_comments, dashboard, forms as admin_forms, media, plugins, posts, profile, settings, sites as admin_sites, taxonomy, upload, users};
+use crate::handlers::admin::{appearance, comments as admin_comments, dashboard, documentation as admin_documentation, forms as admin_forms, media, plugins, posts, profile, settings, sites as admin_sites, taxonomy, upload, users};
 
 /// Tower middleware that records per-request HTTP metrics.
 async fn track_http_metrics(req: Request, next: Next) -> Response {
@@ -133,6 +133,8 @@ pub fn build(
         .route("/admin/plugins/activate",   post(plugins::activate))
         .route("/admin/plugins/deactivate", post(plugins::deactivate))
         .route("/admin/plugins/delete",     post(plugins::delete))
+        // ── Admin documentation ────────────────────────────────────────────
+        .route("/admin/documentation", get(admin_documentation::list))
         // ── Admin appearance ───────────────────────────────────────────────
         .route("/admin/appearance", get(appearance::list))
         .route("/admin/appearance/activate", post(appearance::activate))

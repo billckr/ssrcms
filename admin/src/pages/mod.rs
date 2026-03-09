@@ -1,6 +1,7 @@
 pub mod account;
 pub mod appearance;
 pub mod dashboard;
+pub mod documentation;
 pub mod forms;
 pub mod login;
 pub mod media;

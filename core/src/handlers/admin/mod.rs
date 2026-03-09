@@ -73,6 +73,7 @@ pub async fn page_ctx_full(state: &AppState, admin: &AdminUser, current_site: &s
 pub mod appearance;
 pub mod comments;
 pub mod dashboard;
+pub mod documentation;
 pub mod forms;
 pub mod media;
 pub mod plugins;

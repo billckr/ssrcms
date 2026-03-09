@@ -143,6 +143,7 @@ async fn reset(
 
     println!();
     println!("  Database schema and migration history will be preserved.");
+    println!("  Documentation table will be preserved (skill-generated, not site data).");
     println!();
 
     // ── Final confirmation ────────────────────────────────────────────────────
@@ -164,6 +165,8 @@ async fn reset(
 
     // ── Truncate database ─────────────────────────────────────────────────────
     // _sqlx_migrations is intentionally kept so install doesn't re-run migrations.
+    // `documentation` is intentionally kept — it holds skill-generated docs that
+    // are not site data and should survive dev resets.
     sqlx::query(
         "TRUNCATE TABLE
             tower_sessions,
