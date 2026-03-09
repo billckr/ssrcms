@@ -7,6 +7,10 @@
 //!   content     — TEXT indexed only    (searched, not stored — saves space)
 //!   slug        — TEXT STORED          (for URL building without a DB round-trip)
 //!   post_type   — TEXT STORED+fast     (filter: "post" vs "page")
+//!
+//! Tokenizer: "en_stop" — SimpleTokenizer → LowerCaser → StopWordFilter → Stemmer(English)
+//! Stop words are stripped at both index time and query time, so searching common
+//! words like "and", "the", "is" returns no results rather than matching everything.
 
 use std::path::Path;
 use std::sync::{Arc, RwLock};
@@ -14,7 +18,36 @@ use std::sync::{Arc, RwLock};
 use tantivy::collector::TopDocs;
 use tantivy::query::QueryParser;
 use tantivy::schema::*;
+use tantivy::tokenizer::{Language, LowerCaser, SimpleTokenizer, Stemmer, StopWordFilter, TextAnalyzer};
 use tantivy::{Index, IndexReader, IndexWriter, ReloadPolicy};
+
+/// Name used to register the custom analyzer with the index.
+const TOKENIZER_NAME: &str = "en_stop";
+
+/// Common English stop words stripped before indexing and querying.
+/// Searching any of these terms alone returns zero results.
+static EN_STOP_WORDS: &[&str] = &[
+    "a", "an", "the", "and", "or", "but", "in", "on", "at", "to", "for",
+    "of", "with", "by", "from", "up", "about", "into", "through", "is",
+    "was", "are", "were", "be", "been", "being", "have", "has", "had",
+    "do", "does", "did", "will", "would", "could", "should", "may", "might",
+    "shall", "can", "i", "me", "my", "we", "our", "you", "your", "he",
+    "him", "his", "she", "her", "it", "its", "they", "them", "their",
+    "this", "that", "these", "those", "what", "which", "who", "whom",
+    "not", "no", "so", "if", "as", "than", "too", "very", "just", "also",
+    "more", "most", "other", "some", "such", "only", "own", "same",
+];
+
+/// Build the custom English text analyzer:
+/// tokenise → lowercase → strip stop words → stem.
+fn build_analyzer() -> TextAnalyzer {
+    let stops: Vec<String> = EN_STOP_WORDS.iter().map(|s| s.to_string()).collect();
+    TextAnalyzer::builder(SimpleTokenizer::default())
+        .filter(LowerCaser)
+        .filter(StopWordFilter::remove(stops))
+        .filter(Stemmer::new(Language::English))
+        .build()
+}
 
 use crate::errors::{AppError, Result};
 
@@ -34,10 +67,19 @@ impl SearchSchema {
     pub fn build() -> Self {
         let mut builder = Schema::builder();
 
+        // Indexing options for searchable fields — uses the "en_stop" custom tokenizer
+        // (stop words + stemming) registered on the index at startup.
+        let indexed = TextOptions::default()
+            .set_indexing_options(
+                TextFieldIndexing::default()
+                    .set_tokenizer(TOKENIZER_NAME)
+                    .set_index_option(IndexRecordOption::WithFreqsAndPositions),
+            );
+
         let id = builder.add_text_field("id", STRING | STORED);
         let site_id = builder.add_text_field("site_id", STORED);
-        let title = builder.add_text_field("title", TEXT | STORED);
-        let content = builder.add_text_field("content", TEXT);
+        let title = builder.add_text_field("title", indexed.clone() | STORED);
+        let content = builder.add_text_field("content", indexed);
         let slug = builder.add_text_field("slug", STORED);
         let post_type = builder.add_text_field("post_type", STRING | STORED);
 
@@ -85,7 +127,7 @@ impl SearchIndex {
         let index = match Index::open_in_dir(path) {
             Ok(existing) if existing.schema() == fields.schema => existing,
             Ok(_) => {
-                // Schema mismatch — wipe and recreate.
+                // Schema mismatch (e.g. tokenizer changed) — wipe and recreate.
                 tracing::warn!("search index schema mismatch — recreating index");
                 std::fs::remove_dir_all(path)?;
                 std::fs::create_dir_all(path)?;
@@ -93,6 +135,9 @@ impl SearchIndex {
             }
             Err(_) => Index::create_in_dir(path, fields.schema.clone())?,
         };
+
+        // Register the custom analyzer so both indexing and querying use it.
+        index.tokenizers().register(TOKENIZER_NAME, build_analyzer());
 
         let reader = index
             .reader_builder()
