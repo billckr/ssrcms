@@ -27,6 +27,31 @@ pub struct DashboardData {
     pub author_total_views: i64,
 }
 
+/// Compute integer Y-axis bounds for a set of count values.
+/// Returns `(axis_max, split_number)` so that every tick label is a whole
+/// number.  The step size is chosen to keep the tick count ≤ 10.
+fn integer_y_axis(values: &[f32]) -> (f32, usize) {
+    let max_val = values.iter().cloned().fold(0.0f32, f32::max);
+    let max_int = (max_val.ceil() as u32).max(1) as f32;
+    // Pick a step that divides max_int evenly and keeps splits ≤ 10.
+    let step = if max_int <= 10.0 {
+        1.0
+    } else if max_int <= 20.0 {
+        2.0
+    } else if max_int <= 50.0 {
+        5.0
+    } else if max_int <= 100.0 {
+        10.0
+    } else if max_int <= 500.0 {
+        50.0
+    } else {
+        100.0
+    };
+    let axis_max = (max_int / step).ceil() * step;
+    let splits = (axis_max / step) as usize;
+    (axis_max, splits.max(1))
+}
+
 /// Post-process a charts-rs SVG to be responsive.
 /// Replaces the fixed `width` attribute with `width="100%"` and adds a
 /// `viewBox` so the chart scales to fill its container at any screen size.
@@ -48,6 +73,7 @@ pub fn render(data: &DashboardData, flash: Option<&str>, ctx: &crate::PageContex
                     .to_string()
             } else {
                 use charts_rs::{BarChart, Color, Series};
+                let (y_max, y_splits) = integer_y_axis(&data.author_chart_values);
                 let mut chart = BarChart::new(
                     vec![Series::new("Published".to_string(), data.author_chart_values.clone())],
                     data.author_chart_labels.clone(),
@@ -57,6 +83,9 @@ pub fn render(data: &DashboardData, flash: Option<&str>, ctx: &crate::PageContex
                 chart.height = 260.0;
                 chart.legend_show = Some(false);
                 chart.font_family = "system-ui, -apple-system, sans-serif".to_string();
+                chart.y_axis_configs[0].axis_min = Some(0.0);
+                chart.y_axis_configs[0].axis_max = Some(y_max);
+                chart.y_axis_configs[0].axis_split_number = y_splits;
                 responsive_svg(chart.svg().unwrap_or_default(), 600, 260)
             }
         };
@@ -69,6 +98,7 @@ pub fn render(data: &DashboardData, flash: Option<&str>, ctx: &crate::PageContex
                     .to_string()
             } else {
                 use charts_rs::{BarChart, Color, Series};
+                let (y_max, y_splits) = integer_y_axis(&data.author_views_values);
                 let mut chart = BarChart::new(
                     vec![Series::new("Views".to_string(), data.author_views_values.clone())],
                     data.author_views_labels.clone(),
@@ -78,6 +108,9 @@ pub fn render(data: &DashboardData, flash: Option<&str>, ctx: &crate::PageContex
                 chart.height = 260.0;
                 chart.legend_show = Some(false);
                 chart.font_family = "system-ui, -apple-system, sans-serif".to_string();
+                chart.y_axis_configs[0].axis_min = Some(0.0);
+                chart.y_axis_configs[0].axis_max = Some(y_max);
+                chart.y_axis_configs[0].axis_split_number = y_splits;
                 responsive_svg(chart.svg().unwrap_or_default(), 600, 260)
             }
         };
