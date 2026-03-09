@@ -22,13 +22,16 @@ pub async fn list(
     let cs = state.site_hostname(admin.site_id);
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
 
-    let rows: Result<Vec<(String, String, String, Option<String>, Option<String>)>, _> =
+    let rows: Result<Vec<(String, String, String, Option<String>, Option<String>, Option<String>)>, _> =
         sqlx::query_as(
             r#"SELECT slug, title, content,
                       to_char(last_updated AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI UTC'),
-                      updated_by
+                      updated_by,
+                      grp
                FROM documentation
-               ORDER BY title ASC"#,
+               ORDER BY
+                 CASE grp WHEN 'system' THEN 0 WHEN 'feature' THEN 1 ELSE 2 END,
+                 title ASC"#,
         )
         .fetch_all(&state.db)
         .await;
@@ -37,12 +40,13 @@ pub async fn list(
         Ok(rows) => {
             let entries: Vec<DocEntry> = rows
                 .into_iter()
-                .map(|(slug, title, content, last_updated, updated_by)| DocEntry {
+                .map(|(slug, title, content, last_updated, updated_by, grp)| DocEntry {
                     slug,
                     title,
                     content,
                     last_updated: last_updated.unwrap_or_default(),
                     updated_by,
+                    grp: grp.unwrap_or_else(|| "feature".to_string()),
                 })
                 .collect();
             Html(render_list(&entries, None, &ctx)).into_response()
