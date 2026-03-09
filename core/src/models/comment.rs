@@ -55,11 +55,12 @@ pub struct CommentContext {
 }
 
 pub struct CreateComment {
-    pub post_id:   Uuid,
-    pub site_id:   Option<Uuid>,
-    pub author_id: Uuid,
-    pub parent_id: Option<Uuid>,
-    pub body:      String,
+    pub post_id:    Uuid,
+    pub site_id:    Option<Uuid>,
+    pub author_id:  Uuid,
+    pub parent_id:  Option<Uuid>,
+    pub body:       String,
+    pub ip_address: Option<String>,
 }
 
 /// Raw DB result used by `list_for_user` before UI mapping.
@@ -74,14 +75,15 @@ pub struct UserCommentRecord {
 
 pub async fn create(pool: &PgPool, data: &CreateComment) -> Result<Comment> {
     let comment = sqlx::query_as::<_, Comment>(
-        "INSERT INTO comments (post_id, site_id, author_id, parent_id, body) \
-         VALUES ($1, $2, $3, $4, $5) RETURNING *",
+        "INSERT INTO comments (post_id, site_id, author_id, parent_id, body, ip_address) \
+         VALUES ($1, $2, $3, $4, $5, $6) RETURNING *",
     )
     .bind(data.post_id)
     .bind(data.site_id)
     .bind(data.author_id)
     .bind(data.parent_id)
     .bind(&data.body)
+    .bind(&data.ip_address)
     .fetch_one(pool)
     .await
     .map_err(AppError::from)?;

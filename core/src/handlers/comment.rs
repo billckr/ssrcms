@@ -1,7 +1,8 @@
 //! Public comment submission handler — POST /blog/:slug/comment.
 
 use axum::{
-    extract::{Path, State},
+    extract::{ConnectInfo, Path, State},
+    http::HeaderMap,
     response::{IntoResponse, Redirect},
     Form,
 };
@@ -33,6 +34,8 @@ pub struct CommentForm {
 pub async fn submit(
     State(state): State<AppState>,
     current_site: CurrentSite,
+    headers: HeaderMap,
+    ConnectInfo(peer_addr): ConnectInfo<std::net::SocketAddr>,
     session: Session,
     Path(slug): Path<String>,
     Form(form): Form<CommentForm>,
@@ -88,12 +91,20 @@ pub async fn submit(
     // Optional parent_id (only one level of threading — replies to top-level only).
     let parent_id = form.parent_id.trim().parse::<Uuid>().ok();
 
+    let ip_address = headers
+        .get("x-real-ip")
+        .or_else(|| headers.get("x-forwarded-for"))
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.split(',').next().unwrap_or(s).trim().to_string())
+        .or_else(|| Some(peer_addr.ip().to_string()));
+
     let data = CreateComment {
-        post_id: post_record.id,
-        site_id: Some(current_site.site.id),
-        author_id: user_id,
+        post_id:    post_record.id,
+        site_id:    Some(current_site.site.id),
+        author_id:  user_id,
         parent_id,
         body,
+        ip_address,
     };
 
     if let Err(e) = crate::models::comment::create(&state.db, &data).await {
