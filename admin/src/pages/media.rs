@@ -6,7 +6,6 @@ pub struct MediaItem {
     pub mime_type: String,
     pub path: String,
     pub alt_text: Option<String>,
-    pub folder_name: Option<String>,
 }
 
 pub struct FolderItem {
@@ -25,16 +24,10 @@ pub fn render_list(items: &[MediaItem], folders: &[FolderItem], active_folder: O
             format!(r#"<div class="media-thumb media-file">&#x1F4C4; {}</div>"#,
                 crate::html_escape(&m.mime_type))
         };
-        let folder_badge = if let Some(ref fname) = m.folder_name {
-            format!(r#"<div class="media-folder-badge">{}</div>"#, crate::html_escape(fname))
-        } else {
-            String::new()
-        };
         format!(
             r#"<div class="media-card">
               {preview}
               <div class="media-name">{filename}</div>
-              {folder_badge}
               <form method="POST" action="/admin/media/{id}/delete" onsubmit="return confirm('Delete?')" style="display:inline">
                 <button class="icon-btn icon-danger" title="Delete" type="submit">
                   <img src="/admin/static/icons/trash-2.svg" alt="Delete">
@@ -44,7 +37,6 @@ pub fn render_list(items: &[MediaItem], folders: &[FolderItem], active_folder: O
             preview = preview,
             filename = crate::html_escape(&m.filename),
             id = crate::html_escape(&m.id),
-            folder_badge = folder_badge,
         )
     }).collect::<Vec<_>>().join("\n");
 
@@ -95,9 +87,10 @@ pub fn render_list(items: &[MediaItem], folders: &[FolderItem], active_folder: O
       </select>
       <button type="submit" form="upload-form" class="btn btn-primary">Upload</button>
       <!-- new folder inline form -->
-      <button type="button" class="btn btn-secondary" onclick="toggleNewFolder()" id="new-folder-btn">+ New Folder</button>
+      <button type="button" class="btn btn-secondary" onclick="toggleNewFolder()" id="new-folder-btn">Folder +</button>
       <span id="new-folder-form" style="display:none;gap:.35rem;align-items:center">
-        <input id="new-folder-input" type="text" maxlength="40" placeholder="Folder name&hellip;"
+        <input id="new-folder-input" type="text" maxlength="25" placeholder="Folder name&hellip;"
+               oninput="this.value=this.value.replace(/[^a-zA-Z0-9\-]/g,'')"
                style="padding:.4rem .75rem;border:1px solid var(--border);border-radius:var(--radius);font-size:14px;background:var(--surface);color:var(--text)">
         <button type="button" class="btn btn-primary" onclick="submitNewFolder()">Create</button>
         <button type="button" class="btn btn-secondary" onclick="toggleNewFolder()">Cancel</button>
@@ -137,15 +130,6 @@ pub fn render_list(items: &[MediaItem], folders: &[FolderItem], active_folder: O
 .drop-zone-sub {{ font-size: 0.875rem; color: var(--text-muted, #64748b); margin: 0; }}
 .drop-zone-browse {{ color: var(--primary, #3b82f6); cursor: pointer; text-decoration: underline; }}
 .drop-zone-filename {{ font-size: 0.875rem; color: #16a34a; font-weight: 500; margin: 0.5rem 0 0; }}
-.media-folder-badge {{
-  font-size: 11px;
-  color: var(--muted, #64748b);
-  background: var(--surface-alt, #f1f5f9);
-  border-radius: 4px;
-  padding: 1px 6px;
-  display: inline-block;
-  margin-top: 2px;
-}}
 </style>
 <script>
 (function() {{

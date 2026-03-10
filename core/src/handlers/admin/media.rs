@@ -27,17 +27,12 @@ pub async fn list(
             vec![]
         });
 
-    let folder_map: std::collections::HashMap<Uuid, String> = folders.iter()
-        .map(|f| (f.id, f.name.clone()))
-        .collect();
-
     let items: Vec<admin::pages::media::MediaItem> = raw.iter().map(|m| admin::pages::media::MediaItem {
         id: m.id.to_string(),
         filename: m.filename.clone(),
         mime_type: m.mime_type.clone(),
         path: m.path.clone(),
         alt_text: if m.alt_text.is_empty() { None } else { Some(m.alt_text.clone()) },
-        folder_name: m.folder_id.and_then(|fid| folder_map.get(&fid).cloned()),
     }).collect();
 
     let folder_items: Vec<admin::pages::media::FolderItem> = folders.iter().map(|f| admin::pages::media::FolderItem {
@@ -168,12 +163,12 @@ pub async fn create_folder(
     axum::Form(body): axum::Form<std::collections::HashMap<String, String>>,
 ) -> impl IntoResponse {
     let name = body.get("name").map(|s| s.trim()).unwrap_or("");
-    // Sanitize: letters, numbers, spaces and hyphens only, max 40 chars
+    // Sanitize: letters, numbers and hyphens only, max 25 chars
     let clean: String = name.chars()
-        .filter(|c| c.is_alphanumeric() || *c == ' ' || *c == '-')
-        .take(40)
+        .filter(|c| c.is_ascii_alphanumeric() || *c == '-')
+        .take(25)
         .collect();
-    let clean = clean.trim().to_string();
+    let clean = clean.trim_matches('-').to_string();
     if clean.is_empty() {
         return Redirect::to("/admin/media").into_response();
     }
