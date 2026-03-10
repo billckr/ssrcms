@@ -207,6 +207,7 @@ if [[ "$CLEAR" == "1" ]]; then
     command psql "$DATABASE_URL" -c "DELETE FROM taxonomies       WHERE site_id = '$SITE_ID';" > /dev/null
     command psql "$DATABASE_URL" -c "DELETE FROM form_submissions WHERE site_id = '$SITE_ID';" > /dev/null
     command psql "$DATABASE_URL" -c "DELETE FROM media            WHERE site_id = '$SITE_ID';" > /dev/null
+    command psql "$DATABASE_URL" -c "DELETE FROM media_folders    WHERE site_id = '$SITE_ID';" > /dev/null
 
     echo "Cleared. All content removed for $DOMAIN."
     exit 0
