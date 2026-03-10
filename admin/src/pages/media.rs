@@ -91,7 +91,7 @@ pub fn render_list(items: &[MediaItem], folders: &[FolderItem], active_folder: O
       <span id="new-folder-form" style="display:none;gap:.35rem;align-items:center">
         <input id="new-folder-input" type="text" maxlength="25" placeholder="Folder name&hellip;"
                oninput="this.value=this.value.replace(/[^a-zA-Z0-9\-]/g,'')"
-               style="padding:.4rem .75rem;border:1px solid var(--border);border-radius:var(--radius);font-size:14px;background:var(--surface);color:var(--text)">
+               style="width:16ch;padding:.4rem .75rem;border:1px solid var(--border);border-radius:var(--radius);font-size:14px;background:var(--surface);color:var(--text)">
         <button type="button" class="btn btn-primary" onclick="submitNewFolder()">Create</button>
         <button type="button" class="btn btn-secondary" onclick="toggleNewFolder()">Cancel</button>
       </span>
@@ -99,7 +99,7 @@ pub fn render_list(items: &[MediaItem], folders: &[FolderItem], active_folder: O
       <!-- right side -->
       <button type="button" class="btn btn-secondary" onclick="openMediaPicker('browse')" style="margin-left:auto">Browse</button>
       <input id="media-search" type="search" placeholder="Search media&hellip;"
-             style="padding:.4rem .75rem;border:1px solid var(--border);border-radius:var(--radius);font-size:14px;background:var(--surface);color:var(--text);width:100%;max-width:260px"
+             style="width:16ch;padding:.4rem .75rem;border:1px solid var(--border);border-radius:var(--radius);font-size:14px;background:var(--surface);color:var(--text)"
              oninput="filterMediaGrid(this.value)">
     </div>
   </form>
