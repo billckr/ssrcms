@@ -15,6 +15,26 @@ use crate::app_state::AppState;
 use crate::handlers::{account, archive, auth, comment as comment_handler, form as form_handler, home, metrics as metrics_handler, page, plugin_route, post as post_handler, post_unlock, search, subscribe, theme_static};
 use crate::handlers::admin::{appearance, comments as admin_comments, dashboard, documentation as admin_documentation, forms as admin_forms, media, plugins, posts, profile, settings, sites as admin_sites, taxonomy, upload, users};
 
+/// Prevent browsers from caching admin and account pages.
+///
+/// Without this, the browser's back button shows a stale cached copy of a
+/// protected page after logout. `no-store` is stronger than `no-cache` — it
+/// tells the browser not to write the response to any cache at all.
+async fn no_store_for_protected(req: Request, next: Next) -> Response {
+    let is_protected = {
+        let p = req.uri().path();
+        p.starts_with("/admin") || p.starts_with("/account")
+    };
+    let mut response = next.run(req).await;
+    if is_protected {
+        response.headers_mut().insert(
+            axum::http::header::CACHE_CONTROL,
+            axum::http::HeaderValue::from_static("no-store"),
+        );
+    }
+    response
+}
+
 /// Tower middleware that records per-request HTTP metrics.
 async fn track_http_metrics(req: Request, next: Next) -> Response {
     let method = req.method().to_string();
@@ -185,6 +205,7 @@ pub fn build(
     router = router.route("/{slug}", get(page::single_page));
 
     router
+        .layer(middleware::from_fn(no_store_for_protected))
         .layer(middleware::from_fn(track_http_metrics))
         .layer(session_layer)
         .layer(TraceLayer::new_for_http())

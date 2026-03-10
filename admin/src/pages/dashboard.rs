@@ -207,67 +207,83 @@ pub fn render(data: &DashboardData, flash: Option<&str>, ctx: &crate::PageContex
             true, vr,
         );
 
+        // Pending stat gets amber treatment when there are posts awaiting review.
+        let pending_num_style = if data.author_pending_posts > 0 {
+            "font-size:1.4rem;font-weight:700;color:#d97706"
+        } else {
+            "font-size:1.4rem;font-weight:700"
+        };
+        let pending_link_html = if data.author_pending_posts > 0 {
+            r#" &nbsp;<a href="/admin/posts?status=pending" style="font-size:.75rem;color:#d97706;text-decoration:none;white-space:nowrap">Review &rarr;</a>"#
+        } else { "" };
+
         format!(
-            r#"<div class="stats-grid">
-  <div class="stat-card">
-    <div class="stat-num">{published}</div>
-    <div class="stat-label">Your Published Posts</div>
+            r#"
+<div style="background:var(--card-bg);border:1px solid var(--border);border-radius:8px;padding:.6rem 1.25rem;display:flex;align-items:center;margin-bottom:1.25rem">
+  <div style="flex:1;text-align:center;padding:.2rem .5rem">
+    <span style="font-size:1.4rem;font-weight:700;color:var(--accent)">{published}</span>
+    <span style="font-size:.8rem;color:var(--muted);margin-left:.35rem">Published</span>
   </div>
-  <div class="stat-card">
-    <div class="stat-num">{drafts}</div>
-    <div class="stat-label">Your Drafts</div>
+  <div style="width:1px;background:var(--border);align-self:stretch;margin:.1rem 0"></div>
+  <div style="flex:1;text-align:center;padding:.2rem .5rem">
+    <span style="font-size:1.4rem;font-weight:700">{drafts}</span>
+    <span style="font-size:.8rem;color:var(--muted);margin-left:.35rem">Drafts</span>
   </div>
-  <div class="stat-card stat-card-pending">
-    <div class="stat-num">{pending}</div>
-    <div class="stat-label">Awaiting Review</div>
-    {pending_link}
+  <div style="width:1px;background:var(--border);align-self:stretch;margin:.1rem 0"></div>
+  <div style="flex:1;text-align:center;padding:.2rem .5rem">
+    <span style="{pending_num_style}">{pending}</span>
+    <span style="font-size:.8rem;color:var(--muted);margin-left:.35rem">Awaiting Review</span>
+    {pending_link_html}
   </div>
-  <div class="stat-card">
-    <div class="stat-num">{total_views}</div>
-    <div class="stat-label">Total Post Views</div>
+  <div style="width:1px;background:var(--border);align-self:stretch;margin:.1rem 0"></div>
+  <div style="flex:1;text-align:center;padding:.2rem .5rem">
+    <span style="font-size:1.4rem;font-weight:700">{total_views}</span>
+    <span style="font-size:.8rem;color:var(--muted);margin-left:.35rem">Total Views</span>
   </div>
 </div>
-<div class="two-col" style="margin-top:1.5rem">
-  <div class="card" style="padding:1.25rem">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
-      <h3 style="margin:0;font-size:.95rem;font-weight:600">Published Posts</h3>
-      <div style="display:flex;align-items:center;gap:.5rem">
-        {posts_year_sel}
-        <div style="display:flex;gap:.35rem">
-          <a href="/admin?range=week&amp;views_range={vr}&amp;year={y}&amp;views_year={vy}"  class="{paw}" style="font-size:12px;padding:.25rem .65rem">Week</a>
-          <a href="/admin?range=month&amp;views_range={vr}&amp;year={y}&amp;views_year={vy}" class="{pam}" style="font-size:12px;padding:.25rem .65rem">Month</a>
-          <a href="/admin?range=year&amp;views_range={vr}&amp;year={y}&amp;views_year={vy}"  class="{pay}" style="font-size:12px;padding:.25rem .65rem">Year</a>
+<div class="two-col">
+  <div>
+    <div class="card" style="padding:1.25rem;margin-bottom:1rem">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
+        <h3 style="margin:0;font-size:.95rem;font-weight:600">Published Posts</h3>
+        <div style="display:flex;align-items:center;gap:.5rem">
+          {posts_year_sel}
+          <div style="display:flex;gap:.35rem">
+            <a href="/admin?range=week&amp;views_range={vr}&amp;year={y}&amp;views_year={vy}"  class="{paw}" style="font-size:12px;padding:.25rem .65rem">Week</a>
+            <a href="/admin?range=month&amp;views_range={vr}&amp;year={y}&amp;views_year={vy}" class="{pam}" style="font-size:12px;padding:.25rem .65rem">Month</a>
+            <a href="/admin?range=year&amp;views_range={vr}&amp;year={y}&amp;views_year={vy}"  class="{pay}" style="font-size:12px;padding:.25rem .65rem">Year</a>
+          </div>
         </div>
       </div>
+      {chart_html}
     </div>
-    {chart_html}
+    <div class="card" style="padding:1.25rem">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
+        <h3 style="margin:0;font-size:.95rem;font-weight:600">Post Views</h3>
+        <div style="display:flex;align-items:center;gap:.5rem">
+          {views_year_sel}
+          <div style="display:flex;gap:.35rem">
+            <a href="/admin?range={pr}&amp;views_range=week&amp;year={y}&amp;views_year={vy}"  class="{vaw}" style="font-size:12px;padding:.25rem .65rem">Week</a>
+            <a href="/admin?range={pr}&amp;views_range=month&amp;year={y}&amp;views_year={vy}" class="{vam}" style="font-size:12px;padding:.25rem .65rem">Month</a>
+            <a href="/admin?range={pr}&amp;views_range=year&amp;year={y}&amp;views_year={vy}"  class="{vay}" style="font-size:12px;padding:.25rem .65rem">Year</a>
+          </div>
+        </div>
+      </div>
+      {views_chart_html}
+    </div>
   </div>
-  <div class="card" style="padding:1.25rem">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
-      <h3 style="margin:0;font-size:.95rem;font-weight:600">Post Views</h3>
-      <div style="display:flex;align-items:center;gap:.5rem">
-        {views_year_sel}
-        <div style="display:flex;gap:.35rem">
-          <a href="/admin?range={pr}&amp;views_range=week&amp;year={y}&amp;views_year={vy}"  class="{vaw}" style="font-size:12px;padding:.25rem .65rem">Week</a>
-          <a href="/admin?range={pr}&amp;views_range=month&amp;year={y}&amp;views_year={vy}" class="{vam}" style="font-size:12px;padding:.25rem .65rem">Month</a>
-          <a href="/admin?range={pr}&amp;views_range=year&amp;year={y}&amp;views_year={vy}"  class="{vay}" style="font-size:12px;padding:.25rem .65rem">Year</a>
-        </div>
-      </div>
-    </div>
-    {views_chart_html}
+  <div>
+    <!-- right column: reserved for future widgets -->
   </div>
 </div>"#,
-            published        = data.author_published_posts,
-            drafts           = data.author_draft_posts,
-            pending          = data.author_pending_posts,
-            total_views      = data.author_total_views,
-            pending_link     = if data.author_pending_posts > 0 {
-                r#"<a href="/admin/posts?status=pending" class="stat-action">View pending posts &rarr;</a>"#
-            } else { "" },
-            y               = y,
-            vy              = vy,
-            pr              = pr,
-            vr              = vr,
+            published         = data.author_published_posts,
+            drafts            = data.author_draft_posts,
+            pending           = data.author_pending_posts,
+            total_views       = data.author_total_views,
+            pending_num_style = pending_num_style,
+            pending_link_html = pending_link_html,
+            y  = y,  vy = vy,
+            pr = pr, vr = vr,
             paw = paw, pam = pam, pay = pay,
             vaw = vaw, vam = vam, vay = vay,
             posts_year_sel   = posts_year_sel,

@@ -62,7 +62,7 @@ pub async fn single_post(
     // Resolve subscriber session (optional — never fails).
     let session_ctx = resolve_session(&state, &session).await;
 
-    // Record a unique view (skips bots and logged-in admin users).
+    // Record a unique view (skips bots and logged-in account users).
     if !session_ctx.is_logged_in {
         let ua = headers
             .get(axum::http::header::USER_AGENT)
