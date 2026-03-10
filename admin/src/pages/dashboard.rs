@@ -209,9 +209,9 @@ pub fn render(data: &DashboardData, flash: Option<&str>, ctx: &crate::PageContex
 
         // Pending stat gets amber treatment when there are posts awaiting review.
         let pending_num_style = if data.author_pending_posts > 0 {
-            "font-size:1.4rem;font-weight:700;color:#d97706"
+            "color:#d97706"
         } else {
-            "font-size:1.4rem;font-weight:700"
+            ""
         };
         let pending_link_html = if data.author_pending_posts > 0 {
             r#" &nbsp;<a href="/admin/posts?status=pending" style="font-size:.75rem;color:#d97706;text-decoration:none;white-space:nowrap">Review &rarr;</a>"#
@@ -219,26 +219,29 @@ pub fn render(data: &DashboardData, flash: Option<&str>, ctx: &crate::PageContex
 
         format!(
             r#"
-<div style="background:var(--card-bg);border:1px solid var(--border);border-radius:8px;padding:.6rem 1.25rem;display:flex;align-items:center;margin-bottom:1.25rem">
-  <div style="flex:1;text-align:center;padding:.2rem .5rem">
-    <span style="font-size:1.4rem;font-weight:700;color:var(--accent)">{published}</span>
-    <span style="font-size:.8rem;color:var(--muted);margin-left:.35rem">Published</span>
+<style>
+.author-stat-bar {{ display:grid;grid-template-columns:repeat(4,1fr);gap:.75rem;margin-bottom:1.25rem }}
+.author-stat-bar .sb-item {{ background:var(--card-bg);border:1px solid var(--border);border-radius:8px;padding:.6rem .75rem;text-align:center }}
+.author-stat-bar .sb-num {{ font-size:1.5rem;font-weight:700;line-height:1.2 }}
+.author-stat-bar .sb-label {{ font-size:.78rem;color:var(--muted);margin-top:.1rem }}
+@media(max-width:640px){{ .author-stat-bar {{ grid-template-columns:repeat(2,1fr) }} }}
+</style>
+<div class="author-stat-bar">
+  <div class="sb-item">
+    <div class="sb-num" style="color:var(--accent)">{published}</div>
+    <div class="sb-label">Published</div>
   </div>
-  <div style="width:1px;background:var(--border);align-self:stretch;margin:.1rem 0"></div>
-  <div style="flex:1;text-align:center;padding:.2rem .5rem">
-    <span style="font-size:1.4rem;font-weight:700">{drafts}</span>
-    <span style="font-size:.8rem;color:var(--muted);margin-left:.35rem">Drafts</span>
+  <div class="sb-item">
+    <div class="sb-num">{drafts}</div>
+    <div class="sb-label">Drafts</div>
   </div>
-  <div style="width:1px;background:var(--border);align-self:stretch;margin:.1rem 0"></div>
-  <div style="flex:1;text-align:center;padding:.2rem .5rem">
-    <span style="{pending_num_style}">{pending}</span>
-    <span style="font-size:.8rem;color:var(--muted);margin-left:.35rem">Awaiting Review</span>
-    {pending_link_html}
+  <div class="sb-item">
+    <div class="sb-num" style="{pending_num_style}">{pending}</div>
+    <div class="sb-label">Awaiting Review{pending_link_html}</div>
   </div>
-  <div style="width:1px;background:var(--border);align-self:stretch;margin:.1rem 0"></div>
-  <div style="flex:1;text-align:center;padding:.2rem .5rem">
-    <span style="font-size:1.4rem;font-weight:700">{total_views}</span>
-    <span style="font-size:.8rem;color:var(--muted);margin-left:.35rem">Total Views</span>
+  <div class="sb-item">
+    <div class="sb-num">{total_views}</div>
+    <div class="sb-label">Total Views</div>
   </div>
 </div>
 <div class="two-col">
