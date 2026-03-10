@@ -70,7 +70,10 @@ async fn reset(
 
     let hash = match row {
         Some((h,)) => h,
-        None => anyhow::bail!("No protected super_admin found in the database."),
+        None => anyhow::bail!(
+            "No super_admin found — the database appears to already be reset.\n\
+             Run 'synaptic-cli install' to set up a fresh installation."
+        ),
     };
 
     let supplied = match password {
