@@ -17,7 +17,7 @@ pub fn render_list(items: &[MediaItem], folders: &[FolderItem], active_folder: O
     let grid = items.iter().map(|m| {
         let is_image = m.mime_type.starts_with("image/");
         let preview = if is_image {
-            format!(r#"<img src="/uploads/{}" alt="{}" class="media-thumb">"#,
+            format!(r#"<img src="/uploads/{}" alt="{}" class="media-thumb" loading="lazy">"#,
                 crate::html_escape(&m.path),
                 crate::html_escape(m.alt_text.as_deref().unwrap_or("")))
         } else {
