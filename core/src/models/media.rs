@@ -19,6 +19,7 @@ pub struct Media {
     pub height: Option<i32>,
     pub file_size: i64,
     pub uploaded_by: Uuid,
+    pub folder_id: Option<Uuid>,
     pub created_at: DateTime<Utc>,
 }
 
@@ -73,6 +74,7 @@ pub struct CreateMedia {
     pub height: Option<i32>,
     pub file_size: i64,
     pub uploaded_by: Uuid,
+    pub folder_id: Option<Uuid>,
 }
 
 pub async fn update_media_meta(pool: &PgPool, id: Uuid, alt_text: &str, title: &str, caption: &str) -> Result<()> {
@@ -96,8 +98,8 @@ pub async fn update_media_meta(pool: &PgPool, id: Uuid, alt_text: &str, title: &
 pub async fn create(pool: &PgPool, data: &CreateMedia) -> Result<Media> {
     let media = sqlx::query_as::<_, Media>(
         r#"
-        INSERT INTO media (site_id, filename, mime_type, path, alt_text, title, caption, width, height, file_size, uploaded_by)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        INSERT INTO media (site_id, filename, mime_type, path, alt_text, title, caption, width, height, file_size, uploaded_by, folder_id)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
         RETURNING *
         "#,
     )
@@ -112,6 +114,7 @@ pub async fn create(pool: &PgPool, data: &CreateMedia) -> Result<Media> {
     .bind(data.height)
     .bind(data.file_size)
     .bind(data.uploaded_by)
+    .bind(data.folder_id)
     .fetch_one(pool)
     .await?;
 
@@ -149,15 +152,17 @@ pub async fn delete(pool: &PgPool, id: Uuid) -> Result<()> {
     Ok(())
 }
 
-pub async fn list(pool: &PgPool, site_id: Option<Uuid>, uploaded_by: Option<Uuid>, limit: i64, offset: i64) -> Result<Vec<Media>> {
+pub async fn list(pool: &PgPool, site_id: Option<Uuid>, uploaded_by: Option<Uuid>, folder_id: Option<Uuid>, limit: i64, offset: i64) -> Result<Vec<Media>> {
     let items = sqlx::query_as::<_, Media>(
         "SELECT * FROM media \
          WHERE ($1::uuid IS NULL OR site_id = $1) \
            AND ($2::uuid IS NULL OR uploaded_by = $2) \
-         ORDER BY created_at DESC LIMIT $3 OFFSET $4",
+           AND ($3::uuid IS NULL OR folder_id = $3) \
+         ORDER BY created_at DESC LIMIT $4 OFFSET $5",
     )
     .bind(site_id)
     .bind(uploaded_by)
+    .bind(folder_id)
     .bind(limit)
     .bind(offset)
     .fetch_all(pool)

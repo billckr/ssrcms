@@ -128,6 +128,8 @@ pub fn build(
         // ── Admin media ────────────────────────────────────────────────────
         .route("/admin/media", get(media::list))
         .route("/admin/media/upload", post(upload::upload).layer(upload_limit.clone()))
+        .route("/admin/media/folders/new", post(media::create_folder))
+        .route("/admin/media/folders/{id}/delete", post(media::delete_folder))
         .route("/admin/media/{id}/delete", post(media::delete))
         // ── Admin categories ───────────────────────────────────────────────
         .route("/admin/categories", get(taxonomy::categories))

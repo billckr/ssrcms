@@ -45,6 +45,7 @@ pub async fn upload(
 ) -> impl IntoResponse {
     let mut file_data: Option<(String, String, Vec<u8>)> = None; // (filename, mime, bytes)
     let mut alt_text: Option<String> = None;
+    let mut folder_id: Option<Uuid> = None;
 
     while let Ok(Some(field)) = multipart.next_field().await {
         let name: String = field.name().unwrap_or("").to_string();
@@ -59,6 +60,9 @@ pub async fn upload(
             alt_text = field.text().await.ok()
                 .map(|s| sanitize_media_text(&s))
                 .filter(|s| !s.is_empty());
+        } else if name == "folder_id" {
+            folder_id = field.text().await.ok()
+                .and_then(|s| s.parse().ok());
         }
     }
 
@@ -120,6 +124,7 @@ pub async fn upload(
         height: img_height,
         file_size,
         uploaded_by: admin.user.id,
+        folder_id,
     };
 
     if let Err(e) = crate::models::media::create(&state.db, &create).await {

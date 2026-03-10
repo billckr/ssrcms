@@ -1,32 +1,55 @@
-use axum::{extract::State, response::Html, extract::Path};
+use axum::{extract::{Query, State}, response::Html, extract::Path};
 use uuid::Uuid;
 use axum::response::{IntoResponse, Redirect};
 
 use crate::app_state::AppState;
 use crate::middleware::admin_auth::AdminUser;
-use admin::pages::media::MediaItem;
-
 use super::sanitize_media_text;
 
 pub async fn list(
     State(state): State<AppState>,
     admin: AdminUser,
+    Query(params): Query<std::collections::HashMap<String, String>>,
 ) -> Html<String> {
-    let uploaded_by = if admin.site_role == "author" { Some(admin.user.id) } else { None };
-    let raw = crate::models::media::list(&state.db, admin.site_id, uploaded_by, 200, 0).await.unwrap_or_else(|e| {
-        tracing::warn!("failed to list media: {:?}", e);
+    let folder_id: Option<Uuid> = params.get("folder_id")
+        .and_then(|s| s.parse().ok());
+
+    let folders = if let Some(sid) = admin.site_id {
+        crate::models::media_folder::list(&state.db, sid).await.unwrap_or_default()
+    } else {
         vec![]
-    });
-    let items: Vec<MediaItem> = raw.iter().map(|m| MediaItem {
+    };
+
+    let uploaded_by = if admin.site_role == "author" { Some(admin.user.id) } else { None };
+    let raw = crate::models::media::list(&state.db, admin.site_id, uploaded_by, folder_id, 200, 0)
+        .await.unwrap_or_else(|e| {
+            tracing::warn!("failed to list media: {:?}", e);
+            vec![]
+        });
+
+    let folder_map: std::collections::HashMap<Uuid, String> = folders.iter()
+        .map(|f| (f.id, f.name.clone()))
+        .collect();
+
+    let items: Vec<admin::pages::media::MediaItem> = raw.iter().map(|m| admin::pages::media::MediaItem {
         id: m.id.to_string(),
         filename: m.filename.clone(),
         mime_type: m.mime_type.clone(),
         path: m.path.clone(),
         alt_text: if m.alt_text.is_empty() { None } else { Some(m.alt_text.clone()) },
+        folder_name: m.folder_id.and_then(|fid| folder_map.get(&fid).cloned()),
     }).collect();
+
+    let folder_items: Vec<admin::pages::media::FolderItem> = folders.iter().map(|f| admin::pages::media::FolderItem {
+        id: f.id.to_string(),
+        name: f.name.clone(),
+    }).collect();
+
+    let active_folder = params.get("folder_id").map(|s| s.as_str());
+
     let cs = state.site_hostname(admin.site_id);
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
-    Html(admin::pages::media::render_list(&items, None, &ctx))
+    Html(admin::pages::media::render_list(&items, &folder_items, active_folder, None, &ctx))
 }
 
 pub async fn delete(
@@ -114,7 +137,7 @@ pub async fn api_list(
     }
 
     let uploaded_by = if admin.site_role == "author" { Some(admin.user.id) } else { None };
-    let raw = crate::models::media::list(&state.db, admin.site_id, uploaded_by, 500, 0)
+    let raw = crate::models::media::list(&state.db, admin.site_id, uploaded_by, None, 500, 0)
         .await
         .unwrap_or_else(|e| {
             tracing::warn!("media api_list error: {:?}", e);
@@ -137,4 +160,36 @@ pub async fn api_list(
         .collect();
 
     axum::Json(items)
+}
+
+pub async fn create_folder(
+    State(state): State<AppState>,
+    admin: AdminUser,
+    axum::Form(body): axum::Form<std::collections::HashMap<String, String>>,
+) -> impl IntoResponse {
+    let name = body.get("name").map(|s| s.trim()).unwrap_or("");
+    // Sanitize: letters, numbers, spaces and hyphens only, max 40 chars
+    let clean: String = name.chars()
+        .filter(|c| c.is_alphanumeric() || *c == ' ' || *c == '-')
+        .take(40)
+        .collect();
+    let clean = clean.trim().to_string();
+    if clean.is_empty() {
+        return Redirect::to("/admin/media").into_response();
+    }
+    if let Some(site_id) = admin.site_id {
+        let _ = crate::models::media_folder::create(&state.db, site_id, &clean).await;
+    }
+    Redirect::to("/admin/media").into_response()
+}
+
+pub async fn delete_folder(
+    State(state): State<AppState>,
+    admin: AdminUser,
+    Path(id): Path<Uuid>,
+) -> impl IntoResponse {
+    if let Some(site_id) = admin.site_id {
+        let _ = crate::models::media_folder::delete(&state.db, id, site_id).await;
+    }
+    Redirect::to("/admin/media").into_response()
 }

@@ -6,9 +6,15 @@ pub struct MediaItem {
     pub mime_type: String,
     pub path: String,
     pub alt_text: Option<String>,
+    pub folder_name: Option<String>,
 }
 
-pub fn render_list(items: &[MediaItem], flash: Option<&str>, ctx: &crate::PageContext) -> String {
+pub struct FolderItem {
+    pub id: String,
+    pub name: String,
+}
+
+pub fn render_list(items: &[MediaItem], folders: &[FolderItem], active_folder: Option<&str>, flash: Option<&str>, ctx: &crate::PageContext) -> String {
     let grid = items.iter().map(|m| {
         let is_image = m.mime_type.starts_with("image/");
         let preview = if is_image {
@@ -19,10 +25,16 @@ pub fn render_list(items: &[MediaItem], flash: Option<&str>, ctx: &crate::PageCo
             format!(r#"<div class="media-thumb media-file">&#x1F4C4; {}</div>"#,
                 crate::html_escape(&m.mime_type))
         };
+        let folder_badge = if let Some(ref fname) = m.folder_name {
+            format!(r#"<div class="media-folder-badge">{}</div>"#, crate::html_escape(fname))
+        } else {
+            String::new()
+        };
         format!(
             r#"<div class="media-card">
               {preview}
               <div class="media-name">{filename}</div>
+              {folder_badge}
               <form method="POST" action="/admin/media/{id}/delete" onsubmit="return confirm('Delete?')" style="display:inline">
                 <button class="icon-btn icon-danger" title="Delete" type="submit">
                   <img src="/admin/static/icons/trash-2.svg" alt="Delete">
@@ -32,8 +44,32 @@ pub fn render_list(items: &[MediaItem], flash: Option<&str>, ctx: &crate::PageCo
             preview = preview,
             filename = crate::html_escape(&m.filename),
             id = crate::html_escape(&m.id),
+            folder_badge = folder_badge,
         )
     }).collect::<Vec<_>>().join("\n");
+
+    // Build folder dropdown options
+    let folder_options: String = folders.iter().map(|f| {
+        let selected = if active_folder == Some(f.id.as_str()) { " selected" } else { "" };
+        format!(r#"<option value="{id}"{selected}>{name}</option>"#,
+            id = crate::html_escape(&f.id),
+            name = crate::html_escape(&f.name),
+            selected = selected,
+        )
+    }).collect::<Vec<_>>().join("\n");
+
+    // Delete folder button — shown only when a specific folder is active
+    let delete_folder_btn = if let Some(active_id) = active_folder {
+        format!(
+            r#"<form method="POST" action="/admin/media/folders/{id}/delete" style="display:inline"
+                  onsubmit="return confirm('Delete folder? Images will become unorganised.')">
+              <button class="btn btn-danger" type="submit" style="font-size:12px;padding:.3rem .6rem">Delete Folder</button>
+            </form>"#,
+            id = crate::html_escape(active_id),
+        )
+    } else {
+        String::new()
+    };
 
     let mut content = format!(
         r#"<div class="form-section">
@@ -49,19 +85,28 @@ pub fn render_list(items: &[MediaItem], flash: Option<&str>, ctx: &crate::PageCo
         <p class="drop-zone-filename" id="drop-filename" style="display:none"></p>
       </div>
     </div>
-    <div class="form-group" style="margin-top:0.75rem">
-      <div style="display:flex;justify-content:space-between;margin-bottom:4px">
-        <label style="font-size:12px;font-weight:600;color:var(--muted)">Alt Text <span style="font-weight:400">(optional)</span></label>
-        <span id="upload-alt-count" style="font-size:11px;color:var(--muted)">35/35</span>
-      </div>
-      <input type="text" name="alt_text" maxlength="35" placeholder="Describe this image..."
-             oninput="mpickerCount('upload-alt-input','upload-alt-count')" id="upload-alt-input">
-    </div>
     <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin-top:.75rem">
-      <button type="submit" class="btn btn-primary">Upload</button>
-      <button type="button" class="btn btn-secondary" onclick="openMediaPicker('browse')">Browse</button>
+      <!-- folder dropdown -->
+      <select id="folder-select" name="folder_id" form="upload-form"
+              style="padding:.4rem .75rem;border:1px solid var(--border);border-radius:var(--radius);font-size:14px;background:var(--surface);color:var(--text)"
+              onchange="filterByFolder(this.value)">
+        <option value="">All Media</option>
+        {folder_options}
+      </select>
+      <button type="submit" form="upload-form" class="btn btn-primary">Upload</button>
+      <!-- new folder inline form -->
+      <button type="button" class="btn btn-secondary" onclick="toggleNewFolder()" id="new-folder-btn">+ New Folder</button>
+      <span id="new-folder-form" style="display:none;gap:.35rem;align-items:center">
+        <input id="new-folder-input" type="text" maxlength="40" placeholder="Folder name&hellip;"
+               style="padding:.4rem .75rem;border:1px solid var(--border);border-radius:var(--radius);font-size:14px;background:var(--surface);color:var(--text)">
+        <button type="button" class="btn btn-primary" onclick="submitNewFolder()">Create</button>
+        <button type="button" class="btn btn-secondary" onclick="toggleNewFolder()">Cancel</button>
+      </span>
+      {delete_folder_btn}
+      <!-- right side -->
+      <button type="button" class="btn btn-secondary" onclick="openMediaPicker('browse')" style="margin-left:auto">Browse</button>
       <input id="media-search" type="search" placeholder="Search media&hellip;"
-             style="margin-left:auto;padding:.4rem .75rem;border:1px solid var(--border);border-radius:var(--radius);font-size:14px;background:var(--surface);color:var(--text);width:100%;max-width:260px"
+             style="padding:.4rem .75rem;border:1px solid var(--border);border-radius:var(--radius);font-size:14px;background:var(--surface);color:var(--text);width:100%;max-width:260px"
              oninput="filterMediaGrid(this.value)">
     </div>
   </form>
@@ -92,6 +137,15 @@ pub fn render_list(items: &[MediaItem], flash: Option<&str>, ctx: &crate::PageCo
 .drop-zone-sub {{ font-size: 0.875rem; color: var(--text-muted, #64748b); margin: 0; }}
 .drop-zone-browse {{ color: var(--primary, #3b82f6); cursor: pointer; text-decoration: underline; }}
 .drop-zone-filename {{ font-size: 0.875rem; color: #16a34a; font-weight: 500; margin: 0.5rem 0 0; }}
+.media-folder-badge {{
+  font-size: 11px;
+  color: var(--muted, #64748b);
+  background: var(--surface-alt, #f1f5f9);
+  border-radius: 4px;
+  padding: 1px 6px;
+  display: inline-block;
+  margin-top: 2px;
+}}
 </style>
 <script>
 (function() {{
@@ -147,9 +201,39 @@ function filterMediaGrid(q) {{
   if (ct) ct.textContent = lower ? visible + ' of ' + cards.length + ' items' : cards.length + ' items';
 }}
 
+function filterByFolder(folderId) {{
+  var url = '/admin/media';
+  if (folderId) url += '?folder_id=' + encodeURIComponent(folderId);
+  window.location.href = url;
+}}
+
+function toggleNewFolder() {{
+  var form = document.getElementById('new-folder-form');
+  var btn = document.getElementById('new-folder-btn');
+  var visible = form.style.display !== 'none' && form.style.display !== '';
+  form.style.display = visible ? 'none' : 'flex';
+  if (!visible) document.getElementById('new-folder-input').focus();
+}}
+
+function submitNewFolder() {{
+  var name = document.getElementById('new-folder-input').value.trim();
+  if (!name) return;
+  var form = document.createElement('form');
+  form.method = 'POST';
+  form.action = '/admin/media/folders/new';
+  var input = document.createElement('input');
+  input.name = 'name';
+  input.value = name;
+  form.appendChild(input);
+  document.body.appendChild(form);
+  form.submit();
+}}
+
 // Initialise count on load.
 document.addEventListener('DOMContentLoaded', function() {{ filterMediaGrid(''); }});
 </script>"#,
+        folder_options = folder_options,
+        delete_folder_btn = delete_folder_btn,
         grid = grid,
     );
     content.push_str(&crate::media_picker_modal_html());
