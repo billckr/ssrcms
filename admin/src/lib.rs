@@ -399,3 +399,41 @@ pub fn html_escape(s: &str) -> String {
      .replace('"', "&quot;")
      .replace('\'', "&#x27;")
 }
+
+/// Generate the live-search `<script>` block used by list pages with a search input.
+///
+/// - `input_id`   — `id` of the search `<input>` element
+/// - `list_id`    — `id` of the `<div>` whose `innerHTML` is replaced on each keystroke
+/// - `url_prefix` — URL prefix to which `&search=<encoded-term>` is appended,
+///                  e.g. `"/admin/posts?partial=1"` or `"/account/my-comments?partial=1"`
+///
+/// Debounces input at 300 ms; on each firing replaces `list_id` innerHTML with
+/// the fetched HTML fragment. No JS framework or build pipeline dependency.
+///
+/// Migration note: when any consuming page is ported to Leptos/WASM, replace this
+/// with a reactive signal + server function — the UX will be identical but fully in Rust.
+pub fn live_search_script(input_id: &str, list_id: &str, url_prefix: &str) -> String {
+    format!(
+        r#"<script>
+(function () {{
+  var input = document.getElementById('{input_id}');
+  var list  = document.getElementById('{list_id}');
+  if (!input || !list) return;
+  var timer;
+  input.addEventListener('input', function () {{
+    clearTimeout(timer);
+    timer = setTimeout(function () {{
+      var url = '{url_prefix}&search=' + encodeURIComponent(input.value);
+      fetch(url)
+        .then(function (r) {{ return r.text(); }})
+        .then(function (html) {{ list.innerHTML = html; }})
+        .catch(function () {{}});
+    }}, 300);
+  }});
+}})();
+</script>"#,
+        input_id   = input_id,
+        list_id    = list_id,
+        url_prefix = url_prefix,
+    )
+}

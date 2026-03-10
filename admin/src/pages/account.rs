@@ -331,31 +331,15 @@ pub fn comments_list_fragment(rows: &[MyCommentRow], page: i64, total_pages: i64
 pub fn render_my_comments(rows: &[MyCommentRow], page: i64, total_pages: i64, search: &str, ctx: &AccountContext) -> String {
     let fragment = comments_list_fragment(rows, page, total_pages, search);
 
-    // Live-search script: debounces input at 300 ms, then fetches the list
-    // fragment from the same route with ?partial=1 and replaces the div.
-    // Pagination links within the fragment already carry the search term, so
-    // navigating pages while searching works without JS involvement.
-    // Note: this is plain JS with no build pipeline or framework dependency.
-    // When this page is eventually ported to Leptos, replace with a reactive
-    // signal + server function — the UX will be identical but fully in Rust.
-    let script = r#"<script>
-(function () {
-  var input = document.getElementById('comment-search');
-  var list  = document.getElementById('comments-list');
-  if (!input || !list) return;
-  var timer;
-  input.addEventListener('input', function () {
-    clearTimeout(timer);
-    timer = setTimeout(function () {
-      var url = '/account/my-comments?partial=1&search=' + encodeURIComponent(input.value);
-      fetch(url)
-        .then(function (r) { return r.text(); })
-        .then(function (html) { list.innerHTML = html; })
-        .catch(function () {});
-    }, 300);
-  });
-})();
-</script>"#;
+    // Live-search script — shared helper from crate::live_search_script.
+    // Debounces input at 300 ms, fetches ?partial=1&search=... and swaps div#comments-list.
+    // Pagination links in the fragment carry &search=... so page navigation preserves the filter.
+    // When this page is ported to Leptos, replace with a reactive signal + server function.
+    let script = crate::live_search_script(
+        "comment-search",
+        "comments-list",
+        "/account/my-comments?partial=1",
+    );
 
     // Top pagination rendered outside the fragment div so the search input
     // (also outside) is never wiped by the JS live-search swap.

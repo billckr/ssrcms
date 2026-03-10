@@ -50,14 +50,50 @@ pub struct TermOption {
     pub name: String,
 }
 
-pub fn render_list(posts: &[PostRow], post_type: &str, page: i64, total_pages: i64, flash: Option<&str>, ctx: &crate::PageContext, status_filter: Option<&str>, pending_count: i64, author_scheduled_count: i64) -> String {
-    let title = if post_type == "page" { "Pages" } else { "Posts" };
-    let new_label = if post_type == "page" { "New Page" } else { "New Post" };
-    let new_href = if post_type == "page" { "/admin/pages/new" } else { "/admin/posts/new" };
-    let edit_prefix = if post_type == "page" { "/admin/pages" } else { "/admin/posts" };
-    let base_path = if post_type == "page" { "/admin/pages" } else { "/admin/posts" };
+/// Build pagination controls for the posts/pages list.
+/// Preserves `status_qs` (e.g. `"&status=published"`) and `search_qs` across page nav.
+fn posts_pagination(base_path: &str, page: i64, total_pages: i64, status_qs: &str, search_qs: &str) -> String {
+    if total_pages <= 1 {
+        return String::new();
+    }
+    let qs = format!("{status_qs}{search_qs}");
+    let prev = if page > 1 {
+        format!(r#"<a href="{base_path}?page={}{qs}" class="page-btn">&laquo; Prev</a>"#, page - 1)
+    } else {
+        r#"<span class="page-btn page-btn-disabled">&laquo; Prev</span>"#.to_string()
+    };
+    let next = if page < total_pages {
+        format!(r#"<a href="{base_path}?page={}{qs}" class="page-btn">Next &raquo;</a>"#, page + 1)
+    } else {
+        r#"<span class="page-btn page-btn-disabled">Next &raquo;</span>"#.to_string()
+    };
+    let start = (page - 3).max(1);
+    let end   = (page + 3).min(total_pages);
+    let mut nums = String::new();
+    for p in start..=end {
+        if p == page {
+            nums.push_str(&format!(r#"<span class="page-btn page-btn-active">{p}</span>"#));
+        } else {
+            nums.push_str(&format!(r#"<a href="{base_path}?page={p}{qs}" class="page-btn">{p}</a>"#));
+        }
+    }
+    format!(r#"<div class="pagination">{prev}{nums}{next}</div>"#)
+}
 
-    let bulk_action = if post_type == "page" { "/admin/pages/bulk-delete" } else { "/admin/posts/bulk-delete" };
+/// Renders only the table and bottom pagination — the content of `div#posts-list`.
+/// Called by `render_list` on full page loads and returned directly for `?partial=1`
+/// JS live-search requests so the browser can swap just the table div without a full reload.
+pub fn posts_list_fragment(
+    posts: &[PostRow],
+    post_type: &str,
+    page: i64,
+    total_pages: i64,
+    ctx: &crate::PageContext,
+    status_filter: Option<&str>,
+    search: &str,
+) -> String {
+    let edit_prefix = if post_type == "page" { "/admin/pages" } else { "/admin/posts" };
+    let base_path   = if post_type == "page" { "/admin/pages" } else { "/admin/posts" };
 
     // Only published/scheduled (and the mixed "all") views show a date column.
     let show_date_col = matches!(status_filter, None | Some("") | Some("published") | Some("scheduled"));
@@ -66,6 +102,25 @@ pub fn render_list(posts: &[PostRow], post_type: &str, page: i64, total_pages: i
         Some("published") => "Published (UTC)",
         _ => "Date (UTC)",
     };
+
+    let status_qs = match status_filter {
+        Some(s) if !s.is_empty() => format!("&status={}", s),
+        _ => String::new(),
+    };
+    let search_qs = if search.is_empty() {
+        String::new()
+    } else {
+        format!("&search={}", crate::html_escape(search))
+    };
+
+    if posts.is_empty() {
+        let msg = if search.is_empty() {
+            format!("No {}s found.", post_type)
+        } else {
+            format!("No {}s matched &ldquo;{}&rdquo;.", post_type, crate::html_escape(search))
+        };
+        return format!(r#"<p class="muted">{msg}</p>"#);
+    }
 
     let rows = posts.iter().map(|p| {
         let path = if p.post_type == "page" {
@@ -76,7 +131,7 @@ pub fn render_list(posts: &[PostRow], post_type: &str, page: i64, total_pages: i
         let view_href = if ctx.current_site.is_empty() {
             path
         } else {
-            format!("//{}{}" , ctx.current_site, path)
+            format!("//{}{}", ctx.current_site, path)
         };
         // Authors cannot edit scheduled or published posts — show view only.
         let author_read_only = ctx.user_role.eq_ignore_ascii_case("author")
@@ -95,7 +150,7 @@ pub fn render_list(posts: &[PostRow], post_type: &str, page: i64, total_pages: i
                 </a>"#,
                 prefix = edit_prefix, id = crate::html_escape(&p.id))
         };
-        // Date cell: only for tabs where it's meaningful, with UTC suffix.
+        // Date cell: only for tabs where it's meaningful.
         let date_td = if show_date_col {
             let val = if p.status == "published" || p.status == "scheduled" {
                 p.published_at.as_deref()
@@ -108,7 +163,7 @@ pub fn render_list(posts: &[PostRow], post_type: &str, page: i64, total_pages: i
         } else {
             String::new()
         };
-        // Domain badge — same gray pill style as the users list.
+        // Domain badge — gray pill style.
         let domain_td = {
             let h = crate::html_escape(&p.site_hostname);
             if h.is_empty() {
@@ -118,12 +173,25 @@ pub fn render_list(posts: &[PostRow], post_type: &str, page: i64, total_pages: i
             }
         };
         // Column order varies by tab:
-        //   Drafts / Pending review: Status → Domain → Author
-        //   All / Published / Scheduled / Trashed: Author → Domain → [Date]
+        //   Drafts / Pending: Author → Domain
+        //   All / Published / Scheduled / Trashed: Author → Domain → Date
         let author_td = format!("<td>{}</td>", crate::html_escape(&p.author_name));
         let middle_tds = match status_filter {
             Some("draft") | Some("pending") => format!("{author_td}{domain_td}"),
             _ => format!("{author_td}{domain_td}{date_td}"),
+        };
+        let delete_btn = if ctx.user_role.eq_ignore_ascii_case("author") {
+            String::new()
+        } else {
+            format!(
+                r#"<form method="POST" action="{prefix}/{id}/delete" style="display:inline" onsubmit="return confirm('Delete this?')">
+              <button class="icon-btn icon-danger" title="Delete" type="submit">
+                <img src="/admin/static/icons/delete.svg" alt="Delete">
+              </button>
+            </form>"#,
+                prefix = edit_prefix,
+                id = crate::html_escape(&p.id),
+            )
         };
         format!(
             r#"<tr>
@@ -141,64 +209,67 @@ pub fn render_list(posts: &[PostRow], post_type: &str, page: i64, total_pages: i
                 {delete_btn}
               </td>
             </tr>"#,
-            id = crate::html_escape(&p.id),
-            title_cell = title_cell,
-            status_cls = crate::html_escape(&p.status),
-            status_label = crate::html_escape(if p.status == "pending" { "Pending Review" } else { &p.status }),
+            id            = crate::html_escape(&p.id),
+            title_cell    = title_cell,
+            status_cls    = crate::html_escape(&p.status),
+            status_label  = crate::html_escape(if p.status == "pending" { "Pending Review" } else { &p.status }),
             protected_badge = if p.post_password_set { r#" <span class="badge badge-protected" title="Protected">&#x1F512;</span>"# } else { "" },
-            middle_tds = middle_tds,
-            view_href = crate::html_escape(&view_href),
-            edit_btn = edit_btn,
-            delete_btn = if ctx.user_role.eq_ignore_ascii_case("author") {
-                String::new()
-            } else {
-                format!(
-                    r#"<form method="POST" action="{prefix}/{id}/delete" style="display:inline" onsubmit="return confirm('Delete this?')">
-                  <button class="icon-btn icon-danger" title="Delete" type="submit">
-                    <img src="/admin/static/icons/delete.svg" alt="Delete">
-                  </button>
-                </form>"#,
-                    prefix = edit_prefix,
-                    id = crate::html_escape(&p.id),
-                )
-            },
+            middle_tds    = middle_tds,
+            view_href     = crate::html_escape(&view_href),
+            edit_btn      = edit_btn,
+            delete_btn    = delete_btn,
         )
     }).collect::<Vec<_>>().join("\n");
 
-    // Build status_qs: query string fragment to preserve status= across page nav
+    // Thead middle columns mirror the tbody column ordering.
+    let middle_ths = match status_filter {
+        Some("draft") | Some("pending") => "<th>Author</th><th>Domain</th>".to_string(),
+        _ => {
+            let date_th = if show_date_col { format!("<th>{}</th>", date_col_label) } else { String::new() };
+            format!("<th>Author</th><th>Domain</th>{date_th}")
+        },
+    };
+
+    let pagination = posts_pagination(base_path, page, total_pages, &status_qs, &search_qs);
+
+    format!(
+        r#"<table class="data-table">
+  <thead><tr>
+    <th style="width:2rem"><input type="checkbox" id="select-all" title="Select all" aria-label="Select all"></th>
+    <th>Title</th><th>Status</th>{middle_ths}<th>Actions</th>
+  </tr></thead>
+  <tbody>{rows}</tbody>
+</table>
+{pagination}"#,
+        middle_ths = middle_ths,
+        rows       = rows,
+        pagination = pagination,
+    )
+}
+
+pub fn render_list(posts: &[PostRow], post_type: &str, page: i64, total_pages: i64, flash: Option<&str>, ctx: &crate::PageContext, status_filter: Option<&str>, pending_count: i64, author_scheduled_count: i64, search: &str) -> String {
+    let title     = if post_type == "page" { "Pages" } else { "Posts" };
+    let new_label = if post_type == "page" { "New Page" } else { "New Post" };
+    let new_href  = if post_type == "page" { "/admin/pages/new" } else { "/admin/posts/new" };
+    let base_path = if post_type == "page" { "/admin/pages" } else { "/admin/posts" };
+    let bulk_action = if post_type == "page" { "/admin/pages/bulk-delete" } else { "/admin/posts/bulk-delete" };
+
     let status_qs = match status_filter {
         Some(s) if !s.is_empty() => format!("&status={}", s),
         _ => String::new(),
     };
-
-    let pagination = if total_pages > 1 {
-        let prev = if page > 1 {
-            format!(r#"<a href="{}?page={}{status_qs}" class="page-btn">&laquo; Prev</a>"#, base_path, page - 1, status_qs = status_qs)
-        } else {
-            r#"<span class="page-btn page-btn-disabled">&laquo; Prev</span>"#.to_string()
-        };
-        let next = if page < total_pages {
-            format!(r#"<a href="{}?page={}{status_qs}" class="page-btn">Next &raquo;</a>"#, base_path, page + 1, status_qs = status_qs)
-        } else {
-            r#"<span class="page-btn page-btn-disabled">Next &raquo;</span>"#.to_string()
-        };
-        let start = (page - 3).max(1);
-        let end = (page + 3).min(total_pages);
-        let mut nums = String::new();
-        for p in start..=end {
-            if p == page {
-                nums.push_str(&format!(r#"<span class="page-btn page-btn-active">{}</span>"#, p));
-            } else {
-                nums.push_str(&format!(r#"<a href="{}?page={}{status_qs}" class="page-btn">{}</a>"#, base_path, p, p, status_qs = status_qs));
-            }
-        }
-        format!(r#"<div class="pagination">{prev}{nums}{next}</div>"#)
-    } else {
+    let search_qs = if search.is_empty() {
         String::new()
+    } else {
+        format!("&search={}", crate::html_escape(search))
     };
 
-    // Filter tabs — pages have fewer meaningful statuses; authors don't see Trash,
-    // and only see Scheduled when they actually have scheduled posts.
+    // Top pagination lives outside div#posts-list so the search input (also outside)
+    // is never wiped by the JS live-search innerHTML swap.
+    let top_pagination = posts_pagination(base_path, page, total_pages, &status_qs, &search_qs);
+
+    // Filter tabs — pages have fewer statuses; authors don't see Trash and only see
+    // Scheduled when they actually have scheduled posts.
     let tab_specs: &[(&str, &str)] = if post_type == "page" {
         &[("all", "All"), ("published", "Published"), ("draft", "Draft"), ("trashed", "Trashed")]
     } else if ctx.user_role.eq_ignore_ascii_case("author") {
@@ -221,7 +292,6 @@ pub fn render_list(posts: &[PostRow], post_type: &str, page: i64, total_pages: i
         } else {
             format!("{}?status={}", base_path, val)
         };
-        // Show pending count inline on the Pending Review tab
         let extra = if *val == "pending" && pending_count > 0 {
             format!(
                 r#" <span class="badge badge-pending" style="font-size:10px;padding:.05rem .35rem;vertical-align:middle">{}</span>"#,
@@ -234,42 +304,47 @@ pub fn render_list(posts: &[PostRow], post_type: &str, page: i64, total_pages: i
     }).collect();
     let tabs_html = format!(r#"<div class="page-tabs" style="margin-bottom:1.25rem">{}</div>"#, tabs);
 
-    // Thead middle columns mirror the tbody ordering.
-    let middle_ths = match status_filter {
-        Some("draft") | Some("pending") => "<th>Author</th><th>Domain</th>".to_string(),
-        _ => {
-            let date_th = if show_date_col { format!("<th>{}</th>", date_col_label) } else { String::new() };
-            format!("<th>Author</th><th>Domain</th>{}", date_th)
-        },
-    };
+    // Fragment: table + bottom pagination — swapped by the live-search JS.
+    let fragment = posts_list_fragment(posts, post_type, page, total_pages, ctx, status_filter, search);
+
+    // The live-search fetch URL includes status= so results stay scoped to the current tab.
+    let fetch_prefix = format!("{}?partial=1{}", base_path, status_qs);
 
     let content = format!(
-        r#"{tabs_html}<div style="display:flex;align-items:center;gap:.75rem;margin-bottom:1rem">
+        r#"{tabs_html}
+<div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.75rem">
   <a href="{new_href}" class="btn btn-primary">{new_label}</a>
   <button id="bulk-delete-btn" type="button" class="btn btn-danger" style="display:none"
           onclick="bulkDelete()">Delete Selected (<span id="bulk-count">0</span>)</button>
 </div>
-<table class="data-table">
-  <thead><tr>
-    <th style="width:2rem"><input type="checkbox" id="select-all" title="Select all" aria-label="Select all"></th>
-    <th>Title</th><th>Status</th>{middle_ths}<th>Actions</th>
-  </tr></thead>
-  <tbody>{rows}</tbody>
-</table>
-{pagination}
+<div style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;margin-bottom:.75rem">
+  <div>{top_pagination}</div>
+  <input id="post-search"
+         type="search"
+         placeholder="Search {post_type}s&hellip;"
+         value="{search_val}"
+         style="width:100%;max-width:320px;padding:.4rem .75rem;border:1px solid var(--border);border-radius:4px;font-size:14px;background:var(--card-bg);color:inherit">
+</div>
+<div id="posts-list">{fragment}</div>
+{live_search}
 <script>
 (function() {{
-  var selectAll = document.getElementById('select-all');
-  var btn       = document.getElementById('bulk-delete-btn');
-  var countEl   = document.getElementById('bulk-count');
+  var btn     = document.getElementById('bulk-delete-btn');
+  var countEl = document.getElementById('bulk-count');
 
   function updateBtn() {{
     var checked = document.querySelectorAll('.bulk-cb:checked');
     var n = checked.length;
+    var total = document.querySelectorAll('.bulk-cb').length;
     countEl.textContent = n;
     btn.style.display = n > 0 ? '' : 'none';
-    selectAll.indeterminate = n > 0 && n < document.querySelectorAll('.bulk-cb').length;
-    selectAll.checked = n > 0 && n === document.querySelectorAll('.bulk-cb').length;
+    // Re-query select-all each call: after a live-search swap the element inside
+    // div#posts-list is replaced, so the cached reference would be stale.
+    var sa = document.getElementById('select-all');
+    if (sa) {{
+      sa.indeterminate = n > 0 && n < total;
+      sa.checked = n > 0 && n === total;
+    }}
   }}
 
   document.addEventListener('change', function(e) {{
@@ -298,13 +373,15 @@ pub fn render_list(posts: &[PostRow], post_type: &str, page: i64, total_pages: i
   }};
 }})();
 </script>"#,
-        new_href = new_href,
-        new_label = new_label,
-        rows = rows,
-        pagination = pagination,
-        bulk_action = bulk_action,
-        tabs_html = tabs_html,
-        middle_ths = middle_ths,
+        tabs_html      = tabs_html,
+        new_href       = new_href,
+        new_label      = new_label,
+        top_pagination = top_pagination,
+        post_type      = post_type,
+        search_val     = crate::html_escape(search),
+        fragment       = fragment,
+        live_search    = crate::live_search_script("post-search", "posts-list", &fetch_prefix),
+        bulk_action    = bulk_action,
     );
 
     let path = if post_type == "page" { "/admin/pages" } else { "/admin/posts" };
@@ -719,22 +796,22 @@ mod tests {
 
     #[test]
     fn post_view_link_uses_blog_prefix() {
-        let html = render_list(&[make_row("post", "my-post")], "post", 1, 1, None, &make_ctx(), None, 0, 0);
+        let html = render_list(&[make_row("post", "my-post")], "post", 1, 1, None, &make_ctx(), None, 0, 0, "");
         assert!(html.contains("href=\"/blog/my-post\""), "post view href should be /blog/{{slug}}");
         assert!(html.contains("target=\"_blank\""), "view link should open in new tab");
     }
 
     #[test]
     fn page_view_link_uses_root_prefix() {
-        let html = render_list(&[make_row("page", "about")], "page", 1, 1, None, &make_ctx(), None, 0, 0);
+        let html = render_list(&[make_row("page", "about")], "page", 1, 1, None, &make_ctx(), None, 0, 0, "");
         assert!(html.contains("href=\"/about\""), "page view href should be /{{slug}}");
         assert!(html.contains("target=\"_blank\""), "view link should open in new tab");
     }
 
     #[test]
     fn view_icon_present_in_both_post_and_page_lists() {
-        let post_html = render_list(&[make_row("post", "hello")], "post", 1, 1, None, &make_ctx(), None, 0, 0);
-        let page_html = render_list(&[make_row("page", "hello")], "page", 1, 1, None, &make_ctx(), None, 0, 0);
+        let post_html = render_list(&[make_row("post", "hello")], "post", 1, 1, None, &make_ctx(), None, 0, 0, "");
+        let page_html = render_list(&[make_row("page", "hello")], "page", 1, 1, None, &make_ctx(), None, 0, 0, "");
         assert!(post_html.contains("eye.svg"), "post list should include eye icon");
         assert!(page_html.contains("eye.svg"), "page list should include eye icon");
     }

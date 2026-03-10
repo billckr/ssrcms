@@ -499,6 +499,9 @@ pub struct ListFilter {
     pub author_id: Option<Uuid>,
     pub category_slug: Option<String>,
     pub tag_slug: Option<String>,
+    /// Optional free-text filter applied to post titles (admin list only).
+    /// Stop words are stripped before building ILIKE clauses.
+    pub search: Option<String>,
     pub limit: i64,
     pub offset: i64,
 }
@@ -512,10 +515,34 @@ impl Default for ListFilter {
             author_id: None,
             category_slug: None,
             tag_slug: None,
+            search: None,
             limit: 10,
             offset: 0,
         }
     }
+}
+
+/// Common English stop words — mirrors the list in `search/index.rs` and `models/comment.rs`.
+/// Stripped from admin search input before building ILIKE clauses.
+static POST_STOP_WORDS: &[&str] = &[
+    "a", "an", "the", "and", "or", "but", "in", "on", "at", "to", "for",
+    "of", "with", "by", "from", "up", "about", "into", "through", "is",
+    "was", "are", "were", "be", "been", "being", "have", "has", "had",
+    "do", "does", "did", "will", "would", "could", "should", "may", "might",
+    "shall", "can", "i", "me", "my", "we", "our", "you", "your", "he",
+    "him", "his", "she", "her", "it", "its", "they", "them", "their",
+    "this", "that", "these", "those", "what", "which", "who", "whom",
+    "not", "no", "so", "if", "as", "than", "too", "very", "just", "also",
+    "more", "most", "other", "some", "such", "only", "own", "same",
+];
+
+/// Split a search string into lowercase terms, stripping stop words.
+/// Returns an empty Vec if all terms are stop words (→ no filter applied).
+pub fn search_terms(input: &str) -> Vec<String> {
+    input.split_whitespace()
+        .map(|w| w.to_lowercase())
+        .filter(|w| !POST_STOP_WORDS.contains(&w.as_str()))
+        .collect()
 }
 
 pub async fn list(pool: &PgPool, filter: &ListFilter) -> Result<Vec<Post>> {
@@ -568,26 +595,38 @@ pub async fn list(pool: &PgPool, filter: &ListFilter) -> Result<Vec<Post>> {
         .fetch_all(pool)
         .await?
     } else {
-        sqlx::query_as::<_, Post>(
-            r#"
-            SELECT *
-            FROM posts
-            WHERE ($1::text IS NULL OR status = $1)
-              AND ($2::text IS NULL OR post_type = $2)
-              AND ($3::uuid IS NULL OR author_id = $3)
-              AND ($4::uuid IS NULL OR site_id = $4)
-            ORDER BY published_at DESC NULLS LAST
-            LIMIT $5 OFFSET $6
-            "#,
-        )
-        .bind(filter.status.as_ref().map(|s| s.as_str()))
-        .bind(filter.post_type.as_ref().map(|t| t.as_str()))
-        .bind(filter.author_id)
-        .bind(filter.site_id)
-        .bind(filter.limit)
-        .bind(filter.offset)
-        .fetch_all(pool)
-        .await?
+        // Build dynamic SQL so optional title search terms can be appended as
+        // AND LOWER(title) LIKE $n clauses. Fixed params are $1–$4; search terms
+        // start at $5; LIMIT/OFFSET come last.
+        let terms = filter.search.as_deref().map(search_terms).unwrap_or_default();
+
+        let mut sql = "SELECT * FROM posts \
+                       WHERE ($1::text IS NULL OR status = $1) \
+                         AND ($2::text IS NULL OR post_type = $2) \
+                         AND ($3::uuid IS NULL OR author_id = $3) \
+                         AND ($4::uuid IS NULL OR site_id = $4)"
+            .to_string();
+
+        for i in 0..terms.len() {
+            let n = i + 5;
+            sql.push_str(&format!(" AND LOWER(title) LIKE ${n}"));
+        }
+
+        let limit_n  = terms.len() + 5;
+        let offset_n = terms.len() + 6;
+        sql.push_str(&format!(
+            " ORDER BY published_at DESC NULLS LAST LIMIT ${limit_n} OFFSET ${offset_n}"
+        ));
+
+        let mut q = sqlx::query_as::<_, Post>(&sql)
+            .bind(filter.status.as_ref().map(|s| s.as_str()))
+            .bind(filter.post_type.as_ref().map(|t| t.as_str()))
+            .bind(filter.author_id)
+            .bind(filter.site_id);
+        for term in &terms {
+            q = q.bind(format!("%{term}%"));
+        }
+        q.bind(filter.limit).bind(filter.offset).fetch_all(pool).await?
     };
 
     Ok(posts)

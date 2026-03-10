@@ -16,6 +16,12 @@ use admin::pages::posts::{PostEdit, PostRow, TermOption};
 pub struct PostsQuery {
     pub page: Option<i64>,
     pub status: Option<String>,
+    /// Free-text filter for post title — stop words stripped before building ILIKE clauses.
+    #[serde(default)]
+    pub search: Option<String>,
+    /// When set (any value), return only the table fragment HTML for JS live-search.
+    #[serde(default)]
+    pub partial: Option<String>,
 }
 
 pub async fn list(
@@ -26,7 +32,7 @@ pub async fn list(
     let cs = state.site_hostname(admin.site_id);
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
     let author_filter = if admin.site_role == "author" { Some(admin.user.id) } else { None };
-    list_type(state, "post", q.page, q.status.as_deref(), admin.site_id, author_filter, ctx).await
+    list_type(state, "post", q.page, q.status.as_deref(), q.search.as_deref(), q.partial.as_deref(), admin.site_id, author_filter, ctx).await
 }
 
 pub async fn list_pages(
@@ -39,10 +45,10 @@ pub async fn list_pages(
     }
     let cs = state.site_hostname(admin.site_id);
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
-    list_type(state, "page", q.page, q.status.as_deref(), admin.site_id, None, ctx).await.into_response()
+    list_type(state, "page", q.page, q.status.as_deref(), q.search.as_deref(), q.partial.as_deref(), admin.site_id, None, ctx).await.into_response()
 }
 
-async fn list_type(state: AppState, post_type: &str, page: Option<i64>, status_filter: Option<&str>, site_id: Option<Uuid>, author_id: Option<Uuid>, ctx: admin::PageContext) -> Html<String> {
+async fn list_type(state: AppState, post_type: &str, page: Option<i64>, status_filter: Option<&str>, search: Option<&str>, partial: Option<&str>, site_id: Option<Uuid>, author_id: Option<Uuid>, ctx: admin::PageContext) -> Html<String> {
     let per_page = 20i64;
     let page = page.unwrap_or(1).max(1);
     let offset = (page - 1) * per_page;
@@ -58,21 +64,32 @@ async fn list_type(state: AppState, post_type: &str, page: Option<i64>, status_f
     };
     let status_sql = status_enum.as_ref().map(|s| s.as_str());
 
-    // Count uses the same site_id + author_id + status filters.
-    let total: i64 = sqlx::query_scalar(
-        r#"SELECT COUNT(*) FROM posts
-           WHERE ($1::uuid IS NULL OR site_id = $1)
-             AND post_type = $2
-             AND ($3::uuid IS NULL OR author_id = $3)
-             AND ($4::text IS NULL OR status = $4)"#,
-    )
-    .bind(site_id)
-    .bind(post_type)
-    .bind(author_id)
-    .bind(status_sql)
-    .fetch_one(&state.db)
-    .await
-    .unwrap_or(0);
+    // Strip stop words from the search input once; reuse for both COUNT and SELECT.
+    let search_str = search.unwrap_or("").trim();
+    let search_opt = if search_str.is_empty() { None } else { Some(search_str) };
+    let terms = search_opt.map(crate::models::post::search_terms).unwrap_or_default();
+
+    // COUNT — same filters as SELECT. Dynamic ILIKE clauses mirror the SELECT query.
+    // Fixed params: $1=site_id, $2=post_type, $3=author_id, $4=status; search terms start at $5.
+    let mut count_sql = "SELECT COUNT(*) FROM posts \
+                         WHERE ($1::uuid IS NULL OR site_id = $1) \
+                           AND post_type = $2 \
+                           AND ($3::uuid IS NULL OR author_id = $3) \
+                           AND ($4::text IS NULL OR status = $4)"
+        .to_string();
+    for i in 0..terms.len() {
+        let n = i + 5;
+        count_sql.push_str(&format!(" AND LOWER(title) LIKE ${n}"));
+    }
+    let mut count_q = sqlx::query_scalar::<_, i64>(&count_sql)
+        .bind(site_id)
+        .bind(post_type)
+        .bind(author_id)
+        .bind(status_sql);
+    for term in &terms {
+        count_q = count_q.bind(format!("%{term}%"));
+    }
+    let total: i64 = count_q.fetch_one(&state.db).await.unwrap_or(0);
 
     let total_pages = ((total + per_page - 1) / per_page).max(1);
 
@@ -117,6 +134,7 @@ async fn list_type(state: AppState, post_type: &str, page: Option<i64>, status_f
         author_id,
         limit: per_page,
         offset,
+        search: search_opt.map(|s| s.to_string()),
         ..Default::default()
     };
 
@@ -158,7 +176,13 @@ async fn list_type(state: AppState, post_type: &str, page: Option<i64>, status_f
         });
     }
 
-    Html(admin::pages::posts::render_list(&rows, post_type, page, total_pages, None, &ctx, status_filter, pending_count, author_scheduled_count))
+    // `partial=<anything>` means the JS live-search is requesting only the table
+    // fragment so it can swap div#posts-list without a full page reload.
+    if partial.is_some() {
+        Html(admin::pages::posts::posts_list_fragment(&rows, post_type, page, total_pages, &ctx, status_filter, search_str))
+    } else {
+        Html(admin::pages::posts::render_list(&rows, post_type, page, total_pages, None, &ctx, status_filter, pending_count, author_scheduled_count, search_str))
+    }
 }
 
 pub async fn new_post(
