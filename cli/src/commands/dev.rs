@@ -54,12 +54,7 @@ async fn reset(
 
     let pool = super::connect_db().await?;
 
-    // ── Verify super_admin password first ─────────────────────────────────────
-
-    println!();
-    println!("  !! DEV RESET — DESTRUCTIVE OPERATION !!");
-    println!("  NEVER run this on a production database.");
-    println!();
+    // ── Check a super_admin exists before showing the scary banner ─────────────
 
     let row: Option<(String,)> = sqlx::query_as(
         "SELECT password_hash FROM users WHERE is_protected = TRUE AND deleted_at IS NULL LIMIT 1"
@@ -71,10 +66,15 @@ async fn reset(
     let hash = match row {
         Some((h,)) => h,
         None => anyhow::bail!(
-            "No super_admin found — the database appears to already be reset.\n\
+            "The database appears to already be reset — no super_admin found.\n\
              Run 'synaptic-cli install' to set up a fresh installation."
         ),
     };
+
+    println!();
+    println!("  !! DEV RESET — DESTRUCTIVE OPERATION !!");
+    println!("  NEVER run this on a production database.");
+    println!();
 
     let supplied = match password {
         Some(p) => p,
