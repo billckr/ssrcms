@@ -50,14 +50,43 @@ pub fn render_list(items: &[MediaItem], folders: &[FolderItem], active_folder: O
         )
     }).collect::<Vec<_>>().join("\n");
 
-    // Delete folder button — shown only when a specific folder is active
-    let delete_folder_btn = if let Some(active_id) = active_folder {
+    // Delete folder button — shown only when a specific folder is active.
+    // Rendered as a plain button (no form) to avoid nesting inside the upload form.
+    // The actual delete forms live outside the upload form in the modal.
+    let delete_folder_btn = if active_folder.is_some() {
+        r#"<button type="button" class="btn btn-danger"
+                 style="font-size:12px;padding:.3rem .6rem"
+                 onclick="showDeleteFolderModal()">Delete Folder</button>"#.to_string()
+    } else {
+        String::new()
+    };
+
+    // Delete-folder modal forms (placed outside the upload form to avoid nesting).
+    let delete_folder_modal = if let Some(active_id) = active_folder {
+        let eid = crate::html_escape(active_id);
         format!(
-            r#"<form method="POST" action="/admin/media/folders/{id}/delete" style="display:inline"
-                  onsubmit="return confirm('Delete folder? Images will become unorganised.')">
-              <button class="btn btn-danger" type="submit" style="font-size:12px;padding:.3rem .6rem">Delete Folder</button>
-            </form>"#,
-            id = crate::html_escape(active_id),
+            r#"<div id="delete-folder-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:900;align-items:center;justify-content:center">
+  <div style="background:var(--surface);border-radius:8px;padding:1.5rem;max-width:400px;width:90%;box-shadow:0 4px 24px rgba(0,0,0,.25)">
+    <h3 style="margin:0 0 .5rem;font-size:1rem;font-weight:600">Delete Folder</h3>
+    <p style="margin:0 0 1.25rem;font-size:.875rem;color:var(--muted)">What should happen to the images inside this folder?</p>
+    <div style="display:flex;flex-direction:column;gap:.5rem">
+      <form method="POST" action="/admin/media/folders/{id}/delete">
+        <input type="hidden" name="delete_media" value="false">
+        <button type="submit" class="btn btn-secondary" style="width:100%;text-align:left">
+          Keep images &mdash; move them to All Media
+        </button>
+      </form>
+      <form method="POST" action="/admin/media/folders/{id}/delete">
+        <input type="hidden" name="delete_media" value="true">
+        <button type="submit" class="btn btn-danger" style="width:100%;text-align:left">
+          Delete folder and all images inside it
+        </button>
+      </form>
+      <button type="button" class="btn btn-secondary" onclick="hideDeleteFolderModal()">Cancel</button>
+    </div>
+  </div>
+</div>"#,
+            id = eid,
         )
     } else {
         String::new()
@@ -89,8 +118,10 @@ pub fn render_list(items: &[MediaItem], folders: &[FolderItem], active_folder: O
       <!-- new folder inline form -->
       <button type="button" class="btn btn-secondary" onclick="toggleNewFolder()" id="new-folder-btn">Folder +</button>
       <span id="new-folder-form" style="display:none;gap:.35rem;align-items:center">
-        <input id="new-folder-input" type="text" maxlength="25" placeholder="Folder name&hellip;"
-               oninput="this.value=this.value.replace(/[^a-zA-Z0-9\-]/g,'')"
+        <input id="new-folder-input" type="text" minlength="4" maxlength="25"
+               placeholder="Folder name&hellip;"
+               oninput="this.value=this.value.replace(/[^a-zA-Z0-9\-]/g,'');this.setCustomValidity('')"
+               title="Folder name must be 4–25 characters (letters, numbers, hyphens)"
                style="width:16ch;padding:.4rem .75rem;border:1px solid var(--border);border-radius:var(--radius);font-size:14px;background:var(--surface);color:var(--text)">
         <button type="button" class="btn btn-primary" onclick="submitNewFolder()">Create</button>
         <button type="button" class="btn btn-secondary" onclick="toggleNewFolder()">Cancel</button>
@@ -104,6 +135,7 @@ pub fn render_list(items: &[MediaItem], folders: &[FolderItem], active_folder: O
     </div>
   </form>
 </div>
+{delete_folder_modal}
 <div style="margin-bottom:.5rem"><span id="media-count" style="font-size:13px;color:var(--muted)"></span></div>
 <div class="media-grid" id="media-grid">{grid}</div>
 <style>
@@ -200,8 +232,15 @@ function toggleNewFolder() {{
 }}
 
 function submitNewFolder() {{
-  var name = document.getElementById('new-folder-input').value.trim();
-  if (!name) return;
+  var inp = document.getElementById('new-folder-input');
+  var name = inp.value.trim();
+  if (!name) {{
+    inp.setCustomValidity('Please enter a folder name (4–25 characters, letters, numbers and hyphens only)');
+    inp.reportValidity();
+    return;
+  }}
+  inp.setCustomValidity('');
+  if (!inp.reportValidity()) return;
   var form = document.createElement('form');
   form.method = 'POST';
   form.action = '/admin/media/folders/new';
@@ -213,11 +252,20 @@ function submitNewFolder() {{
   form.submit();
 }}
 
+function showDeleteFolderModal() {{
+  document.getElementById('delete-folder-modal').style.display = 'flex';
+}}
+
+function hideDeleteFolderModal() {{
+  document.getElementById('delete-folder-modal').style.display = 'none';
+}}
+
 // Initialise count on load.
 document.addEventListener('DOMContentLoaded', function() {{ filterMediaGrid(''); }});
 </script>"#,
         folder_options = folder_options,
         delete_folder_btn = delete_folder_btn,
+        delete_folder_modal = delete_folder_modal,
         grid = grid,
     );
     content.push_str(&crate::media_picker_modal_html());

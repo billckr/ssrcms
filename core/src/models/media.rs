@@ -144,6 +144,15 @@ pub async fn update_alt_text(pool: &PgPool, id: Uuid, alt_text: &str) -> Result<
     Ok(())
 }
 
+pub async fn unassign_folder(pool: &PgPool, folder_id: Uuid, site_id: Uuid) -> Result<()> {
+    sqlx::query("UPDATE media SET folder_id = NULL WHERE folder_id = $1 AND site_id = $2")
+        .bind(folder_id)
+        .bind(site_id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
 pub async fn delete(pool: &PgPool, id: Uuid) -> Result<()> {
     sqlx::query("DELETE FROM media WHERE id = $1")
         .bind(id)

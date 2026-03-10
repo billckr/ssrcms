@@ -169,7 +169,7 @@ pub async fn create_folder(
         .take(25)
         .collect();
     let clean = clean.trim_matches('-').to_string();
-    if clean.is_empty() {
+    if clean.len() < 4 {
         return Redirect::to("/admin/media").into_response();
     }
     if let Some(site_id) = admin.site_id {
@@ -182,8 +182,26 @@ pub async fn delete_folder(
     State(state): State<AppState>,
     admin: AdminUser,
     Path(id): Path<Uuid>,
+    axum::Form(body): axum::Form<std::collections::HashMap<String, String>>,
 ) -> impl IntoResponse {
+    let delete_media = body.get("delete_media").map(|s| s == "true").unwrap_or(false);
     if let Some(site_id) = admin.site_id {
+        if delete_media {
+            // Delete all media files and DB records belonging to this folder.
+            let items = crate::models::media::list(&state.db, Some(site_id), None, Some(id), 10_000, 0)
+                .await
+                .unwrap_or_default();
+            for m in &items {
+                let path = std::path::Path::new(&state.config.uploads_dir).join(&m.path);
+                if let Err(e) = std::fs::remove_file(&path) {
+                    tracing::warn!("delete_folder: could not remove file {:?}: {:?}", path, e);
+                }
+                let _ = crate::models::media::delete(&state.db, m.id).await;
+            }
+        } else {
+            // Unassign folder from all images so they appear in All Media.
+            let _ = crate::models::media::unassign_folder(&state.db, id, site_id).await;
+        }
         let _ = crate::models::media_folder::delete(&state.db, id, site_id).await;
     }
     Redirect::to("/admin/media").into_response()
