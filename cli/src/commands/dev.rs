@@ -197,13 +197,46 @@ async fn reset(
 
         remove_subdirs(&base.join("themes").join("sites"),  "themes/sites/");
         remove_subdirs(&base.join("themes").join("private"), "themes/private/");
-        remove_subdirs(&base.join("uploads"), "uploads/");
+        // Uploads stores files flat (not in subdirs), so remove files directly.
+        remove_files(&base.join("uploads"), "uploads/");
     }
 
     println!();
     println!("Reset complete. Next: synaptic-cli install");
 
     Ok(())
+}
+
+/// Delete every immediate child file of `parent`, leaving the parent itself
+/// and any subdirectories in place.  Skips directories (e.g. future subfolders).
+fn remove_files(parent: &std::path::Path, label: &str) {
+    if !parent.is_dir() {
+        return;
+    }
+    let entries = match std::fs::read_dir(parent) {
+        Ok(e) => e,
+        Err(e) => {
+            println!("  Warning: could not read {label}: {e}");
+            return;
+        }
+    };
+    let mut removed = 0u32;
+    for entry in entries.flatten() {
+        if entry.file_type().map(|t| t.is_file()).unwrap_or(false) {
+            match std::fs::remove_file(entry.path()) {
+                Ok(()) => removed += 1,
+                Err(e) => println!(
+                    "  Warning: could not remove {}: {e}",
+                    entry.path().display()
+                ),
+            }
+        }
+    }
+    if removed > 0 {
+        println!("  Removed {removed} file{} from {label}", if removed == 1 { "" } else { "s" });
+    } else {
+        println!("  {label} already empty — nothing to remove.");
+    }
 }
 
 /// Delete every immediate child directory of `parent`, leaving the parent
