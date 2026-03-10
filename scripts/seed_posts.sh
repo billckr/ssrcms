@@ -31,6 +31,8 @@ PORT=""
 FORCE_STATUS=""
 TYPE="post"
 EXTRAS=0
+COMMENTS=0
+REPLIES=0
 
 usage() {
     cat <<EOF
@@ -43,14 +45,19 @@ Required:
   -user   <email>           Author email address (e.g. beth@beth.com)
 
 Options:
-  -number <n>               Number of items to create (default: 10)
-  -type   post|page         Content type to create (default: post)
-  -status published|draft   Force all items to a specific status.
+  -number   <n>             Number of items to create (default: 10)
+  -type     post|page       Content type to create (default: post)
+  -status   published|draft Force all items to a specific status.
                             Without this flag items are randomly mixed
                             (~60% published, ~40% draft).
   -extras                   Create random categories and tags and assign them
                             to ~50% of the inserted items (randomly chosen).
-  -port   <port>            Port to include in the printed URLs (e.g. 3000).
+  -comments <n>             Add n comments to ~50% of inserted published posts.
+                            Comments are authored by random site subscribers.
+                            Ignored when -type is page.
+  -replies                  With -comments: also add a random number of replies
+                            to each top-level comment (one level deep).
+  -port     <port>          Port to include in the printed URLs (e.g. 3000).
                             Only affects output — not stored in the database.
 
 Examples:
@@ -60,11 +67,14 @@ Examples:
   $(basename "$0") -domain beth.com -user beth@beth.com -number 5  -status draft
   $(basename "$0") -domain beth.com -user beth@beth.com -number 5  -type page
   $(basename "$0") -domain beth.com -user beth@beth.com -number 50 -extras
+  $(basename "$0") -domain beth.com -user beth@beth.com -number 20 -comments 5 -port 3000
+  $(basename "$0") -domain beth.com -user beth@beth.com -number 20 -comments 8 -replies -port 3000
 
 Notes:
   - Reads DATABASE_URL from .env in the project root if not set in the environment.
   - Slugs include a random 4-character suffix to avoid collisions on repeat runs.
   - Published posts are assigned a random date within the last 12 months.
+  - Comments require at least one subscriber user on the site (-comments is skipped otherwise).
 EOF
     exit 1
 }
@@ -79,6 +89,8 @@ while [[ $# -gt 0 ]]; do
         -status)   FORCE_STATUS="$2";  shift 2 ;;
         -type)     TYPE="$2";          shift 2 ;;
         -extras)   EXTRAS=1;           shift 1 ;;
+        -comments) COMMENTS="$2";      shift 2 ;;
+        -replies)  REPLIES=1;          shift 1 ;;
         *) usage ;;
     esac
 done
@@ -91,6 +103,22 @@ fi
 if [[ "$TYPE" != "post" && "$TYPE" != "page" ]]; then
     echo "ERROR: -type must be 'post' or 'page'" >&2
     exit 1
+fi
+
+if [[ "$COMMENTS" != "0" ]]; then
+    if ! [[ "$COMMENTS" =~ ^[0-9]+$ ]] || [[ "$COMMENTS" -lt 1 ]]; then
+        echo "ERROR: -comments must be a positive integer" >&2
+        exit 1
+    fi
+    if [[ "$TYPE" == "page" ]]; then
+        echo "WARNING: -comments is ignored for -type page" >&2
+        COMMENTS=0
+    fi
+fi
+
+if [[ "$REPLIES" == "1" && "$COMMENTS" == "0" ]]; then
+    echo "WARNING: -replies has no effect without -comments — ignoring" >&2
+    REPLIES=0
 fi
 
 [[ -z "$DOMAIN" || -z "$USER_EMAIL" ]] && usage
@@ -198,7 +226,7 @@ Vestibulum ante ipsum primis in faucibus orci luctus et ultrices posuere cubilia
              $PUBLISHED_AT
          ) RETURNING id;"
 
-    POST_ID=$(command psql "$DATABASE_URL" --tuples-only --no-align -c "$SQL" 2>/dev/null | tr -d '[:space:]')
+    POST_ID=$(command psql "$DATABASE_URL" --tuples-only --no-align -c "$SQL" 2>/dev/null | grep -oE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}')
     if [[ -n "$POST_ID" ]]; then
         POST_IDS+=("$POST_ID")
         PORT_PART="${PORT:+:$PORT}"
@@ -290,5 +318,160 @@ if [[ "$EXTRAS" == "1" && "$SUCCESS" -gt 0 ]]; then
         done
         echo ""
         echo "Extras done. $ASSIGNED assignments made."
+    fi
+fi
+
+# ── Comments ────────────────────────────────────────────────────────────────────
+if [[ "$COMMENTS" -gt 0 && "$SUCCESS" -gt 0 ]]; then
+    echo ""
+    echo "Seeding comments..."
+
+    # Collect only the published post IDs (drafts don't show comments).
+    # Build a quoted IN list from the array, e.g. 'uuid1','uuid2',...
+    IN_LIST=$(printf "'%s'," "${POST_IDS[@]}")
+    IN_LIST="${IN_LIST%,}"   # strip trailing comma
+    mapfile -t PUB_IDS < <(
+        command psql "$DATABASE_URL" --tuples-only --no-align \
+            -c "SELECT id FROM posts WHERE id IN ($IN_LIST) AND status = 'published';" \
+            2>/dev/null
+    )
+
+    PUB_COUNT=${#PUB_IDS[@]}
+    if [[ "$PUB_COUNT" -eq 0 ]]; then
+        echo "  No published posts in this run — skipping comments."
+    else
+        # Look up subscribers for this site.
+        mapfile -t SUB_IDS < <(
+            command psql "$DATABASE_URL" --tuples-only --no-align \
+                -c "SELECT u.id FROM users u
+                    JOIN site_users su ON su.user_id = u.id
+                    WHERE su.site_id = '$SITE_ID'
+                      AND u.role = 'subscriber'
+                      AND u.deleted_at IS NULL;" \
+                2>/dev/null
+        )
+
+        SUB_COUNT=${#SUB_IDS[@]}
+        if [[ "$SUB_COUNT" -eq 0 ]]; then
+            echo "  WARNING: No subscribers found for '$DOMAIN' — skipping comments."
+            echo "           Add subscriber users to the site and re-run with -comments."
+        else
+            echo "  Found $SUB_COUNT subscriber(s) to use as comment authors."
+
+            # Word bank for comment bodies.
+            COMMENT_BODIES=(
+                "Really enjoyed this post — thanks for sharing!"
+                "Great writeup. Learned something new today."
+                "I've been thinking about this topic for a while. Well said."
+                "Interesting perspective. I'd love to hear more on this."
+                "This is exactly what I was looking for. Bookmarked."
+                "Good points here. Have you considered the flip side?"
+                "Solid article. The examples really helped it click."
+                "Thanks for breaking this down so clearly."
+                "I shared this with my team — very relevant to what we're working on."
+                "Not sure I fully agree, but you've given me a lot to think about."
+                "This reminded me of a similar issue I ran into last year."
+                "Very well written. Looking forward to more posts like this."
+                "The detail in this post is impressive. Nice work."
+                "I've seen this come up a lot lately. Good to have a clear take on it."
+                "Came here from a search and glad I did — great content."
+                "This changed how I think about the subject. Thanks."
+                "Would love a follow-up post going deeper on the second point."
+                "Agreed on most counts. The last section especially resonated."
+                "First time commenting here. Really quality stuff."
+                "Short and to the point. Exactly what I needed."
+            )
+
+            REPLY_BODIES=(
+                "Good point — I hadn't thought of it that way."
+                "Totally agree with you on this."
+                "That's a fair take. Thanks for weighing in."
+                "Interesting — did you find that worked well in practice?"
+                "Yeah, I had the same reaction when I first read it."
+                "Thanks for adding that context."
+                "Worth expanding on if you get the chance!"
+                "That lines up with my experience too."
+                "I was wondering about that — glad someone brought it up."
+                "Makes sense. Appreciate the extra perspective."
+            )
+
+            # Select ~50% of published posts randomly.
+            HALF=$(( (PUB_COUNT + 1) / 2 ))
+            mapfile -t SHUFFLED < <(printf '%s\n' "${PUB_IDS[@]}" | shuf)
+            COMMENT_TARGETS=("${SHUFFLED[@]:0:$HALF}")
+
+            TOTAL_COMMENTS=0
+            TOTAL_REPLIES=0
+            COMMENTED_URLS=()
+
+            for PID in "${COMMENT_TARGETS[@]}"; do
+                # Enable comments on this post.
+                command psql "$DATABASE_URL" -c \
+                    "UPDATE posts SET comments_enabled = TRUE WHERE id = '$PID';" \
+                    > /dev/null 2>&1
+
+                TOP_LEVEL_IDS=()
+
+                for (( c = 1; c <= COMMENTS; c++ )); do
+                    SUB_ID="${SUB_IDS[$((RANDOM % SUB_COUNT))]}"
+                    BODY="${COMMENT_BODIES[$((RANDOM % ${#COMMENT_BODIES[@]}))]}"
+                    # Spread created_at over the last 30 days for realism.
+                    MINS_AGO=$(( RANDOM % 43200 ))
+
+                    CID=$(command psql "$DATABASE_URL" --tuples-only --no-align -c \
+                        "INSERT INTO comments (post_id, site_id, author_id, body, created_at, updated_at)
+                         VALUES ('$PID', '$SITE_ID', '$SUB_ID', \$\$${BODY}\$\$,
+                                 NOW() - INTERVAL '$MINS_AGO minutes',
+                                 NOW() - INTERVAL '$MINS_AGO minutes')
+                         RETURNING id;" \
+                        2>/dev/null | grep -oE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}')
+
+                    if [[ -n "$CID" ]]; then
+                        TOP_LEVEL_IDS+=("$CID")
+                        TOTAL_COMMENTS=$((TOTAL_COMMENTS + 1))
+                    fi
+                done
+
+                # Replies: for each top-level comment, randomly add 0–3 replies.
+                if [[ "$REPLIES" == "1" && "${#TOP_LEVEL_IDS[@]}" -gt 0 ]]; then
+                    for PARENT_ID in "${TOP_LEVEL_IDS[@]}"; do
+                        NUM_REPLIES=$(( RANDOM % 4 ))   # 0, 1, 2, or 3
+                        for (( r = 0; r < NUM_REPLIES; r++ )); do
+                            SUB_ID="${SUB_IDS[$((RANDOM % SUB_COUNT))]}"
+                            BODY="${REPLY_BODIES[$((RANDOM % ${#REPLY_BODIES[@]}))]}"
+                            MINS_AGO=$(( RANDOM % 43200 ))
+
+                            RID=$(command psql "$DATABASE_URL" --tuples-only --no-align -c \
+                                "INSERT INTO comments (post_id, site_id, author_id, parent_id, body, created_at, updated_at)
+                                 VALUES ('$PID', '$SITE_ID', '$SUB_ID', '$PARENT_ID', \$\$${BODY}\$\$,
+                                         NOW() - INTERVAL '$MINS_AGO minutes',
+                                         NOW() - INTERVAL '$MINS_AGO minutes')
+                                 RETURNING id;" \
+                                2>/dev/null | grep -oE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' || true)
+
+                            [[ -n "$RID" ]] && TOTAL_REPLIES=$((TOTAL_REPLIES + 1))
+                        done
+                    done
+                fi
+
+                # Build the URL for this post.
+                SLUG=$(command psql "$DATABASE_URL" --tuples-only --no-align \
+                    -c "SELECT slug FROM posts WHERE id = '$PID';" 2>/dev/null | tr -d '[:space:]')
+                PORT_PART="${PORT:+:$PORT}"
+                COMMENTED_URLS+=("http://${DOMAIN}${PORT_PART}/blog/${SLUG}")
+            done
+
+            echo ""
+            echo "Posts with comments:"
+            for URL in "${COMMENTED_URLS[@]}"; do
+                echo "  $URL"
+            done
+            echo ""
+            if [[ "$REPLIES" == "1" ]]; then
+                echo "Comments done. $TOTAL_COMMENTS top-level, $TOTAL_REPLIES replies across ${#COMMENT_TARGETS[@]} post(s)."
+            else
+                echo "Comments done. $TOTAL_COMMENTS comment(s) across ${#COMMENT_TARGETS[@]} post(s)."
+            fi
+        fi
     fi
 fi
