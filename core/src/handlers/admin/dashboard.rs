@@ -1,5 +1,5 @@
 use axum::{extract::{Query, State}, response::Html};
-use chrono::{Duration, Local};
+use chrono::{Datelike, Local};
 
 use crate::app_state::AppState;
 use crate::middleware::admin_auth::AdminUser;
@@ -11,6 +11,10 @@ pub struct DashboardQuery {
     pub range: Option<String>,
     #[serde(default)]
     pub views_range: Option<String>,
+    #[serde(default)]
+    pub year: Option<i32>,
+    #[serde(default)]
+    pub views_year: Option<i32>,
 }
 
 pub async fn dashboard(
@@ -66,8 +70,10 @@ pub async fn dashboard(
     };
 
     // Author view totals and chart data (only for author role).
-    let (author_total_views, author_views_labels, author_views_values, views_range) = if is_author {
+    let (author_total_views, author_views_labels, author_views_values, views_range,
+         available_views_years, selected_views_year) = if is_author {
         let aid = admin.user.id;
+        let current_year = Local::now().year();
 
         let total: i64 = sqlx::query_scalar(
             "SELECT COUNT(*)::bigint FROM post_views pv
@@ -75,190 +81,182 @@ pub async fn dashboard(
              WHERE p.author_id = $1 AND ($2::uuid IS NULL OR p.site_id = $2)"
         ).bind(aid).bind(site_id).fetch_one(&state.db).await.unwrap_or(0);
 
+        let avail_years: Vec<i32> = sqlx::query_scalar::<_, i32>(
+            "SELECT DISTINCT EXTRACT(YEAR FROM pv.viewed_date)::int \
+             FROM post_views pv \
+             JOIN posts p ON p.id = pv.post_id \
+             WHERE p.author_id = $1 AND ($2::uuid IS NULL OR p.site_id = $2) \
+             ORDER BY 1 DESC"
+        ).bind(aid).bind(site_id).fetch_all(&state.db).await.unwrap_or_default();
+
+        let default_year = avail_years.first().copied().unwrap_or(current_year);
+        let sel_year = query.views_year.unwrap_or(default_year);
+
         let range_str = query.views_range
             .as_deref()
             .map(|r| r.to_ascii_lowercase())
-            .filter(|r| r == "month" || r == "year")
-            .unwrap_or_else(|| "week".to_string());
+            .filter(|r| r == "week" || r == "month" || r == "year")
+            .unwrap_or_else(|| "month".to_string());
 
         let (labels, values) = match range_str.as_str() {
             "month" => {
-                let rows: Vec<(String, i32)> = sqlx::query_as(
-                    r#"SELECT
-                        'Wk ' || TO_CHAR(DATE_TRUNC('week', pv.viewed_date), 'IW') as label,
-                        COUNT(*)::int as count
-                    FROM post_views pv
-                    JOIN posts p ON p.id = pv.post_id
-                    WHERE p.author_id = $1
-                      AND ($2::uuid IS NULL OR p.site_id = $2)
-                      AND pv.viewed_date >= CURRENT_DATE - INTERVAL '27 days'
-                    GROUP BY DATE_TRUNC('week', pv.viewed_date), label
-                    ORDER BY DATE_TRUNC('week', pv.viewed_date)"#
-                ).bind(aid).bind(site_id).fetch_all(&state.db).await
+                let rows: Vec<(i32, i32)> = sqlx::query_as(
+                    "SELECT EXTRACT(MONTH FROM pv.viewed_date)::int AS month_num,
+                            COUNT(*)::int AS count
+                     FROM post_views pv
+                     JOIN posts p ON p.id = pv.post_id
+                     WHERE p.author_id = $1
+                       AND ($2::uuid IS NULL OR p.site_id = $2)
+                       AND EXTRACT(YEAR FROM pv.viewed_date)::int = $3
+                     GROUP BY month_num
+                     ORDER BY month_num"
+                ).bind(aid).bind(site_id).bind(sel_year).fetch_all(&state.db).await
                  .unwrap_or_else(|e| { tracing::warn!("views month chart error: {:?}", e); vec![] });
-                (
-                    rows.iter().map(|(l, _)| l.clone()).collect::<Vec<_>>(),
-                    rows.iter().map(|(_, c)| *c as f32).collect::<Vec<_>>(),
-                )
+                let month_map: std::collections::HashMap<i32, f32> =
+                    rows.into_iter().map(|(m, c)| (m, c as f32)).collect();
+                let month_names = ["Jan","Feb","Mar","Apr","May","Jun",
+                                   "Jul","Aug","Sep","Oct","Nov","Dec"];
+                let labels: Vec<String> = month_names.iter().map(|s| s.to_string()).collect();
+                let values: Vec<f32> = (1..=12i32)
+                    .map(|m| *month_map.get(&m).unwrap_or(&0.0))
+                    .collect();
+                (labels, values)
             }
             "year" => {
-                let rows: Vec<(String, i32)> = sqlx::query_as(
-                    r#"SELECT
-                        TO_CHAR(DATE_TRUNC('month', pv.viewed_date), 'Mon') as label,
-                        COUNT(*)::int as count
-                    FROM post_views pv
-                    JOIN posts p ON p.id = pv.post_id
-                    WHERE p.author_id = $1
-                      AND ($2::uuid IS NULL OR p.site_id = $2)
-                      AND pv.viewed_date >= CURRENT_DATE - INTERVAL '11 months'
-                    GROUP BY DATE_TRUNC('month', pv.viewed_date), label
-                    ORDER BY DATE_TRUNC('month', pv.viewed_date)"#
+                let rows: Vec<(i32, i32)> = sqlx::query_as(
+                    "SELECT EXTRACT(YEAR FROM pv.viewed_date)::int AS yr,
+                            COUNT(*)::int AS count
+                     FROM post_views pv
+                     JOIN posts p ON p.id = pv.post_id
+                     WHERE p.author_id = $1
+                       AND ($2::uuid IS NULL OR p.site_id = $2)
+                     GROUP BY yr
+                     ORDER BY yr"
                 ).bind(aid).bind(site_id).fetch_all(&state.db).await
                  .unwrap_or_else(|e| { tracing::warn!("views year chart error: {:?}", e); vec![] });
-                (
-                    rows.iter().map(|(l, _)| l.clone()).collect::<Vec<_>>(),
-                    rows.iter().map(|(_, c)| *c as f32).collect::<Vec<_>>(),
-                )
+                let labels: Vec<String> = rows.iter().map(|(y, _)| y.to_string()).collect();
+                let values: Vec<f32> = rows.iter().map(|(_, c)| *c as f32).collect();
+                (labels, values)
             }
             _ => {
-                // Week: last 7 days by day, zero-filled.
+                // Week: sparse — only weeks in selected year that have views.
                 let rows: Vec<(String, i32)> = sqlx::query_as(
                     r#"SELECT
-                        TO_CHAR(pv.viewed_date, 'Dy') as label,
-                        COUNT(*)::int as count
+                        'Wk ' || TO_CHAR(DATE_TRUNC('week', pv.viewed_date), 'IW') AS label,
+                        COUNT(*)::int AS count
                     FROM post_views pv
                     JOIN posts p ON p.id = pv.post_id
                     WHERE p.author_id = $1
                       AND ($2::uuid IS NULL OR p.site_id = $2)
-                      AND pv.viewed_date >= CURRENT_DATE - INTERVAL '6 days'
-                    GROUP BY pv.viewed_date, label
-                    ORDER BY pv.viewed_date"#
-                ).bind(aid).bind(site_id).fetch_all(&state.db).await
+                      AND EXTRACT(YEAR FROM pv.viewed_date)::int = $3
+                    GROUP BY DATE_TRUNC('week', pv.viewed_date), label
+                    ORDER BY DATE_TRUNC('week', pv.viewed_date)"#
+                ).bind(aid).bind(site_id).bind(sel_year).fetch_all(&state.db).await
                  .unwrap_or_else(|e| { tracing::warn!("views week chart error: {:?}", e); vec![] });
-
-                let result_map: std::collections::HashMap<String, f32> = rows
-                    .into_iter().map(|(l, c)| (l, c as f32)).collect();
-                let today = Local::now().date_naive();
-                let labels: Vec<String> = (0..7i64).rev()
-                    .map(|i| format!("{}", (today - Duration::days(i)).format("%a")))
-                    .collect();
-                let values: Vec<f32> = labels.iter()
-                    .map(|l| *result_map.get(l).unwrap_or(&0.0))
-                    .collect();
+                let labels: Vec<String> = rows.iter().map(|(l, _)| l.clone()).collect();
+                let values: Vec<f32> = rows.iter().map(|(_, c)| *c as f32).collect();
                 (labels, values)
             }
         };
 
-        (total, labels, values, range_str)
+        (total, labels, values, range_str, avail_years, sel_year)
     } else {
-        (0, vec![], vec![], "week".to_string())
+        (0, vec![], vec![], "month".to_string(), vec![], Local::now().year())
     };
 
-    // Author chart: query published posts per time bucket.
-    let (author_chart_labels, author_chart_values, chart_range) = if is_author {
+    // Author chart: published posts per time bucket (year-scoped).
+    let (author_chart_labels, author_chart_values, chart_range,
+         available_years, selected_year) = if is_author {
         let aid = admin.user.id;
+        let current_year = Local::now().year();
+
+        let avail_years: Vec<i32> = sqlx::query_scalar::<_, i32>(
+            "SELECT DISTINCT EXTRACT(YEAR FROM published_at AT TIME ZONE 'UTC')::int \
+             FROM posts \
+             WHERE author_id = $1 AND ($2::uuid IS NULL OR site_id = $2) \
+               AND status = 'published' AND post_type = 'post' \
+             ORDER BY 1 DESC"
+        ).bind(aid).bind(site_id).fetch_all(&state.db).await.unwrap_or_default();
+
+        let default_year = avail_years.first().copied().unwrap_or(current_year);
+        let sel_year = query.year.unwrap_or(default_year);
+
         let range_str = query.range
             .as_deref()
             .map(|r| r.to_ascii_lowercase())
-            .filter(|r| r == "month" || r == "year")
-            .unwrap_or_else(|| "week".to_string());
+            .filter(|r| r == "week" || r == "month" || r == "year")
+            .unwrap_or_else(|| "month".to_string());
 
         match range_str.as_str() {
             "month" => {
-                // Last 28 days, one bar per week (4 bars).
-                let rows: Vec<(String, i32)> = sqlx::query_as(
-                    r#"SELECT
-                        'Wk ' || TO_CHAR(DATE_TRUNC('week', published_at AT TIME ZONE 'UTC'), 'IW') as label,
-                        COUNT(*)::int as count
-                    FROM posts
-                    WHERE author_id = $1
-                      AND ($2::uuid IS NULL OR site_id = $2)
-                      AND status = 'published'
-                      AND post_type = 'post'
-                      AND published_at >= NOW() - INTERVAL '28 days'
-                    GROUP BY DATE_TRUNC('week', published_at AT TIME ZONE 'UTC'), label
-                    ORDER BY DATE_TRUNC('week', published_at AT TIME ZONE 'UTC')"#
-                )
-                .bind(aid)
-                .bind(site_id)
-                .fetch_all(&state.db)
-                .await
+                // All 12 months of selected year, zero-filled.
+                let rows: Vec<(i32, i32)> = sqlx::query_as(
+                    "SELECT EXTRACT(MONTH FROM published_at AT TIME ZONE 'UTC')::int AS month_num,
+                            COUNT(*)::int AS count
+                     FROM posts
+                     WHERE author_id = $1
+                       AND ($2::uuid IS NULL OR site_id = $2)
+                       AND status = 'published'
+                       AND post_type = 'post'
+                       AND EXTRACT(YEAR FROM published_at AT TIME ZONE 'UTC')::int = $3
+                     GROUP BY month_num
+                     ORDER BY month_num"
+                ).bind(aid).bind(site_id).bind(sel_year).fetch_all(&state.db).await
                 .unwrap_or_else(|e| { tracing::warn!("dashboard month chart error: {:?}", e); vec![] });
 
-                let labels: Vec<String> = rows.iter().map(|(l, _)| l.clone()).collect();
-                let values: Vec<f32> = rows.iter().map(|(_, c)| *c as f32).collect();
-                (labels, values, range_str)
+                let month_map: std::collections::HashMap<i32, f32> =
+                    rows.into_iter().map(|(m, c)| (m, c as f32)).collect();
+                let month_names = ["Jan","Feb","Mar","Apr","May","Jun",
+                                   "Jul","Aug","Sep","Oct","Nov","Dec"];
+                let labels: Vec<String> = month_names.iter().map(|s| s.to_string()).collect();
+                let values: Vec<f32> = (1..=12i32)
+                    .map(|m| *month_map.get(&m).unwrap_or(&0.0))
+                    .collect();
+                (labels, values, range_str, avail_years, sel_year)
             }
             "year" => {
-                // Last 12 months, one bar per month.
+                // All years with posts, total per year.
+                let rows: Vec<(i32, i32)> = sqlx::query_as(
+                    "SELECT EXTRACT(YEAR FROM published_at AT TIME ZONE 'UTC')::int AS yr,
+                            COUNT(*)::int AS count
+                     FROM posts
+                     WHERE author_id = $1
+                       AND ($2::uuid IS NULL OR site_id = $2)
+                       AND status = 'published'
+                       AND post_type = 'post'
+                     GROUP BY yr
+                     ORDER BY yr"
+                ).bind(aid).bind(site_id).fetch_all(&state.db).await
+                .unwrap_or_else(|e| { tracing::warn!("dashboard year chart error: {:?}", e); vec![] });
+
+                let labels: Vec<String> = rows.iter().map(|(y, _)| y.to_string()).collect();
+                let values: Vec<f32> = rows.iter().map(|(_, c)| *c as f32).collect();
+                (labels, values, range_str, avail_years, sel_year)
+            }
+            _ => {
+                // Week: sparse — only weeks in selected year that have posts.
                 let rows: Vec<(String, i32)> = sqlx::query_as(
                     r#"SELECT
-                        TO_CHAR(DATE_TRUNC('month', published_at AT TIME ZONE 'UTC'), 'Mon') as label,
-                        COUNT(*)::int as count
+                        'Wk ' || TO_CHAR(DATE_TRUNC('week', published_at AT TIME ZONE 'UTC'), 'IW') AS label,
+                        COUNT(*)::int AS count
                     FROM posts
                     WHERE author_id = $1
                       AND ($2::uuid IS NULL OR site_id = $2)
                       AND status = 'published'
                       AND post_type = 'post'
-                      AND published_at >= NOW() - INTERVAL '12 months'
-                    GROUP BY DATE_TRUNC('month', published_at AT TIME ZONE 'UTC'), label
-                    ORDER BY DATE_TRUNC('month', published_at AT TIME ZONE 'UTC')"#
-                )
-                .bind(aid)
-                .bind(site_id)
-                .fetch_all(&state.db)
-                .await
-                .unwrap_or_else(|e| { tracing::warn!("dashboard year chart error: {:?}", e); vec![] });
+                      AND EXTRACT(YEAR FROM published_at AT TIME ZONE 'UTC')::int = $3
+                    GROUP BY DATE_TRUNC('week', published_at AT TIME ZONE 'UTC'), label
+                    ORDER BY DATE_TRUNC('week', published_at AT TIME ZONE 'UTC')"#
+                ).bind(aid).bind(site_id).bind(sel_year).fetch_all(&state.db).await
+                .unwrap_or_else(|e| { tracing::warn!("dashboard week chart error: {:?}", e); vec![] });
 
                 let labels: Vec<String> = rows.iter().map(|(l, _)| l.clone()).collect();
                 let values: Vec<f32> = rows.iter().map(|(_, c)| *c as f32).collect();
-                (labels, values, range_str)
-            }
-            _ => {
-                // Week (default): last 7 days, one bar per day, zero-filled.
-                let rows: Vec<(String, i32)> = sqlx::query_as(
-                    r#"SELECT
-                        TO_CHAR(DATE(published_at AT TIME ZONE 'UTC'), 'Dy') as label,
-                        COUNT(*)::int as count
-                    FROM posts
-                    WHERE author_id = $1
-                      AND ($2::uuid IS NULL OR site_id = $2)
-                      AND status = 'published'
-                      AND post_type = 'post'
-                      AND published_at >= NOW() - INTERVAL '7 days'
-                    GROUP BY DATE(published_at AT TIME ZONE 'UTC'), label
-                    ORDER BY DATE(published_at AT TIME ZONE 'UTC')"#
-                )
-                .bind(aid)
-                .bind(site_id)
-                .fetch_all(&state.db)
-                .await
-                .unwrap_or_else(|e| { tracing::warn!("dashboard week chart error: {:?}", e); vec![] });
-
-                // Build a map from 3-letter day abbrev -> count.
-                let result_map: std::collections::HashMap<String, f32> = rows
-                    .into_iter()
-                    .map(|(label, count)| (label, count as f32))
-                    .collect();
-
-                let today = Local::now().date_naive();
-                let labels: Vec<String> = (0..7i64)
-                    .rev()
-                    .map(|i| {
-                        let d = today - Duration::days(i);
-                        format!("{}", d.format("%a"))
-                    })
-                    .collect();
-                let values: Vec<f32> = labels
-                    .iter()
-                    .map(|l| *result_map.get(l).unwrap_or(&0.0))
-                    .collect();
-
-                (labels, values, range_str)
+                (labels, values, range_str, avail_years, sel_year)
             }
         }
     } else {
-        (vec![], vec![], "week".to_string())
+        (vec![], vec![], "month".to_string(), vec![], Local::now().year())
     };
 
     let cs = state.site_hostname(site_id);
@@ -276,9 +274,13 @@ pub async fn dashboard(
         author_chart_labels,
         author_chart_values,
         chart_range,
+        available_years,
+        selected_year,
         author_views_labels,
         author_views_values,
         views_range,
+        available_views_years,
+        selected_views_year,
         author_total_views,
     };
 

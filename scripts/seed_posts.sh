@@ -33,23 +33,35 @@ TYPE="post"
 EXTRAS=0
 COMMENTS=0
 REPLIES=0
+CLEAR=0
+FORCE=0
 
 usage() {
     cat <<EOF
 Usage: $(basename "$0") -domain <hostname> -user <email> [options]
+       $(basename "$0") -domain <hostname> -clear [-force]
 
-Create random seed posts for a specific site and author.
+Seed or clear content for a specific site.
 
-Required:
+Required (seed mode):
   -domain <hostname>        Site hostname (e.g. beth.com)
   -user   <email>           Author email address (e.g. beth@beth.com)
 
-Options:
+Required (clear mode):
+  -domain <hostname>        Site hostname to clear
+  -clear                    Delete all posts, pages, comments, taxonomies,
+                            form submissions, and media rows for this site.
+                            Users and site settings are NOT affected.
+                            Prompts for confirmation unless -force is also set.
+  -force                    Skip the confirmation prompt (use in scripts).
+
+Seed options:
   -number   <n>             Number of items to create (default: 10)
   -type     post|page       Content type to create (default: post)
-  -status   published|draft Force all items to a specific status.
+  -status   published|draft|pending
+                            Force all items to a specific status.
                             Without this flag items are randomly mixed
-                            (~60% published, ~40% draft).
+                            (~1/3 published, ~1/3 draft, ~1/3 pending).
   -extras                   Create random categories and tags and assign them
                             to ~50% of the inserted items (randomly chosen).
   -comments <n>             Add n comments to ~50% of inserted published posts.
@@ -69,12 +81,15 @@ Examples:
   $(basename "$0") -domain beth.com -user beth@beth.com -number 50 -extras
   $(basename "$0") -domain beth.com -user beth@beth.com -number 20 -comments 5 -port 3000
   $(basename "$0") -domain beth.com -user beth@beth.com -number 20 -comments 8 -replies -port 3000
+  $(basename "$0") -domain beth.com -clear
+  $(basename "$0") -domain beth.com -clear -force
 
 Notes:
   - Reads DATABASE_URL from .env in the project root if not set in the environment.
   - Slugs include a random 4-character suffix to avoid collisions on repeat runs.
   - Published posts are assigned a random date within the last 12 months.
   - Comments require at least one subscriber user on the site (-comments is skipped otherwise).
+  - -clear removes DB rows only; uploaded files in uploads/ are not deleted.
 EOF
     exit 1
 }
@@ -91,12 +106,14 @@ while [[ $# -gt 0 ]]; do
         -extras)   EXTRAS=1;           shift 1 ;;
         -comments) COMMENTS="$2";      shift 2 ;;
         -replies)  REPLIES=1;          shift 1 ;;
+        -clear)    CLEAR=1;            shift 1 ;;
+        -force)    FORCE=1;            shift 1 ;;
         *) usage ;;
     esac
 done
 
-if [[ -n "$FORCE_STATUS" && "$FORCE_STATUS" != "published" && "$FORCE_STATUS" != "draft" ]]; then
-    echo "ERROR: -status must be 'published' or 'draft'" >&2
+if [[ -n "$FORCE_STATUS" && "$FORCE_STATUS" != "published" && "$FORCE_STATUS" != "draft" && "$FORCE_STATUS" != "pending" ]]; then
+    echo "ERROR: -status must be 'published', 'draft', or 'pending'" >&2
     exit 1
 fi
 
@@ -121,9 +138,10 @@ if [[ "$REPLIES" == "1" && "$COMMENTS" == "0" ]]; then
     REPLIES=0
 fi
 
-[[ -z "$DOMAIN" || -z "$USER_EMAIL" ]] && usage
+[[ -z "$DOMAIN" ]] && usage
+[[ "$CLEAR" == "0" && -z "$USER_EMAIL" ]] && usage
 
-if ! [[ "$NUMBER" =~ ^[0-9]+$ ]] || [[ "$NUMBER" -lt 1 ]]; then
+if [[ "$CLEAR" == "0" ]] && { ! [[ "$NUMBER" =~ ^[0-9]+$ ]] || [[ "$NUMBER" -lt 1 ]]; }; then
     echo "ERROR: -number must be a positive integer" >&2
     exit 1
 fi
@@ -137,19 +155,61 @@ if [[ -z "$SITE_ID" ]]; then
     exit 1
 fi
 
-USER_ID=$(psql -c "SELECT id FROM users WHERE email = '$USER_EMAIL' AND deleted_at IS NULL LIMIT 1;" | tr -d '[:space:]')
-if [[ -z "$USER_ID" ]]; then
-    echo "ERROR: No user found with email '$USER_EMAIL'" >&2
-    exit 1
+if [[ "$CLEAR" == "0" ]]; then
+    USER_ID=$(psql -c "SELECT id FROM users WHERE email = '$USER_EMAIL' AND deleted_at IS NULL LIMIT 1;" | tr -d '[:space:]')
+    if [[ -z "$USER_ID" ]]; then
+        echo "ERROR: No user found with email '$USER_EMAIL'" >&2
+        exit 1
+    fi
+
+    # Check user is a super_admin OR has a role on this specific site.
+    IS_SUPER=$(psql -c "SELECT 1 FROM users WHERE id = '$USER_ID' AND role = 'super_admin' LIMIT 1;" | tr -d '[:space:]')
+    IS_MEMBER=$(psql -c "SELECT 1 FROM site_users WHERE site_id = '$SITE_ID' AND user_id = '$USER_ID' LIMIT 1;" | tr -d '[:space:]')
+    if [[ -z "$IS_SUPER" && -z "$IS_MEMBER" ]]; then
+        echo "ERROR: User '$USER_EMAIL' has no access to site '$DOMAIN'" >&2
+        echo "       Add the user to the site first, or use a super_admin account." >&2
+        exit 1
+    fi
 fi
 
-# Check user is a super_admin OR has a role on this specific site.
-IS_SUPER=$(psql -c "SELECT 1 FROM users WHERE id = '$USER_ID' AND role = 'super_admin' LIMIT 1;" | tr -d '[:space:]')
-IS_MEMBER=$(psql -c "SELECT 1 FROM site_users WHERE site_id = '$SITE_ID' AND user_id = '$USER_ID' LIMIT 1;" | tr -d '[:space:]')
-if [[ -z "$IS_SUPER" && -z "$IS_MEMBER" ]]; then
-    echo "ERROR: User '$USER_EMAIL' has no access to site '$DOMAIN'" >&2
-    echo "       Add the user to the site first, or use a super_admin account." >&2
-    exit 1
+# ── Clear mode ────────────────────────────────────────────────────────────────
+if [[ "$CLEAR" == "1" ]]; then
+    POST_COUNT=$(psql -c "SELECT COUNT(*) FROM posts WHERE site_id = '$SITE_ID';" | tr -d '[:space:]')
+    COMMENT_COUNT=$(psql -c "SELECT COUNT(*) FROM comments WHERE site_id = '$SITE_ID';" | tr -d '[:space:]')
+    TAX_COUNT=$(psql -c "SELECT COUNT(*) FROM taxonomies WHERE site_id = '$SITE_ID';" | tr -d '[:space:]')
+    FORM_COUNT=$(psql -c "SELECT COUNT(*) FROM form_submissions WHERE site_id = '$SITE_ID';" | tr -d '[:space:]')
+    MEDIA_COUNT=$(psql -c "SELECT COUNT(*) FROM media WHERE site_id = '$SITE_ID';" | tr -d '[:space:]')
+
+    echo ""
+    echo "  ── Content to delete for: $DOMAIN ──────────────────────"
+    echo "  Posts / Pages    : $POST_COUNT  (comments and taxonomy links cascade)"
+    echo "  Comments         : $COMMENT_COUNT"
+    echo "  Categories / Tags: $TAX_COUNT"
+    echo "  Form submissions : $FORM_COUNT"
+    echo "  Media rows       : $MEDIA_COUNT  (files in uploads/ are NOT removed)"
+    echo ""
+    echo "  Users and site settings are NOT affected."
+    echo ""
+
+    if [[ "$FORCE" == "0" ]]; then
+        printf "  Type 'yes' to delete or anything else to abort: "
+        read -r CONFIRM
+        if [[ "$CONFIRM" != "yes" ]]; then
+            echo "Aborted."
+            exit 0
+        fi
+    fi
+
+    # Delete in dependency order. Posts cascade to post_meta, post_taxonomies,
+    # and comments, so deleting posts is sufficient — but we also clean up
+    # taxonomies, form_submissions, and media rows independently.
+    command psql "$DATABASE_URL" -c "DELETE FROM posts            WHERE site_id = '$SITE_ID';" > /dev/null
+    command psql "$DATABASE_URL" -c "DELETE FROM taxonomies       WHERE site_id = '$SITE_ID';" > /dev/null
+    command psql "$DATABASE_URL" -c "DELETE FROM form_submissions WHERE site_id = '$SITE_ID';" > /dev/null
+    command psql "$DATABASE_URL" -c "DELETE FROM media            WHERE site_id = '$SITE_ID';" > /dev/null
+
+    echo "Cleared. All content removed for $DOMAIN."
+    exit 0
 fi
 
 echo "Site:   $DOMAIN  ($SITE_ID)"
@@ -174,7 +234,7 @@ TOPICS=(
     "History" "Culture" "Business" "Health" "Education" "Art" "Sport"
     "Finance" "Philosophy" "Architecture" "Photography" "Writing" "Code"
 )
-STATUSES=("published" "published" "published" "draft" "draft")
+STATUSES=("published" "draft" "pending")
 
 rand_element() {
     local -n arr=$1
@@ -197,10 +257,17 @@ for ((i = 1; i <= NUMBER; i++)); do
     SUFFIX=$(cat /proc/sys/kernel/random/uuid | tr -d '-' | head -c 4)
     SLUG=$(echo "$TITLE" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g; s/--*/-/g; s/^-//; s/-$//')-$SUFFIX
 
-    # Random publish date within the last 12 months
-    DAYS_AGO=$(( RANDOM % 365 ))
+    # Random publish date within the last 12 months (only for published posts).
+    # Pending posts get a submitted_at date; drafts get nothing.
+    DAYS_AGO=$(( RANDOM % 90 ))
     PUBLISHED_AT="NOW() - INTERVAL '$DAYS_AGO days'"
-    [[ "$STATUS" == "draft" ]] && PUBLISHED_AT="NULL"
+    SUBMITTED_AT="NULL"
+    if [[ "$STATUS" == "draft" ]]; then
+        PUBLISHED_AT="NULL"
+    elif [[ "$STATUS" == "pending" ]]; then
+        PUBLISHED_AT="NULL"
+        SUBMITTED_AT="NOW() - INTERVAL '$(( RANDOM % 30 )) days'"
+    fi
 
     CONTENT="<p>This is a sample post about <strong>$TOPIC</strong>. $(
         echo "Lorem ipsum dolor sit amet, consectetur adipiscing elit. \
@@ -213,7 +280,7 @@ Vestibulum ante ipsum primis in faucibus orci luctus et ultrices posuere cubilia
 
     EXCERPT="A $ADJ look at $TOPIC — exploring $NOUN and beyond."
 
-    SQL="INSERT INTO posts (title, slug, content, excerpt, status, post_type, author_id, site_id, published_at)
+    SQL="INSERT INTO posts (title, slug, content, excerpt, status, post_type, author_id, site_id, published_at, submitted_at)
          VALUES (
              '$TITLE',
              '$SLUG',
@@ -223,7 +290,8 @@ Vestibulum ante ipsum primis in faucibus orci luctus et ultrices posuere cubilia
              '$TYPE',
              '$USER_ID',
              '$SITE_ID',
-             $PUBLISHED_AT
+             $PUBLISHED_AT,
+             $SUBMITTED_AT
          ) RETURNING id;"
 
     POST_ID=$(command psql "$DATABASE_URL" --tuples-only --no-align -c "$SQL" 2>/dev/null | grep -oE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}')

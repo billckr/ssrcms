@@ -11,18 +11,26 @@ pub struct DashboardData {
     pub author_draft_posts: i64,
     pub author_pending_posts: i64,
     pub author_published_posts: i64,
-    /// Author posts chart: x-axis labels (days/weeks/months)
+    /// Author posts chart: x-axis labels (weeks/months/years)
     pub author_chart_labels: Vec<String>,
     /// Author posts chart: published count for each label slot
     pub author_chart_values: Vec<f32>,
     /// Active range for the posts chart: "week", "month", or "year"
     pub chart_range: String,
+    /// Years that have published posts (for dropdown); most recent first
+    pub available_years: Vec<i32>,
+    /// Currently selected year for the posts chart
+    pub selected_year: i32,
     /// Author view chart: x-axis labels
     pub author_views_labels: Vec<String>,
     /// Author view chart: unique view count per label slot
     pub author_views_values: Vec<f32>,
     /// Active range for the views chart: "week", "month", or "year"
     pub views_range: String,
+    /// Years that have view data (for dropdown); most recent first
+    pub available_views_years: Vec<i32>,
+    /// Currently selected year for the views chart
+    pub selected_views_year: i32,
     /// All-time total unique views across the author's posts
     pub author_total_views: i64,
 }
@@ -63,9 +71,69 @@ fn responsive_svg(svg: String, w: u32, h: u32) -> String {
     svg.replacen(&format!(r#" height="{h}""#), "", 1)
 }
 
+/// Build a year <select> form that navigates to /admin with all current params preserved.
+/// `hide_on_year_tab`: pass true so the dropdown is omitted when the active tab is "year"
+/// (since Year view spans all time and the per-year filter is irrelevant).
+fn year_select(
+    select_name: &str,
+    selected: i32,
+    available: &[i32],
+    range: &str,
+    views_range: &str,
+    year: i32,
+    views_year: i32,
+    hide_on_year_tab: bool,
+    active_tab: &str,
+) -> String {
+    if hide_on_year_tab && active_tab == "year" {
+        return String::new();
+    }
+    let options: String = if available.is_empty() {
+        format!("<option value=\"{selected}\" selected>{selected}</option>")
+    } else {
+        available.iter().map(|&y| {
+            if y == selected {
+                format!("<option value=\"{y}\" selected>{y}</option>")
+            } else {
+                format!("<option value=\"{y}\">{y}</option>")
+            }
+        }).collect()
+    };
+    // Only emit hidden inputs for params that the <select> itself does NOT control,
+    // to avoid duplicate query string fields on submit.
+    let year_hidden = if select_name != "year" {
+        format!(r#"<input type="hidden" name="year" value="{year}">"#)
+    } else {
+        String::new()
+    };
+    let views_year_hidden = if select_name != "views_year" {
+        format!(r#"<input type="hidden" name="views_year" value="{views_year}">"#)
+    } else {
+        String::new()
+    };
+    format!(
+        r#"<form method="GET" action="/admin" style="display:inline-flex;align-items:center">
+  <input type="hidden" name="range" value="{range}">
+  <input type="hidden" name="views_range" value="{views_range}">
+  {year_hidden}{views_year_hidden}<select name="{select_name}" onchange="this.form.submit()" style="font-size:12px;padding:.2rem .5rem;border:1px solid var(--border);border-radius:4px;background:var(--card-bg);color:inherit;cursor:pointer">{options}</select>
+</form>"#,
+        select_name = select_name,
+        range = range,
+        views_range = views_range,
+        year_hidden = year_hidden,
+        views_year_hidden = views_year_hidden,
+        options = options,
+    )
+}
+
 pub fn render(data: &DashboardData, flash: Option<&str>, ctx: &crate::PageContext) -> String {
     let content = if ctx.user_role.eq_ignore_ascii_case("author") {
-        // ── Posts chart ──────────────────────────────────────────────────────
+        let y  = data.selected_year;
+        let vy = data.selected_views_year;
+        let pr = &data.chart_range;
+        let vr = &data.views_range;
+
+        // ── Posts chart ───────────────────────────────────────────────────────
         let chart_html = {
             let all_zero = data.author_chart_values.iter().all(|&v| v == 0.0);
             if data.author_chart_labels.is_empty() || all_zero {
@@ -115,21 +183,30 @@ pub fn render(data: &DashboardData, flash: Option<&str>, ctx: &crate::PageContex
             }
         };
 
-        // ── Active tab classes (independent per chart) ────────────────────────
-        let vr = data.views_range.as_str();
-        let (paw, pam, pay) = match data.chart_range.as_str() {
+        // ── Tab active classes ────────────────────────────────────────────────
+        let (paw, pam, pay) = match pr.as_str() {
             "month" => ("btn", "btn btn-primary", "btn"),
             "year"  => ("btn", "btn", "btn btn-primary"),
             _       => ("btn btn-primary", "btn", "btn"),
         };
-        let (vaw, vam, vay) = match vr {
+        let (vaw, vam, vay) = match vr.as_str() {
             "month" => ("btn", "btn btn-primary", "btn"),
             "year"  => ("btn", "btn", "btn btn-primary"),
             _       => ("btn btn-primary", "btn", "btn"),
         };
 
-        // Posts chart tabs preserve the current views_range; views tabs preserve range.
-        let pr  = &data.chart_range;
+        // ── Year selects (hidden on "year" tab since it spans all time) ───────
+        let posts_year_sel = year_select(
+            "year", y, &data.available_years,
+            pr, vr, y, vy,
+            true, pr,
+        );
+        let views_year_sel = year_select(
+            "views_year", vy, &data.available_views_years,
+            pr, vr, y, vy,
+            true, vr,
+        );
+
         format!(
             r#"<div class="stats-grid">
   <div class="stat-card">
@@ -154,10 +231,13 @@ pub fn render(data: &DashboardData, flash: Option<&str>, ctx: &crate::PageContex
   <div class="card" style="padding:1.25rem">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
       <h3 style="margin:0;font-size:.95rem;font-weight:600">Published Posts</h3>
-      <div style="display:flex;gap:.35rem">
-        <a href="/admin?range=week&amp;views_range={vr}"  class="{paw}" style="font-size:12px;padding:.25rem .65rem">Week</a>
-        <a href="/admin?range=month&amp;views_range={vr}" class="{pam}" style="font-size:12px;padding:.25rem .65rem">Month</a>
-        <a href="/admin?range=year&amp;views_range={vr}"  class="{pay}" style="font-size:12px;padding:.25rem .65rem">Year</a>
+      <div style="display:flex;align-items:center;gap:.5rem">
+        {posts_year_sel}
+        <div style="display:flex;gap:.35rem">
+          <a href="/admin?range=week&amp;views_range={vr}&amp;year={y}&amp;views_year={vy}"  class="{paw}" style="font-size:12px;padding:.25rem .65rem">Week</a>
+          <a href="/admin?range=month&amp;views_range={vr}&amp;year={y}&amp;views_year={vy}" class="{pam}" style="font-size:12px;padding:.25rem .65rem">Month</a>
+          <a href="/admin?range=year&amp;views_range={vr}&amp;year={y}&amp;views_year={vy}"  class="{pay}" style="font-size:12px;padding:.25rem .65rem">Year</a>
+        </div>
       </div>
     </div>
     {chart_html}
@@ -165,10 +245,13 @@ pub fn render(data: &DashboardData, flash: Option<&str>, ctx: &crate::PageContex
   <div class="card" style="padding:1.25rem">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
       <h3 style="margin:0;font-size:.95rem;font-weight:600">Post Views</h3>
-      <div style="display:flex;gap:.35rem">
-        <a href="/admin?range={pr}&amp;views_range=week"  class="{vaw}" style="font-size:12px;padding:.25rem .65rem">Week</a>
-        <a href="/admin?range={pr}&amp;views_range=month" class="{vam}" style="font-size:12px;padding:.25rem .65rem">Month</a>
-        <a href="/admin?range={pr}&amp;views_range=year"  class="{vay}" style="font-size:12px;padding:.25rem .65rem">Year</a>
+      <div style="display:flex;align-items:center;gap:.5rem">
+        {views_year_sel}
+        <div style="display:flex;gap:.35rem">
+          <a href="/admin?range={pr}&amp;views_range=week&amp;year={y}&amp;views_year={vy}"  class="{vaw}" style="font-size:12px;padding:.25rem .65rem">Week</a>
+          <a href="/admin?range={pr}&amp;views_range=month&amp;year={y}&amp;views_year={vy}" class="{vam}" style="font-size:12px;padding:.25rem .65rem">Month</a>
+          <a href="/admin?range={pr}&amp;views_range=year&amp;year={y}&amp;views_year={vy}"  class="{vay}" style="font-size:12px;padding:.25rem .65rem">Year</a>
+        </div>
       </div>
     </div>
     {views_chart_html}
@@ -181,10 +264,14 @@ pub fn render(data: &DashboardData, flash: Option<&str>, ctx: &crate::PageContex
             pending_link     = if data.author_pending_posts > 0 {
                 r#"<a href="/admin/posts?status=pending" class="stat-action">View pending posts &rarr;</a>"#
             } else { "" },
-            vr               = vr,
-            pr               = pr,
+            y               = y,
+            vy              = vy,
+            pr              = pr,
+            vr              = vr,
             paw = paw, pam = pam, pay = pay,
             vaw = vaw, vam = vam, vay = vay,
+            posts_year_sel   = posts_year_sel,
+            views_year_sel   = views_year_sel,
             chart_html       = chart_html,
             views_chart_html = views_chart_html,
         )

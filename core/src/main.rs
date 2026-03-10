@@ -204,8 +204,12 @@ async fn main() -> anyhow::Result<()> {
     // ── Application state ─────────────────────────────────────────────────────
     let active_theme = Arc::new(std::sync::RwLock::new(startup_theme));
     let cookie_key = axum_extra::extract::cookie::Key::generate();
-    let view_buffer: synaptic_core::app_state::ViewBuffer =
-        Arc::new(std::sync::Mutex::new(std::collections::HashSet::new()));
+    // Create the view-tracking channel.  The sender (`view_tx`) is cloned into
+    // AppState so every request handler can fire-and-forget a single `.send()`.
+    // The receiver (`view_rx`) is handed exclusively to the background flush task,
+    // which drains it every 60 s and batch-inserts deduplicated records into the DB.
+    let (view_tx, view_rx) = tokio::sync::mpsc::unbounded_channel::<(uuid::Uuid, String, chrono::NaiveDate)>();
+    let view_buffer: synaptic_core::app_state::ViewBuffer = view_tx;
     let state = AppState {
         db: pool.clone(),
         templates: engine,
@@ -228,7 +232,7 @@ async fn main() -> anyhow::Result<()> {
     info!("scheduler: scheduled post publisher started (60 s interval)");
 
     // ── View flush task ───────────────────────────────────────────────────────
-    synaptic_core::scheduler::spawn_view_flush(pool.clone(), view_buffer);
+    synaptic_core::scheduler::spawn_view_flush(pool.clone(), view_rx);
     info!("scheduler: view flush task started (60 s interval)");
 
     // ── Router ────────────────────────────────────────────────────────────────

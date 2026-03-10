@@ -2,8 +2,9 @@
 
 use metrics_exporter_prometheus::PrometheusHandle;
 use sqlx::PgPool;
-use std::collections::{HashMap, HashSet};
-use std::sync::{Arc, Mutex, RwLock};
+use std::collections::HashMap;
+use std::sync::{Arc, RwLock};
+use tokio::sync::mpsc;
 use uuid::Uuid;
 
 use axum_extra::extract::cookie::Key;
@@ -189,9 +190,23 @@ pub type SiteCache = Arc<RwLock<HashMap<String, (Site, SiteSettings)>>>;
 /// Plugin-registered routes: path → (template_name, content_type).
 pub type PluginRoutes = Arc<HashMap<String, RouteRegistration>>;
 
-/// In-memory buffer of pending view records flushed to the DB every 60 s.
-/// Tuple: (post_id, anonymized_ip, viewed_date).
-pub type ViewBuffer = Arc<Mutex<HashSet<(Uuid, String, chrono::NaiveDate)>>>;
+/// Sender half of the view-tracking channel.
+///
+/// Each request handler fires a single `.send()` — a non-blocking, lock-free
+/// operation — and moves on immediately.  The receiver lives exclusively inside
+/// the background flush task (`scheduler::spawn_view_flush`), which drains it
+/// every 60 s, deduplicates in a local HashSet, and batch-inserts into
+/// `post_views`.
+///
+/// Why a channel instead of `Arc<Mutex<HashSet>>`:
+///   • `std::sync::Mutex::lock()` in an async context blocks the OS thread, not
+///     just the async task — under high concurrency this starves Tokio's thread
+///     pool and degrades ALL request handling site-wide, not only view counting.
+///   • `mpsc::UnboundedSender::send()` uses a lock-free internal queue; thousands
+///     of concurrent senders never contend with each other.
+///
+/// Tuple payload: (post_id, anonymized_ip_hash, viewed_date).
+pub type ViewBuffer = mpsc::UnboundedSender<(Uuid, String, chrono::NaiveDate)>;
 
 /// Cloneable application state shared across all handlers.
 #[derive(Clone)]
@@ -219,7 +234,7 @@ pub struct AppState {
     pub metrics_token: Option<String>,
     /// App-wide settings (app_name, timezone, max_upload_mb) — hot-reloadable.
     pub app_settings: Arc<RwLock<AppSettings>>,
-    /// In-memory buffer of pending view records; flushed to DB every 60 s.
+    /// Channel sender for view tracking — see `ViewBuffer` type alias for full rationale.
     pub view_buffer: ViewBuffer,
 }
 

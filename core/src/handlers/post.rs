@@ -75,10 +75,11 @@ pub async fn single_post(
             // We use a lightweight slug→id lookup path here.
             if let Ok(post_record) = post::get_published_by_slug(&state.db, Some(site_id), &slug).await {
                 let today = Local::now().date_naive();
-                let key = (post_record.id, ip_hash, today);
-                if let Ok(mut buf) = state.view_buffer.lock() {
-                    buf.insert(key);
-                }
+                // Fire-and-forget: send() on an UnboundedSender is non-blocking
+                // and lock-free — it enqueues immediately regardless of how many
+                // other requests are doing the same thing concurrently.
+                // The background flush task deduplicates and persists every 60 s.
+                let _ = state.view_buffer.send((post_record.id, ip_hash, today));
             }
         }
     }
