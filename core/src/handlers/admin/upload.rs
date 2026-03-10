@@ -10,6 +10,7 @@ use uuid::Uuid;
 use crate::app_state::AppState;
 use crate::middleware::admin_auth::AdminUser;
 use crate::models::media::CreateMedia;
+use super::sanitize_media_text;
 
 /// Convert an arbitrary filename stem into a URL-safe slug.
 /// e.g. "My Photo (2026)!" → "my-photo-2026"
@@ -55,7 +56,9 @@ pub async fn upload(
                 file_data = Some((filename, mime, raw));
             }
         } else if name == "alt_text" {
-            alt_text = field.text().await.ok().filter(|s: &String| !s.is_empty());
+            alt_text = field.text().await.ok()
+                .map(|s| sanitize_media_text(&s))
+                .filter(|s| !s.is_empty());
         }
     }
 
@@ -74,7 +77,11 @@ pub async fn upload(
         .file_stem()
         .and_then(|s| s.to_str())
         .unwrap_or("upload");
-    let slug = slugify_name(stem);
+    let slug = {
+        let s = slugify_name(stem);
+        // Cap at 80 chars so stored filenames stay reasonable on all filesystems.
+        if s.chars().count() > 80 { s.chars().take(80).collect() } else { s }
+    };
     let short_id = &Uuid::new_v4().to_string()[..8];
     let stored_name = format!("{}-{}.{}", slug, short_id, ext);
 

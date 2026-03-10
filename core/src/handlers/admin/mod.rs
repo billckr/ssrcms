@@ -70,6 +70,31 @@ pub async fn page_ctx_full(state: &AppState, admin: &AdminUser, current_site: &s
     ctx
 }
 
+/// Strip HTML tags and disallowed characters from media metadata fields
+/// (alt text, title, caption), then trim whitespace and enforce the 35-char
+/// limit. Shared by the upload handler and the metadata update API so that
+/// server-side enforcement is identical regardless of which route is used.
+pub fn sanitize_media_text(input: &str) -> String {
+    let no_tags = {
+        let mut out = String::with_capacity(input.len());
+        let mut in_tag = false;
+        for ch in input.chars() {
+            match ch {
+                '<' => in_tag = true,
+                '>' => in_tag = false,
+                _ if !in_tag => out.push(ch),
+                _ => {}
+            }
+        }
+        out
+    };
+    let clean: String = no_tags
+        .chars()
+        .filter(|&c| c != '&' && c != '"' && c != '`')
+        .collect();
+    clean.trim().chars().take(35).collect()
+}
+
 pub mod appearance;
 pub mod comments;
 pub mod dashboard;

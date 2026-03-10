@@ -50,13 +50,24 @@ pub fn render_list(items: &[MediaItem], flash: Option<&str>, ctx: &crate::PageCo
       </div>
     </div>
     <div class="form-group" style="margin-top:0.75rem">
-      <input type="text" name="alt_text" placeholder="Alt text (optional)">
+      <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+        <label style="font-size:12px;font-weight:600;color:var(--muted)">Alt Text <span style="font-weight:400">(optional)</span></label>
+        <span id="upload-alt-count" style="font-size:11px;color:var(--muted)">35/35</span>
+      </div>
+      <input type="text" name="alt_text" maxlength="35" placeholder="Describe this image..."
+             oninput="mpickerCount('upload-alt-input','upload-alt-count')" id="upload-alt-input">
     </div>
-    <button type="submit" class="btn btn-primary">Upload</button>
-    <button type="button" class="btn btn-secondary" onclick="openMediaPicker('browse')" style="margin-left:0.5rem">Browse All Media</button>
+    <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin-top:.75rem">
+      <button type="submit" class="btn btn-primary">Upload</button>
+      <button type="button" class="btn btn-secondary" onclick="openMediaPicker('browse')">Browse</button>
+      <input id="media-search" type="search" placeholder="Search media&hellip;"
+             style="margin-left:auto;padding:.4rem .75rem;border:1px solid var(--border);border-radius:var(--radius);font-size:14px;background:var(--surface);color:var(--text);width:100%;max-width:260px"
+             oninput="filterMediaGrid(this.value)">
+    </div>
   </form>
 </div>
-<div class="media-grid">{grid}</div>
+<div style="margin-bottom:.5rem"><span id="media-count" style="font-size:13px;color:var(--muted)"></span></div>
+<div class="media-grid" id="media-grid">{grid}</div>
 <style>
 .drop-zone {{
   border: 2px dashed var(--border, #cbd5e1);
@@ -121,6 +132,23 @@ function updateDropZone(file) {{
   label.textContent = file.name;
   label.style.display = 'block';
 }}
+
+function filterMediaGrid(q) {{
+  var cards = document.querySelectorAll('#media-grid .media-card');
+  var lower = q.toLowerCase().trim();
+  var visible = 0;
+  cards.forEach(function(card) {{
+    var name = (card.querySelector('.media-name') || {{}}).textContent || '';
+    var show = !lower || name.toLowerCase().indexOf(lower) !== -1;
+    card.style.display = show ? '' : 'none';
+    if (show) visible++;
+  }});
+  var ct = document.getElementById('media-count');
+  if (ct) ct.textContent = lower ? visible + ' of ' + cards.length + ' items' : cards.length + ' items';
+}}
+
+// Initialise count on load.
+document.addEventListener('DOMContentLoaded', function() {{ filterMediaGrid(''); }});
 </script>"#,
         grid = grid,
     );

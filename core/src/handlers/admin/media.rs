@@ -6,31 +6,7 @@ use crate::app_state::AppState;
 use crate::middleware::admin_auth::AdminUser;
 use admin::pages::media::MediaItem;
 
-/// Strip HTML tags and angle brackets from media metadata fields, then trim
-/// whitespace and enforce the 35-character limit. Matches the client-side
-/// `maxlength="35"` enforcement so crafted requests cannot bypass it.
-fn sanitize_media_text(input: &str) -> String {
-    // Remove anything that looks like an HTML tag (<...>) first, then
-    // strip any remaining lone < > & characters.
-    let no_tags = {
-        let mut out = String::with_capacity(input.len());
-        let mut in_tag = false;
-        for ch in input.chars() {
-            match ch {
-                '<' => in_tag = true,
-                '>' => in_tag = false,
-                _ if !in_tag => out.push(ch),
-                _ => {}
-            }
-        }
-        out
-    };
-    let clean: String = no_tags
-        .chars()
-        .filter(|&c| c != '&' && c != '"' && c != '`')
-        .collect();
-    clean.trim().chars().take(35).collect()
-}
+use super::sanitize_media_text;
 
 pub async fn list(
     State(state): State<AppState>,
