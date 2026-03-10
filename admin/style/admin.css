@@ -590,6 +590,7 @@ legend {
   width: 280px;
   flex-shrink: 0;
   border-left: 1px solid var(--border);
+  background: var(--bg);
   padding: 1.25rem;
   overflow-y: auto;
   display: flex;
@@ -606,7 +607,9 @@ legend {
 }
 .mpicker-detail-img { margin-bottom: .75rem; }
 .mpicker-detail-img img { width: 100%; border-radius: var(--radius); display: block; }
-.mpicker-detail-filename { font-size: 12px; font-weight: 500; word-break: break-all; color: var(--text); }
+.mpicker-detail input[type=text],
+.mpicker-detail textarea { width: 100%; padding: .45rem .75rem; border: 1px solid var(--border); border-radius: var(--radius); font-size: 14px; background: var(--surface); color: var(--text); }
+.mpicker-detail textarea { resize: vertical; }
 @media (max-width: 640px) {
   .mpicker-body { flex-direction: column; }
   .mpicker-detail { width: 100%; border-left: none; border-top: 1px solid var(--border); max-height: 180px; }

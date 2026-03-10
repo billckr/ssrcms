@@ -284,7 +284,9 @@ pub fn media_picker_modal_html() -> String {
         + ' data-filename="' + escHtml(m.filename) + '"'
         + ' data-alt="' + escHtml(m.alt_text) + '"'
         + ' data-title="' + escHtml(m.title) + '"'
-        + ' data-caption="' + escHtml(m.caption) + '">'
+        + ' data-caption="' + escHtml(m.caption) + '"'
+        + ' data-size="' + (m.file_size || 0) + '"'
+        + ' data-mime="' + escHtml(m.mime_type) + '">'
         + '<img src="' + escHtml(m.url) + '" alt="' + escHtml(m.alt_text || m.filename) + '" loading="lazy">'
         + '</div>';
     }).join('');
@@ -297,28 +299,54 @@ pub fn media_picker_modal_html() -> String {
     el.classList.add('mpicker-thumb-selected');
     var confirmBtn = pickerMode !== 'browse'
       ? '<button type="button" class="btn btn-primary" style="width:100%;margin-top:1rem" onclick="confirmPick()">'
-          + (pickerMode === 'inline' ? 'Insert Image' : 'Set Featured Image')
+          + (pickerMode === 'inline' ? 'Insert Image' : 'Set Image')
           + '</button>'
       : '';
+    var rawSize = parseInt(el.dataset.size || '0', 10);
+    var sizeStr = rawSize >= 1048576
+      ? (rawSize / 1048576).toFixed(1) + ' MB'
+      : rawSize >= 1024
+        ? (rawSize / 1024).toFixed(1) + ' KB'
+        : rawSize + ' B';
+    var mimeStr = el.dataset.mime || '—';
     document.getElementById('mpicker-detail').innerHTML =
       '<div class="mpicker-detail-img"><img src="' + escHtml(selectedUrl) + '" alt="' + escHtml(el.dataset.alt || el.dataset.filename) + '"></div>'
-      + '<p class="mpicker-detail-filename">' + escHtml(el.dataset.filename) + '</p>'
       + confirmBtn
       + '<div style="margin-top:1.25rem;display:flex;flex-direction:column;gap:0.75rem">'
-      + '<div>'
-      + '<label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;color:var(--muted)">Alt Text <span style="font-weight:400">(screen readers, SEO)</span></label>'
-      + '<input id="mpicker-alt-input" type="text" class="form-control" style="font-size:13px" placeholder="Describe this image..." value="' + escHtml(el.dataset.alt || '') + '">'
+      + '<div style="display:grid;grid-template-columns:auto 1fr;gap:.2rem .75rem;font-size:13px">'
+      + '<span style="color:var(--muted)">Name</span><span style="word-break:break-all">' + escHtml(el.dataset.filename) + '</span>'
+      + '<span style="color:var(--muted)">Size</span><span>' + escHtml(sizeStr) + '</span>'
+      + '<span style="color:var(--muted)">Type</span><span>' + escHtml(mimeStr) + '</span>'
       + '</div>'
       + '<div>'
-      + '<label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;color:var(--muted)">Title <span style="font-weight:400">(tooltip on hover)</span></label>'
-      + '<input id="mpicker-title-input" type="text" class="form-control" style="font-size:13px" placeholder="Optional image title..." value="' + escHtml(el.dataset.title || '') + '">'
+      + '<div style="display:flex;justify-content:space-between;margin-bottom:4px"><label style="font-size:12px;font-weight:600;color:var(--muted)">Alt Text <span style="font-weight:400">(screen readers)</span></label><span id="mpicker-alt-count" style="font-size:11px;color:var(--muted)">' + (35 - (el.dataset.alt || '').length) + '/35</span></div>'
+      + '<input id="mpicker-alt-input" type="text" maxlength="35" placeholder="Describe this image..." value="' + escHtml(el.dataset.alt || '') + '" oninput="mpickerCount(\'mpicker-alt-input\',\'mpicker-alt-count\')">'
       + '</div>'
       + '<div>'
-      + '<label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;color:var(--muted)">Caption <span style="font-weight:400">(shown below image)</span></label>'
-      + '<textarea id="mpicker-caption-input" class="form-control" style="font-size:13px;resize:vertical" rows="2" placeholder="Optional caption...">' + escHtml(el.dataset.caption || '') + '</textarea>'
+      + '<div style="display:flex;justify-content:space-between;margin-bottom:4px"><label style="font-size:12px;font-weight:600;color:var(--muted)">Title <span style="font-weight:400">(tooltip on hover)</span></label><span id="mpicker-title-count" style="font-size:11px;color:var(--muted)">' + (35 - (el.dataset.title || '').length) + '/35</span></div>'
+      + '<input id="mpicker-title-input" type="text" maxlength="35" placeholder="Optional image title..." value="' + escHtml(el.dataset.title || '') + '" oninput="mpickerCount(\'mpicker-title-input\',\'mpicker-title-count\')">'
       + '</div>'
-      + '<button type="button" class="btn btn-primary" style="width:100%;margin-top:0" onclick="saveMediaMeta()">Update Metadata</button>'
+      + '<div style="flex:1;display:flex;flex-direction:column">'
+      + '<div style="display:flex;justify-content:space-between;margin-bottom:4px"><label style="font-size:12px;font-weight:600;color:var(--muted)">Caption <span style="font-weight:400">(shown below image)</span></label><span id="mpicker-caption-count" style="font-size:11px;color:var(--muted)">' + (35 - (el.dataset.caption || '').length) + '/35</span></div>'
+      + '<textarea id="mpicker-caption-input" rows="3" maxlength="35" placeholder="Optional caption..." oninput="mpickerCount(\'mpicker-caption-input\',\'mpicker-caption-count\')">' + escHtml(el.dataset.caption || '') + '</textarea>'
+      + '</div>'
+      + '<button type="button" class="btn btn-primary" style="width:100%;margin-top:0" onclick="saveMediaMeta()">Update</button>'
       + '</div>';
+  };
+  window.mpickerCount = function(inputId, countId) {
+    var el = document.getElementById(inputId);
+    var ct = document.getElementById(countId);
+    if (!el || !ct) return;
+    // Strip HTML characters — no markup allowed in alt/title/caption.
+    var cleaned = el.value.replace(/[<>&"`]/g, '');
+    if (cleaned !== el.value) {
+      el.value = cleaned;
+      el.style.outline = '2px solid var(--danger)';
+      setTimeout(function() { el.style.outline = ''; }, 1200);
+    }
+    var remaining = 35 - el.value.length;
+    ct.textContent = remaining + '/35';
+    ct.style.color = remaining <= 5 ? 'var(--danger)' : 'var(--muted)';
   };
   function readCurrentMeta() {
     return {
@@ -339,13 +367,20 @@ pub fn media_picker_modal_html() -> String {
       thumb.dataset.title   = meta.title.trim();
       thumb.dataset.caption = meta.caption.trim();
     }
+    // Keep allMedia in sync so reopening the modal reflects saved values.
+    var item = allMedia.find(function(m) { return m.id === selectedId; });
+    if (item) {
+      item.alt_text = meta.alt.trim();
+      item.title    = meta.title.trim();
+      item.caption  = meta.caption.trim();
+    }
     fetch('/admin/api/media/' + selectedId + '/meta', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ alt_text: meta.alt.trim(), title: meta.title.trim(), caption: meta.caption.trim() })
     }).then(function() {
       if (btn) btn.textContent = 'Saved \u2713';
-      setTimeout(function() { if (btn) btn.textContent = 'Update Metadata'; }, 1500);
+      setTimeout(function() { if (btn) btn.textContent = 'Update'; }, 1500);
     }).catch(function() {
       if (btn) btn.textContent = 'Error \u2014 try again';
     });

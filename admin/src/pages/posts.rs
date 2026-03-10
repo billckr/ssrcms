@@ -667,9 +667,9 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
         <input type="hidden" name="post_type" value="{post_type}">
         <button type="submit" class="btn btn-primary">Save</button>
       </div>
+      {featured_image_section}
       {template_section}
       {categories_section}
-      {featured_image_section}
     </div>
   </div>
 </form>

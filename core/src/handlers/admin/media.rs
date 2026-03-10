@@ -6,6 +6,32 @@ use crate::app_state::AppState;
 use crate::middleware::admin_auth::AdminUser;
 use admin::pages::media::MediaItem;
 
+/// Strip HTML tags and angle brackets from media metadata fields, then trim
+/// whitespace and enforce the 35-character limit. Matches the client-side
+/// `maxlength="35"` enforcement so crafted requests cannot bypass it.
+fn sanitize_media_text(input: &str) -> String {
+    // Remove anything that looks like an HTML tag (<...>) first, then
+    // strip any remaining lone < > & characters.
+    let no_tags = {
+        let mut out = String::with_capacity(input.len());
+        let mut in_tag = false;
+        for ch in input.chars() {
+            match ch {
+                '<' => in_tag = true,
+                '>' => in_tag = false,
+                _ if !in_tag => out.push(ch),
+                _ => {}
+            }
+        }
+        out
+    };
+    let clean: String = no_tags
+        .chars()
+        .filter(|&c| c != '&' && c != '"' && c != '`')
+        .collect();
+    clean.trim().chars().take(35).collect()
+}
+
 pub async fn list(
     State(state): State<AppState>,
     admin: AdminUser,
@@ -72,9 +98,9 @@ pub async fn api_update_meta(
     Path(id): Path<Uuid>,
     axum::Json(body): axum::Json<serde_json::Value>,
 ) -> impl IntoResponse {
-    let alt_text = body.get("alt_text").and_then(|v| v.as_str()).unwrap_or("");
-    let title    = body.get("title").and_then(|v| v.as_str()).unwrap_or("");
-    let caption  = body.get("caption").and_then(|v| v.as_str()).unwrap_or("");
+    let alt_text = sanitize_media_text(body.get("alt_text").and_then(|v| v.as_str()).unwrap_or(""));
+    let title    = sanitize_media_text(body.get("title").and_then(|v| v.as_str()).unwrap_or(""));
+    let caption  = sanitize_media_text(body.get("caption").and_then(|v| v.as_str()).unwrap_or(""));
     // Verify site ownership before allowing update.
     match crate::models::media::get_by_id(&state.db, id).await {
         Ok(media) => {
@@ -84,7 +110,7 @@ pub async fn api_update_meta(
         }
         Err(_) => return (axum::http::StatusCode::NOT_FOUND, axum::Json(serde_json::json!({"error": "Not found"}))).into_response(),
     }
-    match crate::models::media::update_media_meta(&state.db, id, alt_text, title, caption).await {
+    match crate::models::media::update_media_meta(&state.db, id, &alt_text, &title, &caption).await {
         Ok(_) => axum::Json(serde_json::json!({"ok": true})).into_response(),
         Err(e) => {
             tracing::error!("failed to update meta for media {}: {:?}", id, e);
@@ -108,6 +134,7 @@ pub async fn api_list(
         title: String,
         caption: String,
         mime_type: String,
+        file_size: i64,
     }
 
     let uploaded_by = if admin.site_role == "author" { Some(admin.user.id) } else { None };
@@ -129,6 +156,7 @@ pub async fn api_list(
             title: m.title.clone(),
             caption: m.caption.clone(),
             mime_type: m.mime_type.clone(),
+            file_size: m.file_size,
         })
         .collect();
 
