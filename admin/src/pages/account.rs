@@ -216,51 +216,100 @@ pub struct MyCommentRow {
     pub can_delete:    bool,
 }
 
-pub fn render_my_comments(rows: &[MyCommentRow], ctx: &AccountContext) -> String {
-    let content = if rows.is_empty() {
-        r#"<h2>My Comments</h2>
-<p class="muted">You haven&rsquo;t made any comments yet.</p>"#
-            .to_string()
+/// Build pagination HTML for the comments list.
+/// Pagination links preserve the active search query so navigating between
+/// pages doesn't reset the filter.
+fn comments_pagination(page: i64, total_pages: i64, search: &str) -> String {
+    if total_pages <= 1 {
+        return String::new();
+    }
+    let search_qs = if search.is_empty() {
+        String::new()
     } else {
-        let row_html = rows.iter().map(|r| {
-            let delete_btn = if r.can_delete {
-                format!(
-                    r#"<form method="POST" action="/account/comments/{id}/delete" style="display:inline"
-                         onsubmit="return confirm('Delete this comment? This cannot be undone.')">
-                      <button class="icon-btn icon-danger" title="Delete" type="submit">
-                        <img src="/admin/static/icons/trash-2.svg" alt="Delete">
-                      </button>
-                    </form>"#,
-                    id = crate::html_escape(&r.id),
-                )
-            } else {
-                String::new()
-            };
-            format!(
-                r#"<tr>
-                  <td><span class="badge">{hostname}</span></td>
-                  <td>{post_title}</td>
-                  <td class="muted" style="font-size:0.85rem">{preview}</td>
-                  <td style="white-space:nowrap">{date}</td>
-                  <td class="actions">
-                    <a href="/blog/{slug}#comments" class="icon-btn" title="View post" target="_blank" rel="noopener noreferrer">
-                      <img src="/admin/static/icons/eye.svg" alt="View">
-                    </a>
-                    {delete_btn}
-                  </td>
-                </tr>"#,
-                hostname   = crate::html_escape(&r.site_hostname),
-                post_title = crate::html_escape(&r.post_title),
-                preview    = crate::html_escape(&r.body_preview),
-                date       = crate::html_escape(&r.created_at),
-                slug       = crate::html_escape(&r.post_slug),
-                delete_btn = delete_btn,
-            )
-        }).collect::<Vec<_>>().join("\n");
+        format!("&search={}", crate::html_escape(search))
+    };
+    let prev = if page > 1 {
+        format!(r#"<a href="/account/my-comments?page={}{}" class="page-btn">&laquo; Prev</a>"#, page - 1, search_qs)
+    } else {
+        r#"<span class="page-btn page-btn-disabled">&laquo; Prev</span>"#.to_string()
+    };
+    let next = if page < total_pages {
+        format!(r#"<a href="/account/my-comments?page={}{}" class="page-btn">Next &raquo;</a>"#, page + 1, search_qs)
+    } else {
+        r#"<span class="page-btn page-btn-disabled">Next &raquo;</span>"#.to_string()
+    };
+    let start = (page - 3).max(1);
+    let end   = (page + 3).min(total_pages);
+    let mut nums = String::new();
+    for p in start..=end {
+        if p == page {
+            nums.push_str(&format!(r#"<span class="page-btn page-btn-active">{p}</span>"#));
+        } else {
+            nums.push_str(&format!(
+                r#"<a href="/account/my-comments?page={p}{search_qs}" class="page-btn">{p}</a>"#,
+                search_qs = search_qs
+            ));
+        }
+    }
+    format!(r#"<div class="pagination">{prev}{nums}{next}</div>"#)
+}
 
+/// Returns just the inner list HTML (pagination + table).
+/// Used both by `render_my_comments` and directly by the live-search
+/// fetch() call (`?partial=1`) so JS can swap only the table div.
+pub fn comments_list_fragment(rows: &[MyCommentRow], page: i64, total_pages: i64, search: &str) -> String {
+    if rows.is_empty() {
+        let msg = if search.is_empty() {
+            "You haven&rsquo;t made any comments yet.".to_string()
+        } else {
+            format!("No comments matched &ldquo;{}&rdquo;.", crate::html_escape(search))
+        };
+        return format!(r#"<p class="muted">{msg}</p>"#);
+    }
+
+    let pagination = comments_pagination(page, total_pages, search);
+
+    let row_html: String = rows.iter().map(|r| {
+        let delete_btn = if r.can_delete {
+            format!(
+                r#"<form method="POST" action="/account/comments/{id}/delete" style="display:inline"
+                     onsubmit="return confirm('Delete this comment? This cannot be undone.')">
+                  <button class="icon-btn icon-danger" title="Delete" type="submit">
+                    <img src="/admin/static/icons/trash-2.svg" alt="Delete">
+                  </button>
+                </form>"#,
+                id = crate::html_escape(&r.id),
+            )
+        } else {
+            String::new()
+        };
         format!(
-            r#"<h2>My Comments</h2>
-<table class="data-table">
+            r#"<tr>
+              <td><span class="badge">{hostname}</span></td>
+              <td>{post_title}</td>
+              <td class="muted" style="font-size:0.85rem">{preview}</td>
+              <td style="white-space:nowrap">{date}</td>
+              <td class="actions">
+                <a href="/blog/{slug}#comments" class="icon-btn" title="View post" target="_blank" rel="noopener noreferrer">
+                  <img src="/admin/static/icons/eye.svg" alt="View">
+                </a>
+                {delete_btn}
+              </td>
+            </tr>"#,
+            hostname   = crate::html_escape(&r.site_hostname),
+            post_title = crate::html_escape(&r.post_title),
+            preview    = crate::html_escape(&r.body_preview),
+            date       = crate::html_escape(&r.created_at),
+            slug       = crate::html_escape(&r.post_slug),
+            delete_btn = delete_btn,
+        )
+    }).collect::<Vec<_>>().join("\n");
+
+    // Fragment contains only the table + bottom pagination.
+    // Top pagination lives outside the fragment div (alongside the search box)
+    // so JS can replace the table without clobbering the search input.
+    format!(
+        r#"<table class="data-table">
   <thead><tr>
     <th>Site</th>
     <th>Post</th>
@@ -268,16 +317,67 @@ pub fn render_my_comments(rows: &[MyCommentRow], ctx: &AccountContext) -> String
     <th>Date</th>
     <th>Actions</th>
   </tr></thead>
-  <tbody>
-    {rows}
-  </tbody>
+  <tbody>{rows}</tbody>
 </table>
 <p class="muted" style="margin-top:0.75rem;font-size:0.8rem">
   Comments can be deleted within 15&nbsp;minutes of posting.
-</p>"#,
-            rows = row_html,
-        )
-    };
+</p>
+{pagination}"#,
+        rows       = row_html,
+        pagination = pagination,
+    )
+}
+
+pub fn render_my_comments(rows: &[MyCommentRow], page: i64, total_pages: i64, search: &str, ctx: &AccountContext) -> String {
+    let fragment = comments_list_fragment(rows, page, total_pages, search);
+
+    // Live-search script: debounces input at 300 ms, then fetches the list
+    // fragment from the same route with ?partial=1 and replaces the div.
+    // Pagination links within the fragment already carry the search term, so
+    // navigating pages while searching works without JS involvement.
+    // Note: this is plain JS with no build pipeline or framework dependency.
+    // When this page is eventually ported to Leptos, replace with a reactive
+    // signal + server function — the UX will be identical but fully in Rust.
+    let script = r#"<script>
+(function () {
+  var input = document.getElementById('comment-search');
+  var list  = document.getElementById('comments-list');
+  if (!input || !list) return;
+  var timer;
+  input.addEventListener('input', function () {
+    clearTimeout(timer);
+    timer = setTimeout(function () {
+      var url = '/account/my-comments?partial=1&search=' + encodeURIComponent(input.value);
+      fetch(url)
+        .then(function (r) { return r.text(); })
+        .then(function (html) { list.innerHTML = html; })
+        .catch(function () {});
+    }, 300);
+  });
+})();
+</script>"#;
+
+    // Top pagination rendered outside the fragment div so the search input
+    // (also outside) is never wiped by the JS live-search swap.
+    let top_pagination = comments_pagination(page, total_pages, search);
+
+    let content = format!(
+        r#"<h2>My Comments</h2>
+<div style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;margin-bottom:.75rem">
+  <div>{top_pagination}</div>
+  <input id="comment-search"
+         type="search"
+         placeholder="Search comments&hellip;"
+         value="{search_val}"
+         style="width:100%;max-width:320px;padding:.4rem .75rem;border:1px solid var(--border);border-radius:4px;font-size:14px;background:var(--card-bg);color:inherit">
+</div>
+<div id="comments-list">{fragment}</div>
+{script}"#,
+        top_pagination = top_pagination,
+        search_val     = crate::html_escape(search),
+        fragment       = fragment,
+        script         = script,
+    );
 
     account_page("My Comments", "/account/my-comments", None, &content, ctx)
 }

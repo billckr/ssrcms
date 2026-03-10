@@ -188,11 +188,75 @@ pub async fn list_for_post(
     Ok(CommentPage { comments, current_page: page, total_pages, total_count })
 }
 
-/// Fetch a subscriber's own non-deleted comments for the current site, newest first.
+/// Common English stop words — mirrors the list in `search/index.rs`.
+/// Stripped from user search input before building ILIKE clauses so that
+/// searching "the rust comment" only filters on meaningful terms.
+static COMMENT_STOP_WORDS: &[&str] = &[
+    "a", "an", "the", "and", "or", "but", "in", "on", "at", "to", "for",
+    "of", "with", "by", "from", "up", "about", "into", "through", "is",
+    "was", "are", "were", "be", "been", "being", "have", "has", "had",
+    "do", "does", "did", "will", "would", "could", "should", "may", "might",
+    "shall", "can", "i", "me", "my", "we", "our", "you", "your", "he",
+    "him", "his", "she", "her", "it", "its", "they", "them", "their",
+    "this", "that", "these", "those", "what", "which", "who", "whom",
+    "not", "no", "so", "if", "as", "than", "too", "very", "just", "also",
+    "more", "most", "other", "some", "such", "only", "own", "same",
+];
+
+/// Split a search string into lowercase terms, stripping stop words.
+/// Returns an empty Vec if all terms are stop words (→ no filter applied).
+fn search_terms(input: &str) -> Vec<String> {
+    input.split_whitespace()
+        .map(|w| w.to_lowercase())
+        .filter(|w| !COMMENT_STOP_WORDS.contains(&w.as_str()))
+        .collect()
+}
+
+/// Count a user's non-deleted comments for a site — used for pagination.
+/// When `search` is provided, only counts rows matching all search terms.
+pub async fn count_for_user(
+    pool:    &PgPool,
+    user_id: Uuid,
+    site_id: Uuid,
+    search:  Option<&str>,
+) -> Result<i64> {
+    let terms = search.map(search_terms).unwrap_or_default();
+
+    // Base query joins posts so we can search post title as well as body.
+    let mut sql = "SELECT COUNT(*) \
+                   FROM comments c \
+                   JOIN posts p ON p.id = c.post_id \
+                   WHERE c.author_id = $1 AND c.site_id = $2 AND c.deleted_at IS NULL"
+        .to_string();
+
+    // Each search term adds an AND clause; both body and post title are searched.
+    // Positional params start at $3 (after user_id and site_id).
+    for i in 0..terms.len() {
+        let n = i + 3;
+        sql.push_str(&format!(
+            " AND (LOWER(c.body) LIKE ${n} OR LOWER(p.title) LIKE ${n})"
+        ));
+    }
+
+    let mut q = sqlx::query_scalar::<_, i64>(&sql)
+        .bind(user_id)
+        .bind(site_id);
+    for term in &terms {
+        q = q.bind(format!("%{term}%"));
+    }
+    q.fetch_one(pool).await.map_err(AppError::from)
+}
+
+/// Fetch a page of a subscriber's own non-deleted comments, newest first.
+/// When `search` is provided, results are filtered to rows matching all terms
+/// (after stop-word stripping) in either the comment body or the post title.
 pub async fn list_for_user(
     pool:    &PgPool,
     user_id: Uuid,
     site_id: Uuid,
+    search:  Option<&str>,
+    limit:   i64,
+    offset:  i64,
 ) -> Result<Vec<UserCommentRecord>> {
     #[derive(sqlx::FromRow)]
     struct Row {
@@ -204,23 +268,38 @@ pub async fn list_for_user(
         site_hostname: String,
     }
 
-    let rows: Vec<Row> = sqlx::query_as(
-        "SELECT c.id, c.body, c.created_at, \
-                p.title AS post_title, p.slug AS post_slug, \
-                COALESCE(s.hostname, '') AS site_hostname \
-         FROM comments c \
-         JOIN posts p ON p.id = c.post_id \
-         LEFT JOIN sites s ON s.id = c.site_id \
-         WHERE c.author_id = $1 \
-           AND c.site_id   = $2 \
-           AND c.deleted_at IS NULL \
-         ORDER BY c.created_at DESC",
-    )
-    .bind(user_id)
-    .bind(site_id)
-    .fetch_all(pool)
-    .await
-    .map_err(AppError::from)?;
+    let terms = search.map(search_terms).unwrap_or_default();
+
+    let mut sql = "SELECT c.id, c.body, c.created_at, \
+                          p.title AS post_title, p.slug AS post_slug, \
+                          COALESCE(s.hostname, '') AS site_hostname \
+                   FROM comments c \
+                   JOIN posts p ON p.id = c.post_id \
+                   LEFT JOIN sites s ON s.id = c.site_id \
+                   WHERE c.author_id = $1 \
+                     AND c.site_id   = $2 \
+                     AND c.deleted_at IS NULL"
+        .to_string();
+
+    for i in 0..terms.len() {
+        let n = i + 3;
+        sql.push_str(&format!(
+            " AND (LOWER(c.body) LIKE ${n} OR LOWER(p.title) LIKE ${n})"
+        ));
+    }
+
+    // LIMIT and OFFSET params come after all search-term params.
+    let limit_n  = terms.len() + 3;
+    let offset_n = terms.len() + 4;
+    sql.push_str(&format!(" ORDER BY c.created_at DESC LIMIT ${limit_n} OFFSET ${offset_n}"));
+
+    let mut q = sqlx::query_as::<_, Row>(&sql)
+        .bind(user_id)
+        .bind(site_id);
+    for term in &terms {
+        q = q.bind(format!("%{term}%"));
+    }
+    let rows = q.bind(limit).bind(offset).fetch_all(pool).await.map_err(AppError::from)?;
 
     Ok(rows.into_iter().map(|r| UserCommentRecord {
         id:            r.id,

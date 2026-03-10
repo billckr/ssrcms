@@ -2,7 +2,7 @@
 //! All routes require an `AccountUser` (any logged-in role).
 
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     response::{Html, IntoResponse, Redirect},
     Form,
 };
@@ -143,24 +143,50 @@ pub async fn saved_posts(account: AccountUser) -> Html<String> {
 
 // ── My Comments ──────────────────────────────────────────────────────────────
 
+#[derive(Deserialize, Default)]
+pub struct CommentsQuery {
+    #[serde(default)]
+    pub page: Option<i64>,
+    /// Free-text filter — stop words stripped, each remaining term matched
+    /// with ILIKE against comment body and post title.
+    #[serde(default)]
+    pub search: Option<String>,
+    /// When set (any value), the handler returns only the list fragment HTML
+    /// instead of the full page — used by the live-search JS fetch().
+    #[serde(default)]
+    pub partial: Option<String>,
+}
+
 /// GET /account/my-comments
 pub async fn my_comments(
     State(state): State<AppState>,
     account: AccountUser,
+    Query(query): Query<CommentsQuery>,
 ) -> Html<String> {
     let ctx = build_ctx(&account);
+    let per_page = 20i64;
+    let page = query.page.unwrap_or(1).max(1);
+    let offset = (page - 1) * per_page;
+    let search = query.search.as_deref().unwrap_or("").trim().to_string();
+    let search_opt = if search.is_empty() { None } else { Some(search.as_str()) };
     let window = chrono::Duration::minutes(15);
     let now = chrono::Utc::now();
-    let records = if let Some(site_id) = account.site_id {
-        crate::models::comment::list_for_user(&state.db, account.user.id, site_id)
+
+    let (total, records) = if let Some(site_id) = account.site_id {
+        let total = crate::models::comment::count_for_user(&state.db, account.user.id, site_id, search_opt)
+            .await.unwrap_or(0);
+        let recs = crate::models::comment::list_for_user(&state.db, account.user.id, site_id, search_opt, per_page, offset)
             .await
             .unwrap_or_else(|e| {
                 tracing::warn!("failed to fetch comments for user {}: {:?}", account.user.id, e);
                 vec![]
-            })
+            });
+        (total, recs)
     } else {
-        vec![]
+        (0, vec![])
     };
+
+    let total_pages = ((total + per_page - 1) / per_page).max(1);
     let rows: Vec<MyCommentRow> = records.into_iter().map(|r| {
         let can_delete = (now - r.created_at) < window;
         let body_preview = {
@@ -183,7 +209,13 @@ pub async fn my_comments(
             can_delete,
         }
     }).collect();
-    Html(admin::pages::account::render_my_comments(&rows, &ctx))
+    // `partial=<anything>` means the JS live-search is requesting only the
+    // list fragment so it can swap the table div without a full page reload.
+    if query.partial.is_some() {
+        Html(admin::pages::account::comments_list_fragment(&rows, page, total_pages, &search))
+    } else {
+        Html(admin::pages::account::render_my_comments(&rows, page, total_pages, &search, &ctx))
+    }
 }
 
 /// POST /account/comments/{id}/delete — soft-delete within the 15-minute window.
