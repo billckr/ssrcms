@@ -460,7 +460,7 @@ legend {
 .theme-description { color: var(--text); margin: .25rem 0 .1rem; }
 .theme-author { color: var(--muted); font-size: .8rem; margin-bottom: 1rem; }
 .theme-actions { display: flex; gap: .5rem; }
-.theme-screenshot { margin: -1.25rem -1.5rem 1rem; border-radius: var(--radius) var(--radius) 0 0; overflow: hidden; background: var(--border); aspect-ratio: 4/3; }
+.theme-screenshot { margin: -1.25rem -1.5rem 1rem; border-radius: var(--radius) var(--radius) 0 0; overflow: hidden; background: var(--border); aspect-ratio: 4/3; border-bottom: 1px solid var(--border); }
 .theme-screenshot img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .theme-screenshot-placeholder { display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: .85rem; font-style: italic; }
 .theme-upload-section { margin-top: 2.5rem; padding-top: 2rem; border-top: 1px solid var(--border); }

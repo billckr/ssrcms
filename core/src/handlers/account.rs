@@ -135,35 +135,71 @@ pub async fn profile_change_password(
 
 // ── Saved Posts ───────────────────────────────────────────────────────────────
 
+#[derive(Deserialize, Default)]
+pub struct SavedPostsQuery {
+    #[serde(default)]
+    pub page: Option<i64>,
+    #[serde(default)]
+    pub search: Option<String>,
+    /// When set (any value), return only the list fragment — used by live-search JS.
+    #[serde(default)]
+    pub partial: Option<String>,
+}
+
 /// GET /account/saved-posts
 pub async fn saved_posts(
     State(state): State<AppState>,
     account: AccountUser,
+    Query(query): Query<SavedPostsQuery>,
 ) -> Html<String> {
     let ctx = build_ctx(&account);
-    let posts_raw = crate::models::saved_post::list_for_user(
+    let per_page = 20i64;
+    let page = query.page.unwrap_or(1).max(1);
+    let offset = (page - 1) * per_page;
+    let search = query.search.as_deref().unwrap_or("").trim().to_string();
+    let search_opt = if search.is_empty() { None } else { Some(search.as_str()) };
+
+    let total = crate::models::saved_post::count_for_user(
         &state.db,
         account.user.id,
         account.site_id,
+        search_opt,
+    )
+    .await
+    .unwrap_or(0);
+
+    let records = crate::models::saved_post::list_for_user_paginated(
+        &state.db,
+        account.user.id,
+        account.site_id,
+        search_opt,
+        per_page,
+        offset,
     )
     .await
     .unwrap_or_default();
 
+    let total_pages = ((total + per_page - 1) / per_page).max(1);
     let base_url = &account.site_base_url;
-    let rows: Vec<admin::pages::account::SavedPostRow> = posts_raw
-        .iter()
-        .map(|p| {
-            let post_url = format!("{}/blog/{}", base_url, p.slug);
-            let saved_at = String::new(); // saved_at comes from the join; use a simpler query if needed
+
+    let rows: Vec<admin::pages::account::SavedPostRow> = records
+        .into_iter()
+        .map(|r| {
+            let post_url = format!("{}/blog/{}", base_url, r.slug);
             admin::pages::account::SavedPostRow {
-                title:    p.title.clone(),
+                title:    r.title,
+                slug:     r.slug,
                 post_url,
-                saved_at,
+                saved_at: r.saved_at.format("%B %-d, %Y at %-I:%M %p").to_string(),
             }
         })
         .collect();
 
-    Html(admin::pages::account::render_saved_posts(&rows, &ctx))
+    if query.partial.is_some() {
+        Html(admin::pages::account::saved_posts_list_fragment(&rows, page, total_pages, &search))
+    } else {
+        Html(admin::pages::account::render_saved_posts(&rows, page, total_pages, &search, &ctx))
+    }
 }
 
 // ── My Comments ──────────────────────────────────────────────────────────────

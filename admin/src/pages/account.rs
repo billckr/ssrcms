@@ -199,36 +199,131 @@ pub fn render_profile(data: &ProfileData, flash: Option<&str>, ctx: &AccountCont
 // ── Saved Posts ───────────────────────────────────────────────────────────────
 
 pub struct SavedPostRow {
-    pub title:      String,
-    pub post_url:   String,
-    pub saved_at:   String,
+    pub title:    String,
+    pub slug:     String,
+    pub post_url: String,
+    pub saved_at: String,
 }
 
-pub fn render_saved_posts(posts: &[SavedPostRow], ctx: &AccountContext) -> String {
-    let rows = if posts.is_empty() {
-        r#"<p class="muted">You haven&rsquo;t saved any posts yet.</p>"#.to_string()
+fn saved_posts_pagination(page: i64, total_pages: i64, search: &str) -> String {
+    if total_pages <= 1 {
+        return String::new();
+    }
+    let search_qs = if search.is_empty() {
+        String::new()
     } else {
-        let mut html = String::from(r#"<ul class="saved-posts-list">"#);
-        for p in posts {
-            html.push_str(&format!(
-                r#"<li class="saved-post-item">
-  <a href="{url}" class="saved-post-title">{title}</a>
-  <span class="saved-post-meta">Saved {saved_at}</span>
-  <form method="post" action="{unsave_url}" class="unsave-form">
-    <button type="submit" class="btn-unsave">Remove</button>
-  </form>
-</li>"#,
-                url = crate::html_escape(&p.post_url),
-                title = crate::html_escape(&p.title),
-                saved_at = crate::html_escape(&p.saved_at),
-                unsave_url = derive_unsave_url(&p.post_url),
+        format!("&search={}", crate::html_escape(search))
+    };
+    let prev = if page > 1 {
+        format!(r#"<a href="/account/saved-posts?page={}{}" class="page-btn">&laquo; Prev</a>"#, page - 1, search_qs)
+    } else {
+        r#"<span class="page-btn page-btn-disabled">&laquo; Prev</span>"#.to_string()
+    };
+    let next = if page < total_pages {
+        format!(r#"<a href="/account/saved-posts?page={}{}" class="page-btn">Next &raquo;</a>"#, page + 1, search_qs)
+    } else {
+        r#"<span class="page-btn page-btn-disabled">Next &raquo;</span>"#.to_string()
+    };
+    let start = (page - 3).max(1);
+    let end   = (page + 3).min(total_pages);
+    let mut nums = String::new();
+    for p in start..=end {
+        if p == page {
+            nums.push_str(&format!(r#"<span class="page-btn page-btn-active">{p}</span>"#));
+        } else {
+            nums.push_str(&format!(
+                r#"<a href="/account/saved-posts?page={p}{search_qs}" class="page-btn">{p}</a>"#,
+                search_qs = search_qs
             ));
         }
-        html.push_str("</ul>");
-        html
-    };
+    }
+    format!(r#"<div class="pagination">{prev}{nums}{next}</div>"#)
+}
 
-    let content = format!("<h2>Saved Posts</h2>\n{}", rows);
+/// Returns just the inner list HTML (pagination + table).
+/// Used by `render_saved_posts` and the live-search fetch (`?partial=1`).
+pub fn saved_posts_list_fragment(rows: &[SavedPostRow], page: i64, total_pages: i64, search: &str) -> String {
+    if rows.is_empty() {
+        let msg = if search.is_empty() {
+            "You haven&rsquo;t saved any posts yet.".to_string()
+        } else {
+            format!("No saved posts matched &ldquo;{}&rdquo;.", crate::html_escape(search))
+        };
+        return format!(r#"<p class="muted">{msg}</p>"#);
+    }
+
+    let pagination = saved_posts_pagination(page, total_pages, search);
+
+    let row_html: String = rows.iter().map(|r| {
+        let unsave_url = derive_unsave_url(&r.post_url);
+        format!(
+            r#"<tr>
+              <td><a href="{url}" target="_blank" rel="noopener noreferrer">{title}</a></td>
+              <td style="white-space:nowrap">{saved_at}</td>
+              <td class="actions">
+                <a href="{url}" class="icon-btn" title="View post" target="_blank" rel="noopener noreferrer">
+                  <img src="/admin/static/icons/eye.svg" alt="View">
+                </a>
+                <form method="post" action="{unsave_url}" style="display:inline"
+                      onsubmit="return confirm('Remove this post from your saved list?')">
+                  <input type="hidden" name="return_to" value="/account/saved-posts">
+                  <button class="icon-btn icon-danger" title="Remove" type="submit">
+                    <img src="/admin/static/icons/trash-2.svg" alt="Remove">
+                  </button>
+                </form>
+              </td>
+            </tr>"#,
+            url       = crate::html_escape(&r.post_url),
+            title     = crate::html_escape(&r.title),
+            saved_at  = crate::html_escape(&r.saved_at),
+            unsave_url = crate::html_escape(&unsave_url),
+        )
+    }).collect::<Vec<_>>().join("\n");
+
+    format!(
+        r#"<table class="data-table">
+  <thead><tr>
+    <th>Post</th>
+    <th>Saved</th>
+    <th>Actions</th>
+  </tr></thead>
+  <tbody>{rows}</tbody>
+</table>
+{pagination}"#,
+        rows       = row_html,
+        pagination = pagination,
+    )
+}
+
+pub fn render_saved_posts(rows: &[SavedPostRow], page: i64, total_pages: i64, search: &str, ctx: &AccountContext) -> String {
+    let fragment = saved_posts_list_fragment(rows, page, total_pages, search);
+
+    let script = crate::live_search_script(
+        "saved-posts-search",
+        "saved-posts-list",
+        "/account/saved-posts?partial=1",
+    );
+
+    let top_pagination = saved_posts_pagination(page, total_pages, search);
+
+    let content = format!(
+        r#"<h2>Saved Posts</h2>
+<div style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;margin-bottom:.75rem">
+  <div>{top_pagination}</div>
+  <input id="saved-posts-search"
+         type="search"
+         placeholder="Search saved posts&hellip;"
+         value="{search_val}"
+         style="width:100%;max-width:320px;padding:.4rem .75rem;border:1px solid var(--border);border-radius:4px;font-size:14px;background:var(--card-bg);color:inherit">
+</div>
+<div id="saved-posts-list">{fragment}</div>
+{script}"#,
+        top_pagination = top_pagination,
+        search_val     = crate::html_escape(search),
+        fragment       = fragment,
+        script         = script,
+    );
+
     account_page("Saved Posts", "/account/saved-posts", None, &content, ctx)
 }
 

@@ -1,5 +1,5 @@
 use axum::{
-    extract::{ConnectInfo, Path, Query, State},
+    extract::{ConnectInfo, Form, Path, Query, State},
     http::HeaderMap,
     response::{Html, IntoResponse, Response},
 };
@@ -287,13 +287,25 @@ pub async fn save_post(
 }
 
 /// `POST /blog/:slug/unsave` — remove a post from the subscriber's reading list.
+#[derive(serde::Deserialize, Default)]
+pub struct UnsaveForm {
+    pub return_to: Option<String>,
+}
+
 pub async fn unsave_post(
     State(state): State<AppState>,
     current_site: CurrentSite,
     Path(slug): Path<String>,
     session: Session,
+    Form(form): Form<UnsaveForm>,
 ) -> Response {
-    let redirect = axum::response::Redirect::to(&format!("/blog/{}", slug));
+    let fallback = format!("/blog/{}", slug);
+    let return_to = form.return_to
+        .as_deref()
+        .filter(|s| s.starts_with('/'))
+        .unwrap_or(&fallback)
+        .to_string();
+    let redirect = axum::response::Redirect::to(&return_to);
     let session_ctx = super::resolve_session(&state, &session).await;
     let Some(ref u) = session_ctx.user else {
         return redirect.into_response();
