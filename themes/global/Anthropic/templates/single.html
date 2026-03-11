@@ -67,16 +67,16 @@
 
 {% if prev_post or next_post %}
   <nav class="post-nav" aria-label="Post navigation">
-    {% if prev_post %}
+    {% if next_post %}
       <div class="post-nav-prev">
         <span>← Previous</span>
-        <a href="{{ prev_post.url }}">{{ prev_post.title }}</a>
+        <a href="{{ next_post.url }}">{{ next_post.title }}</a>
       </div>
     {% endif %}
-    {% if next_post %}
+    {% if prev_post %}
       <div class="post-nav-next">
         <span>Next →</span>
-        <a href="{{ next_post.url }}">{{ next_post.title }}</a>
+        <a href="{{ prev_post.url }}">{{ prev_post.title }}</a>
       </div>
     {% endif %}
   </nav>

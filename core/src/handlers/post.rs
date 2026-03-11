@@ -176,7 +176,7 @@ async fn render_post(
     let post_ctx = build_post_context(&state, &post_record, base_url).await?;
 
     let prev = if let Some(pub_at) = post_record.published_at {
-        match post::get_prev(&state.db, post_record.site_id, pub_at).await? {
+        match post::get_prev(&state.db, post_record.site_id, pub_at, post_record.id).await? {
             Some(p) => Some(build_post_context(&state, &p, base_url).await?),
             None => None,
         }
@@ -185,7 +185,7 @@ async fn render_post(
     };
 
     let next = if let Some(pub_at) = post_record.published_at {
-        match post::get_next(&state.db, post_record.site_id, pub_at).await? {
+        match post::get_next(&state.db, post_record.site_id, pub_at, post_record.id).await? {
             Some(p) => Some(build_post_context(&state, &p, base_url).await?),
             None => None,
         }

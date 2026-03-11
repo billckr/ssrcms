@@ -366,6 +366,10 @@ a:hover {
   background-color: var(--orange-light);
 }
 
+.post-nav-next {
+  margin-left: auto;
+}
+
 .post-nav-prev > span,
 .post-nav-next > span {
   display: block;
