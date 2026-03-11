@@ -156,9 +156,9 @@ async fn list(site: Option<String>, database_url: Option<String>) -> anyhow::Res
                 .unwrap_or_default();
 
             println!("\nThemes for {} ({})", hostname, site_id);
-            println!("{}", "-".repeat(82));
-            println!("{:<22} {:<10} {:<6} {:<10} {}", "Name", "Version", "API", "Status", "Description");
-            println!("{}", "-".repeat(82));
+            println!("{}", "-".repeat(96));
+            println!("{:<22} {:<20} {:<10} {:<6} {:<10} {}", "Name", "Slug", "Version", "API", "Status", "Description");
+            println!("{}", "-".repeat(96));
 
             // Show global themes and this site's local copies, deduplicated by dir_name.
             // A site copy supersedes the global copy of the same name.
@@ -192,15 +192,15 @@ async fn list(site: Option<String>, database_url: Option<String>) -> anyhow::Res
                     "available"
                 };
                 let marker = if *is_active { " *" } else { "  " };
-                println!("{}{:<20} {:<10} {:<6} {:<10} {}", marker, display_name, version, api, status, desc);
+                println!("{}{:<20} {:<20} {:<10} {:<6} {:<10} {}", marker, display_name, dir_name, version, api, status, desc);
             }
             println!();
         }
 
         // ── Overview: all sites ───────────────────────────────────────────────
         None => {
-            println!("\n{:<22} {:<10} {:<6} {:<16} {}", "Name", "Version", "API", "Domain", "Description");
-            println!("{}", "-".repeat(82));
+            println!("\n{:<22} {:<20} {:<10} {:<6} {:<16} {}", "Name", "Slug", "Version", "API", "Domain", "Description");
+            println!("{}", "-".repeat(96));
 
             for (dir_name, display_name, version, api, desc, source) in &themes {
                 let active_for: Vec<String> = active_map.iter().filter_map(|(site_id, t)| {
@@ -228,7 +228,7 @@ async fn list(site: Option<String>, database_url: Option<String>) -> anyhow::Res
                 };
 
                 let marker = if active_for.is_empty() { "  " } else { " *" };
-                println!("{}{:<20} {:<10} {:<6} {:<16} {}", marker, display_name, version, api, display_source, desc);
+                println!("{}{:<20} {:<20} {:<10} {:<6} {:<16} {}", marker, display_name, dir_name, version, api, display_source, desc);
             }
             println!();
         }
