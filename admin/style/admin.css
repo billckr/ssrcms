@@ -99,7 +99,7 @@ tr.muted td { opacity: .55; }
 /* ── Theme file editor ────────────────────────────────────────────────────── */
 .editor-wrap { display: flex; flex-direction: column; gap: .75rem; }
 .editor-topbar { display: flex; align-items: center; gap: .75rem; padding: .6rem .9rem; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); flex-wrap: wrap; }
-.editor-file-select { font-family: 'Consolas', 'Fira Code', monospace; font-size: .82rem; padding: .3rem .5rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); color: var(--text); min-width: 300px; max-width: 560px; flex: 1; }
+.editor-file-select { font-family: 'Consolas', 'Fira Code', monospace; font-size: .82rem; padding: .3rem .5rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); color: var(--text); max-width: 360px; width: fit-content; }
 .editor-meta { display: flex; align-items: center; gap: .75rem; padding: .4rem .75rem; background: #f8fafc; border: 1px solid var(--border); border-radius: var(--radius) var(--radius) 0 0; border-bottom: none; }
 .editor-filename { font-family: 'Consolas', 'Fira Code', monospace; font-size: .82rem; font-weight: 600; color: var(--text); flex: 1; }
 .editor-form { display: flex; flex-direction: column; }
