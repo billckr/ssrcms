@@ -4,8 +4,11 @@ use uuid::Uuid;
 
 #[derive(Subcommand)]
 pub enum ThemeAction {
-    /// List installed themes (reads theme.toml manifests from ./themes/)
+    /// List themes — all sites overview, or scoped to one site with --site
     List {
+        /// Filter to a specific site (hostname or UUID)
+        #[arg(long)]
+        site: Option<String>,
         /// Database URL (overrides DATABASE_URL env var)
         #[arg(long, env = "DATABASE_URL", hide = true)]
         database_url: Option<String>,
@@ -47,7 +50,7 @@ pub enum ThemeAction {
 
 pub async fn run(action: ThemeAction) -> anyhow::Result<()> {
     match action {
-        ThemeAction::List { database_url } => list(database_url).await,
+        ThemeAction::List { site, database_url } => list(site, database_url).await,
         ThemeAction::Activate { name, site, database_url, pid_file } => {
             activate(name, site, database_url, pid_file).await
         }
@@ -121,7 +124,7 @@ fn scan_themes() -> anyhow::Result<Vec<(String, String, String, String, String, 
     Ok(themes)
 }
 
-async fn list(database_url: Option<String>) -> anyhow::Result<()> {
+async fn list(site: Option<String>, database_url: Option<String>) -> anyhow::Result<()> {
     let themes = scan_themes()?;
 
     if themes.is_empty() {
@@ -129,50 +132,104 @@ async fn list(database_url: Option<String>) -> anyhow::Result<()> {
         return Ok(());
     }
 
-    // Load per-site active themes and all site hostnames from DB.
     let active_map = load_active_themes(database_url).await;
     let all_site_names: std::collections::HashMap<Uuid, String> = load_all_site_names().await;
 
-    println!("\n{:<22} {:<10} {:<6} {:<16} {}", "Name", "Version", "API", "Domain", "Description");
-    println!("{}", "-".repeat(82));
+    match site {
+        // ── Scoped view: one site ─────────────────────────────────────────────
+        Some(ref s) => {
+            // Resolve site identifier to UUID + hostname.
+            let pool = super::connect_db().await?;
+            let site_id = resolve_site_id(&pool, s).await?;
+            let hostname = all_site_names.get(&site_id).cloned()
+                .unwrap_or_else(|| site_id.to_string());
+            let active_theme = active_map.get(&Some(site_id)).cloned()
+                .unwrap_or_default();
 
-    for (dir_name, display_name, version, api, desc, source) in &themes {
-        // active_theme in the DB stores the directory name, so match on that.
-        let active_for: Vec<String> = active_map.iter().filter_map(|(site_id, t)| {
-            if t == dir_name {
-                let label = match site_id {
-                    Some(id) => all_site_names.get(id).cloned().unwrap_or_else(|| id.to_string()),
-                    None => "global".to_string(),
+            println!("\nThemes for {} ({})", hostname, site_id);
+            println!("{}", "-".repeat(82));
+            println!("{:<22} {:<10} {:<6} {:<10} {}", "Name", "Version", "API", "Status", "Description");
+            println!("{}", "-".repeat(82));
+
+            // Show global themes and this site's local copies, deduplicated by dir_name.
+            // A site copy supersedes the global copy of the same name.
+            let site_prefix = format!("site:{}", site_id);
+            let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+
+            // First pass: collect site-local themes (they take priority).
+            let mut rows: Vec<(String, String, String, String, String, bool)> = Vec::new();
+            for (dir_name, display_name, version, api, desc, source) in &themes {
+                if source == &site_prefix {
+                    let is_active = dir_name == &active_theme;
+                    rows.push((dir_name.clone(), display_name.clone(), version.clone(), api.clone(), desc.clone(), is_active));
+                    seen.insert(dir_name.clone());
+                }
+            }
+            // Second pass: global themes not already installed locally.
+            for (dir_name, display_name, version, api, desc, source) in &themes {
+                if source == "global" && !seen.contains(dir_name) {
+                    rows.push((dir_name.clone(), display_name.clone(), version.clone(), api.clone(), desc.clone(), false));
+                }
+            }
+            rows.sort_by(|a, b| a.0.cmp(&b.0));
+
+            for (dir_name, display_name, version, api, desc, is_active) in &rows {
+                let installed = seen.contains(dir_name);
+                let status = if *is_active {
+                    "active"
+                } else if installed {
+                    "installed"
+                } else {
+                    "available"
                 };
-                Some(label)
-            } else {
-                None
+                let marker = if *is_active { " *" } else { "  " };
+                println!("{}{:<20} {:<10} {:<6} {:<10} {}", marker, display_name, version, api, status, desc);
             }
-        }).collect();
+            println!();
+        }
 
-        // Resolve the source label: "global" stays as-is, "site:<uuid>" becomes the hostname.
-        let display_source = if source == "global" {
-            "global".to_string()
-        } else if let Some(uuid_str) = source.strip_prefix("site:") {
-            if let Ok(id) = uuid_str.parse::<Uuid>() {
-                all_site_names.get(&id).cloned().unwrap_or_else(|| uuid_str.to_string())
-            } else {
-                source.clone()
+        // ── Overview: all sites ───────────────────────────────────────────────
+        None => {
+            println!("\n{:<22} {:<10} {:<6} {:<16} {}", "Name", "Version", "API", "Domain", "Description");
+            println!("{}", "-".repeat(82));
+
+            for (dir_name, display_name, version, api, desc, source) in &themes {
+                let active_for: Vec<String> = active_map.iter().filter_map(|(site_id, t)| {
+                    if t == dir_name {
+                        let label = match site_id {
+                            Some(id) => all_site_names.get(id).cloned().unwrap_or_else(|| id.to_string()),
+                            None => "global".to_string(),
+                        };
+                        Some(label)
+                    } else {
+                        None
+                    }
+                }).collect();
+
+                let display_source = if source == "global" {
+                    "global".to_string()
+                } else if let Some(uuid_str) = source.strip_prefix("site:") {
+                    if let Ok(id) = uuid_str.parse::<Uuid>() {
+                        all_site_names.get(&id).cloned().unwrap_or_else(|| uuid_str.to_string())
+                    } else {
+                        source.clone()
+                    }
+                } else {
+                    source.clone()
+                };
+
+                let marker = if active_for.is_empty() { "  " } else { " *" };
+                let active_str = if active_for.is_empty() {
+                    String::new()
+                } else {
+                    format!("  [active: {}]", active_for.join(", "))
+                };
+                println!("{}{:<20} {:<10} {:<6} {:<16} {}{}", marker, display_name, version, api, display_source, desc, active_str);
             }
-        } else {
-            source.clone()
-        };
-
-        let marker = if active_for.is_empty() { "  " } else { " *" };
-        let active_str = if active_for.is_empty() {
-            String::new()
-        } else {
-            format!("  [active: {}]", active_for.join(", "))
-        };
-        println!("{}{:<20} {:<10} {:<6} {:<16} {}{}", marker, display_name, version, api, display_source, desc, active_str);
+            println!();
+        }
     }
 
-    println!();
     Ok(())
 }
 
