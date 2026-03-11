@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+
+  {# Home page #}
+  <url>
+    <loc>{{ site.url | safe }}/</loc>
+    <changefreq>daily</changefreq>
+    <priority>1.0</priority>
+  </url>
+
+  {# Published posts #}
+  {% for post in all_posts %}
+  <url>
+    <loc>{{ post.url | safe }}</loc>
+    {% if post.updated_at %}
+    <lastmod>{{ post.updated_at | date_format(format="%Y-%m-%d") }}</lastmod>
+    {% elif post.published_at %}
+    <lastmod>{{ post.published_at | date_format(format="%Y-%m-%d") }}</lastmod>
+    {% endif %}
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  {% endfor %}
+
+  {# Published pages #}
+  {% for page in all_pages %}
+  <url>
+    <loc>{{ page.url | safe }}</loc>
+    {% if page.updated_at %}
+    <lastmod>{{ page.updated_at | date_format(format="%Y-%m-%d") }}</lastmod>
+    {% endif %}
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+  {% endfor %}
+
+</urlset>

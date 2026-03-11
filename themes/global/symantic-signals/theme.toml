@@ -1,6 +1,6 @@
 [theme]
-name        = "Anthropic"
+name        = "Symantic Signals"
 version     = "1.0.1"
 api_version = "1"
-description = "Anthropic theme with warm style."
+description = "Modern theme with style."
 author      = "Synaptic Signals"

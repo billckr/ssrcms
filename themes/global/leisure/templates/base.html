@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   {{ hook(name="head_start") | safe }}
   <title>{% block title %}{{ site.name }}{% endblock title %}</title>
+
   {# — SEO meta tags — #}
   {% if post is defined %}
     <meta name="description" content="{{ post.excerpt | strip_html | truncate(length=160) }}">
@@ -34,8 +35,11 @@
     <meta name="twitter:description" content="{{ site.description }}">
   {% endif %}
   <meta name="robots" content="index, follow">
-  <link rel="alternate" type="application/rss+xml" title="{{ site.name }}" href="{{ site.url | safe }}/feed.xml">
+  <link rel="alternate" type="application/rss+xml" title="{{ site.name }}" href="{{ site.url | safe }}/feed">
 
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@700&family=Open+Sans:wght@400;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/theme/static/css/style.css">
   {% block head_extra %}{% endblock head_extra %}
   {{ hook(name="head_end") | safe }}
@@ -44,24 +48,33 @@
   {{ hook(name="body_start") | safe }}
 
   <header class="site-header">
-    <nav class="site-nav">
+    <div class="container">
       <a class="site-title" href="/">{{ site.name }}</a>
-      <ul class="nav-links">
-        {% for item in nav.primary.items %}
-          <li><a href="{{ item.url }}"{% if item.target == "_blank" %} target="_blank" rel="noopener"{% endif %}{% if item.is_current %} aria-current="page"{% endif %}>{{ item.label }}</a></li>
-        {% endfor %}
-      </ul>
-      {% if session.is_logged_in %}
-        <div class="user-bar">
-          <a href="/account" class="user-bar-name">{{ session.user.display_name }}</a>
-          <a href="/account/logout" class="user-bar-logout">Sign out</a>
-        </div>
-      {% else %}
-        <div class="user-bar">
-          <a href="/login" class="user-bar-login">Sign in</a>
-        </div>
-      {% endif %}
-    </nav>
+      <nav class="site-nav">
+        <ul class="nav-links">
+          {% for item in nav.primary.items %}
+            <li><a href="{{ item.url }}"{% if item.target == "_blank" %} target="_blank" rel="noopener"{% endif %}{% if item.is_current %} aria-current="page"{% endif %}>{{ item.label }}</a></li>
+          {% endfor %}
+        </ul>
+      </nav>
+      <div class="header-right">
+        <form method="get" action="/search" class="header-search" role="search">
+          {# Search query is capped at 25 characters — enforced here and server-side. #}
+          <input type="search" name="q" placeholder="Search…" aria-label="Search posts" maxlength="25">
+          <button type="submit">Search</button>
+        </form>
+        {% if session.is_logged_in %}
+          <div class="user-bar">
+            <a href="/account" class="user-bar-name">{{ session.user.display_name }}</a>
+            <a href="/account/logout" class="user-bar-logout">Sign out</a>
+          </div>
+        {% else %}
+          <div class="user-bar">
+            <a href="/login" class="user-bar-login">Sign in</a>
+          </div>
+        {% endif %}
+      </div>
+    </div>
   </header>
 
   <main class="site-main">
@@ -71,8 +84,33 @@
   </main>
 
   <footer class="site-footer">
-    <p>&copy; {{ site.name }}</p>
-    {{ hook(name="footer") | safe }}
+    <div class="container">
+      <div class="footer-inner">
+        <div class="footer-brand">
+          <a class="site-title" href="/">{{ site.name }}</a>
+          <p>{{ site.description }}</p>
+        </div>
+        <div class="footer-col">
+          <h4>Navigation</h4>
+          <ul>
+            {% for item in nav.primary.items %}
+              <li><a href="{{ item.url }}">{{ item.label }}</a></li>
+            {% endfor %}
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h4>Stay Updated</h4>
+          <ul>
+            <li><a href="/newsletter">Newsletter</a></li>
+            <li><a href="/feed">RSS Feed</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <p>&copy; {{ site.name }}</p>
+        {{ hook(name="footer") | safe }}
+      </div>
+    </div>
   </footer>
 
   {{ hook(name="body_end") | safe }}

@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+
+{% block title %}{{ page.title }} — {{ site.name }}{% endblock title %}
+
+{% block content %}
+<div class="single-post-wrap">
+  <div class="container">
+    <div class="single-post-header">
+      <h1 class="post-title">{{ page.title }}</h1>
+    </div>
+
+    <div class="post-body">
+      {% if page.content %}
+      <div class="post-content">
+        {{ page.content | safe }}
+      </div>
+      {% endif %}
+
+      <form class="themed-form" method="POST" action="/subscribe">
+        <div class="form-field">
+          <label for="sf-name">Your name <span class="form-required" aria-hidden="true">*</span></label>
+          <input type="text" id="sf-name" name="display_name" required autocomplete="name" placeholder="Jane Smith">
+        </div>
+
+        <div class="form-field">
+          <label for="sf-email">Email address <span class="form-required" aria-hidden="true">*</span></label>
+          <input type="email" id="sf-email" name="email" required autocomplete="email" placeholder="jane@example.com">
+        </div>
+
+        <div class="form-field">
+          <label for="sf-password">Password <span class="form-required" aria-hidden="true">*</span></label>
+          <input type="password" id="sf-password" name="password" required autocomplete="new-password">
+          <span class="form-hint">8–12 characters &middot; uppercase &middot; number &middot; symbol (! @ # $ % &amp;)</span>
+        </div>
+
+        <div class="form-field">
+          <label for="sf-confirm">Confirm password <span class="form-required" aria-hidden="true">*</span></label>
+          <input type="password" id="sf-confirm" name="confirm_password" required autocomplete="new-password">
+        </div>
+
+        <!-- Honeypot: hidden from real users; bots fill it; handler rejects if non-empty -->
+        <div class="honeypot-field" aria-hidden="true">
+          <label for="sf-website">Website</label>
+          <input type="text" id="sf-website" name="website" tabindex="-1" autocomplete="off">
+        </div>
+
+        <div class="form-field">
+          <label class="form-checkbox-label">
+            <input type="checkbox" name="human_check" value="on" required>
+            <span>I'm Human</span>
+          </label>
+        </div>
+
+        <div class="form-field">
+          <label class="form-checkbox-label">
+            <input type="checkbox" name="terms" value="on" required>
+            <span>Agree to <a href="/terms" target="_blank" rel="noopener noreferrer">Terms of Service</a></span>
+          </label>
+        </div>
+
+        <button type="submit" class="btn">Create account</button>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock content %}

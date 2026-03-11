@@ -1,6 +1,7 @@
 use axum::{
     extract::{Path, State},
     response::{Html, IntoResponse, Response},
+    http::header,
 };
 use axum_extra::extract::cookie::SignedCookieJar;
 use tower_sessions::Session;
@@ -9,7 +10,7 @@ use uuid::Uuid;
 
 use crate::app_state::AppState;
 use crate::middleware::site::CurrentSite;
-use crate::models::post::{self, PostType};
+use crate::models::post::{self, ListFilter, PostStatus, PostType};
 use crate::templates::context::{ContextBuilder, NavContext, RequestContext, SessionContext};
 
 use super::home::{build_post_context, build_site_context, render_error_page};
@@ -40,8 +41,20 @@ pub async fn single_page(
         }
     }
 
+    // Detect feed template early so we can set the correct Content-Type.
+    let is_feed = post::get_published_by_slug(&state.db, Some(site_id), &slug)
+        .await
+        .ok()
+        .and_then(|p| p.template)
+        .map(|t| t == "feed")
+        .unwrap_or(false);
+
     let session_ctx = super::resolve_session(&state, &session).await;
     match render_page(state.clone(), slug, uri, site_id, &base_url, session_ctx).await {
+        Ok(xml) if is_feed => (
+            [(header::CONTENT_TYPE, "application/rss+xml; charset=utf-8")],
+            xml,
+        ).into_response(),
         Ok(html) => Html(html).into_response(),
         Err(e) => render_error_page(e, &state, &path, Some(current_site.site.id)).await,
     }
@@ -81,6 +94,31 @@ async fn render_page(
     .into_tera_context();
 
     ctx.insert("page", &page_ctx);
+
+    // For the RSS feed template, inject the 20 most recent published posts.
+    let template_name_raw = post_record
+        .template
+        .as_deref()
+        .filter(|t| !t.is_empty())
+        .unwrap_or("page");
+    if template_name_raw == "feed" {
+        let feed_posts = post::list(&state.db, &ListFilter {
+            site_id: Some(site_id),
+            status: Some(PostStatus::Published),
+            post_type: Some(PostType::Post),
+            limit: 20,
+            ..Default::default()
+        })
+        .await
+        .unwrap_or_default();
+        let mut feed_post_ctxs = Vec::with_capacity(feed_posts.len());
+        for p in &feed_posts {
+            if let Ok(pctx) = build_post_context(&state, p, base_url).await {
+                feed_post_ctxs.push(pctx);
+            }
+        }
+        ctx.insert("posts", &feed_post_ctxs);
+    }
 
     let active_plugins = crate::models::site_plugin::active_plugin_names(&state.db, site_id)
         .await

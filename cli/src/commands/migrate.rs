@@ -27,6 +27,8 @@ pub async fn run(args: MigrateArgs) -> anyhow::Result<()> {
     .await
     .unwrap_or_default();
 
+    let applied_set: std::collections::HashSet<i64> = applied.iter().copied().collect();
+
     let unknown: Vec<i64> = applied
         .into_iter()
         .filter(|v| !known_versions.contains(v))
@@ -38,21 +40,34 @@ pub async fn run(args: MigrateArgs) -> anyhow::Result<()> {
             "This CLI binary is outdated.\n\
              The database has migrations the binary doesn't know about: {list}\n\
              \n\
-             To fix, rebuild and redeploy the CLI on your build machine:\n\
+             To fix, reinstall the CLI from the project root:\n\
              \n\
-             cargo build --release -p synaptic-cli\n\
-             scp target/release/synaptic-cli root@<your-server>:/usr/local/bin/synaptic-cli\n\
+             ./app.sh update-cli\n\
              \n\
              Then re-run: synaptic-cli migrate"
         );
     }
 
-    println!("Running database migrations...");
+    // Determine which migrations are pending before running.
+    let pending: Vec<_> = migrator.migrations.iter()
+        .filter(|m| !applied_set.contains(&m.version))
+        .collect();
+
+    if pending.is_empty() {
+        println!("Database is up to date — no migrations to run.");
+        return Ok(());
+    }
+
+    println!("Applying {} migration{}:", pending.len(), if pending.len() == 1 { "" } else { "s" });
+    for m in &pending {
+        println!("  [{:04}] {}", m.version, m.description);
+    }
+
     migrator
         .run(&pool)
         .await
         .map_err(|e| anyhow::anyhow!("Migration failed: {e}"))?;
 
-    println!("Migrations applied successfully.");
+    println!("Done.");
     Ok(())
 }

@@ -2,5 +2,5 @@
 name        = "Default"
 version     = "1.0.0"
 api_version = "1"
-description = "Default Theme. Generic but not without style."
+description = "Plain, but not without style."
 author      = "Synaptic Signals"
