@@ -99,6 +99,30 @@
     {% if comment_pagination.total_count == 1 %}1 comment{% elif comment_pagination.total_count > 1 %}{{ comment_pagination.total_count }} comments{% else %}No comments yet{% endif %}
   </h2>
 
+  <div class="comment-form-wrap" id="comment-form">
+    {% if request.query.comment_error | default(value="") == "rate_limited" %}
+      <p class="comment-error">You can only post 2 comments every 10 minutes. Please wait a moment before trying again.</p>
+    {% endif %}
+    {% if session.is_logged_in %}
+      <h3>Leave a comment</h3>
+      <form method="post" action="/blog/{{ post.slug }}/comment">
+        <input type="hidden" name="parent_id" value="">
+        <textarea name="body" class="comment-textarea" rows="5" maxlength="400" placeholder="Write a comment…" required></textarea>
+        <label class="human-check-label">
+          <input type="checkbox" name="human_check" value="1" required> I'm human
+        </label>
+        <div class="comment-form-footer">
+          <small class="comment-char-count">400 remaining</small>
+          <button type="submit" class="comment-submit">Post comment</button>
+        </div>
+      </form>
+    {% else %}
+      <p class="comment-login-prompt">
+        <a href="/login?redirect={{ request.path }}">Sign in</a> to leave a comment.
+      </p>
+    {% endif %}
+  </div>
+
   {% if comments | length > 0 %}
     <ol class="comment-list">
       {% for comment in comments %}
@@ -171,29 +195,6 @@
   </nav>
   {% endif %}
 
-  <div class="comment-form-wrap" id="comment-form">
-    {% if request.query.comment_error | default(value="") == "rate_limited" %}
-      <p class="comment-error">You can only post 2 comments every 10 minutes. Please wait a moment before trying again.</p>
-    {% endif %}
-    {% if session.is_logged_in %}
-      <h3>Leave a comment</h3>
-      <form method="post" action="/blog/{{ post.slug }}/comment">
-        <input type="hidden" name="parent_id" value="">
-        <textarea name="body" class="comment-textarea" rows="5" maxlength="400" placeholder="Write a comment…" required></textarea>
-        <label class="human-check-label">
-          <input type="checkbox" name="human_check" value="1" required> I'm human
-        </label>
-        <div class="comment-form-footer">
-          <small class="comment-char-count">400 remaining</small>
-          <button type="submit" class="comment-submit">Post comment</button>
-        </div>
-      </form>
-    {% else %}
-      <p class="comment-login-prompt">
-        <a href="/login?redirect={{ request.path }}">Sign in</a> to leave a comment.
-      </p>
-    {% endif %}
-  </div>
 </section>
 
 <script>
