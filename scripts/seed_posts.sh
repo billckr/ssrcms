@@ -2,7 +2,7 @@
 # seed_posts.sh — Insert random posts for a given site and author.
 #
 # Usage:
-#   ./scripts/seed_posts.sh -domain beth.com -user beth@beth.com -number 25
+#   ./scripts/seed_posts.sh -domain example.com -user user@example.com -number 25
 #
 # Reads DATABASE_URL from .env in the project root if not already set.
 
@@ -44,8 +44,8 @@ Usage: $(basename "$0") -domain <hostname> -user <email> [options]
 Seed or clear content for a specific site.
 
 Required (seed mode):
-  -domain <hostname>        Site hostname (e.g. beth.com)
-  -user   <email>           Author email address (e.g. beth@beth.com)
+  -domain <hostname>        Site hostname (e.g. example.com)
+  -user   <email>           Author email address (e.g. user@example.com)
 
 Required (clear mode):
   -domain <hostname>        Site hostname to clear
@@ -73,16 +73,17 @@ Seed options:
                             Only affects output — not stored in the database.
 
 Examples:
-  $(basename "$0") -domain beth.com -user beth@beth.com -number 25
-  $(basename "$0") -domain beth.com -user beth@beth.com -number 25 -port 3000
-  $(basename "$0") -domain beth.com -user beth@beth.com -number 10 -status published -port 3000
-  $(basename "$0") -domain beth.com -user beth@beth.com -number 5  -status draft
-  $(basename "$0") -domain beth.com -user beth@beth.com -number 5  -type page
-  $(basename "$0") -domain beth.com -user beth@beth.com -number 50 -extras
-  $(basename "$0") -domain beth.com -user beth@beth.com -number 20 -comments 5 -port 3000
-  $(basename "$0") -domain beth.com -user beth@beth.com -number 20 -comments 8 -replies -port 3000
-  $(basename "$0") -domain beth.com -clear
-  $(basename "$0") -domain beth.com -clear -force
+  $(basename "$0") -domain example.com -user user@example.com -number 25
+  $(basename "$0") -domain example.com -user user@example.com -number 25 -port 3000
+  $(basename "$0") -domain example.com -user user@example.com -number 10 -status published -port 3000
+  $(basename "$0") -domain example.com -user user@example.com -number 5  -status draft
+  $(basename "$0") -domain example.com -user user@example.com -number 5  -type page
+  $(basename "$0") -domain example.com -user user@example.com -number 50 -extras
+  $(basename "$0") -domain example.com -user user@example.com -number 20 -comments 5 -port 3000
+  $(basename "$0") -domain example.com -user user@example.com -number 20 -comments 8 -replies -port 3000
+  $(basename "$0") -domain example.com -user user@example.com -number 20 -comments 8 -replies -extras -port 3000
+  $(basename "$0") -domain example.com -clear
+  $(basename "$0") -domain example.com -clear -force
 
 Notes:
   - Reads DATABASE_URL from .env in the project root if not set in the environment.
