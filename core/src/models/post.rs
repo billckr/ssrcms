@@ -656,54 +656,46 @@ pub async fn count(
 }
 
 /// Get the post published immediately before this one (within the same site).
-/// Uses (published_at, id) as a composite cursor so posts sharing the same
-/// timestamp don't trap navigation.
 pub async fn get_prev(
     pool: &PgPool,
     site_id: Option<Uuid>,
     published_at: DateTime<Utc>,
-    id: Uuid,
 ) -> Result<Option<Post>> {
     Ok(sqlx::query_as::<_, Post>(
         r#"
         SELECT * FROM posts
         WHERE status = 'published'
           AND post_type = 'post'
-          AND (published_at < $1 OR (published_at = $1 AND id < $2))
-          AND ($3::uuid IS NULL OR site_id = $3)
-        ORDER BY published_at DESC, id DESC
+          AND published_at < $1
+          AND ($2::uuid IS NULL OR site_id = $2)
+        ORDER BY published_at DESC
         LIMIT 1
         "#,
     )
     .bind(published_at)
-    .bind(id)
     .bind(site_id)
     .fetch_optional(pool)
     .await?)
 }
 
 /// Get the post published immediately after this one (within the same site).
-/// Uses (published_at, id) as a composite cursor so posts sharing the same
-/// timestamp don't trap navigation.
 pub async fn get_next(
     pool: &PgPool,
     site_id: Option<Uuid>,
     published_at: DateTime<Utc>,
-    id: Uuid,
 ) -> Result<Option<Post>> {
     Ok(sqlx::query_as::<_, Post>(
         r#"
         SELECT * FROM posts
         WHERE status = 'published'
           AND post_type = 'post'
-          AND (published_at > $1 OR (published_at = $1 AND id > $2))
-          AND ($3::uuid IS NULL OR site_id = $3)
-        ORDER BY published_at ASC, id ASC
+          AND published_at > $1
+          AND ($2::uuid IS NULL OR site_id = $2)
+        ORDER BY published_at ASC
         LIMIT 1
         "#,
     )
     .bind(published_at)
-    .bind(id)
     .bind(site_id)
     .fetch_optional(pool)
     .await?)
