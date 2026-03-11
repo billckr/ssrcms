@@ -1117,9 +1117,12 @@ fn walk_dir_inner(base: &FsPath, current: &FsPath, out: &mut Vec<String>) {
         if path.is_dir() {
             walk_dir_inner(base, &path, out);
         } else {
-            if name_str.ends_with(".bak") { continue; }
-            if name_str == "screenshot.png" { continue; }
-            if name_str == "theme.toml" { continue; }
+            // Only show editable theme files — allowlist of extensions.
+            // Everything else (images, zips, .bak, Zone.Identifier, theme.toml, etc.) is excluded.
+            let editable = name_str.ends_with(".html")
+                || name_str.ends_with(".css")
+                || name_str.ends_with(".js");
+            if !editable { continue; }
             if let Ok(rel) = path.strip_prefix(base) {
                 out.push(rel.to_string_lossy().replace('\\', "/"));
             }
