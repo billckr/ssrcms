@@ -851,3 +851,54 @@ a:hover {
 
 /* ── Honeypot ── */
 .honeypot { display: none; }
+
+/* ── Sidebar Menu Widget ─────────────────────────────────────────────────────
+   Styles for the get_menu() sidebar nav block in index.html.
+   Links stack vertically using flex-direction: column.
+   ─────────────────────────────────────────────────────────────────────────── */
+
+/* The outer nav container — column direction makes links stack vertically */
+.sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+/* Each nav link — block display so it fills the full sidebar width */
+.sidebar-nav-link {
+  display: block;
+  padding: 0.35rem 0.6rem;
+  border-radius: 4px;
+  text-decoration: none;
+  color: var(--text-dark);
+  font-size: 0.9rem;
+  transition: background 0.15s, color 0.15s;
+}
+
+/* Hover state — light orange tint matching the theme */
+.sidebar-nav-link:hover {
+  background: var(--orange-pale);
+  color: var(--orange-dark);
+}
+
+/* Active state — applied when item.is_current is true (current page URL matches) */
+.sidebar-nav-link--active {
+  font-weight: 600;
+  color: var(--orange-primary);
+  background: var(--orange-pale);
+}
+
+/* Child items container — indented to show hierarchy */
+.sidebar-nav-children {
+  padding-left: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  margin-bottom: 0.2rem;
+}
+
+/* Child links are slightly smaller than top-level links */
+.sidebar-nav-link--child {
+  font-size: 0.85rem;
+}
+/* ── End Sidebar Menu Widget ─────────────────────────────────────────────── */

@@ -1291,6 +1291,14 @@ pub async fn save_file(
         }
     }
 
+    // Skip write entirely if content hasn't changed — prevents a spurious .bak
+    // being created and the file being marked as modified when nothing was edited.
+    if let Ok(existing) = fs::read_to_string(&abs_path) {
+        if existing == form.content {
+            return Redirect::to(&format!("{}&saved=1", redirect_base)).into_response();
+        }
+    }
+
     let bak = bak_path_for(&abs_path);
     if !bak.exists() {
         if let Err(e) = fs::copy(&abs_path, &bak) {
