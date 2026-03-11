@@ -250,9 +250,10 @@ async fn main() -> anyhow::Result<()> {
     {
         use tokio::signal::unix::{signal, SignalKind};
 
-        let templates   = state.templates.clone();
+        let templates    = state.templates.clone();
         let active_theme = state.active_theme.clone();
-        let db          = pool.clone();
+        let site_cache   = state.site_cache.clone();
+        let db           = pool.clone();
 
         tokio::spawn(async move {
             let mut stream = match signal(SignalKind::user_defined1()) {
@@ -286,6 +287,24 @@ async fn main() -> anyhow::Result<()> {
                     .unwrap_or(None)
                 )
                 .unwrap_or_else(|| "default".to_string());
+
+                // Also reload all per-site active_theme values from DB into
+                // the site cache — this is what per-request rendering reads.
+                let site_rows: Vec<(uuid::Uuid, String)> = sqlx::query_as(
+                    "SELECT site_id, value FROM site_settings
+                     WHERE key = 'active_theme' AND site_id IS NOT NULL"
+                )
+                .fetch_all(&db)
+                .await
+                .unwrap_or_default();
+
+                if let Ok(mut cache) = site_cache.write() {
+                    for val in cache.values_mut() {
+                        if let Some((_, new_theme)) = site_rows.iter().find(|(id, _)| *id == val.0.id) {
+                            val.1.active_theme = new_theme.clone();
+                        }
+                    }
+                }
 
                 match templates.switch_theme(&theme_name) {
                     Ok(_) => {
