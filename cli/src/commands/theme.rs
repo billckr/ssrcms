@@ -219,12 +219,7 @@ async fn list(site: Option<String>, database_url: Option<String>) -> anyhow::Res
                 };
 
                 let marker = if active_for.is_empty() { "  " } else { " *" };
-                let active_str = if active_for.is_empty() {
-                    String::new()
-                } else {
-                    format!("  [active: {}]", active_for.join(", "))
-                };
-                println!("{}{:<20} {:<10} {:<6} {:<16} {}{}", marker, display_name, version, api, display_source, desc, active_str);
+                println!("{}{:<20} {:<10} {:<6} {:<16} {}", marker, display_name, version, api, display_source, desc);
             }
             println!();
         }
