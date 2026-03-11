@@ -263,12 +263,28 @@ async fn main() -> anyhow::Result<()> {
                 stream.recv().await;
                 tracing::info!("SIGUSR1 received — reloading active theme");
 
+                // Use the same resolution as startup: prefer the per-site row
+                // for the primary site, fall back to the global/NULL row.
                 let theme_name: String = sqlx::query_scalar(
-                    "SELECT value FROM site_settings WHERE key = 'active_theme'"
+                    "SELECT ss.value
+                     FROM site_settings ss
+                     JOIN sites s ON s.id = ss.site_id
+                     WHERE ss.key = 'active_theme'
+                     ORDER BY s.created_at
+                     LIMIT 1"
                 )
                 .fetch_optional(&db)
                 .await
                 .unwrap_or(None)
+                .or(
+                    sqlx::query_scalar(
+                        "SELECT value FROM site_settings
+                         WHERE key = 'active_theme' AND site_id IS NULL"
+                    )
+                    .fetch_optional(&db)
+                    .await
+                    .unwrap_or(None)
+                )
                 .unwrap_or_else(|| "default".to_string());
 
                 match templates.switch_theme(&theme_name) {
