@@ -5,6 +5,7 @@ use uuid::Uuid;
 #[derive(Subcommand)]
 pub enum ThemeAction {
     /// List themes — all sites overview, or scoped to one site with --site
+    #[command(after_help = "Examples:\n  synap-cli theme list\n  synap-cli theme list --site example.com")]
     List {
         /// Filter to a specific site (hostname or UUID)
         #[arg(long)]
@@ -14,8 +15,13 @@ pub enum ThemeAction {
         database_url: Option<String>,
     },
     /// Copy a theme from global to the site folder and activate it
+    ///
+    /// If the site does not already have a local copy of the theme it is copied
+    /// from themes/global/ first, then set as active — matching the behaviour
+    /// of the 'Get Theme' button in the admin UI.
+    #[command(after_help = "Examples:\n  synap-cli theme activate default --site example.com\n  synap-cli theme activate testing --site example.com")]
     Activate {
-        /// Name of the theme to activate (must match the name field in theme.toml)
+        /// Name of the theme to activate (directory name, e.g. default)
         #[arg(value_name = "THEME")]
         name: String,
         /// Site hostname or UUID to target (required for multi-site installs)
@@ -29,8 +35,11 @@ pub enum ThemeAction {
         pid_file: String,
     },
     /// Remove a site's local copy of a theme (never touches the global original)
+    ///
+    /// The active theme cannot be removed — activate a different theme first.
+    #[command(after_help = "Examples:\n  synap-cli theme remove testing --site example.com")]
     Remove {
-        /// Name of the theme to remove
+        /// Name of the theme to remove (directory name, e.g. testing)
         #[arg(value_name = "THEME")]
         name: String,
         /// Site hostname or UUID to target
