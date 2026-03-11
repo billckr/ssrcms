@@ -30,7 +30,7 @@ pub struct MenuEdit {
 }
 
 const LOCATION_OPTIONS: &[(&str, &str)] = &[
-    ("", "— By name only (use get_menu in template) —"),
+    ("", "Name only (custom get_menu)"),
     ("primary", "Primary Navigation"),
     ("footer", "Footer Links"),
 ];
@@ -39,7 +39,7 @@ fn location_label(location: Option<&str>) -> &'static str {
     match location {
         Some("primary") => "Primary Navigation",
         Some("footer")  => "Footer Links",
-        _               => "By name only",
+        _               => "Name only (custom get_menu)",
     }
 }
 
@@ -85,7 +85,7 @@ pub fn render_list(menus: &[MenuRow], ctx: &crate::PageContext) -> String {
         r#"<form method="POST" action="/admin/menus" style="display:flex;gap:.75rem;align-items:flex-end;margin-bottom:1.5rem;flex-wrap:wrap">
   <div class="form-group" style="margin:0;flex:1;min-width:160px">
     <label for="new-menu-name">Menu Name</label>
-    <input id="new-menu-name" type="text" name="name" required placeholder="e.g. Main Menu">
+    <input id="new-menu-name" type="text" name="name" required placeholder="e.g. Main Menu" maxlength="25" style="width:200px">
   </div>
   <div class="form-group" style="margin:0">
     <label for="new-menu-location">Location</label>
@@ -182,7 +182,7 @@ pub fn render_edit(
       <span class="menu-item-card__dest">{dest}</span>
     </div>
     <div class="menu-item-card__actions">
-      <label class="btn btn-sm" for="edit-toggle-{item_id}" style="cursor:pointer">Edit</label>
+      <label class="btn btn-primary btn-sm" for="edit-toggle-{item_id}" style="cursor:pointer;padding:.25rem .6rem;font-size:.8rem">Edit</label>
       <form method="POST" action="/admin/menus/{menu_id}/items/{item_id}/delete"
             onsubmit="return confirm('Delete this item?')" style="display:inline">
         <button class="icon-btn icon-danger" title="Delete" type="submit">
@@ -287,7 +287,7 @@ pub fn render_edit(
 }}
 .form-row {{
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(2, minmax(120px, 260px));
   gap: .75rem;
   margin-bottom: .75rem;
 }}
@@ -373,7 +373,7 @@ pub fn render_edit(
     <div class="form-row">
       <div class="form-group" style="margin:0">
         <label for="menu-name">Menu Name</label>
-        <input id="menu-name" type="text" name="name" value="{menu_name}" required>
+        <input id="menu-name" type="text" name="name" value="{menu_name}" required maxlength="25" style="width:200px">
       </div>
       <div class="form-group" style="margin:0">
         <label for="menu-location">Assign to Location</label>
