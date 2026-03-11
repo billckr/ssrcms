@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+
+{% block title %}{{ site.name }} — {{ site.description }}{% endblock title %}
+
+{% block content %}
+<section class="hero" style="background-image: url('/theme/static/images/blog-hero.jpg');">
+  <div class="container">
+    <h1>{{ site.name }}</h1>
+    <p>{{ site.description }}</p>
+    <div class="hero-actions">
+      {% if posts | length > 0 %}
+        <a href="{{ posts[0].url | safe }}" class="btn">Read Latest Post</a>
+      {% endif %}
+      <a href="/newsletter" class="btn btn-outline">Subscribe</a>
+    </div>
+  </div>
+</section>
+
+{% if tag_cloud | length > 0 or category_cloud | length > 0 %}
+<section class="section section-alt">
+  <div class="container">
+    {% if category_cloud | length > 0 %}
+    <div class="cloud-group" style="margin-bottom:0.75rem">
+      <span class="section-label">Categories</span><br>
+      {% for cat in category_cloud %}<a href="{{ cat.url }}" class="tag">{{ cat.name }}</a> {% endfor %}
+    </div>
+    {% endif %}
+    {% if tag_cloud | length > 0 %}
+    <div class="cloud-group">
+      <span class="section-label">Tags</span><br>
+      {% for tag in tag_cloud %}<a href="{{ tag.url }}" class="tag">{{ tag.name }}</a> {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+</section>
+{% endif %}
+
+<section class="section">
+  <div class="container">
+    <div class="section-header">
+      <span class="section-label">Latest Posts</span>
+      <h2>From the Blog</h2>
+    </div>
+
+    {% if posts | length == 0 %}
+      <p style="text-align:center;color:var(--muted)">No posts yet.</p>
+    {% else %}
+      <div class="post-grid">
+        {% for post in posts %}
+          <article class="post-card">
+            {% if post.featured_image %}
+              <div class="post-card-image">
+                <a href="{{ post.url | safe }}">
+                  <img src="{{ post.featured_image.url | safe }}" alt="{{ post.featured_image.alt_text }}" loading="lazy"{% if post.featured_image.width %} width="{{ post.featured_image.width }}" height="{{ post.featured_image.height }}"{% endif %}>
+                </a>
+              </div>
+            {% endif %}
+            <div class="post-card-body">
+              <div class="post-card-meta">
+                <time datetime="{{ post.published_at }}">
+                  {% if post.published_at %}{{ post.published_at | date_format }}{% endif %}
+                </time>
+                <span>by <a href="{{ post.author.url | safe }}">{{ post.author.display_name }}</a></span>
+                <span>{{ post.reading_time }} min read</span>
+              </div>
+              <h2 class="post-card-title">
+                <a href="{{ post.url | safe }}">{{ post.title }}</a>
+              </h2>
+              <p class="post-card-excerpt">{{ post.excerpt }}</p>
+              <div class="post-card-footer">
+                <a href="{{ post.url | safe }}" class="read-more">Read more →</a>
+              </div>
+            </div>
+          </article>
+        {% endfor %}
+      </div>
+
+      {% if pagination %}
+        <nav class="pagination" aria-label="Page navigation">
+          {% if pagination.prev_url %}
+            <a href="{{ pagination.prev_url }}" class="pagination-prev">← Newer</a>
+          {% endif %}
+          <span class="pagination-info">Page {{ pagination.current_page }} of {{ pagination.total_pages }}</span>
+          {% if pagination.next_url %}
+            <a href="{{ pagination.next_url }}" class="pagination-next">Older →</a>
+          {% endif %}
+        </nav>
+      {% endif %}
+    {% endif %}
+  </div>
+</section>
+{% endblock content %}

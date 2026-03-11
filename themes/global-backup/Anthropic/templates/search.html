@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+
+{% block title %}
+  {% if query %}
+    Search: {{ query }} — {{ site.name }}
+  {% else %}
+    Search — {{ site.name }}
+  {% endif %}
+{% endblock title %}
+
+{% block content %}
+<header class="search-header">
+  <h1>Search</h1>
+  <form method="get" action="/search" class="search-form">
+    {# Search query is capped at 25 characters — enforced here and server-side. #}
+    <input type="text" name="q" placeholder="Search posts..." value="{{ query }}" class="search-input" maxlength="25">
+    <button type="submit" class="search-button">Search</button>
+  </form>
+</header>
+
+{% if query %}
+  {% if results | length == 0 %}
+    <p class="no-results">No posts found matching "{{ query }}".</p>
+  {% else %}
+    <p class="result-count">Found {{ result_count }} result{% if result_count != 1 %}s{% endif %}</p>
+    <ol class="post-list">
+      {% for post in results %}
+        <li class="post-item">
+          <article>
+            <header>
+              <h2 class="post-title">
+                <a href="{{ post.url | safe }}">{{ post.title }}</a>
+              </h2>
+              <div class="post-meta">
+                <time datetime="{{ post.published_at }}">
+                  {% if post.published_at %}{{ post.published_at | date_format }}{% endif %}
+                </time>
+              </div>
+            </header>
+            <p class="post-excerpt">{{ post.excerpt }}</p>
+            <a href="{{ post.url | safe }}" class="read-more">Read more →</a>
+          </article>
+        </li>
+      {% endfor %}
+    </ol>
+  {% endif %}
+{% else %}
+  <p class="search-prompt">Enter a search query above.</p>
+{% endif %}
+{% endblock content %}

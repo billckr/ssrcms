@@ -1,10 +1,10 @@
 //! CLI commands for multi-site management.
 //!
 //! Usage:
-//!   synaptic-cli site init --hostname <domain>    # backfill existing single-site install
-//!   synaptic-cli site create --hostname <domain>  # add a new empty site
-//!   synaptic-cli site list                        # list all sites
-//!   synaptic-cli site delete --id <uuid>          # remove a site and all its content
+//!   synap-cli site init --hostname <domain>    # backfill existing single-site install
+//!   synap-cli site create --hostname <domain>  # add a new empty site
+//!   synap-cli site list                        # list all sites
+//!   synap-cli site delete --id <uuid>          # remove a site and all its content
 
 use clap::Subcommand;
 use uuid::Uuid;
@@ -338,7 +338,7 @@ async fn list(database_url: Option<String>) -> anyhow::Result<()> {
     .map_err(|e| anyhow::anyhow!("Failed to list sites: {e}"))?;
 
     if rows.is_empty() {
-        println!("No sites found. Run 'synaptic-cli site init --hostname <domain>' to get started.");
+        println!("No sites found. Run 'synap-cli site init --hostname <domain>' to get started.");
         return Ok(());
     }
 

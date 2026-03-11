@@ -4,7 +4,7 @@ use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
 #[command(
-    name = "synaptic-cli",
+    name = "synap-cli",
     about = "Synaptic Signals CMS — installer & manager",
     version
 )]

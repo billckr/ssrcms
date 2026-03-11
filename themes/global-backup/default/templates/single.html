@@ -1,0 +1,236 @@
+{% extends "base.html" %}
+
+{% block title %}{{ post.title }} — {{ site.name }}{% endblock title %}
+
+{% block head_extra %}
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": {{ post.title | json_encode | safe }},
+  "url": {{ post.url | json_encode | safe }},
+  "datePublished": {{ post.published_at | default(value="") | json_encode | safe }},
+  "dateModified": {{ post.updated_at | json_encode | safe }},
+  "author": {
+    "@type": "Person",
+    "name": {{ post.author.display_name | json_encode | safe }},
+    "url": {{ post.author.url | json_encode | safe }}
+  },
+  "publisher": {
+    "@type": "Organization",
+    "name": {{ site.name | json_encode | safe }},
+    "url": {{ site.url | json_encode | safe }}
+  }{% if post.featured_image %},
+  "image": {{ post.featured_image.url | json_encode | safe }}{% endif %}{% if post.excerpt %},
+  "description": {{ post.excerpt | strip_html | json_encode | safe }}{% endif %}
+}
+</script>
+{% endblock head_extra %}
+
+{% block content %}
+<article class="single-post">
+  <header class="post-header">
+    {% if post.featured_image %}
+      <figure class="featured-image-wrap">
+        <img src="{{ post.featured_image.url | safe }}" alt="{{ post.featured_image.alt_text }}"{% if post.featured_image.title %} title="{{ post.featured_image.title }}"{% endif %} class="featured-image" fetchpriority="high"{% if post.featured_image.width %} width="{{ post.featured_image.width }}" height="{{ post.featured_image.height }}"{% endif %}>
+        {% if post.featured_image.caption %}<figcaption class="featured-image-caption">{{ post.featured_image.caption }}</figcaption>{% endif %}
+      </figure>
+    {% endif %}
+    <h1 class="post-title">{{ post.title }}</h1>
+    <div class="post-meta">
+      <time datetime="{{ post.published_at }}">
+        {% if post.published_at %}{{ post.published_at | date_format }}{% endif %}
+      </time>
+      <span class="post-author">by <a href="{{ post.author.url | safe }}">{{ post.author.display_name }}</a></span>
+      {% if post.categories | length > 0 %}
+        <span class="post-categories">
+          in {% for cat in post.categories %}<a href="{{ cat.url }}">{{ cat.name }}</a>{% if not loop.last %}, {% endif %}{% endfor %}
+        </span>
+      {% endif %}
+      <span class="reading-time">{{ post.reading_time }} min read</span>
+      {% if session.is_logged_in %}
+        {% if is_saved %}
+          <form method="post" action="/blog/{{ post.slug }}/unsave" class="save-post-form">
+            <button type="submit" class="btn-save-post saved">★ Saved</button>
+          </form>
+        {% else %}
+          <form method="post" action="/blog/{{ post.slug }}/save" class="save-post-form">
+            <button type="submit" class="btn-save-post">☆ Save</button>
+          </form>
+        {% endif %}
+      {% endif %}
+    </div>
+  </header>
+
+  <div class="post-content">
+    {{ post.content | safe }}
+  </div>
+
+  {% if post.tags | length > 0 %}
+    <footer class="post-tags">
+      <span>Tags:</span>
+      {% for tag in post.tags %}
+        <a href="{{ tag.url }}" class="tag">{{ tag.name }}</a>
+      {% endfor %}
+    </footer>
+  {% endif %}
+</article>
+
+{% if prev_post or next_post %}
+  <nav class="post-nav" aria-label="Post navigation">
+    {% if next_post %}
+      <div class="post-nav-prev">
+        <span>← Previous</span>
+        <a href="{{ next_post.url }}">{{ next_post.title }}</a>
+      </div>
+    {% endif %}
+    {% if prev_post %}
+      <div class="post-nav-next">
+        <span>Next →</span>
+        <a href="{{ prev_post.url }}">{{ prev_post.title }}</a>
+      </div>
+    {% endif %}
+  </nav>
+{% endif %}
+
+{% if related_posts | length > 0 %}
+  <section class="related-posts">
+    <h2>Related posts</h2>
+    <ul>
+      {% for rp in related_posts %}
+        <li><a href="{{ rp.url }}">{{ rp.title }}</a></li>
+      {% endfor %}
+    </ul>
+  </section>
+{% endif %}
+
+{% if post.comments_enabled %}
+<section class="comments" id="comments">
+  <h2 class="comments-heading">
+    {% if comment_pagination.total_count == 1 %}1 comment{% elif comment_pagination.total_count > 1 %}{{ comment_pagination.total_count }} comments{% else %}No comments yet{% endif %}
+  </h2>
+
+  <div class="comment-form-wrap" id="comment-form">
+    {% if request.query.comment_error | default(value="") == "rate_limited" %}
+      <p class="comment-error">You can only post 2 comments every 10 minutes. Please wait a moment before trying again.</p>
+    {% endif %}
+    {% if session.is_logged_in %}
+      <h3>Leave a comment</h3>
+      <form method="post" action="/blog/{{ post.slug }}/comment">
+        <input type="hidden" name="parent_id" value="">
+        <textarea name="body" class="comment-textarea" rows="5" maxlength="400" placeholder="Write a comment…" required></textarea>
+        <label class="human-check-label">
+          <input type="checkbox" name="human_check" value="1" required> I'm human
+        </label>
+        <div class="comment-form-footer">
+          <small class="comment-char-count">400 remaining</small>
+          <button type="submit" class="comment-submit">Post comment</button>
+        </div>
+      </form>
+    {% else %}
+      <p class="comment-login-prompt">
+        <a href="/login?redirect={{ request.path }}">Sign in</a> to leave a comment.
+      </p>
+    {% endif %}
+  </div>
+
+  {% if comments | length > 0 %}
+    <ol class="comment-list">
+      {% for comment in comments %}
+        <li class="comment" id="comment-{{ comment.id }}">
+          <div class="comment-meta">
+            <strong class="comment-author">{{ comment.author_name }}</strong>
+            <time class="comment-date">{{ comment.created_at }}</time>
+            {% if session.is_logged_in and (session.user.role == "editor" or session.user.role == "site_admin" or session.user.role == "super_admin") %}
+              <form method="post" action="/admin/comments/{{ comment.id }}/delete" class="comment-delete-form">
+                <input type="hidden" name="redirect" value="{{ request.url }}#comments">
+                <button type="submit" class="comment-delete-btn" onclick="return confirm('Delete this comment?')">Delete</button>
+              </form>
+            {% endif %}
+          </div>
+          <div class="comment-body">{% if comment.is_deleted %}<em class="muted">[deleted]</em>{% else %}{{ comment.body }}{% endif %}</div>
+          {% if session.is_logged_in and not comment.is_deleted %}
+            <a href="#" class="reply-toggle comment-reply-link" data-parent="{{ comment.id }}">Reply</a>
+            <div class="reply-form" id="reply-form-{{ comment.id }}">
+              <form method="post" action="/blog/{{ post.slug }}/comment">
+                <input type="hidden" name="parent_id" value="{{ comment.id }}">
+                <textarea name="body" class="comment-textarea" rows="3" maxlength="400" placeholder="Write a reply…" required></textarea>
+                <label class="human-check-label">
+                  <input type="checkbox" name="human_check" value="1" required> I'm human
+                </label>
+                <div class="comment-form-footer">
+                  <small class="comment-char-count">400 remaining</small>
+                  <button type="submit" class="comment-submit">Post reply</button>
+                </div>
+              </form>
+            </div>
+          {% endif %}
+
+          {% if comment.replies | length > 0 %}
+            <ol class="comment-replies">
+              {% for reply in comment.replies %}
+                <li class="comment comment-reply" id="comment-{{ reply.id }}">
+                  <div class="comment-meta">
+                    <strong class="comment-author">{{ reply.author_name }}</strong>
+                    <time class="comment-date">{{ reply.created_at }}</time>
+                    {% if session.is_logged_in and (session.user.role == "editor" or session.user.role == "site_admin" or session.user.role == "super_admin") %}
+                      <form method="post" action="/admin/comments/{{ reply.id }}/delete" class="comment-delete-form">
+                        <input type="hidden" name="redirect" value="{{ request.url }}#comments">
+                        <button type="submit" class="comment-delete-btn" onclick="return confirm('Delete this comment?')">Delete</button>
+                      </form>
+                    {% endif %}
+                  </div>
+                  <div class="comment-body">{{ reply.body }}</div>
+                </li>
+              {% endfor %}
+            </ol>
+          {% endif %}
+        </li>
+      {% endfor %}
+    </ol>
+  {% endif %}
+
+  {% if comment_pagination.total_pages > 1 %}
+  <nav class="pagination" aria-label="Comment pages">
+    {% if comment_pagination.prev_page %}
+      <a class="pagination-prev" href="{{ comment_pagination.post_url }}?cpage={{ comment_pagination.prev_page }}#comments">&larr; Older</a>
+    {% else %}
+      <span class="pagination-prev" style="opacity:0.4;pointer-events:none">&larr; Older</span>
+    {% endif %}
+    <span class="pagination-info">Page {{ comment_pagination.current_page }} of {{ comment_pagination.total_pages }}</span>
+    {% if comment_pagination.next_page %}
+      <a class="pagination-next" href="{{ comment_pagination.post_url }}?cpage={{ comment_pagination.next_page }}#comments">Newer &rarr;</a>
+    {% else %}
+      <span class="pagination-next" style="opacity:0.4;pointer-events:none">Newer &rarr;</span>
+    {% endif %}
+  </nav>
+  {% endif %}
+
+</section>
+
+<script>
+  document.querySelectorAll('.reply-toggle').forEach(function(link) {
+    link.addEventListener('click', function(e) {
+      e.preventDefault();
+      var form = document.getElementById('reply-form-' + link.dataset.parent);
+      if (form) {
+        var visible = form.style.display === 'block';
+        form.style.display = visible ? 'none' : 'block';
+        link.textContent = visible ? 'Reply' : 'Cancel';
+      }
+    });
+  });
+
+  document.querySelectorAll('.comment-textarea').forEach(function(ta) {
+    var counter = ta.closest('form').querySelector('.comment-char-count');
+    if (!counter) return;
+    var max = parseInt(ta.getAttribute('maxlength'), 10);
+    ta.addEventListener('input', function() {
+      var remaining = max - ta.value.length;
+      counter.textContent = remaining + ' remaining';
+      counter.style.color = remaining < 20 ? '#dc2626' : remaining < 50 ? '#d97706' : '';
+    });
+  });
+</script>
+{% endif %}
+{% endblock content %}

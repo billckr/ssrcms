@@ -77,7 +77,7 @@ pub async fn install(
 
     let site_id = match admin.site_id {
         Some(id) => id,
-        None => err!("No site selected. Run 'synaptic-cli site init' first."),
+        None => err!("No site selected. Run 'synap-cli site init' first."),
     };
 
     let plugins_dir = &state.config.plugins_dir;

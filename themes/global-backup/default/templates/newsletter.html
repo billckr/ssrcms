@@ -1,0 +1,174 @@
+{% extends "base.html" %}
+
+{% block title %}{{ page.title }} — {{ site.name }}{% endblock title %}
+
+{% block content %}
+<article class="single-page newsletter-page">
+  <header class="page-header">
+    <h1 class="page-title">{{ page.title }}</h1>
+  </header>
+
+  {% if page.content %}
+  <div class="page-content">
+    {{ page.content | safe }}
+  </div>
+  {% endif %}
+
+  {% if request.query.submitted %}
+  <div class="newsletter-success" role="alert">
+    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"
+         fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+         aria-hidden="true">
+      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+      <polyline points="22 4 12 14.01 9 11.01"/>
+    </svg>
+    You're signed up! Thanks for subscribing.
+  </div>
+  {% else %}
+  <form class="newsletter-form" method="POST" action="/form/newsletter">
+    <!-- Honeypot — hidden from real users, bots fill it in -->
+    <div class="newsletter-honeypot" aria-hidden="true" tabindex="-1">
+      <label for="_hp">Leave this blank</label>
+      <input type="text" id="_hp" name="_honeypot" tabindex="-1" autocomplete="off">
+    </div>
+
+    <div class="newsletter-field">
+      <label for="nl-email">Email address <span class="newsletter-required" aria-hidden="true">*</span></label>
+      <input type="email" id="nl-email" name="email" required autocomplete="email"
+             placeholder="you@example.com">
+    </div>
+
+    <div class="newsletter-field newsletter-field--checkbox">
+      <label class="newsletter-checkbox-label">
+        <input type="checkbox" name="terms_accepted" value="yes" required>
+        I agree to the <a href="/terms" target="_blank" rel="noopener noreferrer">Terms &amp; Conditions</a>
+        and consent to receiving email newsletters.
+        <span class="newsletter-required" aria-hidden="true">*</span>
+      </label>
+    </div>
+
+    <button type="submit" class="newsletter-submit" id="newsletter-submit-btn">Subscribe</button>
+  </form>
+  <script>
+    document.querySelector('.newsletter-form').addEventListener('submit', function() {
+      var btn = document.getElementById('newsletter-submit-btn');
+      btn.disabled = true;
+      btn.textContent = 'Subscribing…';
+    });
+  </script>
+  {% endif %}
+</article>
+
+<style>
+/* ── Newsletter page ── */
+.newsletter-page { max-width: 520px; }
+
+.newsletter-form {
+  margin-top: 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.newsletter-honeypot {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.newsletter-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.newsletter-field label {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.newsletter-required { color: #e63946; }
+
+.newsletter-field input[type="email"] {
+  padding: 0.6rem 0.85rem;
+  font-size: 1rem;
+  font-family: inherit;
+  border: 1.5px solid var(--color-border);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--color-text);
+  transition: border-color 0.15s, box-shadow 0.15s;
+  outline: none;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.newsletter-field input[type="email"]:focus {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.newsletter-field--checkbox { flex-direction: row; align-items: flex-start; gap: 0; }
+
+.newsletter-checkbox-label {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  font-size: 0.875rem;
+  font-weight: 400;
+  color: var(--color-text);
+  cursor: pointer;
+  line-height: 1.5;
+}
+
+.newsletter-checkbox-label input[type="checkbox"] {
+  margin-top: 0.2rem;
+  flex-shrink: 0;
+  width: 1rem;
+  height: 1rem;
+  accent-color: var(--color-accent);
+  cursor: pointer;
+}
+
+.newsletter-checkbox-label a {
+  color: var(--color-accent);
+  text-decoration: underline;
+}
+
+.newsletter-submit {
+  align-self: flex-start;
+  padding: 0.65rem 1.5rem;
+  font-size: 1rem;
+  font-weight: 600;
+  font-family: inherit;
+  background: var(--color-accent);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: opacity 0.15s, transform 0.1s;
+}
+
+.newsletter-submit:hover { opacity: 0.88; }
+.newsletter-submit:active { transform: scale(0.98); }
+
+.newsletter-success {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-top: 1.5rem;
+  padding: 1rem 1.25rem;
+  background: #f0fdf4;
+  border: 1.5px solid #86efac;
+  border-radius: 8px;
+  color: #166534;
+  font-weight: 500;
+}
+
+.newsletter-success svg { flex-shrink: 0; color: #16a34a; }
+</style>
+{% endblock content %}

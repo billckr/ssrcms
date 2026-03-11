@@ -49,7 +49,7 @@ pub struct AppConfig {
     #[serde(default = "default_search_index_path")]
     pub search_index_path: String,
 
-    /// Path to the PID file written on startup (used by synaptic-cli for live reload)
+    /// Path to the PID file written on startup (used by synap-cli for live reload)
     #[serde(default = "default_pid_file")]
     pub pid_file: String,
 

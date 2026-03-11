@@ -71,7 +71,7 @@ POST-INSTALL
   SSL for additional sites can be provisioned from the admin panel at:
     https://<domain>/admin/sites
   This requires the Caddy permissions set up by the installer. To re-run:
-    sudo synaptic-cli caddy setup --app-user <SYNAPTIC_USER>
+    sudo synap-cli caddy setup --app-user <SYNAPTIC_USER>
 
   To uninstall:
     systemctl disable --now synaptic-signals caddy
@@ -428,14 +428,14 @@ else
   warn "Admin static assets not found at ${INSTALL_DIR}/admin/static — icons and editor may be missing."
 fi
 
-chmod +x "${INSTALL_DIR}/synaptic" "${INSTALL_DIR}/synaptic-cli"
+chmod +x "${INSTALL_DIR}/synaptic" "${INSTALL_DIR}/synap-cli"
 
 # ── SELinux context (RHEL/AlmaLinux) ──────────────────────────────────────────
 # /var/www and similar paths have httpd_sys_content_t which blocks non-httpd
 # services. Relabel the install dir so systemd can run the service from there.
 if is_rhel_like && command -v chcon &>/dev/null; then
   chcon -Rt var_t "$INSTALL_DIR" 2>/dev/null || true
-  chcon -t bin_t "${INSTALL_DIR}/synaptic" "${INSTALL_DIR}/synaptic-cli" 2>/dev/null || true
+  chcon -t bin_t "${INSTALL_DIR}/synaptic" "${INSTALL_DIR}/synap-cli" 2>/dev/null || true
   info "SELinux context set for ${INSTALL_DIR}."
 fi
 
@@ -477,9 +477,9 @@ CLI_OUTPUT=$(sudo -u "${SYNAPTIC_USER}" \
   SYNAPTIC_DOMAIN="$SYNAPTIC_DOMAIN" \
   ADMIN_EMAIL="$ADMIN_EMAIL" \
   ADMIN_USERNAME="${ADMIN_USERNAME:-}" \
-  "${INSTALL_DIR}/synaptic-cli" install \
+  "${INSTALL_DIR}/synap-cli" install \
   --non-interactive \
-  --output-dir "${INSTALL_DIR}" 2>&1) || die "synaptic-cli install failed:\n$CLI_OUTPUT"
+  --output-dir "${INSTALL_DIR}" 2>&1) || die "synap-cli install failed:\n$CLI_OUTPUT"
 
 echo "$CLI_OUTPUT"
 
@@ -520,9 +520,9 @@ else
   # Set up Caddy write permissions so the admin panel can provision SSL for
   # additional sites without manual intervention.
   info "Setting up Caddy permissions for '${SYNAPTIC_USER}'..."
-  "${INSTALL_DIR}/synaptic-cli" caddy setup --app-user "${SYNAPTIC_USER}" \
+  "${INSTALL_DIR}/synap-cli" caddy setup --app-user "${SYNAPTIC_USER}" \
     && success "Caddy permissions configured." \
-    || warn "Caddy permission setup failed — run manually: sudo synaptic-cli caddy setup --app-user ${SYNAPTIC_USER}"
+    || warn "Caddy permission setup failed — run manually: sudo synap-cli caddy setup --app-user ${SYNAPTIC_USER}"
 fi
 
 # ── Install systemd service ────────────────────────────────────────────────────

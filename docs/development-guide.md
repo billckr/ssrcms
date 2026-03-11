@@ -103,8 +103,8 @@ LOG_LEVEL=info
 ### 4. Run migrations and seed admin user
 
 ```bash
-synaptic-cli migrate
-synaptic-cli user create   # choose role: super_admin
+synap-cli migrate
+synap-cli user create   # choose role: super_admin
 ```
 
 ---
@@ -147,7 +147,7 @@ cargo check
 cargo check -p synaptic-core
 
 # Check the CLI
-cargo check -p synaptic-cli
+cargo check -p synap-cli
 ```
 
 Expected output when clean:
@@ -232,27 +232,27 @@ cargo build --release
 ```
 
 Binaries are written to:
-- `target/debug/synaptic` and `target/debug/synaptic-cli`
-- `target/release/synaptic` and `target/release/synaptic-cli`
+- `target/debug/synaptic` and `target/debug/synap-cli`
+- `target/release/synaptic` and `target/release/synap-cli`
 
 ---
 
-## The CLI (`synaptic-cli`)
+## The CLI (`synap-cli`)
 
 ### Available commands
 
 ```bash
-synaptic-cli install              # Interactive setup wizard
-synaptic-cli migrate              # Apply pending DB migrations
-synaptic-cli user create          # Create a user interactively
-synaptic-cli user list            # List all users
-synaptic-cli user reset-password  # Reset a user's password by email
-synaptic-cli plugin list          # List installed plugins
+synap-cli install              # Interactive setup wizard
+synap-cli migrate              # Apply pending DB migrations
+synap-cli user create          # Create a user interactively
+synap-cli user list            # List all users
+synap-cli user reset-password  # Reset a user's password by email
+synap-cli plugin list          # List installed plugins
 ```
 
 ### When to reinstall the CLI
 
-`synaptic-cli` is a compiled Rust binary installed globally at `~/.cargo/bin/`. It only updates when you explicitly reinstall it — editing source files alone has no effect on the running binary.
+`synap-cli` is a compiled Rust binary installed globally at `~/.cargo/bin/`. It only updates when you explicitly reinstall it — editing source files alone has no effect on the running binary.
 
 ```bash
 ./app.sh update-cli
@@ -260,13 +260,13 @@ synaptic-cli plugin list          # List installed plugins
 cargo install --path cli
 ```
 
-> **Important:** `cargo build` does NOT update the globally installed `synaptic-cli`. Only `cargo install --path cli` (or `./app.sh update-cli`) does.
+> **Important:** `cargo build` does NOT update the globally installed `synap-cli`. Only `cargo install --path cli` (or `./app.sh update-cli`) does.
 
 Run `update-cli` whenever you change anything under `cli/src/`. Examples of changes that require it:
 
 | Change | Example |
 |---|---|
-| Add a new command | Adding `synaptic-cli backup` |
+| Add a new command | Adding `synap-cli backup` |
 | Change a prompt or message | Rewording a `dialoguer` prompt in `user create` |
 | Fix a bug in the installer | Wrong path written to Caddyfile |
 | Add a subcommand | Adding `plugin enable` / `plugin disable` |
@@ -280,14 +280,14 @@ Use this sequence when you want a completely clean slate (wipes all data, re-run
 ./app.sh update-cli
 
 # 2. Wipe all data rows (keeps schema and migration history)
-synaptic-cli dev reset --force
+synap-cli dev reset --force
 
 # 3. Re-run the installer
 #    - Domain: bckr.local (or your dev domain)
 #    - Port: 3000 (or whatever Axum listens on)
 #    ⚠ The port you enter here becomes part of site_url (e.g. http://bckr.local:3000)
 #      so post/page links resolve correctly. Don't leave it blank.
-synaptic-cli install
+synap-cli install
 
 # 4. Rebuild and restart the server (flushes the in-memory site cache)
 ./app.sh rebuild
@@ -304,7 +304,7 @@ synaptic-cli install
 > psql postgres://synaptic:password@localhost:5432/synaptic_signals \
 >   -c "UPDATE site_settings SET value = 'http://bckr.local:3000' WHERE key = 'site_url';"
 > ```
-> Then restart the server. A `synaptic-cli set-site-url` command (password-gated
+> Then restart the server. A `synap-cli set-site-url` command (password-gated
 > like `dev reset`) is planned for the future.
 
 ---
@@ -326,7 +326,7 @@ synaptic-cli install
 Migrations live in `migrations/` at the workspace root. They are applied automatically on server startup AND can be run manually:
 
 ```bash
-synaptic-cli migrate
+synap-cli migrate
 ```
 
 ### Creating a new migration
@@ -343,7 +343,7 @@ sqlx migrate add <migration_name>
 This creates `migrations/<timestamp>_<name>.sql`. Edit the file, then apply:
 
 ```bash
-synaptic-cli migrate
+synap-cli migrate
 # or
 sqlx migrate run
 ```
@@ -400,7 +400,7 @@ Or just make sure the `.env` file is in the workspace root — the server loads 
 
 Run them manually to see the error clearly:
 ```bash
-synaptic-cli migrate
+synap-cli migrate
 ```
 
 ### `relation "_sqlx_migrations" already exists`

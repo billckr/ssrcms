@@ -118,7 +118,7 @@ pub async fn activate(
         Some(id) => id,
         None => {
             tracing::warn!("theme activate: no site selected, cannot save per-site setting");
-            return render_appearance_list(&state, Some("No site selected. Run 'synaptic-cli site init' first."), &ctx, admin.site_id, "my").await.into_response();
+            return render_appearance_list(&state, Some("No site selected. Run 'synap-cli site init' first."), &ctx, admin.site_id, "my").await.into_response();
         }
     };
 
@@ -857,7 +857,7 @@ pub async fn get_theme(
             let cs = state.site_hostname(admin.site_id);
             let ctx = super::page_ctx_full(&state, &admin, &cs).await;
             return render_appearance_list(
-                &state, Some("No site selected. Run 'synaptic-cli site init' first."),
+                &state, Some("No site selected. Run 'synap-cli site init' first."),
                 &ctx, admin.site_id, "global",
             ).await.into_response();
         }

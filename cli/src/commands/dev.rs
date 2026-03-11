@@ -1,8 +1,8 @@
 //! Development utilities — NOT for use on production databases.
 //!
 //! Usage:
-//!   synaptic-cli dev reset             # interactive
-//!   synaptic-cli dev reset --force     # skip prompts (CI / scripts)
+//!   synap-cli dev reset             # interactive
+//!   synap-cli dev reset --force     # skip prompts (CI / scripts)
 
 use clap::Subcommand;
 
@@ -22,7 +22,7 @@ pub enum DevAction {
 
         /// Root install directory that contains themes/ and uploads/.
         /// Defaults to the INSTALL_DIR environment variable (set automatically
-        /// by `synaptic-cli install`).  If neither is provided the filesystem
+        /// by `synap-cli install`).  If neither is provided the filesystem
         /// cleanup step is skipped and only the database is wiped.
         #[arg(long, env = "INSTALL_DIR")]
         install_dir: Option<String>,
@@ -67,7 +67,7 @@ async fn reset(
         Some((h,)) => h,
         None => anyhow::bail!(
             "The database appears to already be reset — no super_admin found.\n\
-             Run 'synaptic-cli install' to set up a fresh installation."
+             Run 'synap-cli install' to set up a fresh installation."
         ),
     };
 
@@ -205,7 +205,7 @@ async fn reset(
     }
 
     println!();
-    println!("Reset complete. Next: synaptic-cli install");
+    println!("Reset complete. Next: synap-cli install");
 
     Ok(())
 }

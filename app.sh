@@ -11,7 +11,7 @@
 #   logs           Tail live server logs (Ctrl+C to exit)
 #   build          Compile a debug build
 #   build-release  Compile an optimised release build
-#   update-cli     Reinstall synaptic-cli after CLI source changes
+#   update-cli     Reinstall synap-cli after CLI source changes
 #   migrate        Run pending database migrations
 #   clean-index    Delete the Tantivy search index (rebuilt on next start)
 #   clean-build    Delete the Cargo target/ directory to force a full rebuild
@@ -227,46 +227,46 @@ cmd_build_release() {
 }
 
 cmd_update_cli() {
-    log "Reinstalling synaptic-cli..."
+    log "Reinstalling synap-cli..."
     cd "$SCRIPT_DIR"
     cargo install --path cli --force
-    log "synaptic-cli updated: $(command -v synaptic-cli)"
+    log "synap-cli updated: $(command -v synap-cli)"
 }
 
-# Returns 0 (true) if synaptic-cli is missing or older than any migration file.
+# Returns 0 (true) if synap-cli is missing or older than any migration file.
 cli_is_stale() {
     local cli_bin
-    cli_bin=$(command -v synaptic-cli 2>/dev/null) || return 0  # not installed = stale
+    cli_bin=$(command -v synap-cli 2>/dev/null) || return 0  # not installed = stale
     local newer
     newer=$(find "$SCRIPT_DIR/migrations" -name "*.sql" -newer "$cli_bin" 2>/dev/null | head -1)
     [[ -n "$newer" ]]
 }
 
 cmd_dev_reset() {
-    if ! command -v synaptic-cli &>/dev/null; then
-        log "synaptic-cli not found — run './app.sh update-cli' first."
+    if ! command -v synap-cli &>/dev/null; then
+        log "synap-cli not found — run './app.sh update-cli' first."
         exit 1
     fi
     if cli_is_stale; then
-        log "Migrations have changed since synaptic-cli was last built — rebuilding CLI..."
+        log "Migrations have changed since synap-cli was last built — rebuilding CLI..."
         cmd_update_cli
     fi
     cd "$SCRIPT_DIR"
-    synaptic-cli dev reset
+    synap-cli dev reset
 }
 
 cmd_migrate() {
-    if ! command -v synaptic-cli &>/dev/null; then
-        log "synaptic-cli not found — run './app.sh update-cli' first."
+    if ! command -v synap-cli &>/dev/null; then
+        log "synap-cli not found — run './app.sh update-cli' first."
         exit 1
     fi
     if cli_is_stale; then
-        log "Migrations have changed since synaptic-cli was last built — rebuilding CLI..."
+        log "Migrations have changed since synap-cli was last built — rebuilding CLI..."
         cmd_update_cli
     fi
     cd "$SCRIPT_DIR"
     log "Running database migrations..."
-    synaptic-cli migrate
+    synap-cli migrate
 }
 
 cmd_clean_index() {
@@ -347,7 +347,7 @@ case "$COMMAND" in
         echo "Build:"
         echo "  build          Compile debug build"
         echo "  build-release  Compile optimised release build"
-        echo "  update-cli     Reinstall synaptic-cli after CLI source changes"
+        echo "  update-cli     Reinstall synap-cli after CLI source changes"
         echo ""
         echo "Development:"
         echo "  dev-reset      Wipe all DB data (keeps schema/migrations) for a clean install run"

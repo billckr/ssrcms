@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+
+{% block title %}
+  {% if archive_term %}
+    {{ archive_term.name }} — {{ site.name }}
+  {% elif archive_author %}
+    Posts by {{ archive_author.display_name }} — {{ site.name }}
+  {% else %}
+    Archive — {{ site.name }}
+  {% endif %}
+{% endblock title %}
+
+{% block content %}
+<div class="archive-header">
+  <div class="container">
+    {% if archive_type == "category" %}
+      <span class="section-label">Category</span>
+      <h1>{{ archive_term.name }}</h1>
+      {% if archive_term.post_count %}
+        <p>{{ archive_term.post_count }} post{% if archive_term.post_count != 1 %}s{% endif %}</p>
+      {% endif %}
+    {% elif archive_type == "tag" %}
+      <span class="section-label">Tag</span>
+      <h1>{{ archive_term.name }}</h1>
+    {% elif archive_type == "author" %}
+      <span class="section-label">Author</span>
+      <h1>{{ archive_author.display_name }}</h1>
+      {% if archive_author.bio %}
+        <p class="archive-author-bio">{{ archive_author.bio }}</p>
+      {% endif %}
+    {% else %}
+      <h1>Archive</h1>
+    {% endif %}
+  </div>
+</div>
+
+<section class="section">
+  <div class="container">
+    {% if posts | length == 0 %}
+      <p style="text-align:center;color:var(--muted)">No posts found.</p>
+    {% else %}
+      <div class="post-grid">
+        {% for post in posts %}
+          <article class="post-card">
+            {% if post.featured_image %}
+              <div class="post-card-image">
+                <a href="{{ post.url | safe }}">
+                  <img src="{{ post.featured_image.url | safe }}" alt="{{ post.featured_image.alt_text }}" loading="lazy"{% if post.featured_image.width %} width="{{ post.featured_image.width }}" height="{{ post.featured_image.height }}"{% endif %}>
+                </a>
+              </div>
+            {% endif %}
+            <div class="post-card-body">
+              <div class="post-card-meta">
+                <time datetime="{{ post.published_at }}">
+                  {% if post.published_at %}{{ post.published_at | date_format }}{% endif %}
+                </time>
+                <span>{{ post.reading_time }} min read</span>
+              </div>
+              <h2 class="post-card-title">
+                <a href="{{ post.url | safe }}">{{ post.title }}</a>
+              </h2>
+              <p class="post-card-excerpt">{{ post.excerpt }}</p>
+              <div class="post-card-footer">
+                <a href="{{ post.url | safe }}" class="read-more">Read more →</a>
+              </div>
+            </div>
+          </article>
+        {% endfor %}
+      </div>
+
+      {% if pagination %}
+        <nav class="pagination" aria-label="Page navigation">
+          {% if pagination.prev_url %}
+            <a href="{{ pagination.prev_url }}" class="pagination-prev">← Newer</a>
+          {% endif %}
+          <span class="pagination-info">Page {{ pagination.current_page }} of {{ pagination.total_pages }}</span>
+          {% if pagination.next_url %}
+            <a href="{{ pagination.next_url }}" class="pagination-next">Older →</a>
+          {% endif %}
+        </nav>
+      {% endif %}
+    {% endif %}
+  </div>
+</section>
+{% endblock content %}

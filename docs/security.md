@@ -201,7 +201,7 @@ The delete button is hidden in the admin UI for accounts that match guard 1 (sel
 
 ### Marking an account as protected
 
-The `synaptic-cli install` command automatically sets `is_protected = TRUE` on the
+The `synap-cli install` command automatically sets `is_protected = TRUE` on the
 account it creates. For manual upgrades, migration 0013 retroactively sets
 `is_protected = TRUE` on all pre-existing accounts that had `role = 'admin'`.
 

@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+
+{% block title %}
+  {% if query %}Search: {{ query }} — {% endif %}{{ site.name }}
+{% endblock title %}
+
+{% block content %}
+<div class="page-header">
+  <div class="container">
+    <span class="section-label">Search</span>
+    <h1>Find a Post</h1>
+  </div>
+</div>
+
+<div class="search-wrap">
+  <div class="container">
+    <form class="search-form" action="/search" method="get">
+      <label for="search-input" class="sr-only">Search</label>
+      {# Search query is capped at 25 characters — enforced here and server-side. #}
+      <input
+        type="search"
+        id="search-input"
+        name="q"
+        value="{{ query }}"
+        placeholder="Search posts…"
+        maxlength="25"
+        autofocus
+      >
+      <button type="submit">Search</button>
+    </form>
+
+    {% if query %}
+      <p class="search-result-count">
+        {{ result_count }} result{% if result_count != 1 %}s{% endif %} for "<strong>{{ query }}</strong>"
+      </p>
+
+      {% if results | length == 0 %}
+        <p style="text-align:center;color:var(--muted)">No posts matched your search. Try different keywords.</p>
+      {% else %}
+        <div class="post-grid">
+          {% for post in results %}
+            <article class="post-card">
+              <div class="post-card-body">
+                <div class="post-card-meta">
+                  <time datetime="{{ post.published_at }}">
+                    {% if post.published_at %}{{ post.published_at | date_format }}{% endif %}
+                  </time>
+                </div>
+                <h2 class="post-card-title">
+                  <a href="{{ post.url | safe }}">{{ post.title }}</a>
+                </h2>
+                <p class="post-card-excerpt">{{ post.excerpt }}</p>
+                <div class="post-card-footer">
+                  <a href="{{ post.url | safe }}" class="read-more">Read more →</a>
+                </div>
+              </div>
+            </article>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endif %}
+  </div>
+</div>
+{% endblock content %}

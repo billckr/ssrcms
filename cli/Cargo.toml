@@ -1,10 +1,10 @@
 [package]
-name = "synaptic-cli"
+name = "synap-cli"
 version.workspace = true
 edition.workspace = true
 
 [[bin]]
-name = "synaptic-cli"
+name = "synap-cli"
 path = "src/main.rs"
 
 [dependencies]
