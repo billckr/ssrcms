@@ -13,6 +13,7 @@ pub enum ThemeAction {
     /// Activate a theme for a site
     Activate {
         /// Name of the theme to activate (must match the name field in theme.toml)
+        #[arg(value_name = "THEME")]
         name: String,
         /// Site hostname or UUID to target (omit for single-site / global fallback)
         #[arg(long)]
