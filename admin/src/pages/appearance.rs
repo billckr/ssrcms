@@ -312,7 +312,7 @@ pub fn render_theme_editor(
 
         let del_btn2 = delete_btn;
         let ro = if is_readonly { " readonly" } else { "" };
-        let save_btn = if is_readonly { "" } else { r#"<button type="submit" form="save-form" class="btn btn-primary">Save file</button>"# };
+        let save_btn = if is_readonly { "" } else { r#"<button type="submit" form="save-form" class="btn btn-primary" id="save-btn" disabled>Save file</button>"# };
         let edited_at = if has_backup {
             files.iter()
                 .find(|f| f.rel_path == rel)
@@ -341,7 +341,18 @@ pub fn render_theme_editor(
   <strong>Tera comments:</strong> <code>&#123;# comment #&#125;</code> — use inside <code>&#123;% block %&#125;</code> tags only.
   <code>&#123;% extends %&#125;</code> must be the very first line of the file — nothing (not even a comment) may appear before it.
   CSS/HTML comments (<code>&lt;!-- --&gt;</code>, <code>/* */</code>) outside of blocks will also break parsing.
-</div>"#,
+</div>
+<script>
+(function() {{
+  var textarea = document.querySelector('.editor-textarea');
+  var btn = document.getElementById('save-btn');
+  if (!textarea || !btn) return;
+  var original = textarea.value;
+  textarea.addEventListener('input', function() {{
+    btn.disabled = textarea.value === original;
+  }});
+}})();
+</script>"#,
             file     = rel_esc,
             theme    = theme_esc,
             content  = content_esc,
