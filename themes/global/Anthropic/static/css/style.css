@@ -432,14 +432,14 @@ a:hover {
 
 .btn-unsave:hover { color: var(--text-dark); }
 
-/* ── User bar ── */
+/* ── User bar (inside .site-nav) ── */
 .user-bar {
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  padding: 0.5rem 2rem;
   font-size: 0.875rem;
   white-space: nowrap;
+  margin-left: auto;
 }
 
 .user-bar-name {

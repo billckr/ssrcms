@@ -51,17 +51,17 @@
           <li><a href="{{ item.url }}"{% if item.target == "_blank" %} target="_blank" rel="noopener"{% endif %}{% if item.is_current %} aria-current="page"{% endif %}>{{ item.label }}</a></li>
         {% endfor %}
       </ul>
+      {% if session.is_logged_in %}
+        <div class="user-bar">
+          <a href="/account" class="user-bar-name">{{ session.user.display_name }}</a>
+          <a href="/account/logout" class="user-bar-logout">Sign out</a>
+        </div>
+      {% else %}
+        <div class="user-bar">
+          <a href="/login" class="user-bar-login">Sign in</a>
+        </div>
+      {% endif %}
     </nav>
-    {% if session.is_logged_in %}
-      <div class="user-bar">
-        <a href="/account" class="user-bar-name">{{ session.user.display_name }}</a>
-        <a href="/account/logout" class="user-bar-logout">Sign out</a>
-      </div>
-    {% else %}
-      <div class="user-bar">
-        <a href="/login" class="user-bar-login">Sign in</a>
-      </div>
-    {% endif %}
   </header>
 
   <main class="site-main">

@@ -859,12 +859,23 @@ p { margin: 0 0 1rem; }
 
   .site-nav { gap: 1rem; width: 100%; }
 
-  .header-search {
+  .header-right {
     width: 100%;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
     padding-bottom: 0.75rem;
   }
 
+  .header-search {
+    width: 100%;
+  }
+
   .header-search input[type="search"] { flex: 1; width: auto; }
+
+  .user-bar {
+    padding-bottom: 0.25rem;
+  }
 
   .nav-links { gap: 0; }
 
