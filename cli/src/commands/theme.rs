@@ -187,7 +187,7 @@ async fn list(site: Option<String>, database_url: Option<String>) -> anyhow::Res
                 let status = if *is_active {
                     "active"
                 } else if installed {
-                    "installed"
+                    "disabled"
                 } else {
                     "available"
                 };
