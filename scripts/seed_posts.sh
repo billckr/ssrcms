@@ -332,15 +332,14 @@ if [[ "$EXTRAS" == "1" && "$SUCCESS" -gt 0 ]]; then
 
     for CAT in "${CAT_NAMES[@]}"; do
         CAT_SLUG=$(echo "$CAT" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g; s/--*/-/g; s/^-//; s/-$//')
-        SQL="INSERT INTO taxonomies (name, slug, taxonomy, site_id)
+        # Insert (ignore conflict), then always SELECT for the id.
+        command psql "$DATABASE_URL" --tuples-only --no-align -c \
+            "INSERT INTO taxonomies (name, slug, taxonomy, site_id)
              VALUES ('$CAT', '$CAT_SLUG', 'category', '$SITE_ID')
-             ON CONFLICT (site_id, slug, taxonomy) DO NOTHING
-             RETURNING id;"
-        ID=$(command psql "$DATABASE_URL" --tuples-only --no-align -c "$SQL" 2>/dev/null | tr -d '[:space:]')
-        # ON CONFLICT returns nothing — fetch the existing row
-        if [[ -z "$ID" ]]; then
-            ID=$(psql -c "SELECT id FROM taxonomies WHERE site_id = '$SITE_ID' AND slug = '$CAT_SLUG' AND taxonomy = 'category' LIMIT 1;" | tr -d '[:space:]')
-        fi
+             ON CONFLICT (site_id, slug, taxonomy) DO NOTHING;" > /dev/null 2>&1
+        ID=$(command psql "$DATABASE_URL" --tuples-only --no-align -c \
+            "SELECT id FROM taxonomies WHERE site_id = '$SITE_ID' AND slug = '$CAT_SLUG' AND taxonomy = 'category' LIMIT 1;" \
+            2>/dev/null | tr -d '[:space:]')
         if [[ -n "$ID" ]]; then
             TAX_IDS+=("category:$CAT:$ID")
             printf "  category  %s\n" "$CAT"
@@ -349,14 +348,13 @@ if [[ "$EXTRAS" == "1" && "$SUCCESS" -gt 0 ]]; then
 
     for TAG in "${TAG_NAMES[@]}"; do
         TAG_SLUG=$(echo "$TAG" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g; s/--*/-/g; s/^-//; s/-$//')
-        SQL="INSERT INTO taxonomies (name, slug, taxonomy, site_id)
+        command psql "$DATABASE_URL" --tuples-only --no-align -c \
+            "INSERT INTO taxonomies (name, slug, taxonomy, site_id)
              VALUES ('$TAG', '$TAG_SLUG', 'tag', '$SITE_ID')
-             ON CONFLICT (site_id, slug, taxonomy) DO NOTHING
-             RETURNING id;"
-        ID=$(command psql "$DATABASE_URL" --tuples-only --no-align -c "$SQL" 2>/dev/null | tr -d '[:space:]')
-        if [[ -z "$ID" ]]; then
-            ID=$(psql -c "SELECT id FROM taxonomies WHERE site_id = '$SITE_ID' AND slug = '$TAG_SLUG' AND taxonomy = 'tag' LIMIT 1;" | tr -d '[:space:]')
-        fi
+             ON CONFLICT (site_id, slug, taxonomy) DO NOTHING;" > /dev/null 2>&1
+        ID=$(command psql "$DATABASE_URL" --tuples-only --no-align -c \
+            "SELECT id FROM taxonomies WHERE site_id = '$SITE_ID' AND slug = '$TAG_SLUG' AND taxonomy = 'tag' LIMIT 1;" \
+            2>/dev/null | tr -d '[:space:]')
         if [[ -n "$ID" ]]; then
             TAX_IDS+=("tag:$TAG:$ID")
             printf "  tag       %s\n" "$TAG"
