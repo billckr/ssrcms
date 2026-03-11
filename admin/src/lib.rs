@@ -108,6 +108,7 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
         {dash}
         {posts}
         {pages}
+        {menus}
         {media}
         {cats}
         {tags}
@@ -117,7 +118,6 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
         {plugins}
         {documentation}
         {appearance}
-        {menus}
         {settings}
       </ul>
       <div class="sidebar-footer">
