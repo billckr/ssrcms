@@ -443,6 +443,25 @@ async fn remove(
         );
     }
 
+    // Guard: refuse to remove the last local theme — the site must always have at least one.
+    let site_themes_dir = themes_root.join("sites").join(site_id.to_string());
+    let local_theme_count = std::fs::read_dir(&site_themes_dir)
+        .map(|entries| {
+            entries.flatten()
+                .filter(|e| e.path().is_dir() && e.path().join("theme.toml").exists())
+                .count()
+        })
+        .unwrap_or(0);
+
+    if local_theme_count <= 1 {
+        anyhow::bail!(
+            "Cannot remove '{}' — it is the only theme installed for this site. \
+             Activate a different theme first (synap-cli theme activate <theme> --site <hostname>), \
+             then remove this one.",
+            name
+        );
+    }
+
     // Path traversal guard: confirm site_path is a direct child of the site's theme dir.
     let expected_parent = themes_root
         .join("sites")
