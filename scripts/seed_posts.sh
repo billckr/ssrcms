@@ -50,8 +50,8 @@ Required (seed mode):
 Required (clear mode):
   -domain <hostname>        Site hostname to clear
   -clear                    Delete all posts, pages, comments, taxonomies,
-                            form submissions, and media rows for this site.
-                            Users and site settings are NOT affected.
+                            form submissions, media rows, and nav menus for
+                            this site. Users and site settings are NOT affected.
                             Prompts for confirmation unless -force is also set.
   -force                    Skip the confirmation prompt (use in scripts).
 
@@ -180,6 +180,7 @@ if [[ "$CLEAR" == "1" ]]; then
     TAX_COUNT=$(psql -c "SELECT COUNT(*) FROM taxonomies WHERE site_id = '$SITE_ID';" | tr -d '[:space:]')
     FORM_COUNT=$(psql -c "SELECT COUNT(*) FROM form_submissions WHERE site_id = '$SITE_ID';" | tr -d '[:space:]')
     MEDIA_COUNT=$(psql -c "SELECT COUNT(*) FROM media WHERE site_id = '$SITE_ID';" | tr -d '[:space:]')
+    MENU_COUNT=$(psql -c "SELECT COUNT(*) FROM nav_menus WHERE site_id = '$SITE_ID';" | tr -d '[:space:]')
 
     echo ""
     echo "  ── Content to delete for: $DOMAIN ──────────────────────"
@@ -188,6 +189,7 @@ if [[ "$CLEAR" == "1" ]]; then
     echo "  Categories / Tags: $TAX_COUNT"
     echo "  Form submissions : $FORM_COUNT"
     echo "  Media rows       : $MEDIA_COUNT  (files in uploads/ are NOT removed)"
+    echo "  Nav menus        : $MENU_COUNT  (items cascade)"
     echo ""
     echo "  Users and site settings are NOT affected."
     echo ""
@@ -209,6 +211,7 @@ if [[ "$CLEAR" == "1" ]]; then
     command psql "$DATABASE_URL" -c "DELETE FROM form_submissions WHERE site_id = '$SITE_ID';" > /dev/null
     command psql "$DATABASE_URL" -c "DELETE FROM media            WHERE site_id = '$SITE_ID';" > /dev/null
     command psql "$DATABASE_URL" -c "DELETE FROM media_folders    WHERE site_id = '$SITE_ID';" > /dev/null
+    command psql "$DATABASE_URL" -c "DELETE FROM nav_menus        WHERE site_id = '$SITE_ID';" > /dev/null
 
     echo "Cleared. All content removed for $DOMAIN."
     exit 0
