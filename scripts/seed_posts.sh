@@ -363,35 +363,72 @@ if [[ "$EXTRAS" == "1" && "$SUCCESS" -gt 0 ]]; then
         fi
     done
 
-    TAX_COUNT=${#TAX_IDS[@]}
-    if [[ "$TAX_COUNT" -eq 0 ]]; then
+    # Split into separate arrays for categories and tags so we can assign
+    # 1-3 of each type per post independently — more realistic test data.
+    CAT_IDS=()
+    TAG_IDS=()
+    for ENTRY in "${TAX_IDS[@]}"; do
+        if [[ "$ENTRY" == category:* ]]; then
+            CAT_IDS+=("$ENTRY")
+        else
+            TAG_IDS+=("$ENTRY")
+        fi
+    done
+
+    CAT_COUNT=${#CAT_IDS[@]}
+    TAG_COUNT=${#TAG_IDS[@]}
+
+    if [[ "$CAT_COUNT" -eq 0 && "$TAG_COUNT" -eq 0 ]]; then
         echo "  No taxonomies available — skipping assignments."
     else
-        # Shuffle post IDs and pick the first half
-        HALF=$(( (SUCCESS + 1) / 2 ))
+        # Target a random subset of posts (between 50-100%) matching comment behaviour.
+        SUBSET=$(( (SUCCESS * (50 + RANDOM % 51) / 100) ))
+        [[ "$SUBSET" -lt 1 ]] && SUBSET=1
         mapfile -t SHUFFLED < <(printf '%s\n' "${POST_IDS[@]}" | shuf)
-        TARGETS=("${SHUFFLED[@]:0:$HALF}")
+        TARGETS=("${SHUFFLED[@]:0:$SUBSET}")
 
         echo ""
-        echo "Assigning to $HALF of $SUCCESS items..."
+        echo "Assigning categories/tags to $SUBSET of $SUCCESS post(s)..."
         ASSIGNED=0
+
         for PID in "${TARGETS[@]}"; do
-            # Pick a random taxonomy entry (format: "type:name:uuid")
-            ENTRY="${TAX_IDS[$((RANDOM % TAX_COUNT))]}"
-            TID="${ENTRY##*:}"
-            TLABEL="${ENTRY%:*}"   # "type:name"
-            TTYPE="${TLABEL%%:*}"
-            TNAME="${TLABEL#*:}"
-            SQL="INSERT INTO post_taxonomies (post_id, taxonomy_id)
-                 VALUES ('$PID', '$TID')
-                 ON CONFLICT DO NOTHING;"
-            if command psql "$DATABASE_URL" -c "$SQL" > /dev/null 2>&1; then
-                printf "  assigned  %-10s  %s\n" "$TTYPE" "$TNAME"
-                ASSIGNED=$((ASSIGNED + 1))
+            # Assign 1-3 random categories
+            if [[ "$CAT_COUNT" -gt 0 ]]; then
+                NUM_CATS=$(( 1 + RANDOM % 3 ))
+                [[ "$NUM_CATS" -gt "$CAT_COUNT" ]] && NUM_CATS=$CAT_COUNT
+                mapfile -t SHUFFLED_CATS < <(printf '%s\n' "${CAT_IDS[@]}" | shuf)
+                for (( i=0; i<NUM_CATS; i++ )); do
+                    ENTRY="${SHUFFLED_CATS[$i]}"
+                    TID="${ENTRY##*:}"
+                    TNAME="${ENTRY#*:}"; TNAME="${TNAME%:*}"
+                    SQL="INSERT INTO post_taxonomies (post_id, taxonomy_id) VALUES ('$PID', '$TID') ON CONFLICT DO NOTHING;"
+                    if command psql "$DATABASE_URL" -c "$SQL" > /dev/null 2>&1; then
+                        printf "  assigned  category   %s\n" "$TNAME"
+                        ASSIGNED=$((ASSIGNED + 1))
+                    fi
+                done
+            fi
+
+            # Assign 1-3 random tags
+            if [[ "$TAG_COUNT" -gt 0 ]]; then
+                NUM_TAGS=$(( 1 + RANDOM % 3 ))
+                [[ "$NUM_TAGS" -gt "$TAG_COUNT" ]] && NUM_TAGS=$TAG_COUNT
+                mapfile -t SHUFFLED_TAGS < <(printf '%s\n' "${TAG_IDS[@]}" | shuf)
+                for (( i=0; i<NUM_TAGS; i++ )); do
+                    ENTRY="${SHUFFLED_TAGS[$i]}"
+                    TID="${ENTRY##*:}"
+                    TNAME="${ENTRY#*:}"; TNAME="${TNAME%:*}"
+                    SQL="INSERT INTO post_taxonomies (post_id, taxonomy_id) VALUES ('$PID', '$TID') ON CONFLICT DO NOTHING;"
+                    if command psql "$DATABASE_URL" -c "$SQL" > /dev/null 2>&1; then
+                        printf "  assigned  tag        %s\n" "$TNAME"
+                        ASSIGNED=$((ASSIGNED + 1))
+                    fi
+                done
             fi
         done
+
         echo ""
-        echo "Extras done. $ASSIGNED assignments made."
+        echo "Extras done. $ASSIGNED category/tag assignments across $SUBSET post(s)."
     fi
 fi
 
