@@ -25,7 +25,7 @@ use crate::app_state::AppState;
 use crate::handlers::home::{build_post_context, build_site_context};
 use crate::middleware::site::CurrentSite;
 use crate::models::post::{self, ListFilter, PostStatus, PostType};
-use crate::templates::context::{ContextBuilder, NavContext, RequestContext, SessionContext};
+use crate::templates::context::{ContextBuilder, RequestContext, SessionContext};
 
 /// Hardcoded handler for `/sitemap.xml`.
 ///
@@ -98,6 +98,7 @@ async fn render_plugin_route(
     base_url: &str,
 ) -> crate::errors::Result<String> {
     let site_ctx = build_site_context(&state, Some(site_id), base_url).await?;
+    let nav = crate::models::nav_menu::build_nav_context(&state.db, site_id, path).await;
 
     let mut ctx = ContextBuilder {
         site: site_ctx,
@@ -110,7 +111,7 @@ async fn render_plugin_route(
             is_logged_in: false,
             user: None,
         },
-        nav: NavContext::default(),
+        nav,
     }
     .into_tera_context();
 

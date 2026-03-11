@@ -209,6 +209,11 @@ pub async fn new_page(
 async fn new_post_type(state: AppState, post_type: &str, site_id: Option<Uuid>, ctx: admin::PageContext) -> Html<String> {
     let (categories, tags) = fetch_term_options(&state, site_id).await;
     let available_templates = if post_type == "page" { scan_templates(&state, site_id) } else { vec![] };
+    let available_parents = if post_type == "page" {
+        fetch_parent_options(&state, site_id, None).await
+    } else {
+        vec![]
+    };
     let edit = PostEdit {
         id: None,
         title: String::new(),
@@ -231,6 +236,8 @@ async fn new_post_type(state: AppState, post_type: &str, site_id: Option<Uuid>, 
         comment_count: 0,
         author_name: String::new(),
         site_name: String::new(),
+        parent_id: None,
+        available_parents,
     };
     Html(admin::pages::posts::render_editor(&edit, None, &ctx))
 }
@@ -324,6 +331,12 @@ async fn edit_post_type(state: AppState, id: Uuid, site_id: Option<Uuid>, is_aut
         .await
         .unwrap_or(0) as u64;
 
+    let available_parents = if post.post_type == "page" {
+        fetch_parent_options(&state, site_id, Some(id)).await
+    } else {
+        vec![]
+    };
+
     let edit = PostEdit {
         id: Some(post.id.to_string()),
         title: post.title.clone(),
@@ -346,6 +359,8 @@ async fn edit_post_type(state: AppState, id: Uuid, site_id: Option<Uuid>, is_aut
         post_password_set: post.post_password.is_some(),
         author_name,
         site_name,
+        parent_id: post.parent_id.map(|id| id.to_string()),
+        available_parents,
     };
 
     Html(admin::pages::posts::render_editor(&edit, None, &ctx)).into_response()
@@ -408,6 +423,8 @@ pub struct PostForm {
     /// "true" when comments are enabled, "false" or absent to disable.
     #[serde(default)]
     pub comments_enabled: String,
+    /// UUID of the parent page, empty string = no parent.
+    pub parent_id: Option<String>,
 }
 
 pub async fn save_new(
@@ -432,11 +449,16 @@ pub async fn save_new(
 
     let form_comments_enabled = form.comments_enabled == "true";
 
+    let form_parent_id: Option<Uuid> = form.parent_id.as_deref()
+        .filter(|s| !s.is_empty())
+        .and_then(|s| s.parse::<Uuid>().ok());
+
     // Require content when publishing.
     if matches!(status, PostStatus::Published) && content_is_empty(&form.content) {
         let cs = state.site_hostname(admin.site_id);
         let ctx = super::page_ctx_full(&state, &admin, &cs).await;
         let (categories, tags) = fetch_term_options(&state, admin.site_id).await;
+        let available_parents = if form.post_type == "page" { fetch_parent_options(&state, admin.site_id, None).await } else { vec![] };
         let edit = PostEdit {
             id: None,
             title: form.title,
@@ -459,6 +481,8 @@ pub async fn save_new(
             comment_count: 0,
             author_name: String::new(),
             site_name: String::new(),
+            parent_id: form.parent_id.clone().filter(|s| !s.is_empty()),
+            available_parents,
         };
         return Html(admin::pages::posts::render_editor(&edit, Some("Content is required before publishing."), &ctx)).into_response();
     }
@@ -486,6 +510,7 @@ pub async fn save_new(
         template: form.template.clone().filter(|s| !s.is_empty()),
         post_password_hash,
         comments_enabled: form_comments_enabled,
+        parent_id: form_parent_id,
     };
 
     match crate::models::post::create(&state.db, &create).await {
@@ -502,6 +527,7 @@ pub async fn save_new(
             let cs = state.site_hostname(admin.site_id);
             let ctx = super::page_ctx_full(&state, &admin, &cs).await;
             let (categories, tags) = fetch_term_options(&state, admin.site_id).await;
+            let available_parents = if form.post_type == "page" { fetch_parent_options(&state, admin.site_id, None).await } else { vec![] };
             let edit = PostEdit {
                 id: None,
                 title: form.title,
@@ -524,6 +550,8 @@ pub async fn save_new(
                 comment_count: 0,
                 author_name: String::new(),
                 site_name: String::new(),
+                parent_id: form_parent_id.map(|id| id.to_string()),
+                available_parents,
             };
             let msg = friendly_save_error(&e);
             Html(admin::pages::posts::render_editor(&edit, Some(&msg), &ctx)).into_response()
@@ -574,12 +602,16 @@ pub async fn save_edit(
     };
     let published_at = parse_datetime(form.published_at.as_deref());
     let form_comments_enabled = form.comments_enabled == "true";
+    let form_parent_id: Option<Uuid> = form.parent_id.as_deref()
+        .filter(|s| !s.is_empty())
+        .and_then(|s| s.parse::<Uuid>().ok());
 
     // Require content when publishing.
     if matches!(status, PostStatus::Published) && content_is_empty(&form.content) {
         let cs = state.site_hostname(admin.site_id);
         let ctx = super::page_ctx_full(&state, &admin, &cs).await;
         let (categories, tags) = fetch_term_options(&state, admin.site_id).await;
+        let available_parents = if form.post_type == "page" { fetch_parent_options(&state, admin.site_id, Some(id)).await } else { vec![] };
         let edit = PostEdit {
             id: Some(id.to_string()),
             title: form.title,
@@ -602,6 +634,8 @@ pub async fn save_edit(
             comment_count: 0,
             author_name: String::new(),
             site_name: String::new(),
+            parent_id: form.parent_id.clone().filter(|s| !s.is_empty()),
+            available_parents,
         };
         return Html(admin::pages::posts::render_editor(&edit, Some("Content is required before publishing."), &ctx)).into_response();
     }
@@ -630,6 +664,8 @@ pub async fn save_edit(
         clear_post_password,
         new_post_password_hash,
         comments_enabled: Some(form_comments_enabled),
+        // Some(None) clears parent; Some(Some(id)) sets it; None leaves unchanged
+        parent_id: Some(form_parent_id),
     };
 
     match crate::models::post::update(&state.db, id, &update).await {
@@ -657,6 +693,7 @@ pub async fn save_edit(
                 .filter(|t| t.taxonomy == "tag")
                 .map(|t| t.id.to_string())
                 .collect();
+            let available_parents = if form.post_type == "page" { fetch_parent_options(&state, admin.site_id, Some(id)).await } else { vec![] };
             let edit = PostEdit {
                 id: Some(id.to_string()),
                 title: form.title,
@@ -679,6 +716,8 @@ pub async fn save_edit(
                 comment_count: 0,
                 author_name: String::new(),
                 site_name: String::new(),
+                parent_id: form_parent_id.map(|id| id.to_string()),
+                available_parents,
             };
             let msg = friendly_save_error(&e);
             Html(admin::pages::posts::render_editor(&edit, Some(&msg), &ctx)).into_response()
@@ -799,6 +838,25 @@ async fn bulk_delete_type(state: AppState, admin: AdminUser, ids: Vec<String>, r
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
+
+/// Fetch (id, title) pairs of published pages for the parent selector dropdown.
+/// Excludes the page being edited (exclude_id) to prevent a page being its own parent.
+async fn fetch_parent_options(
+    state: &AppState,
+    site_id: Option<Uuid>,
+    exclude_id: Option<Uuid>,
+) -> Vec<(String, String)> {
+    let pages = crate::models::post::get_published_pages_by_site(&state.db, site_id)
+        .await
+        .unwrap_or_else(|e| {
+            tracing::warn!("failed to fetch parent page options: {:?}", e);
+            vec![]
+        });
+    pages.into_iter()
+        .filter(|p| exclude_id.map_or(true, |ex| p.id != ex))
+        .map(|p| (p.id.to_string(), p.title.clone()))
+        .collect()
+}
 
 async fn fetch_term_options(state: &AppState, site_id: Option<Uuid>) -> (Vec<TermOption>, Vec<TermOption>) {
     let cats = crate::models::taxonomy::list(&state.db, site_id, TaxonomyType::Category).await.unwrap_or_else(|e| {

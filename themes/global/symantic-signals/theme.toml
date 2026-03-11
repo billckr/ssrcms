@@ -4,3 +4,7 @@ version     = "1.0.1"
 api_version = "1"
 description = "Modern theme with style."
 author      = "Synaptic Signals"
+
+[nav_locations]
+primary = "Primary Navigation"
+footer  = "Footer Links"

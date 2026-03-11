@@ -63,6 +63,7 @@ async fn test_single_post_renders_html() {
         template: None,
         post_password_hash: None,
         comments_enabled: false,
+        parent_id: None,
     })
     .await
     .expect("failed to create test post");
@@ -78,6 +79,8 @@ async fn test_single_post_renders_html() {
         HashMap::new(), // meta
         0,            // comment_count
         base_url,
+        None,         // page_path
+        vec![],       // breadcrumbs
     );
 
     // ── Initialise TemplateEngine ─────────────────────────────────────────────

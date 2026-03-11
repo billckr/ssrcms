@@ -101,6 +101,7 @@ pub mod dashboard;
 pub mod documentation;
 pub mod forms;
 pub mod media;
+pub mod menus;
 pub mod plugins;
 pub mod posts;
 pub mod profile;

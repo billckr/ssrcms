@@ -84,6 +84,7 @@ async fn render_home(
 
     let site_ctx = build_site_context(&state, Some(site_id), base_url).await?;
     let pagination = PaginationContext::new(query.page, per_page, total, base_url, "");
+    let nav = crate::models::nav_menu::build_nav_context(&state.db, site_id, uri.path()).await;
 
     let mut ctx = ContextBuilder {
         site: site_ctx,
@@ -93,7 +94,7 @@ async fn render_home(
             query: HashMap::new(),
         },
         session: session_ctx,
-        nav: NavContext::default(),
+        nav,
     }
     .into_tera_context();
 
@@ -172,6 +173,11 @@ async fn render_404(state: &AppState, path: &str, site_id: Option<uuid::Uuid>) -
     let base_url = &state.settings.base_url;
     let site_ctx = build_site_context(state, site_id, base_url).await?;
 
+    let nav = if let Some(sid) = site_id {
+        crate::models::nav_menu::build_nav_context(&state.db, sid, path).await
+    } else {
+        NavContext::default()
+    };
     let mut ctx = ContextBuilder {
         site: site_ctx,
         request: RequestContext {
@@ -180,7 +186,7 @@ async fn render_404(state: &AppState, path: &str, site_id: Option<uuid::Uuid>) -
             query: HashMap::new(),
         },
         session: SessionContext { is_logged_in: false, user: None },
-        nav: NavContext::default(),
+        nav,
     }
     .into_tera_context();
 
@@ -210,7 +216,7 @@ pub(crate) async fn build_post_context(
     p: &crate::models::post::Post,
     base_url: &str,
 ) -> Result<PostContext> {
-    use crate::models::{media, taxonomy, user};
+    use crate::models::{media, post as post_model, taxonomy, user};
 
     let author = user::get_by_id(&state.db, p.author_id).await?;
     let all_terms = taxonomy::for_post(&state.db, p.id).await?;
@@ -255,6 +261,15 @@ pub(crate) async fn build_post_context(
 
     let meta = post::get_meta(&state.db, p.id).await.unwrap_or_default();
 
+    // For pages with a parent, compute the full hierarchical URL path and breadcrumbs.
+    let (page_path, breadcrumbs) = if p.post_type == "page" {
+        let full_path = post_model::get_full_page_path(&state.db, p).await;
+        let crumbs = post_model::get_page_breadcrumbs(&state.db, p, base_url).await;
+        (Some(full_path), crumbs)
+    } else {
+        (None, vec![])
+    };
+
     Ok(PostContext::build(
         p,
         &author,
@@ -264,6 +279,8 @@ pub(crate) async fn build_post_context(
         meta,
         0, // comment_count — Phase 3
         base_url,
+        page_path,
+        breadcrumbs,
     ))
 }
 

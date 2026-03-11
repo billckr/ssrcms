@@ -4,3 +4,7 @@ version     = "1.0.0"
 api_version = "1"
 description = "Plain, but not without style."
 author      = "Synaptic Signals"
+
+[nav_locations]
+primary = "Primary Navigation"
+footer  = "Footer Links"

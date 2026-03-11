@@ -1,5 +1,5 @@
 use axum::{
-    extract::{Path, State},
+    extract::State,
     response::{Html, IntoResponse, Response},
     http::header,
 };
@@ -11,73 +11,94 @@ use uuid::Uuid;
 use crate::app_state::AppState;
 use crate::middleware::site::CurrentSite;
 use crate::models::post::{self, ListFilter, PostStatus, PostType};
-use crate::templates::context::{ContextBuilder, NavContext, RequestContext, SessionContext};
+use crate::templates::context::{ContextBuilder, RequestContext, SessionContext};
 
 use super::home::{build_post_context, build_site_context, render_error_page};
 
-/// `GET /:slug` — render a static page.
+/// Fallback handler — render a static page, supporting nested paths like /services/service-1.
 pub async fn single_page(
     State(state): State<AppState>,
     current_site: CurrentSite,
     session: Session,
-    Path(slug): Path<String>,
     jar: SignedCookieJar,
     axum::extract::OriginalUri(uri): axum::extract::OriginalUri,
 ) -> Response {
-    let path = uri.path().to_string();
+    let request_path = uri.path().to_string();
     let site_id = current_site.site.id;
     let base_url = current_site.base_url.clone();
 
-    // Password gate: check before full render.
-    if let Ok(post_record) = post::get_published_by_slug(&state.db, Some(site_id), &slug).await {
-        if let Some(ref hash) = post_record.post_password {
-            if !super::post_unlock::is_unlocked(&jar, post_record.id, hash) {
-                return super::post_unlock::gate_response(
-                    &post_record.title,
-                    &format!("/{}/unlock", slug),
-                    None,
-                );
+    // Split URI path into segments, filtering empty parts from leading/trailing slashes
+    let path = uri.path().trim_start_matches('/').to_string();
+    let segments: Vec<&str> = path.split('/').filter(|s: &&str| !s.is_empty()).collect();
+    let slug = segments.first().copied().unwrap_or("");
+
+    // Password gate: only applies to top-level pages (no parent).
+    // Nested pages skip the password gate in MVP.
+    if segments.len() == 1 {
+        if let Ok(post_record) = post::get_published_by_slug(&state.db, Some(site_id), slug).await {
+            if let Some(ref hash) = post_record.post_password {
+                if post_record.parent_id.is_none()
+                    && !super::post_unlock::is_unlocked(&jar, post_record.id, hash)
+                {
+                    return super::post_unlock::gate_response(
+                        &post_record.title,
+                        &format!("/{}/unlock", slug),
+                        None,
+                    );
+                }
             }
         }
     }
 
     // Detect feed template early so we can set the correct Content-Type.
-    let is_feed = post::get_published_by_slug(&state.db, Some(site_id), &slug)
-        .await
-        .ok()
-        .and_then(|p| p.template)
-        .map(|t| t == "feed")
-        .unwrap_or(false);
+    let is_feed = if segments.len() == 1 {
+        post::get_published_by_slug(&state.db, Some(site_id), slug)
+            .await
+            .ok()
+            .and_then(|p| p.template)
+            .map(|t| t == "feed")
+            .unwrap_or(false)
+    } else {
+        false
+    };
 
     let session_ctx = super::resolve_session(&state, &session).await;
-    match render_page(state.clone(), slug, uri, site_id, &base_url, session_ctx).await {
+    match render_page(state.clone(), segments, uri, site_id, &base_url, session_ctx).await {
         Ok(xml) if is_feed => (
             [(header::CONTENT_TYPE, "application/rss+xml; charset=utf-8")],
             xml,
         ).into_response(),
         Ok(html) => Html(html).into_response(),
-        Err(e) => render_error_page(e, &state, &path, Some(current_site.site.id)).await,
+        Err(e) => render_error_page(e, &state, &request_path, Some(current_site.site.id)).await,
     }
 }
 
 async fn render_page(
     state: AppState,
-    slug: String,
+    segments: Vec<&str>,
     uri: axum::http::Uri,
     site_id: Uuid,
     base_url: &str,
     session_ctx: SessionContext,
 ) -> crate::errors::Result<String> {
-    // Look up a published page (post_type = 'page') by slug
-    let post_record = post::get_published_by_slug(&state.db, Some(site_id), &slug).await?;
+    // Look up the page: single segment = slug lookup, multiple = hierarchical path
+    let post_record = if segments.len() == 1 {
+        post::get_published_by_slug(&state.db, Some(site_id), segments[0]).await?
+    } else {
+        post::get_page_by_path(&state.db, Some(site_id), &segments).await?
+    };
 
     // Verify it is actually a page
     if post_record.post_type != PostType::Page.as_str() {
-        return Err(crate::errors::AppError::NotFound(format!("page '{slug}'")));
+        return Err(crate::errors::AppError::NotFound(format!(
+            "page '{}'",
+            segments.join("/")
+        )));
     }
 
     let page_ctx = build_post_context(&state, &post_record, base_url).await?;
     let site_ctx = build_site_context(&state, Some(site_id), base_url).await?;
+    let nav = crate::models::nav_menu::build_nav_context(&state.db, site_id, uri.path()).await;
 
     let mut ctx = ContextBuilder {
         site: site_ctx,
@@ -89,7 +110,7 @@ async fn render_page(
                 .unwrap_or_default(),
         },
         session: session_ctx,
-        nav: NavContext::default(),
+        nav,
     }
     .into_tera_context();
 

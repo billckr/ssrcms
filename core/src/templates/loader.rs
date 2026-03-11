@@ -11,7 +11,7 @@ use tracing::info;
 
 use crate::plugins::HookRegistry;
 use crate::templates::filters;
-use crate::templates::functions::{GetPostsFunction, GetTermsFunction, HookFunction, UrlForFunction};
+use crate::templates::functions::{GetMenuFunction, GetPostsFunction, GetTermsFunction, HookFunction, UrlForFunction};
 use crate::errors::{AppError, Result};
 
 /// Thread-safe Tera template engine wrapper.
@@ -216,6 +216,12 @@ impl TemplateEngine {
             GetTermsFunction {
                 pool: self.db.clone(),
                 base_url: self.base_url.clone(),
+            },
+        );
+        tera.register_function(
+            "get_menu",
+            GetMenuFunction {
+                pool: self.db.clone(),
             },
         );
     }

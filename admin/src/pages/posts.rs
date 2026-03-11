@@ -43,6 +43,10 @@ pub struct PostEdit {
     pub author_name: String,
     /// Hostname of the site this post belongs to (empty for new posts / global admin context).
     pub site_name: String,
+    /// UUID of the parent page (pages only). None = top-level.
+    pub parent_id: Option<String>,
+    /// (id, title) pairs of published pages on this site, excluding self. For parent dropdown.
+    pub available_parents: Vec<(String, String)>,
 }
 
 pub struct TermOption {
@@ -501,6 +505,38 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
         String::new()
     };
 
+    // Parent page selector — only shown for pages with at least one candidate parent.
+    let parent_section = if post.post_type == "page" && !post.available_parents.is_empty() {
+        let current_parent = post.parent_id.as_deref().unwrap_or("");
+        let opts = std::iter::once(("".to_string(), "— None (top-level) —".to_string()))
+            .chain(post.available_parents.iter().map(|(id, title)| (id.clone(), title.clone())))
+            .map(|(val, label)| {
+                let selected = if val == current_parent { " selected" } else { "" };
+                format!(
+                    r#"<option value="{val}"{selected}>{label}</option>"#,
+                    val = crate::html_escape(&val),
+                    label = crate::html_escape(&label),
+                    selected = selected,
+                )
+            })
+            .collect::<Vec<_>>().join("");
+        format!(
+            r#"<div class="form-group">
+          <label for="parent_id">Parent Page</label>
+          <select id="parent_id" name="parent_id">{opts}</select>
+          <small>Set a parent to create a nested page URL.</small>
+        </div>"#,
+            opts = opts,
+        )
+    } else {
+        // Hidden field to always submit an empty parent_id for pages with no candidates
+        if post.post_type == "page" {
+            r#"<input type="hidden" name="parent_id" value="">"#.to_string()
+        } else {
+            String::new()
+        }
+    };
+
     let categories_section = if post.post_type != "page" {
         format!(r#"<div class="form-section">
           <h3>Categories</h3>
@@ -669,6 +705,7 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
       </div>
       {featured_image_section}
       {template_section}
+      {parent_section}
       {categories_section}
     </div>
   </div>
@@ -742,6 +779,7 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
         },
         post_type = crate::html_escape(&post.post_type),
         template_section = template_section,
+        parent_section = parent_section,
         categories_section = categories_section,
         featured_image_section = featured_image_section,
         password_section = password_section,

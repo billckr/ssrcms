@@ -68,6 +68,15 @@ pub struct Post {
     pub comments_enabled: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    pub parent_id: Option<Uuid>,
+}
+
+/// A single breadcrumb item for hierarchical page navigation.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BreadcrumbItem {
+    pub label: String,
+    pub url: String,
+    pub is_current: bool,
 }
 
 /// Full context object for a post, as exposed to Tera templates.
@@ -82,6 +91,10 @@ pub struct PostContext {
     pub status: String,
     pub post_type: String,
     pub url: String,
+    /// UUID string of the parent page, or null for top-level pages/posts.
+    pub parent_id: Option<String>,
+    /// Breadcrumb trail for hierarchical pages (Home → Parent → Current).
+    pub breadcrumbs: Vec<BreadcrumbItem>,
     pub published_at: Option<String>,
     pub updated_at: String,
     pub author: UserContext,
@@ -98,6 +111,10 @@ pub struct PostContext {
 
 impl PostContext {
     /// Build a PostContext from a Post and its related data.
+    ///
+    /// `page_path` overrides the URL for hierarchical pages (e.g. `/services/service-1`).
+    /// For non-page post types, pass `None`.
+    /// `breadcrumbs` is populated for pages with ancestors.
     pub fn build(
         post: &Post,
         author: &User,
@@ -107,10 +124,16 @@ impl PostContext {
         meta: HashMap<String, String>,
         comment_count: i64,
         base_url: &str,
+        page_path: Option<String>,
+        breadcrumbs: Vec<BreadcrumbItem>,
     ) -> Self {
-        let url = match post.post_type.as_str() {
-            "page" => format!("{}/{}", base_url, post.slug),
-            _ => format!("{}/blog/{}", base_url, post.slug),
+        let url = if let Some(ref path) = page_path {
+            format!("{}{}", base_url, path)
+        } else {
+            match post.post_type.as_str() {
+                "page" => format!("{}/{}", base_url, post.slug),
+                _ => format!("{}/blog/{}", base_url, post.slug),
+            }
         };
 
         let excerpt = post.excerpt.clone().unwrap_or_else(|| {
@@ -139,6 +162,8 @@ impl PostContext {
             status: post.status.clone(),
             post_type: post.post_type.clone(),
             url,
+            parent_id: post.parent_id.map(|id| id.to_string()),
+            breadcrumbs,
             published_at: post.published_at.map(|dt| dt.to_rfc3339()),
             updated_at: post.updated_at.to_rfc3339(),
             author: UserContext::from_user(author, base_url),
@@ -179,6 +204,8 @@ pub struct CreatePost {
     pub post_password_hash: Option<String>,
     /// Whether readers can post comments on this post.
     pub comments_enabled: bool,
+    /// UUID of the parent page. None for top-level pages/posts.
+    pub parent_id: Option<Uuid>,
 }
 
 /// Data for updating an existing post.
@@ -201,6 +228,8 @@ pub struct UpdatePost {
     pub new_post_password_hash: Option<String>,
     /// None = leave unchanged; Some(v) = update comments_enabled.
     pub comments_enabled: Option<bool>,
+    /// None = leave unchanged; Some(id) = set parent; Some(None) = clear parent.
+    pub parent_id: Option<Option<Uuid>>,
 }
 
 /// Strip all HTML tags, returning plain text content.
@@ -270,6 +299,7 @@ mod tests {
             comments_enabled: false,
             created_at: Utc::now(),
             updated_at: Utc::now(),
+            parent_id: None,
         }
     }
 
@@ -344,7 +374,7 @@ mod tests {
         let user = make_user();
         let post = make_post("post", "my-post", "content", None);
         let ctx = PostContext::build(
-            &post, &user, vec![], vec![], None, HashMap::new(), 0, "https://example.com",
+            &post, &user, vec![], vec![], None, HashMap::new(), 0, "https://example.com", None, vec![],
         );
         assert_eq!(ctx.url, "https://example.com/blog/my-post");
     }
@@ -354,7 +384,7 @@ mod tests {
         let user = make_user();
         let post = make_post("page", "about", "content", None);
         let ctx = PostContext::build(
-            &post, &user, vec![], vec![], None, HashMap::new(), 0, "https://example.com",
+            &post, &user, vec![], vec![], None, HashMap::new(), 0, "https://example.com", None, vec![],
         );
         assert_eq!(ctx.url, "https://example.com/about");
     }
@@ -364,7 +394,7 @@ mod tests {
         let user = make_user();
         let post = make_post("post", "slug", "Some content.", Some("Custom excerpt.".to_string()));
         let ctx = PostContext::build(
-            &post, &user, vec![], vec![], None, HashMap::new(), 0, "https://example.com",
+            &post, &user, vec![], vec![], None, HashMap::new(), 0, "https://example.com", None, vec![],
         );
         assert_eq!(ctx.excerpt, "Custom excerpt.");
     }
@@ -375,7 +405,7 @@ mod tests {
         let content = "word ".repeat(100);
         let post = make_post("post", "slug", &content, None);
         let ctx = PostContext::build(
-            &post, &user, vec![], vec![], None, HashMap::new(), 0, "https://example.com",
+            &post, &user, vec![], vec![], None, HashMap::new(), 0, "https://example.com", None, vec![],
         );
         assert!(ctx.excerpt.ends_with(" ..."), "excerpt should end with ' ...'");
         let word_count = ctx.excerpt.trim_end_matches(" ...").split_whitespace().count();
@@ -387,7 +417,7 @@ mod tests {
         let user = make_user();
         let post = make_post("post", "slug", "short content here", None);
         let ctx = PostContext::build(
-            &post, &user, vec![], vec![], None, HashMap::new(), 0, "https://example.com",
+            &post, &user, vec![], vec![], None, HashMap::new(), 0, "https://example.com", None, vec![],
         );
         assert!(!ctx.excerpt.ends_with(" ..."));
     }
@@ -398,7 +428,7 @@ mod tests {
         let content = "word ".repeat(200);
         let post = make_post("post", "slug", &content, None);
         let ctx = PostContext::build(
-            &post, &user, vec![], vec![], None, HashMap::new(), 0, "https://example.com",
+            &post, &user, vec![], vec![], None, HashMap::new(), 0, "https://example.com", None, vec![],
         );
         assert_eq!(ctx.reading_time, 1);
     }
@@ -409,7 +439,7 @@ mod tests {
         let content = "word ".repeat(400);
         let post = make_post("post", "slug", &content, None);
         let ctx = PostContext::build(
-            &post, &user, vec![], vec![], None, HashMap::new(), 0, "https://example.com",
+            &post, &user, vec![], vec![], None, HashMap::new(), 0, "https://example.com", None, vec![],
         );
         assert_eq!(ctx.reading_time, 2);
     }
@@ -419,7 +449,7 @@ mod tests {
         let user = make_user();
         let post = make_post("post", "slug", "", None);
         let ctx = PostContext::build(
-            &post, &user, vec![], vec![], None, HashMap::new(), 0, "https://example.com",
+            &post, &user, vec![], vec![], None, HashMap::new(), 0, "https://example.com", None, vec![],
         );
         assert_eq!(ctx.reading_time, 1);
     }
@@ -434,9 +464,9 @@ pub async fn create(pool: &PgPool, data: &CreatePost) -> Result<Post> {
         r#"
         INSERT INTO posts (site_id, title, slug, content, content_format, excerpt, status,
                            post_type, author_id, featured_image_id, published_at, template,
-                           post_password, comments_enabled, submitted_at)
+                           post_password, comments_enabled, submitted_at, parent_id)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
-                CASE WHEN $7 = 'pending' THEN NOW() ELSE NULL END)
+                CASE WHEN $7 = 'pending' THEN NOW() ELSE NULL END, $15)
         RETURNING *
         "#,
     )
@@ -454,6 +484,7 @@ pub async fn create(pool: &PgPool, data: &CreatePost) -> Result<Post> {
     .bind(data.template.as_deref())
     .bind(data.post_password_hash.as_deref())
     .bind(data.comments_enabled)
+    .bind(data.parent_id)
     .fetch_one(pool)
     .await?;
 
@@ -737,6 +768,12 @@ pub async fn update(pool: &PgPool, id: Uuid, data: &UpdatePost) -> Result<Post> 
 
     let new_comments_enabled = data.comments_enabled.unwrap_or(current.comments_enabled);
 
+    // parent_id: None = leave unchanged; Some(None) = clear; Some(Some(id)) = set
+    let new_parent_id: Option<Uuid> = match data.parent_id {
+        Some(v) => v,
+        None => current.parent_id,
+    };
+
     let post = sqlx::query_as::<_, Post>(
         r#"
         UPDATE posts
@@ -746,6 +783,7 @@ pub async fn update(pool: &PgPool, id: Uuid, data: &UpdatePost) -> Result<Post> 
                                  WHEN $11::text IS NOT NULL THEN $11
                                  ELSE post_password END,
             comments_enabled = $13,
+            parent_id = $14,
             submitted_at = CASE WHEN $6 = 'pending' THEN COALESCE(submitted_at, NOW())
                                 ELSE submitted_at END,
             updated_at = NOW()
@@ -766,6 +804,7 @@ pub async fn update(pool: &PgPool, id: Uuid, data: &UpdatePost) -> Result<Post> 
     .bind(data.new_post_password_hash.as_deref())
     .bind(id)
     .bind(new_comments_enabled)
+    .bind(new_parent_id)
     .fetch_one(pool)
     .await?;
     let _ = new_password; // silence unused warning
@@ -840,4 +879,136 @@ pub async fn get_related(
     .fetch_all(pool)
     .await?;
     Ok(posts)
+}
+
+/// Fetch a published page by walking URL segments through the parent hierarchy.
+///
+/// `segments[0]` must be a root-level page (parent_id IS NULL).
+/// Each subsequent segment is matched as a child of the previous page.
+pub async fn get_page_by_path(
+    pool: &PgPool,
+    site_id: Option<Uuid>,
+    segments: &[&str],
+) -> Result<Post> {
+    if segments.is_empty() {
+        return Err(AppError::NotFound("page".to_string()));
+    }
+
+    // Find root page with no parent
+    let mut current = sqlx::query_as::<_, Post>(
+        "SELECT * FROM posts \
+         WHERE slug = $1 AND parent_id IS NULL \
+           AND status = 'published' AND post_type = 'page' \
+           AND ($2::uuid IS NULL OR site_id = $2)",
+    )
+    .bind(segments[0])
+    .bind(site_id)
+    .fetch_optional(pool)
+    .await?
+    .ok_or_else(|| AppError::NotFound(format!("page '{}'", segments[0])))?;
+
+    for &seg in &segments[1..] {
+        current = sqlx::query_as::<_, Post>(
+            "SELECT * FROM posts \
+             WHERE slug = $1 AND parent_id = $2 \
+               AND status = 'published' AND post_type = 'page' \
+               AND ($3::uuid IS NULL OR site_id = $3)",
+        )
+        .bind(seg)
+        .bind(current.id)
+        .bind(site_id)
+        .fetch_optional(pool)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("page '{}'", seg)))?;
+    }
+
+    Ok(current)
+}
+
+/// Build the full URL path for a page by walking its parent chain.
+/// Returns a string like `/services/service-1` (always starts with `/`).
+pub async fn get_full_page_path(pool: &PgPool, page: &Post) -> String {
+    let mut segments = vec![page.slug.clone()];
+    let mut current_parent = page.parent_id;
+    while let Some(pid) = current_parent {
+        match get_by_id(pool, pid).await {
+            Ok(parent) => {
+                segments.push(parent.slug.clone());
+                current_parent = parent.parent_id;
+            }
+            Err(_) => break,
+        }
+    }
+    segments.reverse();
+    format!("/{}", segments.join("/"))
+}
+
+/// Build breadcrumb trail for a hierarchical page.
+/// Returns items from Home → ancestors → current page, each with label, url, is_current.
+pub async fn get_page_breadcrumbs(
+    pool: &PgPool,
+    page: &Post,
+    base_url: &str,
+) -> Vec<BreadcrumbItem> {
+    let mut breadcrumbs = vec![];
+
+    // Collect ancestors (bottom-up), then reverse to get root-first order
+    let mut ancestors: Vec<Post> = vec![];
+    let mut current_parent = page.parent_id;
+    while let Some(pid) = current_parent {
+        match get_by_id(pool, pid).await {
+            Ok(parent) => {
+                current_parent = parent.parent_id;
+                ancestors.push(parent);
+            }
+            Err(_) => break,
+        }
+    }
+    ancestors.reverse();
+
+    // Home always first
+    breadcrumbs.push(BreadcrumbItem {
+        label: "Home".to_string(),
+        url: base_url.to_string(),
+        is_current: false,
+    });
+
+    // Ancestor pages
+    let mut path_segments: Vec<String> = vec![];
+    for ancestor in &ancestors {
+        path_segments.push(ancestor.slug.clone());
+        breadcrumbs.push(BreadcrumbItem {
+            label: ancestor.title.clone(),
+            url: format!("{}/{}", base_url, path_segments.join("/")),
+            is_current: false,
+        });
+    }
+
+    // Current page
+    path_segments.push(page.slug.clone());
+    breadcrumbs.push(BreadcrumbItem {
+        label: page.title.clone(),
+        url: format!("{}/{}", base_url, path_segments.join("/")),
+        is_current: true,
+    });
+
+    breadcrumbs
+}
+
+/// Return all published pages for a site, ordered by title.
+/// Used by the admin page editor to populate the parent selector dropdown.
+pub async fn get_published_pages_by_site(
+    pool: &PgPool,
+    site_id: Option<Uuid>,
+) -> Result<Vec<Post>> {
+    let pages = sqlx::query_as::<_, Post>(
+        "SELECT * FROM posts \
+         WHERE post_type = 'page' AND status = 'published' \
+           AND ($1::uuid IS NULL OR site_id = $1) \
+         ORDER BY title",
+    )
+    .bind(site_id)
+    .fetch_all(pool)
+    .await?;
+    Ok(pages)
 }

@@ -243,6 +243,13 @@ async fn fetch_posts_for_function(
 
         let meta = post::get_meta(pool, p.id).await.unwrap_or_default();
 
+        // For pages, resolve the full hierarchical path.
+        let page_path = if p.post_type == "page" {
+            Some(post::get_full_page_path(pool, p).await)
+        } else {
+            None
+        };
+
         result.push(post::PostContext::build(
             p,
             &author_rec,
@@ -252,10 +259,101 @@ async fn fetch_posts_for_function(
             meta,
             0,
             base_url,
+            page_path,
+            vec![],
         ));
     }
 
     Ok(result)
+}
+
+// ── get_menu() ───────────────────────────────────────────────────────────────
+
+/// `{% set items = get_menu(name="salemenu") %}`
+/// Fetches a menu by name and returns its items as a tree (`Vec<NavItemContext>`).
+/// Returns an empty array if no menu with that name exists.
+/// The `request_path` argument is optional; when supplied, `is_current` is set
+/// on the matching item.  Example:
+///   `{% set items = get_menu(name="salemenu", path=request.path) %}`
+pub struct GetMenuFunction {
+    pub pool: sqlx::PgPool,
+}
+
+impl Function for GetMenuFunction {
+    fn call(&self, args: &HashMap<String, Value>) -> Result<Value> {
+        let name = args
+            .get("name")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| tera::Error::msg("get_menu() requires a 'name' argument"))?
+            .to_string();
+
+        let request_path = args
+            .get("path")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+
+        let pool = self.pool.clone();
+
+        let items = tokio::task::block_in_place(|| {
+            tokio::runtime::Handle::current().block_on(async move {
+                fetch_menu_by_name(&pool, &name, &request_path).await
+            })
+        })
+        .map_err(|e| tera::Error::msg(format!("get_menu() error: {e}")))?;
+
+        serde_json::to_value(items)
+            .map_err(|e| tera::Error::msg(format!("get_menu() serialization error: {e}")))
+    }
+
+    fn is_safe(&self) -> bool {
+        false
+    }
+}
+
+async fn fetch_menu_by_name(
+    pool: &sqlx::PgPool,
+    name: &str,
+    request_path: &str,
+) -> anyhow::Result<Vec<crate::templates::context::NavItemContext>> {
+    use crate::models::nav_menu;
+
+    // Find menu by name (any site — same limitation as get_posts)
+    let menu = sqlx::query_as::<_, nav_menu::NavMenu>(
+        "SELECT * FROM nav_menus WHERE name = $1 ORDER BY created_at LIMIT 1",
+    )
+    .bind(name)
+    .fetch_optional(pool)
+    .await?;
+
+    let Some(menu) = menu else {
+        return Ok(vec![]);
+    };
+
+    let items = nav_menu::items_for_menu(pool, menu.id).await?;
+
+    // Resolve page URLs for any page_id references
+    let page_ids: Vec<uuid::Uuid> = items
+        .iter()
+        .filter_map(|i| i.page_id)
+        .collect();
+
+    let mut page_urls: std::collections::HashMap<uuid::Uuid, String> =
+        std::collections::HashMap::new();
+    for pid in page_ids {
+        if let Ok(post) = sqlx::query_as::<_, crate::models::post::Post>(
+            "SELECT * FROM posts WHERE id = $1",
+        )
+        .bind(pid)
+        .fetch_one(pool)
+        .await
+        {
+            let path = crate::models::post::get_full_page_path(pool, &post).await;
+            page_urls.insert(pid, path);
+        }
+    }
+
+    Ok(nav_menu::build_tree(&items, &page_urls, None, request_path))
 }
 
 // ── get_terms() ──────────────────────────────────────────────────────────────

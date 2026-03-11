@@ -14,7 +14,7 @@ use crate::models::{post, taxonomy};
 use crate::models::post::{ListFilter, PostStatus, PostType};
 use crate::models::taxonomy::{TaxonomyType, TermContext};
 use crate::templates::context::{
-    ArchiveContext, ContextBuilder, NavContext, PaginationContext, RequestContext, SessionContext,
+    ArchiveContext, ContextBuilder, PaginationContext, RequestContext, SessionContext,
 };
 
 use super::home::{build_post_context, build_site_context, render_error_page};
@@ -141,6 +141,7 @@ async fn render_taxonomy_archive(
     };
 
     let site_ctx = build_site_context(&state, Some(site_id), base_url).await?;
+    let nav = crate::models::nav_menu::build_nav_context(&state.db, site_id, uri.path()).await;
 
     let mut ctx = ContextBuilder {
         site: site_ctx,
@@ -150,7 +151,7 @@ async fn render_taxonomy_archive(
             query: HashMap::new(),
         },
         session: session_ctx,
-        nav: NavContext::default(),
+        nav,
     }
     .into_tera_context();
 
@@ -216,6 +217,7 @@ async fn render_author_archive(
 
     let author_ctx = crate::models::user::UserContext::from_user(&author, base_url);
     let site_ctx = build_site_context(&state, Some(site_id), base_url).await?;
+    let nav = crate::models::nav_menu::build_nav_context(&state.db, site_id, uri.path()).await;
 
     let mut ctx = ContextBuilder {
         site: site_ctx,
@@ -225,7 +227,7 @@ async fn render_author_archive(
             query: HashMap::new(),
         },
         session: session_ctx,
-        nav: NavContext::default(),
+        nav,
     }
     .into_tera_context();
 

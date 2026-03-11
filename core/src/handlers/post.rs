@@ -14,7 +14,7 @@ use uuid::Uuid;
 use crate::app_state::AppState;
 use crate::middleware::site::CurrentSite;
 use crate::models::post;
-use crate::templates::context::{ContextBuilder, NavContext, RequestContext, SessionContext};
+use crate::templates::context::{ContextBuilder, RequestContext, SessionContext};
 
 #[derive(Serialize)]
 struct CommentPaginationContext {
@@ -227,6 +227,7 @@ async fn render_post(
         }).collect())
         .unwrap_or_default();
 
+    let nav = crate::models::nav_menu::build_nav_context(&state.db, site_id, uri.path()).await;
     let mut ctx = ContextBuilder {
         site: site_ctx,
         request: RequestContext {
@@ -235,7 +236,7 @@ async fn render_post(
             query: query_params,
         },
         session: session_ctx,
-        nav: NavContext::default(),
+        nav,
     }
     .into_tera_context();
 
