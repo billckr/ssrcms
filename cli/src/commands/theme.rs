@@ -10,12 +10,12 @@ pub enum ThemeAction {
         #[arg(long, env = "DATABASE_URL", hide = true)]
         database_url: Option<String>,
     },
-    /// Activate a theme for a site
+    /// Copy a theme from global to the site folder and activate it
     Activate {
         /// Name of the theme to activate (must match the name field in theme.toml)
         #[arg(value_name = "THEME")]
         name: String,
-        /// Site hostname or UUID to target (omit for single-site / global fallback)
+        /// Site hostname or UUID to target (required for multi-site installs)
         #[arg(long)]
         site: Option<String>,
         /// Database URL (overrides DATABASE_URL env var)
@@ -24,6 +24,18 @@ pub enum ThemeAction {
         /// Path to the server PID file (used to signal a live reload without restart)
         #[arg(long, default_value = "synaptic.pid")]
         pid_file: String,
+    },
+    /// Remove a site's local copy of a theme (never touches the global original)
+    Remove {
+        /// Name of the theme to remove
+        #[arg(value_name = "THEME")]
+        name: String,
+        /// Site hostname or UUID to target
+        #[arg(long)]
+        site: Option<String>,
+        /// Database URL (overrides DATABASE_URL env var)
+        #[arg(long, env = "DATABASE_URL", hide = true)]
+        database_url: Option<String>,
     },
     /// Reload the active theme's templates from disk without restarting (sends SIGUSR1)
     Reload {
@@ -38,6 +50,9 @@ pub async fn run(action: ThemeAction) -> anyhow::Result<()> {
         ThemeAction::List { database_url } => list(database_url).await,
         ThemeAction::Activate { name, site, database_url, pid_file } => {
             activate(name, site, database_url, pid_file).await
+        }
+        ThemeAction::Remove { name, site, database_url } => {
+            remove(name, site, database_url).await
         }
         ThemeAction::Reload { pid_file } => {
             signal_reload(&pid_file, "current");
@@ -111,23 +126,18 @@ async fn list(database_url: Option<String>) -> anyhow::Result<()> {
         return Ok(());
     }
 
-    // Load per-site active themes from DB if available.
-    // Map: site_id (or None for global) -> active_theme value.
+    // Load per-site active themes and all site hostnames from DB.
     let active_map = load_active_themes(database_url).await;
+    let all_site_names: std::collections::HashMap<Uuid, String> = load_all_site_names().await;
 
-    // Also load site hostnames so we can show a friendly label.
-    // Map: site_id -> hostname.
-    let site_names = load_site_names(&active_map).await;
-
-    println!("\n{:<22} {:<10} {:<6} {:<10} {}", "Name", "Version", "API", "Source", "Description");
-    println!("{}", "-".repeat(76));
+    println!("\n{:<22} {:<10} {:<6} {:<16} {}", "Name", "Version", "API", "Domain", "Description");
+    println!("{}", "-".repeat(82));
 
     for (name, version, api, desc, source) in &themes {
-        // Collect every site where this theme is active.
         let active_for: Vec<String> = active_map.iter().filter_map(|(site_id, t)| {
             if t == name {
                 let label = match site_id {
-                    Some(id) => site_names.get(id).cloned().unwrap_or_else(|| id.to_string()),
+                    Some(id) => all_site_names.get(id).cloned().unwrap_or_else(|| id.to_string()),
                     None => "global".to_string(),
                 };
                 Some(label)
@@ -136,13 +146,26 @@ async fn list(database_url: Option<String>) -> anyhow::Result<()> {
             }
         }).collect();
 
+        // Resolve the source label: "global" stays as-is, "site:<uuid>" becomes the hostname.
+        let display_source = if source == "global" {
+            "global".to_string()
+        } else if let Some(uuid_str) = source.strip_prefix("site:") {
+            if let Ok(id) = uuid_str.parse::<Uuid>() {
+                all_site_names.get(&id).cloned().unwrap_or_else(|| uuid_str.to_string())
+            } else {
+                source.clone()
+            }
+        } else {
+            source.clone()
+        };
+
         let marker = if active_for.is_empty() { "  " } else { " *" };
         let active_str = if active_for.is_empty() {
             String::new()
         } else {
             format!("  [active: {}]", active_for.join(", "))
         };
-        println!("{}{:<20} {:<10} {:<6} {:<10} {}{}", marker, name, version, api, source, desc, active_str);
+        println!("{}{:<20} {:<10} {:<6} {:<16} {}{}", marker, name, version, api, display_source, desc, active_str);
     }
 
     println!();
@@ -150,7 +173,6 @@ async fn list(database_url: Option<String>) -> anyhow::Result<()> {
 }
 
 /// Load active_theme setting for every site from site_settings.
-/// Returns a map of Option<Uuid> (None = global/NULL site_id row) -> theme name.
 async fn load_active_themes(database_url: Option<String>) -> std::collections::HashMap<Option<Uuid>, String> {
     let mut map = std::collections::HashMap::new();
     if let Some(url) = database_url {
@@ -173,30 +195,48 @@ async fn load_active_themes(database_url: Option<String>) -> std::collections::H
     map
 }
 
-/// Given the active_map keys, fetch hostnames for known site UUIDs.
-async fn load_site_names(
-    active_map: &std::collections::HashMap<Option<Uuid>, String>,
-) -> std::collections::HashMap<Uuid, String> {
-    let ids: Vec<Uuid> = active_map.keys().filter_map(|k| *k).collect();
-    if ids.is_empty() {
-        return std::collections::HashMap::new();
-    }
-    // We need a pool — try to connect (DATABASE_URL should already be set by load_active_themes).
+/// Fetch hostnames for site UUIDs referenced in the active_map.
+/// Fetch all site UUIDs and their hostnames from the DB.
+async fn load_all_site_names() -> std::collections::HashMap<Uuid, String> {
     let pool = match super::connect_db().await {
         Ok(p) => p,
         Err(_) => return std::collections::HashMap::new(),
     };
-    let mut map = std::collections::HashMap::new();
-    for id in ids {
-        if let Ok(hostname) = sqlx::query_scalar::<_, String>("SELECT hostname FROM sites WHERE id = $1")
-            .bind(id)
-            .fetch_one(&pool)
-            .await
-        {
-            map.insert(id, hostname);
+    let rows: Vec<(Uuid, String)> = sqlx::query_as("SELECT id, hostname FROM sites")
+        .fetch_all(&pool)
+        .await
+        .unwrap_or_default();
+    rows.into_iter().collect()
+}
+
+/// Resolve a --site value (hostname or UUID string) to a UUID using the DB.
+async fn resolve_site_id(pool: &sqlx::PgPool, site: &str) -> anyhow::Result<Uuid> {
+    if let Ok(id) = site.parse::<Uuid>() {
+        return Ok(id);
+    }
+    sqlx::query_scalar("SELECT id FROM sites WHERE hostname = $1")
+        .bind(site)
+        .fetch_optional(pool)
+        .await
+        .map_err(|e| anyhow::anyhow!("DB error looking up site: {e}"))?
+        .ok_or_else(|| anyhow::anyhow!(
+            "No site found with hostname '{}'. Run 'synap-cli site list' to see available sites.", site
+        ))
+}
+
+/// Recursive directory copy — matches the behaviour of copy_dir_all in the web handler.
+fn copy_dir_all(src: &std::path::Path, dst: &std::path::Path) -> std::io::Result<()> {
+    std::fs::create_dir_all(dst)?;
+    for entry in std::fs::read_dir(src)? {
+        let entry = entry?;
+        let ty = entry.file_type()?;
+        if ty.is_dir() {
+            copy_dir_all(&entry.path(), &dst.join(entry.file_name()))?;
+        } else {
+            std::fs::copy(entry.path(), dst.join(entry.file_name()))?;
         }
     }
-    map
+    Ok(())
 }
 
 async fn activate(
@@ -205,59 +245,26 @@ async fn activate(
     database_url: Option<String>,
     pid_file: String,
 ) -> anyhow::Result<()> {
-    // Verify the theme exists on disk.
-    let _theme_path = collect_theme_dirs()
-        .into_iter()
-        .find_map(|(dir, _)| {
-            std::fs::read_dir(&dir).ok()?.flatten().find_map(|entry| {
-                let path = entry.path();
-                if !path.is_dir() { return None; }
-                let toml_path = path.join("theme.toml");
-                let content = std::fs::read_to_string(&toml_path).ok()?;
-                let table: toml::Value = content.parse().ok()?;
-                let toml_name = table.get("theme")
-                    .and_then(|v| v.as_table())
-                    .and_then(|t| t.get("name"))
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("")
-                    .to_string();
-                if toml_name == name { Some(path) } else { None }
-            })
-        })
-        .ok_or_else(|| anyhow::anyhow!(
-            "Theme '{}' not found in ./themes/global/ or ./themes/sites/*/.", name
-        ))?;
+    // Reject obviously unsafe names (matches web handler guard).
+    if name.is_empty() || name.contains("..") || name.contains('/') || name.contains('\\') {
+        anyhow::bail!("Invalid theme name.");
+    }
 
     if let Some(url) = database_url {
         unsafe { std::env::set_var("DATABASE_URL", url); }
     }
 
     let pool = super::connect_db().await?;
+    let themes_root = Path::new("themes");
 
-    // Resolve --site to a UUID (accepts hostname or raw UUID).
-    let site_id: Option<Uuid> = match &site {
-        None => None,
-        Some(s) => {
-            // Try parsing as UUID first, then fall back to hostname lookup.
-            if let Ok(id) = s.parse::<Uuid>() {
-                Some(id)
-            } else {
-                let id: Uuid = sqlx::query_scalar("SELECT id FROM sites WHERE hostname = $1")
-                    .bind(s)
-                    .fetch_optional(&pool)
-                    .await
-                    .map_err(|e| anyhow::anyhow!("DB error looking up site: {e}"))?
-                    .ok_or_else(|| anyhow::anyhow!(
-                        "No site found with hostname '{}'. Run 'synap-cli site list' to see available sites.", s
-                    ))?;
-                Some(id)
-            }
-        }
-    };
-
-    match site_id {
+    match &site {
         None => {
-            // Global / single-site upsert (site_id IS NULL row).
+            // Single-site / global path — theme must exist somewhere on disk.
+            let global_src = themes_root.join("global").join(&name);
+            if !global_src.is_dir() {
+                anyhow::bail!("Theme '{}' not found in themes/global/.", name);
+            }
+
             sqlx::query(
                 "INSERT INTO site_settings (key, value) VALUES ('active_theme', $1)
                  ON CONFLICT (key) WHERE site_id IS NULL DO UPDATE SET value = EXCLUDED.value"
@@ -269,21 +276,41 @@ async fn activate(
 
             println!("Theme '{}' activated (global).", name);
         }
-        Some(id) => {
-            // Per-site upsert using the (site_id, key) partial unique index.
+
+        Some(s) => {
+            let site_id = resolve_site_id(&pool, s).await?;
+
+            let global_src  = themes_root.join("global").join(&name);
+            let site_dest   = themes_root.join("sites").join(site_id.to_string()).join(&name);
+
+            if site_dest.is_dir() {
+                // Already has a local copy — just update the DB setting.
+                println!("Site already has a local copy of '{}' — skipping copy.", name);
+            } else {
+                // Copy from global into the site folder, exactly as the web UI does.
+                if !global_src.is_dir() {
+                    anyhow::bail!(
+                        "Theme '{}' not found in themes/global/. \
+                         Only global themes can be copied to a site.", name
+                    );
+                }
+                copy_dir_all(&global_src, &site_dest)
+                    .map_err(|e| anyhow::anyhow!("Failed to copy theme '{}': {e}", name))?;
+                println!("Copied '{}' from global → themes/sites/{}/{}.", name, site_id, name);
+            }
+
+            // Update site_settings for this site.
             sqlx::query(
                 "INSERT INTO site_settings (site_id, key, value) VALUES ($1, 'active_theme', $2)
                  ON CONFLICT (site_id, key) WHERE site_id IS NOT NULL DO UPDATE SET value = EXCLUDED.value"
             )
-            .bind(id)
+            .bind(site_id)
             .bind(&name)
             .execute(&pool)
             .await
             .map_err(|e| anyhow::anyhow!("Failed to update active_theme for site: {e}"))?;
 
-            let id_str = id.to_string();
-            let label = site.as_deref().unwrap_or(&id_str);
-            println!("Theme '{}' activated for site '{}'.", name, label);
+            println!("Theme '{}' activated for site '{}'.", name, s);
         }
     }
 
@@ -291,8 +318,90 @@ async fn activate(
     Ok(())
 }
 
+async fn remove(
+    name: String,
+    site: Option<String>,
+    database_url: Option<String>,
+) -> anyhow::Result<()> {
+    // Reject obviously unsafe names.
+    if name.is_empty() || name.contains("..") || name.contains('/') || name.contains('\\') {
+        anyhow::bail!("Invalid theme name.");
+    }
+
+    if let Some(url) = database_url {
+        unsafe { std::env::set_var("DATABASE_URL", url); }
+    }
+
+    let pool = super::connect_db().await?;
+    let themes_root = Path::new("themes");
+
+    let site_id = match &site {
+        Some(s) => resolve_site_id(&pool, s).await?,
+        None => {
+            // Try to infer the site if there is exactly one.
+            let rows: Vec<(Uuid,)> = sqlx::query_as("SELECT id FROM sites")
+                .fetch_all(&pool)
+                .await
+                .unwrap_or_default();
+            match rows.as_slice() {
+                [(id,)] => *id,
+                [] => anyhow::bail!("No sites found. Run 'synap-cli site init' first."),
+                _ => anyhow::bail!(
+                    "Multiple sites found — use --site <hostname> to specify which one."
+                ),
+            }
+        }
+    };
+
+    let site_path = themes_root.join("sites").join(site_id.to_string()).join(&name);
+
+    if !site_path.is_dir() {
+        anyhow::bail!(
+            "Theme '{}' not found in the site's local folder. \
+             Only site-local copies can be removed — the global original is never touched.",
+            name
+        );
+    }
+
+    // Guard: refuse to remove the currently active theme.
+    let active: Option<String> = sqlx::query_scalar(
+        "SELECT value FROM site_settings WHERE site_id = $1 AND key = 'active_theme'"
+    )
+    .bind(site_id)
+    .fetch_optional(&pool)
+    .await
+    .unwrap_or(None);
+
+    if active.as_deref() == Some(&name) {
+        anyhow::bail!(
+            "Cannot remove the active theme '{}'. Activate a different theme first.", name
+        );
+    }
+
+    // Path traversal guard: confirm site_path is a direct child of the site's theme dir.
+    let expected_parent = themes_root
+        .join("sites")
+        .join(site_id.to_string())
+        .canonicalize()
+        .map_err(|_| anyhow::anyhow!("Site theme directory not found."))?;
+
+    let canonical = site_path.canonicalize()
+        .map_err(|_| anyhow::anyhow!("Theme path could not be resolved."))?;
+
+    if canonical.parent() != Some(expected_parent.as_path()) {
+        anyhow::bail!("Invalid theme path — path traversal detected.");
+    }
+
+    std::fs::remove_dir_all(&canonical)
+        .map_err(|e| anyhow::anyhow!("Failed to remove theme '{}': {e}", name))?;
+
+    let id_str = site_id.to_string();
+    let label = site.as_deref().unwrap_or(&id_str);
+    println!("Theme '{}' removed from site '{}'. The global original is untouched.", name, label);
+    Ok(())
+}
+
 /// Read the PID file and send SIGUSR1 to the server process.
-/// Prints a status message either way — never returns an error (signal is best-effort).
 fn signal_reload(pid_file: &str, theme_name: &str) {
     let pid_path = std::path::Path::new(pid_file);
 
