@@ -191,8 +191,7 @@ async fn list(site: Option<String>, database_url: Option<String>) -> anyhow::Res
                 } else {
                     "available"
                 };
-                let marker = if *is_active { " *" } else { "  " };
-                println!("{}{:<20} {:<20} {:<10} {:<6} {:<10} {}", marker, display_name, dir_name, version, api, status, desc);
+                println!("  {:<20} {:<20} {:<10} {:<6} {:<10} {}", display_name, dir_name, version, api, status, desc);
             }
             println!();
         }
@@ -203,18 +202,6 @@ async fn list(site: Option<String>, database_url: Option<String>) -> anyhow::Res
             println!("{}", "-".repeat(96));
 
             for (dir_name, display_name, version, api, desc, source) in &themes {
-                let active_for: Vec<String> = active_map.iter().filter_map(|(site_id, t)| {
-                    if t == dir_name {
-                        let label = match site_id {
-                            Some(id) => all_site_names.get(id).cloned().unwrap_or_else(|| id.to_string()),
-                            None => "global".to_string(),
-                        };
-                        Some(label)
-                    } else {
-                        None
-                    }
-                }).collect();
-
                 let display_source = if source == "global" {
                     "global".to_string()
                 } else if let Some(uuid_str) = source.strip_prefix("site:") {
@@ -227,8 +214,7 @@ async fn list(site: Option<String>, database_url: Option<String>) -> anyhow::Res
                     source.clone()
                 };
 
-                let marker = if active_for.is_empty() { "  " } else { " *" };
-                println!("{}{:<20} {:<20} {:<10} {:<6} {:<16} {}", marker, display_name, dir_name, version, api, display_source, desc);
+                println!("  {:<20} {:<20} {:<10} {:<6} {:<16} {}", display_name, dir_name, version, api, display_source, desc);
             }
             println!();
         }
