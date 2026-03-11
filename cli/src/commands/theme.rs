@@ -92,7 +92,10 @@ fn collect_theme_dirs() -> Vec<(std::path::PathBuf, String)> {
 }
 
 /// Scan theme directories and return a list of (name, version, api_version, description, source).
-fn scan_themes() -> anyhow::Result<Vec<(String, String, String, String, String)>> {
+/// Returns (dir_name, display_name, version, api_version, description, source).
+/// dir_name is the folder name on disk — this is what active_theme in the DB stores.
+/// display_name is the human-readable name from theme.toml.
+fn scan_themes() -> anyhow::Result<Vec<(String, String, String, String, String, String)>> {
     let mut themes = Vec::new();
     for (dir, source) in collect_theme_dirs() {
         for entry in std::fs::read_dir(&dir).into_iter().flatten().flatten() {
@@ -107,14 +110,14 @@ fn scan_themes() -> anyhow::Result<Vec<(String, String, String, String, String)>
             let table: toml::Value = content.parse()
                 .map_err(|e| anyhow::anyhow!("Invalid TOML in {}: {e}", toml_path.display()))?;
             let theme = table.get("theme").unwrap_or(&table);
-            let name        = theme.get("name").and_then(|v| v.as_str()).unwrap_or(&dir_name).to_string();
-            let version     = theme.get("version").and_then(|v| v.as_str()).unwrap_or("?").to_string();
-            let api_version = theme.get("api_version").and_then(|v| v.as_str()).unwrap_or("?").to_string();
-            let description = theme.get("description").and_then(|v| v.as_str()).unwrap_or("").to_string();
-            themes.push((name, version, api_version, description, source.clone()));
+            let display_name = theme.get("name").and_then(|v| v.as_str()).unwrap_or(&dir_name).to_string();
+            let version      = theme.get("version").and_then(|v| v.as_str()).unwrap_or("?").to_string();
+            let api_version  = theme.get("api_version").and_then(|v| v.as_str()).unwrap_or("?").to_string();
+            let description  = theme.get("description").and_then(|v| v.as_str()).unwrap_or("").to_string();
+            themes.push((dir_name, display_name, version, api_version, description, source.clone()));
         }
     }
-    themes.sort_by(|a, b| a.4.cmp(&b.4).then(a.0.cmp(&b.0)));
+    themes.sort_by(|a, b| a.5.cmp(&b.5).then(a.0.cmp(&b.0)));
     Ok(themes)
 }
 
@@ -133,9 +136,10 @@ async fn list(database_url: Option<String>) -> anyhow::Result<()> {
     println!("\n{:<22} {:<10} {:<6} {:<16} {}", "Name", "Version", "API", "Domain", "Description");
     println!("{}", "-".repeat(82));
 
-    for (name, version, api, desc, source) in &themes {
+    for (dir_name, display_name, version, api, desc, source) in &themes {
+        // active_theme in the DB stores the directory name, so match on that.
         let active_for: Vec<String> = active_map.iter().filter_map(|(site_id, t)| {
-            if t == name {
+            if t == dir_name {
                 let label = match site_id {
                     Some(id) => all_site_names.get(id).cloned().unwrap_or_else(|| id.to_string()),
                     None => "global".to_string(),
@@ -165,7 +169,7 @@ async fn list(database_url: Option<String>) -> anyhow::Result<()> {
         } else {
             format!("  [active: {}]", active_for.join(", "))
         };
-        println!("{}{:<20} {:<10} {:<6} {:<16} {}{}", marker, name, version, api, display_source, desc, active_str);
+        println!("{}{:<20} {:<10} {:<6} {:<16} {}{}", marker, display_name, version, api, display_source, desc, active_str);
     }
 
     println!();
