@@ -258,10 +258,14 @@ for ((i = 1; i <= NUMBER; i++)); do
     SUFFIX=$(cat /proc/sys/kernel/random/uuid | tr -d '-' | head -c 4)
     SLUG=$(echo "$TITLE" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g; s/--*/-/g; s/^-//; s/-$//')-$SUFFIX
 
-    # Random publish date within the last 12 months (only for published posts).
+    # Random publish date+time within the last 90 days (only for published posts).
     # Pending posts get a submitted_at date; drafts get nothing.
+    # Time is randomised to avoid navigation collisions when multiple posts land on the same day.
     DAYS_AGO=$(( RANDOM % 90 ))
-    PUBLISHED_AT="NOW() - INTERVAL '$DAYS_AGO days'"
+    HOURS=$(( RANDOM % 24 ))
+    MINUTES=$(( RANDOM % 60 ))
+    SECONDS=$(( RANDOM % 60 ))
+    PUBLISHED_AT="NOW() - INTERVAL '$DAYS_AGO days $HOURS hours $MINUTES minutes $SECONDS seconds'"
     SUBMITTED_AT="NULL"
     if [[ "$STATUS" == "draft" ]]; then
         PUBLISHED_AT="NULL"
