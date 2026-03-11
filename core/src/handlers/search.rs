@@ -4,6 +4,7 @@ use axum::{
 };
 use serde::Deserialize;
 use std::collections::HashMap;
+use tower_sessions::Session;
 use uuid::Uuid;
 
 use crate::app_state::AppState;
@@ -22,13 +23,15 @@ pub struct SearchQuery {
 pub async fn search(
     State(state): State<AppState>,
     current_site: CurrentSite,
+    session: Session,
     Query(params): Query<SearchQuery>,
     axum::extract::OriginalUri(uri): axum::extract::OriginalUri,
 ) -> Response {
     let path = uri.path().to_string();
     let site_id = current_site.site.id;
     let base_url = current_site.base_url.clone();
-    match render_search(state.clone(), params.q, uri, site_id, &base_url).await {
+    let session_ctx = super::resolve_session(&state, &session).await;
+    match render_search(state.clone(), params.q, uri, site_id, &base_url, session_ctx).await {
         Ok(html) => Html(html).into_response(),
         Err(e) => render_error_page(e, &state, &path, Some(current_site.site.id)).await,
     }
@@ -40,6 +43,7 @@ async fn render_search(
     uri: axum::http::Uri,
     site_id: Uuid,
     base_url: &str,
+    session_ctx: SessionContext,
 ) -> crate::errors::Result<String> {
     // Enforce 25-character query limit server-side (mirrors maxlength on the HTML input).
     let query = if query.chars().count() > 25 {
@@ -93,7 +97,7 @@ async fn render_search(
             path: uri.path().to_string(),
             query: query_params,
         },
-        session: SessionContext { is_logged_in: false, user: None },
+        session: session_ctx,
         nav: NavContext::default(),
     }
     .into_tera_context();

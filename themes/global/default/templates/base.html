@@ -53,11 +53,23 @@
         {% endfor %}
       </ul>
     </nav>
-    <form method="get" action="/search" class="header-search" role="search">
-      {# Search query is capped at 25 characters — enforced here and server-side. #}
-      <input type="search" name="q" placeholder="Search…" aria-label="Search posts" maxlength="25">
-      <button type="submit">Search</button>
-    </form>
+    <div class="header-right">
+      <form method="get" action="/search" class="header-search" role="search">
+        {# Search query is capped at 25 characters — enforced here and server-side. #}
+        <input type="search" name="q" placeholder="Search…" aria-label="Search posts" maxlength="25">
+        <button type="submit">Search</button>
+      </form>
+      {% if session.is_logged_in %}
+        <div class="user-bar">
+          <a href="/account" class="user-bar-name">{{ session.user.display_name }}</a>
+          <a href="/account/logout" class="user-bar-logout">Sign out</a>
+        </div>
+      {% else %}
+        <div class="user-bar">
+          <a href="/login" class="user-bar-login">Sign in</a>
+        </div>
+      {% endif %}
+    </div>
   </header>
 
   <main class="site-main">

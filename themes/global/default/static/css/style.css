@@ -104,12 +104,45 @@ a:hover { color: var(--color-accent-dark); text-decoration: none; }
 
 /* ── Header search ── */
 /* Search input is limited to 25 characters (maxlength on the input element). */
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-shrink: 0;
+}
+
 .header-search {
   display: flex;
   align-items: center;
   gap: 0.35rem;
   flex-shrink: 0;
 }
+
+.user-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 0.875rem;
+  white-space: nowrap;
+}
+
+.user-bar-name {
+  font-weight: 500;
+  text-decoration: none;
+  color: var(--color-text);
+}
+
+.user-bar-name:hover { color: var(--color-accent); }
+
+.user-bar-logout,
+.user-bar-login {
+  color: var(--color-muted);
+  text-decoration: none;
+  font-size: 0.8rem;
+}
+
+.user-bar-logout:hover,
+.user-bar-login:hover { color: var(--color-accent); }
 
 .header-search input[type="search"] {
   padding: 0.3rem 0.6rem;
@@ -408,6 +441,69 @@ p { margin: 0 0 1rem; }
 .post-nav-next {
   margin-left: auto;
 }
+
+/* ── Save post ── */
+.save-post-form { display: inline; }
+
+.btn-save-post {
+  background: none;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  color: var(--color-muted);
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-size: 0.8rem;
+  padding: 0.15rem 0.5rem;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.btn-save-post:hover,
+.btn-save-post.saved {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+/* ── Saved posts list (account page) ── */
+.saved-posts-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.saved-post-item {
+  display: flex;
+  align-items: baseline;
+  gap: 1rem;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.saved-post-title {
+  flex: 1;
+  font-weight: 500;
+  text-decoration: none;
+  color: var(--color-text);
+}
+
+.saved-post-title:hover { color: var(--color-accent); }
+
+.saved-post-meta {
+  font-size: 0.8rem;
+  color: var(--color-muted);
+  white-space: nowrap;
+}
+
+.btn-unsave {
+  background: none;
+  border: none;
+  color: var(--color-muted);
+  cursor: pointer;
+  font-size: 0.8rem;
+  padding: 0;
+  text-decoration: underline;
+}
+
+.btn-unsave:hover { color: var(--color-text); }
 
 .post-nav span {
   display: block;

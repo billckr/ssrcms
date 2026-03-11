@@ -370,6 +370,96 @@ a:hover {
   margin-left: auto;
 }
 
+/* ── Save post ── */
+.save-post-form { display: inline; }
+
+.btn-save-post {
+  background: none;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-light);
+  cursor: pointer;
+  font-size: 0.8rem;
+  padding: 0.15rem 0.5rem;
+  transition: border-color 0.2s, color 0.2s;
+}
+
+.btn-save-post:hover,
+.btn-save-post.saved {
+  border-color: var(--orange-primary);
+  color: var(--orange-primary);
+}
+
+/* ── Saved posts list (account page) ── */
+.saved-posts-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.saved-post-item {
+  display: flex;
+  align-items: baseline;
+  gap: 1rem;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.saved-post-title {
+  flex: 1;
+  font-weight: 500;
+  text-decoration: none;
+  color: var(--text-dark);
+}
+
+.saved-post-title:hover { color: var(--orange-primary); }
+
+.saved-post-meta {
+  font-size: 0.8rem;
+  color: var(--text-light);
+  white-space: nowrap;
+}
+
+.btn-unsave {
+  background: none;
+  border: none;
+  color: var(--text-light);
+  cursor: pointer;
+  font-size: 0.8rem;
+  padding: 0;
+  text-decoration: underline;
+}
+
+.btn-unsave:hover { color: var(--text-dark); }
+
+/* ── User bar ── */
+.user-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 2rem;
+  font-size: 0.875rem;
+  white-space: nowrap;
+}
+
+.user-bar-name {
+  font-weight: 500;
+  text-decoration: none;
+  color: rgba(255,255,255,0.95);
+}
+
+.user-bar-name:hover { color: white; text-decoration: underline; }
+
+.user-bar-logout,
+.user-bar-login {
+  color: rgba(255,255,255,0.7);
+  text-decoration: none;
+  font-size: 0.8rem;
+}
+
+.user-bar-logout:hover,
+.user-bar-login:hover { color: white; }
+
 .post-nav-prev > span,
 .post-nav-next > span {
   display: block;

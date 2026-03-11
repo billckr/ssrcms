@@ -12,10 +12,9 @@ use tower_sessions::Session;
 use uuid::Uuid;
 
 use crate::app_state::AppState;
-use crate::middleware::account_auth::SESSION_ACCOUNT_USER_ID_KEY;
 use crate::middleware::site::CurrentSite;
 use crate::models::post;
-use crate::templates::context::{ContextBuilder, NavContext, RequestContext, SessionContext, SessionUserContext};
+use crate::templates::context::{ContextBuilder, NavContext, RequestContext, SessionContext};
 
 #[derive(Serialize)]
 struct CommentPaginationContext {
@@ -60,7 +59,7 @@ pub async fn single_post(
     }
 
     // Resolve subscriber session (optional — never fails).
-    let session_ctx = resolve_session(&state, &session).await;
+    let session_ctx = super::resolve_session(&state, &session).await;
 
     // Record a unique view (skips bots and logged-in account users).
     if !session_ctx.is_logged_in {
@@ -138,30 +137,6 @@ fn is_bot(ua: &str) -> bool {
         .any(|kw| lower.contains(kw))
 }
 
-/// Read the account session and build a SessionContext — never redirects.
-async fn resolve_session(state: &AppState, session: &Session) -> SessionContext {
-    let user_id_str: Option<String> = session
-        .get(SESSION_ACCOUNT_USER_ID_KEY)
-        .await
-        .unwrap_or(None);
-    if let Some(id_str) = user_id_str {
-        if let Ok(uid) = id_str.parse::<Uuid>() {
-            if let Ok(user) = crate::models::user::get_by_id(&state.db, uid).await {
-                return SessionContext {
-                    is_logged_in: true,
-                    user: Some(SessionUserContext {
-                        id: user.id.to_string(),
-                        username: user.username.clone(),
-                        display_name: user.display_name.clone(),
-                        role: user.role.as_str().to_string(),
-                    }),
-                };
-            }
-        }
-    }
-    SessionContext { is_logged_in: false, user: None }
-}
-
 async fn render_post(
     state: AppState,
     slug: String,
@@ -230,6 +205,19 @@ async fn render_post(
 
     let site_ctx = build_site_context(&state, Some(site_id), base_url).await?;
 
+    // Check whether the logged-in subscriber has saved this post (before session_ctx is moved).
+    let is_saved = if let Some(ref u) = session_ctx.user {
+        if let Ok(uid) = u.id.parse::<Uuid>() {
+            crate::models::saved_post::is_saved(&state.db, uid, post_record.id)
+                .await
+                .unwrap_or(false)
+        } else {
+            false
+        }
+    } else {
+        false
+    };
+
     let query_params: std::collections::HashMap<String, String> = uri.query()
         .map(|q| q.split('&').filter_map(|pair| {
             let mut parts = pair.splitn(2, '=');
@@ -252,6 +240,7 @@ async fn render_post(
     .into_tera_context();
 
     ctx.insert("post", &post_ctx);
+    ctx.insert("is_saved", &is_saved);
     ctx.insert("prev_post", &prev);
     ctx.insert("next_post", &next);
     ctx.insert("related_posts", &related);
@@ -271,4 +260,50 @@ async fn render_post(
     ContextBuilder::add_hook_outputs(&mut ctx, &hook_outputs);
 
     state.templates.render_for_theme(&theme, Some(site_id), "single.html", &ctx)
+}
+
+// ── Save / Unsave post ────────────────────────────────────────────────────────
+
+/// `POST /blog/:slug/save` — save a post to the subscriber's reading list.
+pub async fn save_post(
+    State(state): State<AppState>,
+    current_site: CurrentSite,
+    Path(slug): Path<String>,
+    session: Session,
+) -> Response {
+    let redirect = axum::response::Redirect::to(&format!("/blog/{}", slug));
+    let session_ctx = super::resolve_session(&state, &session).await;
+    let Some(ref u) = session_ctx.user else {
+        return redirect.into_response();
+    };
+    let Ok(uid) = u.id.parse::<Uuid>() else {
+        return redirect.into_response();
+    };
+    let site_id = current_site.site.id;
+    if let Ok(post_record) = post::get_published_by_slug(&state.db, Some(site_id), &slug).await {
+        let _ = crate::models::saved_post::save(&state.db, uid, post_record.id, Some(site_id)).await;
+    }
+    redirect.into_response()
+}
+
+/// `POST /blog/:slug/unsave` — remove a post from the subscriber's reading list.
+pub async fn unsave_post(
+    State(state): State<AppState>,
+    current_site: CurrentSite,
+    Path(slug): Path<String>,
+    session: Session,
+) -> Response {
+    let redirect = axum::response::Redirect::to(&format!("/blog/{}", slug));
+    let session_ctx = super::resolve_session(&state, &session).await;
+    let Some(ref u) = session_ctx.user else {
+        return redirect.into_response();
+    };
+    let Ok(uid) = u.id.parse::<Uuid>() else {
+        return redirect.into_response();
+    };
+    let site_id = current_site.site.id;
+    if let Ok(post_record) = post::get_published_by_slug(&state.db, Some(site_id), &slug).await {
+        let _ = crate::models::saved_post::unsave(&state.db, uid, post_record.id).await;
+    }
+    redirect.into_response()
 }

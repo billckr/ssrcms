@@ -80,6 +80,8 @@ pub fn build(
         .route("/blog/{slug}", get(post_handler::single_post))
         .route("/blog/{slug}/unlock", post(post_unlock::unlock_post))
         .route("/blog/{slug}/comment", post(comment_handler::submit))
+        .route("/blog/{slug}/save", post(post_handler::save_post))
+        .route("/blog/{slug}/unsave", post(post_handler::unsave_post))
         .route("/category/{slug}", get(archive::category_archive))
         .route("/tag/{slug}", get(archive::tag_archive))
         .route("/author/{username}", get(archive::author_archive))

@@ -196,12 +196,48 @@ pub fn render_profile(data: &ProfileData, flash: Option<&str>, ctx: &AccountCont
     account_page("Profile", "/account/profile", flash, &content, ctx)
 }
 
-// ── Saved Posts (stub) ───────────────────────────────────────────────────────
+// ── Saved Posts ───────────────────────────────────────────────────────────────
 
-pub fn render_saved_posts(ctx: &AccountContext) -> String {
-    let content = r#"<h2>Saved Posts</h2>
-<p class="muted">You haven&rsquo;t saved any posts yet.</p>"#;
-    account_page("Saved Posts", "/account/saved-posts", None, content, ctx)
+pub struct SavedPostRow {
+    pub title:      String,
+    pub post_url:   String,
+    pub saved_at:   String,
+}
+
+pub fn render_saved_posts(posts: &[SavedPostRow], ctx: &AccountContext) -> String {
+    let rows = if posts.is_empty() {
+        r#"<p class="muted">You haven&rsquo;t saved any posts yet.</p>"#.to_string()
+    } else {
+        let mut html = String::from(r#"<ul class="saved-posts-list">"#);
+        for p in posts {
+            html.push_str(&format!(
+                r#"<li class="saved-post-item">
+  <a href="{url}" class="saved-post-title">{title}</a>
+  <span class="saved-post-meta">Saved {saved_at}</span>
+  <form method="post" action="{unsave_url}" class="unsave-form">
+    <button type="submit" class="btn-unsave">Remove</button>
+  </form>
+</li>"#,
+                url = crate::html_escape(&p.post_url),
+                title = crate::html_escape(&p.title),
+                saved_at = crate::html_escape(&p.saved_at),
+                unsave_url = derive_unsave_url(&p.post_url),
+            ));
+        }
+        html.push_str("</ul>");
+        html
+    };
+
+    let content = format!("<h2>Saved Posts</h2>\n{}", rows);
+    account_page("Saved Posts", "/account/saved-posts", None, &content, ctx)
+}
+
+fn derive_unsave_url(post_url: &str) -> String {
+    // post_url is like "http://host/blog/slug" — extract the path and append /unsave
+    if let Some(path_start) = post_url.find("/blog/") {
+        return format!("{}/unsave", &post_url[path_start..]);
+    }
+    "#".to_string()
 }
 
 // ── My Comments ──────────────────────────────────────────────────────────────

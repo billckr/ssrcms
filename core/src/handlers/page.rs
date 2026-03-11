@@ -3,6 +3,7 @@ use axum::{
     response::{Html, IntoResponse, Response},
 };
 use axum_extra::extract::cookie::SignedCookieJar;
+use tower_sessions::Session;
 
 use uuid::Uuid;
 
@@ -17,6 +18,7 @@ use super::home::{build_post_context, build_site_context, render_error_page};
 pub async fn single_page(
     State(state): State<AppState>,
     current_site: CurrentSite,
+    session: Session,
     Path(slug): Path<String>,
     jar: SignedCookieJar,
     axum::extract::OriginalUri(uri): axum::extract::OriginalUri,
@@ -38,7 +40,8 @@ pub async fn single_page(
         }
     }
 
-    match render_page(state.clone(), slug, uri, site_id, &base_url).await {
+    let session_ctx = super::resolve_session(&state, &session).await;
+    match render_page(state.clone(), slug, uri, site_id, &base_url, session_ctx).await {
         Ok(html) => Html(html).into_response(),
         Err(e) => render_error_page(e, &state, &path, Some(current_site.site.id)).await,
     }
@@ -50,6 +53,7 @@ async fn render_page(
     uri: axum::http::Uri,
     site_id: Uuid,
     base_url: &str,
+    session_ctx: SessionContext,
 ) -> crate::errors::Result<String> {
     // Look up a published page (post_type = 'page') by slug
     let post_record = post::get_published_by_slug(&state.db, Some(site_id), &slug).await?;
@@ -71,7 +75,7 @@ async fn render_page(
                 .map(parse_query_string)
                 .unwrap_or_default(),
         },
-        session: SessionContext { is_logged_in: false, user: None },
+        session: session_ctx,
         nav: NavContext::default(),
     }
     .into_tera_context();

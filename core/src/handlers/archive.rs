@@ -4,6 +4,7 @@ use axum::{
 };
 use serde::Deserialize;
 use std::collections::HashMap;
+use tower_sessions::Session;
 
 use uuid::Uuid;
 
@@ -32,6 +33,7 @@ fn default_page() -> i64 {
 pub async fn category_archive(
     State(state): State<AppState>,
     current_site: CurrentSite,
+    session: Session,
     Path(slug): Path<String>,
     Query(query): Query<PageQuery>,
     axum::extract::OriginalUri(uri): axum::extract::OriginalUri,
@@ -39,7 +41,8 @@ pub async fn category_archive(
     let path = uri.path().to_string();
     let site_id = current_site.site.id;
     let base_url = current_site.base_url.clone();
-    match render_taxonomy_archive(state.clone(), slug, TaxonomyType::Category, query.page, uri, site_id, &base_url).await {
+    let session_ctx = super::resolve_session(&state, &session).await;
+    match render_taxonomy_archive(state.clone(), slug, TaxonomyType::Category, query.page, uri, site_id, &base_url, session_ctx).await {
         Ok(html) => Html(html).into_response(),
         Err(e) => render_error_page(e, &state, &path, Some(current_site.site.id)).await,
     }
@@ -49,6 +52,7 @@ pub async fn category_archive(
 pub async fn tag_archive(
     State(state): State<AppState>,
     current_site: CurrentSite,
+    session: Session,
     Path(slug): Path<String>,
     Query(query): Query<PageQuery>,
     axum::extract::OriginalUri(uri): axum::extract::OriginalUri,
@@ -56,7 +60,8 @@ pub async fn tag_archive(
     let path = uri.path().to_string();
     let site_id = current_site.site.id;
     let base_url = current_site.base_url.clone();
-    match render_taxonomy_archive(state.clone(), slug, TaxonomyType::Tag, query.page, uri, site_id, &base_url).await {
+    let session_ctx = super::resolve_session(&state, &session).await;
+    match render_taxonomy_archive(state.clone(), slug, TaxonomyType::Tag, query.page, uri, site_id, &base_url, session_ctx).await {
         Ok(html) => Html(html).into_response(),
         Err(e) => render_error_page(e, &state, &path, Some(current_site.site.id)).await,
     }
@@ -66,6 +71,7 @@ pub async fn tag_archive(
 pub async fn author_archive(
     State(state): State<AppState>,
     current_site: CurrentSite,
+    session: Session,
     Path(username): Path<String>,
     Query(query): Query<PageQuery>,
     axum::extract::OriginalUri(uri): axum::extract::OriginalUri,
@@ -73,7 +79,8 @@ pub async fn author_archive(
     let path = uri.path().to_string();
     let site_id = current_site.site.id;
     let base_url = current_site.base_url.clone();
-    match render_author_archive(state.clone(), username, query.page, uri, site_id, &base_url).await {
+    let session_ctx = super::resolve_session(&state, &session).await;
+    match render_author_archive(state.clone(), username, query.page, uri, site_id, &base_url, session_ctx).await {
         Ok(html) => Html(html).into_response(),
         Err(e) => render_error_page(e, &state, &path, Some(current_site.site.id)).await,
     }
@@ -87,6 +94,7 @@ async fn render_taxonomy_archive(
     uri: axum::http::Uri,
     site_id: Uuid,
     base_url: &str,
+    session_ctx: SessionContext,
 ) -> crate::errors::Result<String> {
     let term = taxonomy::get_by_slug(&state.db, Some(site_id), &slug, tax_type.clone()).await?;
     let count = taxonomy::post_count(&state.db, term.id).await?;
@@ -141,7 +149,7 @@ async fn render_taxonomy_archive(
             path: uri.path().to_string(),
             query: HashMap::new(),
         },
-        session: SessionContext { is_logged_in: false, user: None },
+        session: session_ctx,
         nav: NavContext::default(),
     }
     .into_tera_context();
@@ -173,6 +181,7 @@ async fn render_author_archive(
     uri: axum::http::Uri,
     site_id: Uuid,
     base_url: &str,
+    session_ctx: SessionContext,
 ) -> crate::errors::Result<String> {
     use crate::models::user;
 
@@ -215,7 +224,7 @@ async fn render_author_archive(
             path: uri.path().to_string(),
             query: HashMap::new(),
         },
-        session: SessionContext { is_logged_in: false, user: None },
+        session: session_ctx,
         nav: NavContext::default(),
     }
     .into_tera_context();

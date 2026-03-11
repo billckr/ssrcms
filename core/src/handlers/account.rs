@@ -133,12 +133,37 @@ pub async fn profile_change_password(
     Html(admin::pages::account::render_profile(&data, Some(flash), &ctx))
 }
 
-// ── Saved Posts (stub) ───────────────────────────────────────────────────────
+// ── Saved Posts ───────────────────────────────────────────────────────────────
 
 /// GET /account/saved-posts
-pub async fn saved_posts(account: AccountUser) -> Html<String> {
+pub async fn saved_posts(
+    State(state): State<AppState>,
+    account: AccountUser,
+) -> Html<String> {
     let ctx = build_ctx(&account);
-    Html(admin::pages::account::render_saved_posts(&ctx))
+    let posts_raw = crate::models::saved_post::list_for_user(
+        &state.db,
+        account.user.id,
+        account.site_id,
+    )
+    .await
+    .unwrap_or_default();
+
+    let base_url = &account.site_base_url;
+    let rows: Vec<admin::pages::account::SavedPostRow> = posts_raw
+        .iter()
+        .map(|p| {
+            let post_url = format!("{}/blog/{}", base_url, p.slug);
+            let saved_at = String::new(); // saved_at comes from the join; use a simpler query if needed
+            admin::pages::account::SavedPostRow {
+                title:    p.title.clone(),
+                post_url,
+                saved_at,
+            }
+        })
+        .collect();
+
+    Html(admin::pages::account::render_saved_posts(&rows, &ctx))
 }
 
 // ── My Comments ──────────────────────────────────────────────────────────────

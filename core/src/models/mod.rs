@@ -3,6 +3,7 @@ pub mod form_submission;
 pub mod media;
 pub mod media_folder;
 pub mod post;
+pub mod saved_post;
 pub mod site;
 pub mod site_plugin;
 pub mod site_user;

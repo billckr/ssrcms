@@ -48,6 +48,17 @@
         </span>
       {% endif %}
       <span class="reading-time">{{ post.reading_time }} min read</span>
+      {% if session.is_logged_in %}
+        {% if is_saved %}
+          <form method="post" action="/blog/{{ post.slug }}/unsave" class="save-post-form">
+            <button type="submit" class="btn-save-post saved">★ Saved</button>
+          </form>
+        {% else %}
+          <form method="post" action="/blog/{{ post.slug }}/save" class="save-post-form">
+            <button type="submit" class="btn-save-post">☆ Save</button>
+          </form>
+        {% endif %}
+      {% endif %}
     </div>
   </header>
 

@@ -4,6 +4,7 @@ use axum::{
 };
 use serde::Deserialize;
 use std::collections::HashMap;
+use tower_sessions::Session;
 
 use uuid::Uuid;
 
@@ -30,13 +31,15 @@ fn default_page() -> i64 {
 pub async fn home(
     State(state): State<AppState>,
     current_site: CurrentSite,
+    session: Session,
     Query(query): Query<PageQuery>,
     axum::extract::OriginalUri(uri): axum::extract::OriginalUri,
 ) -> Response {
     let path = uri.path().to_string();
     let site_id = current_site.site.id;
     let base_url = current_site.base_url.clone();
-    match render_home(state.clone(), query, uri, site_id, &base_url).await {
+    let session_ctx = super::resolve_session(&state, &session).await;
+    match render_home(state.clone(), query, uri, site_id, &base_url, session_ctx).await {
         Ok(html) => Html(html).into_response(),
         Err(e) => {
             tracing::error!("home handler error: {:?}", e);
@@ -51,6 +54,7 @@ async fn render_home(
     uri: axum::http::Uri,
     site_id: Uuid,
     base_url: &str,
+    session_ctx: SessionContext,
 ) -> Result<String> {
     let per_page = state.get_site_by_id(site_id)
         .map(|(_, s)| s.posts_per_page)
@@ -88,7 +92,7 @@ async fn render_home(
             path: uri.path().to_string(),
             query: HashMap::new(),
         },
-        session: SessionContext { is_logged_in: false, user: None },
+        session: session_ctx,
         nav: NavContext::default(),
     }
     .into_tera_context();
