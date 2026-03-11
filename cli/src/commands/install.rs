@@ -310,7 +310,7 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
         ("site_description", ""),
         ("site_url",         &site_url),
         ("site_language",    "en-US"),
-        ("active_theme",     "Default"),
+        ("active_theme",     "default"),
         ("posts_per_page",   "10"),
         ("date_format",      "%B %-d, %Y"),
     ];
