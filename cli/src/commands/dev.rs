@@ -28,7 +28,7 @@ pub enum DevAction {
         install_dir: Option<String>,
 
         /// Database URL (overrides DATABASE_URL env var)
-        #[arg(long, env = "DATABASE_URL")]
+        #[arg(long, env = "DATABASE_URL", hide = true)]
         database_url: Option<String>,
     },
 }

@@ -19,7 +19,7 @@ pub enum SiteAction {
         #[arg(long)]
         hostname: String,
         /// Database URL (overrides DATABASE_URL env var)
-        #[arg(long, env = "DATABASE_URL")]
+        #[arg(long, env = "DATABASE_URL", hide = true)]
         database_url: Option<String>,
     },
     /// Create a new empty site.
@@ -34,13 +34,13 @@ pub enum SiteAction {
         #[arg(long)]
         themes_dir: Option<String>,
         /// Database URL (overrides DATABASE_URL env var)
-        #[arg(long, env = "DATABASE_URL")]
+        #[arg(long, env = "DATABASE_URL", hide = true)]
         database_url: Option<String>,
     },
     /// List all sites with their post counts.
     List {
         /// Database URL (overrides DATABASE_URL env var)
-        #[arg(long, env = "DATABASE_URL")]
+        #[arg(long, env = "DATABASE_URL", hide = true)]
         database_url: Option<String>,
     },
     /// Delete a site and all its content (cascade).
@@ -49,7 +49,7 @@ pub enum SiteAction {
         #[arg(long)]
         id: String,
         /// Database URL (overrides DATABASE_URL env var)
-        #[arg(long, env = "DATABASE_URL")]
+        #[arg(long, env = "DATABASE_URL", hide = true)]
         database_url: Option<String>,
     },
 }

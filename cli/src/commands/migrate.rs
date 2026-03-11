@@ -3,7 +3,7 @@ use clap::Args;
 #[derive(Args)]
 pub struct MigrateArgs {
     /// Database URL (overrides DATABASE_URL env var)
-    #[arg(long, env = "DATABASE_URL")]
+    #[arg(long, env = "DATABASE_URL", hide = true)]
     pub database_url: Option<String>,
 }
 

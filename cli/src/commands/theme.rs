@@ -7,7 +7,7 @@ pub enum ThemeAction {
     /// List installed themes (reads theme.toml manifests from ./themes/)
     List {
         /// Database URL (overrides DATABASE_URL env var)
-        #[arg(long, env = "DATABASE_URL")]
+        #[arg(long, env = "DATABASE_URL", hide = true)]
         database_url: Option<String>,
     },
     /// Activate a theme for a site
@@ -18,7 +18,7 @@ pub enum ThemeAction {
         #[arg(long)]
         site: Option<String>,
         /// Database URL (overrides DATABASE_URL env var)
-        #[arg(long, env = "DATABASE_URL")]
+        #[arg(long, env = "DATABASE_URL", hide = true)]
         database_url: Option<String>,
         /// Path to the server PID file (used to signal a live reload without restart)
         #[arg(long, default_value = "synaptic.pid")]
