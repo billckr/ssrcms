@@ -23,7 +23,7 @@ pub fn render(error: Option<&str>, site_name: &str) -> String {
     <h2>Create an account</h2>
     {error_html}
     <form method="POST" action="/subscribe">
-      <label for="display_name">Name</label>
+      <label for="display_name">Display Name</label>
       <input type="text" id="display_name" name="display_name" required autofocus autocomplete="name">
 
       <label for="email">Email</label>

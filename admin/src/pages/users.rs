@@ -558,11 +558,13 @@ function toggleSiteFields() {{
   <form method="POST" action="{action}" style="max-width:580px">
     <div class="user-form-grid">
       <div class="form-group">
-        <label for="username">Username</label>
-        <input type="text" id="username" name="username" value="{username}" required autocomplete="off"{autofocus}>
+        <label for="username">Username <span class="field-hint">(letters, numbers, hyphens only)</span></label>
+        <input type="text" id="username" name="username" value="{username}" required autocomplete="off"
+               pattern="[a-z0-9][a-z0-9\-]*[a-z0-9]|[a-z0-9]" title="Lowercase letters, numbers and hyphens only"{autofocus}>
+        <span id="username-hint" class="field-error" style="display:none">Only lowercase letters, numbers and hyphens allowed.</span>
       </div>
       <div class="form-group">
-        <label for="display_name">Full Name</label>
+        <label for="display_name">Display Name</label>
         <input type="text" id="display_name" name="display_name" value="{display_name}" required autocomplete="off">
       </div>
       <div class="form-group">
@@ -669,15 +671,47 @@ function toggleSiteFields() {{
       return /^(?:[a-z0-9](?:[a-z0-9\-]*[a-z0-9])?\.)+[a-z]{{2,}}$/i.test(h);
     }}
 
+    // Slugify a string to lowercase letters, numbers and hyphens.
+    function toSlug(s) {{
+      return s.toLowerCase()
+        .replace(/[^a-z0-9\s-]/g, '')
+        .trim()
+        .replace(/[\s]+/g, '-')
+        .replace(/-{{2,}}/g, '-')
+        .replace(/^-|-$/g, '');
+    }}
+    var slugPattern = /^[a-z0-9][a-z0-9\-]*[a-z0-9]$|^[a-z0-9]$/;
+    var unameEl = document.getElementById('username');
+    var dnameEl = document.getElementById('display_name');
+    var unameHint = document.getElementById('username-hint');
+    var usernameTouched = false;
+    if (unameEl) {{
+      unameEl.addEventListener('input', function() {{
+        usernameTouched = true;
+        var slug = toSlug(unameEl.value);
+        if (unameHint) unameHint.style.display = (unameEl.value && !slugPattern.test(unameEl.value)) ? '' : 'none';
+        syncSaveBtn();
+      }});
+    }}
+    // Auto-populate username from display name on new user form (until admin edits it manually).
+    if (dnameEl && unameEl && {is_new_js}) {{
+      dnameEl.addEventListener('input', function() {{
+        if (!usernameTouched) {{
+          unameEl.value = toSlug(dnameEl.value);
+          if (unameHint) unameHint.style.display = 'none';
+          syncSaveBtn();
+        }}
+      }});
+    }}
+
     var checkComplete = function() {{
-      var unameEl = document.getElementById('username');
-      var dnameEl = document.getElementById('display_name');
-      var emailEl = document.getElementById('email');
       var uname = unameEl ? unameEl.value.trim() : '';
       var dname = dnameEl ? dnameEl.value.trim() : '';
+      var emailEl = document.getElementById('email');
       var email = emailEl ? emailEl.value.trim() : '';
       var pw    = pwInput ? pwInput.value : '';
       if (!uname || !dname || !email || !pw) return false;
+      if (!slugPattern.test(uname)) return false;
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return false;
       if (validatePw(pw)) return false;
       var roleEl = document.getElementById('role');

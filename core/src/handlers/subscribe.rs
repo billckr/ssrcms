@@ -122,8 +122,8 @@ pub async fn subscribe_post(
             }
         }
         Err(_) => {
-            // New user — generate a username and create the account.
-            let username = generate_username(&state.db, &email).await;
+            // New user — generate a username from display name and create the account.
+            let username = generate_username(&state.db, form.display_name.trim()).await;
             let create = CreateUser {
                 username,
                 email: email.clone(),
@@ -169,26 +169,19 @@ pub async fn subscribe_post(
     Redirect::to("/subscribe").into_response()
 }
 
-/// Derive a unique username from an email address.
-/// e.g. "jane.doe@example.com" → "janedoe", then "janedoe3742" if taken.
-async fn generate_username(pool: &sqlx::PgPool, email: &str) -> String {
-    let prefix = email.split('@').next().unwrap_or("user");
-    // Slugify and strip hyphens so "jane.doe" → "janedoe".
-    let base = slug::slugify(prefix).replace('-', "");
+/// Derive a unique username from a display name.
+/// e.g. "Steve Miller" → "steve-miller", then "steve-miller2" if taken.
+async fn generate_username(pool: &sqlx::PgPool, display_name: &str) -> String {
+    let base = slug::slugify(display_name);
     let base = if base.is_empty() { "user".to_string() } else { base };
 
     if !username_taken(pool, &base).await {
         return base;
     }
 
-    // Try up to 20 times with a random 4-digit suffix.
-    for _ in 0..20 {
-        // Generate number in a scoped block so `ThreadRng` is dropped before the await.
-        let candidate = {
-            use rand::Rng;
-            let n: u32 = rand::thread_rng().gen_range(1000..9999);
-            format!("{}{}", base, n)
-        };
+    // Try sequential suffixes: steve-miller2, steve-miller3, …
+    for n in 2u32..=9999 {
+        let candidate = format!("{}{}", base, n);
         if !username_taken(pool, &candidate).await {
             return candidate;
         }

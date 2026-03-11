@@ -288,6 +288,31 @@ pub async fn save_new(
         }
     };
 
+    // Validate username: lowercase letters, numbers and hyphens only.
+    let username_valid = {
+        let u = form.username.trim();
+        !u.is_empty() && u.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+            && !u.starts_with('-') && !u.ends_with('-')
+    };
+    if !username_valid {
+        let sites = fetch_sites_for_admin(&state, &admin).await;
+        let edit = UserEdit {
+            id: None,
+            username: form.username.clone(),
+            email: form.email.clone(),
+            display_name: form.display_name.clone().unwrap_or_default(),
+            role: form.role.clone(),
+            bio: form.bio.clone().unwrap_or_default(),
+            sites,
+            is_super_admin_target: false,
+        };
+        return Html(admin::pages::users::render_editor(
+            &edit,
+            Some("Username may only contain lowercase letters, numbers and hyphens, and cannot start or end with a hyphen."),
+            &ctx,
+        )).into_response();
+    }
+
     // Validate hostname format when creating a new site.
     if form.site_assignment.as_deref() == Some("new") {
         let hostname = form.new_hostname.as_deref().unwrap_or("").trim().to_lowercase();
