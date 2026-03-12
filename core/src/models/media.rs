@@ -161,6 +161,21 @@ pub async fn delete(pool: &PgPool, id: Uuid) -> Result<()> {
     Ok(())
 }
 
+pub async fn count(pool: &PgPool, site_id: Option<Uuid>, uploaded_by: Option<Uuid>, folder_id: Option<Uuid>) -> Result<i64> {
+    let n = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM media \
+         WHERE ($1::uuid IS NULL OR site_id = $1) \
+           AND ($2::uuid IS NULL OR uploaded_by = $2) \
+           AND ($3::uuid IS NULL OR folder_id = $3)",
+    )
+    .bind(site_id)
+    .bind(uploaded_by)
+    .bind(folder_id)
+    .fetch_one(pool)
+    .await?;
+    Ok(n)
+}
+
 pub async fn list(pool: &PgPool, site_id: Option<Uuid>, uploaded_by: Option<Uuid>, folder_id: Option<Uuid>, limit: i64, offset: i64) -> Result<Vec<Media>> {
     let items = sqlx::query_as::<_, Media>(
         "SELECT * FROM media \
