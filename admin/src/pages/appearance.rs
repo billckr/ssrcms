@@ -226,6 +226,7 @@ pub fn render_theme_editor(
       <option value=".html">.html</option>
       <option value=".css">.css</option>
       <option value=".js">.js</option>
+      <option value=".xml">.xml</option>
     </select>
     <button type="submit" class="btn btn-sm btn-primary">Create</button>
     <button type="button" class="btn btn-sm btn-secondary"

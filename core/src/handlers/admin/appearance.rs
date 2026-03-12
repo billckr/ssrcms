@@ -752,7 +752,7 @@ pub async fn new_file(
     }
 
     // name = bare name the user typed (e.g. "partials/header" or "custom")
-    // ext  = dropdown selection: ".html", ".css", or ".js"
+    // ext  = dropdown selection: ".html", ".css", ".js", or ".xml"
     let name = form.filename.trim().to_string();
     let ext  = form.ext.trim().to_string();
 
@@ -768,7 +768,8 @@ pub async fn new_file(
         ".html" => ("templates", b"{# New template #}\n"),
         ".css"  => ("static",    b"/* styles */\n"),
         ".js"   => ("static",    b"/* scripts */\n"),
-        _       => return editor_err("Invalid file type. Choose .html, .css, or .js."),
+        ".xml"  => ("templates", b"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"),
+        _       => return editor_err("Invalid file type. Choose .html, .css, .js, or .xml."),
     };
 
     // Full relative path from theme root, e.g. "templates/partials/header.html"
@@ -1121,7 +1122,8 @@ fn walk_dir_inner(base: &FsPath, current: &FsPath, out: &mut Vec<String>) {
             // Everything else (images, zips, .bak, Zone.Identifier, theme.toml, etc.) is excluded.
             let editable = name_str.ends_with(".html")
                 || name_str.ends_with(".css")
-                || name_str.ends_with(".js");
+                || name_str.ends_with(".js")
+                || name_str.ends_with(".xml");
             if !editable { continue; }
             if let Ok(rel) = path.strip_prefix(base) {
                 out.push(rel.to_string_lossy().replace('\\', "/"));

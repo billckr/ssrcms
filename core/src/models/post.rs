@@ -457,8 +457,12 @@ mod tests {
 
 pub async fn create(pool: &PgPool, data: &CreatePost) -> Result<Post> {
     let slug = data.slug.clone().unwrap_or_else(|| crate::utils::slugify::slugify(&data.title));
+    let slug = slug.chars().take(200).collect::<String>();
     let format = data.content_format.as_deref().unwrap_or("html");
     let sanitized_content = sanitize_content(&data.content);
+    let clean_title   = ammonia::clean_text(&data.title).chars().take(255).collect::<String>();
+    let clean_excerpt = data.excerpt.as_deref()
+        .map(|e| ammonia::clean_text(e).chars().take(500).collect::<String>());
 
     let post = sqlx::query_as::<_, Post>(
         r#"
@@ -471,11 +475,11 @@ pub async fn create(pool: &PgPool, data: &CreatePost) -> Result<Post> {
         "#,
     )
     .bind(data.site_id)
-    .bind(&data.title)
+    .bind(&clean_title)
     .bind(&slug)
     .bind(&sanitized_content)
     .bind(format)
-    .bind(&data.excerpt)
+    .bind(&clean_excerpt)
     .bind(data.status.as_str())
     .bind(data.post_type.as_str())
     .bind(data.author_id)
@@ -737,13 +741,18 @@ pub async fn update(pool: &PgPool, id: Uuid, data: &UpdatePost) -> Result<Post> 
     let current = get_by_id(pool, id).await?;
 
     let new_slug = data.slug.clone().unwrap_or(current.slug.clone());
-    let new_title = data.title.clone().unwrap_or(current.title.clone());
+    let new_slug = new_slug.chars().take(200).collect::<String>();
+    let new_title = data.title.as_deref()
+        .map(|t| ammonia::clean_text(t).chars().take(255).collect::<String>())
+        .unwrap_or(current.title.clone());
     let new_content = match &data.content {
         Some(html) => sanitize_content(html),
         None => current.content.clone(),
     };
     let new_format = data.content_format.clone().unwrap_or(current.content_format.clone());
-    let new_excerpt = data.excerpt.clone().or(current.excerpt.clone());
+    let new_excerpt = data.excerpt.as_deref()
+        .map(|e| ammonia::clean_text(e).chars().take(500).collect::<String>())
+        .or(current.excerpt.clone());
     let new_status = data.status.as_ref().map(|s| s.as_str().to_string()).unwrap_or(current.status.clone());
     let new_image = if data.clear_featured_image {
         None

@@ -191,7 +191,7 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
                 format!("Forms{}", badge)
             )
         } else { String::new() },
-        plugins = if ctx.can_manage_plugins { nav_link("/admin/plugins", "Plugins") } else { String::new() },
+        plugins = String::new(), // plugins disabled pre-launch
         documentation = if ctx.can_manage_settings || ctx.is_global_admin { nav_link("/admin/documentation", "Documentation") } else { String::new() },
         appearance = if ctx.can_manage_appearance { nav_link("/admin/appearance", "Appearance") } else { String::new() },
         menus = if ctx.can_manage_appearance { nav_link("/admin/menus", "Menus") } else { String::new() },

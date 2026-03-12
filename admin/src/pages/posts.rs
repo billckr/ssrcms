@@ -665,25 +665,28 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
 <form method="POST" action="{action}">
   <div class="editor-layout">
     <div class="editor-main">
-      <div class="form-group">
-        <label for="title">Title</label>
-        <input type="text" id="title" name="title" value="{title_val}" required class="title-input"{autofocus}>
+      <div style="display:grid;grid-template-columns:1fr auto;gap:.75rem;align-items:start;margin-bottom:1.25rem">
+        <div class="form-group" style="margin:0">
+          <label for="title">Title <span style="color:var(--danger);font-weight:700">*</span></label>
+          <input type="text" id="title" name="title" value="{title_val}" required class="title-input" maxlength="255"{autofocus}>
+          <small id="title-count" style="color:var(--muted)">255 remaining</small>
+        </div>
+        <div class="form-group" style="margin:0;min-width:200px;max-width:280px">
+          <label for="slug">Slug</label>
+          <input type="text" id="slug" name="slug" value="{slug}" maxlength="200"
+            onkeydown="if(event.key===' '){{ event.preventDefault(); var i=this.selectionStart; this.value=this.value.slice(0,i)+'-'+this.value.slice(this.selectionEnd); this.selectionStart=this.selectionEnd=i+1; }}"
+            onblur="this.value=this.value.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'');">
+        </div>
       </div>
-      <div class="form-group">
-        <label for="slug">Slug</label>
-        <input type="text" id="slug" name="slug" value="{slug}"
-          onkeydown="if(event.key===' '){{ event.preventDefault(); var i=this.selectionStart; this.value=this.value.slice(0,i)+'-'+this.value.slice(this.selectionEnd); this.selectionStart=this.selectionEnd=i+1; }}"
-          onblur="this.value=this.value.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'');">
-        <small>Lowercase, hyphens only. Spaces auto-convert to hyphens.</small>
-      </div>
-      <div class="form-group">
-        <label>Content</label>
-        <div id="quill-editor" style="height:480px;background:#fff;font-size:1rem"></div>
-        <input type="hidden" id="content" name="content">
-      </div>
-      <div class="form-group">
+      <div class="form-group" style="margin-bottom:1.25rem">
         <label for="excerpt">Excerpt <span style="color:var(--danger);font-weight:700">*</span> <small style="font-weight:400;color:var(--muted)">Used as meta description — required for SEO</small></label>
-        <textarea id="excerpt" name="excerpt" rows="3" required>{excerpt}</textarea>
+        <textarea id="excerpt" name="excerpt" rows="3" required maxlength="500">{excerpt}</textarea>
+        <small id="excerpt-count" style="color:var(--muted)">500 remaining</small>
+      </div>
+      <div class="form-group">
+        <label>Content <span style="color:var(--danger);font-weight:700">*</span></label>
+        <div id="quill-editor" style="height:620px;background:#fff;font-size:1rem"></div>
+        <input type="hidden" id="content" name="content">
       </div>
     </div>
     <div class="editor-sidebar">
@@ -758,6 +761,24 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
     window._quillRange = quill.getSelection(true);
     openMediaPicker('inline');
   }});
+
+  // Remaining character counters for title and excerpt
+  (function() {{
+    function initCount(inputId, countId, max) {{
+      var el = document.getElementById(inputId);
+      var counter = document.getElementById(countId);
+      if (!el || !counter) return;
+      function update() {{
+        var remaining = max - el.value.length;
+        counter.textContent = remaining + ' remaining';
+        counter.style.color = remaining <= 20 ? 'var(--danger)' : 'var(--muted)';
+      }}
+      el.addEventListener('input', update);
+      update();
+    }}
+    initCount('title',   'title-count',   255);
+    initCount('excerpt', 'excerpt-count', 500);
+  }})();
 }})();
 </script>"#,
         action = action,
