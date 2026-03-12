@@ -258,6 +258,23 @@ pub fn render_list(
     let content = format!(r##"
 {flash}
 <style>
+/* ── Force sidebar-collapsed layout on this page only ────────────────── */
+.admin-sidebar {{
+  transform: translateX(-100%);
+  transition: transform .25s ease;
+  box-shadow: none;
+}}
+body.sidebar-open .admin-sidebar {{
+  transform: translateX(0);
+  box-shadow: 4px 0 24px rgba(0,0,0,.25);
+}}
+.admin-main {{
+  margin-left: 0 !important;
+  width: 100%;
+}}
+.hamburger {{
+  display: flex !important;
+}}
 /* ── Media Manager 2 — page-scoped styles ────────────────────────────── */
 .mm-layout {{
   display: grid;
@@ -345,9 +362,14 @@ pub fn render_list(
 .mm-type-item a.active {{ background: #ede9fe; color: var(--primary); font-weight: 600; }}
 .mm-type-dot {{ width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }}
 .mm-type-count {{
-  margin-left: auto; font-size: 11px; color: var(--muted);
-  background: var(--border); border-radius: 10px;
-  padding: .05rem .4rem; font-weight: 600;
+  margin-left: auto;
+  display: inline-block;
+  background: #f3f4f6;
+  color: #374151;
+  border-radius: 4px;
+  padding: .15rem .5rem;
+  font-size: .78rem;
+  font-weight: 500;
 }}
 .mm-type-item a.active .mm-type-count {{ background: #ddd6fe; color: var(--primary); }}
 
@@ -562,7 +584,6 @@ pub fn render_list(
   .mm-layout {{ grid-template-columns: 1fr; height: auto; min-height: 0; }}
   .mm-sidebar {{ border-right: none; border-bottom: 1px solid var(--border); display: grid; grid-template-columns: 1fr 1fr; }}
   .mm-sidebar .mm-panel-section + .mm-panel-section {{ border-top: none; border-left: 1px solid var(--border); }}
-  .mm-new-folder-btn {{ display: none; }}
   .mm-main {{ min-height: 500px; }}
   .mm-detail-panel {{ top: 0; width: 100%; height: 100%; border-left: none; }}
 }}
@@ -599,7 +620,7 @@ pub fn render_list(
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
         </button>
       </div>
-      <button class="btn btn-primary" style="font-size:13px;height:2rem;padding:.3rem .75rem">
+      <button class="btn btn-primary" style="font-size:13px;height:2rem;padding:.3rem .75rem" onclick="document.getElementById('mm2FileInput').click()">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right:.3rem"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
         Upload
       </button>
@@ -664,16 +685,21 @@ pub fn render_list(
   <!-- Main content -->
   <div class="mm-main" id="mmMain">
 
-    <!-- Drop zone -->
-    <div class="mm-dropzone" id="mmDropzone">
-      <div class="mm-dropzone-icon">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></svg>
+    <!-- Drop zone / upload form -->
+    <form method="POST" action="/admin/media/upload" enctype="multipart/form-data" id="mm2UploadForm">
+      <input type="file" id="mm2FileInput" name="file" accept="image/*,application/pdf,video/*,audio/*"
+             style="position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;pointer-events:none"
+             onchange="mm2Submit()">
+      <div class="mm-dropzone" id="mmDropzone">
+        <div class="mm-dropzone-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></svg>
+        </div>
+        <div class="mm-dropzone-text" id="mm2DzText">
+          <strong>Drop files here to upload</strong>
+          <span>or <span class="mm-browse-link">browse your computer</span> — JPG, PNG, GIF, PDF, MP4…</span>
+        </div>
       </div>
-      <div class="mm-dropzone-text">
-        <strong>Drop files here to upload</strong>
-        <span>or <span class="mm-browse-link">browse your computer</span> — JPG, PNG, GIF, PDF, MP4…</span>
-      </div>
-    </div>
+    </form>
 
     <!-- Grid / list wrap -->
     <div class="mm-grid-wrap" id="mmGridWrap">
@@ -792,20 +818,6 @@ pub fn render_list(
       el.classList.toggle('hidden', !match);
     }});
 
-    // Update counts in type pills
-    var typeCounts = {{}};
-    gridItems.forEach(function(el) {{
-      if (!el.classList.contains('hidden')) {{
-        typeCounts[el.dataset.type] = (typeCounts[el.dataset.type] || 0) + 1;
-      }}
-    }});
-    ['image','video','audio','document'].forEach(function(t) {{
-      var el = document.getElementById('tc-' + t);
-      if (el) el.textContent = typeCounts[t] || 0;
-    }});
-    var allEl = document.getElementById('tc-all');
-    if (allEl) allEl.textContent = visible;
-
     // Show empty state
     document.getElementById('mmEmpty').classList.toggle('visible', visible === 0);
 
@@ -906,14 +918,52 @@ pub fn render_list(
     bar.classList.toggle('visible', n > 0);
   }}
 
-  /* ── Drag-over on drop zone ──────────────────────────────────────── */
-  var dz = document.getElementById('mmDropzone');
+  /* ── Drop zone — click + drag-and-drop ──────────────────────────── */
+  var dz    = document.getElementById('mmDropzone');
+  var dzInp = document.getElementById('mm2FileInput');
+  var dzFrm = document.getElementById('mm2UploadForm');
+
+  // Click anywhere on the zone → open file dialog
+  dz.addEventListener('click', function() {{ dzInp.click(); }});
+
+  // Drag visual feedback
   ['dragover','dragenter'].forEach(function(ev) {{
-    dz.addEventListener(ev, function(e) {{ e.preventDefault(); dz.classList.add('drag-over'); }});
+    dz.addEventListener(ev, function(e) {{
+      e.preventDefault();
+      dz.classList.add('drag-over');
+    }});
   }});
-  ['dragleave','drop'].forEach(function(ev) {{
-    dz.addEventListener(ev, function(e) {{ e.preventDefault(); dz.classList.remove('drag-over'); }});
+  dz.addEventListener('dragleave', function() {{ dz.classList.remove('drag-over'); }});
+
+  // Drop → transfer files to input and submit
+  dz.addEventListener('drop', function(e) {{
+    e.preventDefault();
+    dz.classList.remove('drag-over');
+    var file = e.dataTransfer.files[0];
+    if (!file) return;
+    // Stuff the dropped file into the hidden input via DataTransfer
+    try {{
+      var dt = new DataTransfer();
+      dt.items.add(file);
+      dzInp.files = dt.files;
+    }} catch(_) {{}}
+    mm2ShowPending(file.name);
+    dzFrm.submit();
   }});
+
+  window.mm2Submit = function() {{
+    var file = dzInp.files[0];
+    if (!file) return;
+    mm2ShowPending(file.name);
+    dzFrm.submit();
+  }};
+
+  function mm2ShowPending(name) {{
+    var txt = document.getElementById('mm2DzText');
+    if (txt) txt.innerHTML = '<strong>Uploading ' + escHtml(name) + '…</strong><span>Please wait</span>';
+    dz.style.borderColor = 'var(--primary)';
+    dz.style.background  = '#ede9fe';
+  }}
 
   /* ── New folder (placeholder) ────────────────────────────────────── */
   window.promptNewFolder = function() {{
