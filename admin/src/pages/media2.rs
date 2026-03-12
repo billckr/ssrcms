@@ -177,6 +177,17 @@ pub fn render_list(
         format!("[{}]", parts.join(","))
     };
 
+    // ── Folders JSON (for bulk "Move to" in JS) ──────────────────────────────
+    let folders_json: String = {
+        let parts: Vec<String> = folders.iter().map(|f| {
+            format!(r##"{{"id":"{id}","name":"{name}"}}"##,
+                id   = html_escape(&f.id),
+                name = html_escape(&f.name),
+            )
+        }).collect();
+        format!("[{}]", parts.join(","))
+    };
+
     // ── Folder sidebar items ─────────────────────────────────────────────────
     let folder_items_html: String = {
         let mut html = String::from(
@@ -388,6 +399,15 @@ body.sidebar-open .admin-sidebar {{
 /* ── Main ─────────────────────────────────────────────────────────────── */
 .mm-main {{ display: flex; flex-direction: column; overflow: hidden; min-width: 0; }}
 
+/* Content area: sits below the drop zone, holds grid + detail panel */
+.mm-content-area {{
+  flex: 1;
+  position: relative;
+  display: flex;
+  overflow: hidden;
+  min-height: 0;
+}}
+
 .mm-dropzone {{
   margin: .75rem .85rem .5rem;
   border: 2px dashed var(--border);
@@ -407,7 +427,7 @@ body.sidebar-open .admin-sidebar {{
 .mm-dropzone-text span {{ font-size: 12px; color: var(--muted); }}
 .mm-dropzone-text .mm-browse-link {{ color: var(--primary); font-weight: 600; }}
 
-.mm-grid-wrap {{ flex: 1; overflow-y: auto; padding: 0 .85rem .85rem; }}
+.mm-grid-wrap {{ flex: 1; overflow-y: auto; padding: 0 .85rem .85rem; min-width: 0; }}
 
 .mm-grid {{
   display: grid;
@@ -478,9 +498,9 @@ body.sidebar-open .admin-sidebar {{
 .mm-empty {{ display: none; padding: 3rem; text-align: center; color: var(--muted); font-size: 13px; }}
 .mm-empty.visible {{ display: block; }}
 
-/* ── Detail panel ─────────────────────────────────────────────────────── */
+/* ── Detail panel — positioned inside .mm-content-area ───────────────── */
 .mm-detail-panel {{
-  position: absolute; top: 41px; right: 0; bottom: 0; width: 280px;
+  position: absolute; top: 0; right: 0; bottom: 0; width: 280px;
   background: var(--surface); border-left: 1px solid var(--border);
   display: flex; flex-direction: column;
   transform: translateX(100%); transition: transform .22s cubic-bezier(.4,0,.2,1);
@@ -585,7 +605,8 @@ body.sidebar-open .admin-sidebar {{
   .mm-sidebar {{ border-right: none; border-bottom: 1px solid var(--border); display: grid; grid-template-columns: 1fr 1fr; }}
   .mm-sidebar .mm-panel-section + .mm-panel-section {{ border-top: none; border-left: 1px solid var(--border); }}
   .mm-main {{ min-height: 500px; }}
-  .mm-detail-panel {{ top: 0; width: 100%; height: 100%; border-left: none; }}
+  .mm-content-area {{ min-height: 400px; }}
+  .mm-detail-panel {{ width: 100%; border-left: none; }}
 }}
 @media (max-width: 600px) {{
   .mm-toolbar {{ gap: .4rem; }}
@@ -687,6 +708,7 @@ body.sidebar-open .admin-sidebar {{
 
     <!-- Drop zone / upload form -->
     <form method="POST" action="/admin/media/upload" enctype="multipart/form-data" id="mm2UploadForm">
+      <input type="hidden" name="redirect" value="/admin/media2">
       <input type="file" id="mm2FileInput" name="file" accept="image/*,application/pdf,video/*,audio/*"
              style="position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;pointer-events:none"
              onchange="mm2Submit()">
@@ -700,6 +722,9 @@ body.sidebar-open .admin-sidebar {{
         </div>
       </div>
     </form>
+
+    <!-- Content area: grid + detail panel side by side, below the drop zone -->
+    <div class="mm-content-area">
 
     <!-- Grid / list wrap -->
     <div class="mm-grid-wrap" id="mmGridWrap">
@@ -729,22 +754,11 @@ body.sidebar-open .admin-sidebar {{
 
     </div>
 
-    <!-- Footer -->
-    <div class="mm-footer">
-      <span class="mm-footer-info" id="mmFooterInfo">{footer_info}</span>
-      <div class="pagination" style="margin:0" id="mmPagination">
-        {pagination}
-      </div>
-    </div>
-  </div>
-
-  <!-- Detail panel -->
+  <!-- Detail panel — now inside mm-content-area, never overlaps drop zone -->
   <div class="mm-detail-panel" id="mmDetail">
     <div class="mm-detail-header">
       <span>File details</span>
-      <button class="mm-detail-close" onclick="closeDetail()">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-      </button>
+      <button class="btn btn-primary" onclick="closeDetail()" style="padding:.2rem .55rem;height:auto;line-height:1;font-size:14px" title="Close">&#10005;</button>
     </div>
     <div class="mm-detail-body" id="mmDetailBody">
       <p style="color:var(--muted);font-size:13px;text-align:center;padding:2rem 0">Select a file to see details.</p>
@@ -755,22 +769,50 @@ body.sidebar-open .admin-sidebar {{
     </div>
   </div>
 
+    </div><!-- end mm-content-area -->
+
+    <!-- Footer -->
+    <div class="mm-footer">
+      <span class="mm-footer-info" id="mmFooterInfo">{footer_info}</span>
+      <div class="pagination" style="margin:0" id="mmPagination">
+        {pagination}
+      </div>
+    </div>
+  </div>
+
   <!-- Bulk action bar -->
   <div class="mm-bulk-bar" id="mmBulkBar">
     <span class="mm-bulk-bar-count" id="mmBulkCount">0 selected</span>
     <div class="mm-bulk-bar-sep"></div>
-    <button class="mm-bulk-action">Move to…</button>
-    <button class="mm-bulk-action">Download</button>
-    <button class="mm-bulk-action danger">Delete</button>
+    <button class="mm-bulk-action" onclick="bulkMoveTo()">Move to…</button>
+    <button class="mm-bulk-action" onclick="bulkDownload()">Download</button>
+    <button class="mm-bulk-action danger" onclick="bulkDelete()">Delete</button>
     <div class="mm-bulk-bar-sep"></div>
     <button class="mm-bulk-dismiss" onclick="clearSelection()" title="Clear">&#10005;</button>
+  </div>
+
+  <!-- Move-to folder modal -->
+  <div id="mmMoveModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;align-items:center;justify-content:center">
+    <div style="background:var(--surface);border-radius:var(--radius);padding:1.5rem;max-width:360px;width:90%;box-shadow:0 4px 24px rgba(0,0,0,.25)">
+      <h3 style="margin:0 0 .75rem;font-size:1rem;font-weight:600">Move to folder</h3>
+      <div class="form-group" style="margin-bottom:1rem">
+        <select id="mmMoveSelect" style="width:100%;padding:.45rem .75rem;border:1px solid var(--border);border-radius:var(--radius);font-size:14px;background:var(--surface);color:var(--text)">
+          <option value="">— No folder (All media) —</option>
+        </select>
+      </div>
+      <div style="display:flex;gap:.5rem;justify-content:flex-end">
+        <button class="btn btn-secondary" onclick="document.getElementById('mmMoveModal').style.display='none'">Cancel</button>
+        <button class="btn btn-primary" onclick="bulkMoveConfirm()">Move</button>
+      </div>
+    </div>
   </div>
 
 </div>
 
 <script>
 (function() {{
-  var ITEMS = {items_json};
+  var ITEMS   = {items_json};
+  var FOLDERS = {folders_json};
   var selected = new Set();
   var bulkMode = false;
   var activeType = 'all';
@@ -965,6 +1007,58 @@ body.sidebar-open .admin-sidebar {{
     dz.style.background  = '#ede9fe';
   }}
 
+  /* ── Bulk actions ────────────────────────────────────────────────── */
+  window.bulkDelete = function() {{
+    if (selected.size === 0) return;
+    var names = Array.from(selected).map(function(i) {{ return ITEMS[parseInt(i,10)].filename; }});
+    if (!confirm('Delete ' + selected.size + ' file(s)?\n\n' + names.slice(0,5).join('\n') + (names.length > 5 ? '\n…and ' + (names.length-5) + ' more' : ''))) return;
+    var ids = Array.from(selected).map(function(i) {{ return ITEMS[parseInt(i,10)].id; }});
+    var chain = Promise.resolve();
+    ids.forEach(function(id) {{
+      chain = chain.then(function() {{ return fetch('/admin/media/' + id + '/delete', {{method:'POST'}}); }});
+    }});
+    chain.then(function() {{ window.location.reload(); }});
+  }};
+
+  window.bulkDownload = function() {{
+    if (selected.size === 0) return;
+    Array.from(selected).forEach(function(i) {{
+      var item = ITEMS[parseInt(i,10)];
+      var a = document.createElement('a');
+      a.href = item.path; a.download = item.filename; a.target = '_blank';
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    }});
+  }};
+
+  window.bulkMoveTo = function() {{
+    if (selected.size === 0) return;
+    var sel = document.getElementById('mmMoveSelect');
+    sel.innerHTML = '<option value="">— No folder (All media) —</option>';
+    FOLDERS.forEach(function(f) {{
+      var opt = document.createElement('option');
+      opt.value = f.id; opt.textContent = f.name; sel.appendChild(opt);
+    }});
+    document.getElementById('mmMoveModal').style.display = 'flex';
+  }};
+
+  window.bulkMoveConfirm = function() {{
+    var folderId = document.getElementById('mmMoveSelect').value;
+    var ids = Array.from(selected).map(function(i) {{ return ITEMS[parseInt(i,10)].id; }});
+    var chain = Promise.resolve();
+    ids.forEach(function(id) {{
+      chain = chain.then(function() {{
+        return fetch('/admin/api/media/' + id + '/folder', {{
+          method:'POST', headers:{{'Content-Type':'application/json'}},
+          body: JSON.stringify({{folder_id: folderId}})
+        }});
+      }});
+    }});
+    chain.then(function() {{
+      document.getElementById('mmMoveModal').style.display = 'none';
+      window.location.reload();
+    }});
+  }};
+
   /* ── New folder (placeholder) ────────────────────────────────────── */
   window.promptNewFolder = function() {{
     var name = prompt('Folder name (letters, numbers, hyphens):');
@@ -997,6 +1091,7 @@ body.sidebar-open .admin-sidebar {{
         grid_items   = grid_items,
         list_rows    = list_rows,
         items_json   = items_json,
+        folders_json = folders_json,
         footer_info  = footer_info,
         pagination   = pagination_html,
     );

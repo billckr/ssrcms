@@ -126,6 +126,7 @@ pub fn build(
         // ── Admin media API (JSON) ─────────────────────────────────────────
         .route("/admin/api/media", get(media::api_list))
         .route("/admin/api/media/{id}/meta", post(media::api_update_meta))
+        .route("/admin/api/media/{id}/folder", post(media::api_update_folder))
         // ── Admin media ────────────────────────────────────────────────────
         .route("/admin/media", get(media::list))
         .route("/admin/media2", get(media2::list))

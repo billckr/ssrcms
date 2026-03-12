@@ -113,6 +113,39 @@ pub async fn api_update_meta(
     }
 }
 
+/// POST /admin/api/media/{id}/folder — assign or clear the folder for a media item.
+pub async fn api_update_folder(
+    State(state): State<AppState>,
+    admin: AdminUser,
+    Path(id): Path<Uuid>,
+    axum::Json(body): axum::Json<serde_json::Value>,
+) -> impl IntoResponse {
+    let folder_id: Option<Uuid> = body.get("folder_id")
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())
+        .and_then(|s| s.parse().ok());
+    match crate::models::media::get_by_id(&state.db, id).await {
+        Ok(media) => {
+            if !admin.caps.is_global_admin && media.site_id != admin.site_id {
+                return (axum::http::StatusCode::FORBIDDEN, axum::Json(serde_json::json!({"error":"Forbidden"}))).into_response();
+            }
+        }
+        Err(_) => return (axum::http::StatusCode::NOT_FOUND, axum::Json(serde_json::json!({"error":"Not found"}))).into_response(),
+    }
+    match sqlx::query("UPDATE media SET folder_id = $1 WHERE id = $2")
+        .bind(folder_id)
+        .bind(id)
+        .execute(&state.db)
+        .await
+    {
+        Ok(_) => axum::Json(serde_json::json!({"ok": true})).into_response(),
+        Err(e) => {
+            tracing::error!("failed to update folder for media {}: {:?}", id, e);
+            (axum::http::StatusCode::INTERNAL_SERVER_ERROR, axum::Json(serde_json::json!({"error":"Update failed"}))).into_response()
+        }
+    }
+}
+
 /// GET /admin/api/media — JSON list of images accessible to the current user.
 /// Authors see only their own uploads; admins/editors see all site media.
 pub async fn api_list(

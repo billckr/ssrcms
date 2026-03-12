@@ -46,10 +46,18 @@ pub async fn upload(
     let mut file_data: Option<(String, String, Vec<u8>)> = None; // (filename, mime, bytes)
     let mut alt_text: Option<String> = None;
     let mut folder_id: Option<Uuid> = None;
+    let mut redirect_to: String = "/admin/media".to_string();
 
     while let Ok(Some(field)) = multipart.next_field().await {
         let name: String = field.name().unwrap_or("").to_string();
-        if name == "file" {
+        if name == "redirect" {
+            if let Ok(v) = field.text().await {
+                // Only allow internal /admin/... redirects.
+                if v.starts_with("/admin/") {
+                    redirect_to = v;
+                }
+            }
+        } else if name == "file" {
             let filename: String = field.file_name().unwrap_or("upload").to_string();
             let mime: String = field.content_type().unwrap_or("application/octet-stream").to_string();
             if let Ok(bytes) = field.bytes().await {
@@ -68,7 +76,7 @@ pub async fn upload(
 
     let (filename, mime, bytes) = match file_data {
         Some(d) => d,
-        None => return Redirect::to("/admin/media").into_response(),
+        None => return Redirect::to(&redirect_to).into_response(),
     };
 
     // Generate unique, SEO-friendly filename from the original name.
@@ -93,7 +101,7 @@ pub async fn upload(
     let upload_path = Path::new(&state.config.uploads_dir).join(&stored_name);
     if let Err(e) = tokio::fs::write(&upload_path, &bytes).await {
         tracing::error!("failed to write upload: {}", e);
-        return Redirect::to("/admin/media").into_response();
+        return Redirect::to(&redirect_to).into_response();
     }
 
     let file_size = bytes.len() as i64;
@@ -131,5 +139,5 @@ pub async fn upload(
         tracing::error!("failed to save media record: {}", e);
     }
 
-    Redirect::to("/admin/media").into_response()
+    Redirect::to(&redirect_to).into_response()
 }
