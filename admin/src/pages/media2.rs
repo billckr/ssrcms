@@ -1202,8 +1202,8 @@ body.sidebar-open .admin-sidebar {{
     if (panel.contains(e.target)) return;
     /* ignore clicks on mm-items (they handle their own open/close) */
     if (e.target.closest('.mm-item, #mmListBody tr')) return;
-    /* ignore clicks on the bulk action bar */
-    if (e.target.closest('#mmBulkBar')) return;
+    /* ignore clicks on the bulk action bar and any open modals */
+    if (e.target.closest('#mmBulkBar, #mmMoveModal, #mmDeleteFolderModal')) return;
     closeDetail();
   }}, true);
 }})();
