@@ -28,7 +28,7 @@ struct CommentPaginationContext {
 
 use super::home::{build_post_context, build_site_context, render_error_page};
 
-/// `GET /blog/:slug` — render a single post.
+/// `GET /{slug}` — render a single post or page.
 pub async fn single_post(
     State(state): State<AppState>,
     current_site: CurrentSite,
@@ -51,7 +51,7 @@ pub async fn single_post(
             if !super::post_unlock::is_unlocked(&jar, post_record.id, hash) {
                 return super::post_unlock::gate_response(
                     &post_record.title,
-                    &format!("/blog/{}/unlock", slug),
+                    &format!("/{}/unlock", slug),
                     None,
                 );
             }
@@ -148,6 +148,11 @@ async fn render_post(
 ) -> crate::errors::Result<String> {
     let post_record = post::get_published_by_slug(&state.db, Some(site_id), &slug).await?;
 
+    // If this slug belongs to a page, delegate to the page renderer.
+    if post_record.post_type == "page" {
+        return super::page::render_page(state, vec![slug.as_str()], uri, site_id, base_url, session_ctx).await;
+    }
+
     let post_ctx = build_post_context(&state, &post_record, base_url).await?;
 
     let prev = if let Some(pub_at) = post_record.published_at {
@@ -200,7 +205,7 @@ async fn render_post(
         total_count:  comment_page.total_count,
         prev_page:    if comment_page.current_page > 1 { Some(comment_page.current_page - 1) } else { None },
         next_page:    if comment_page.current_page < comment_page.total_pages { Some(comment_page.current_page + 1) } else { None },
-        post_url:     format!("/blog/{}", slug),
+        post_url:     format!("/{}", slug),
     };
 
     let site_ctx = build_site_context(&state, Some(site_id), base_url).await?;
@@ -265,14 +270,14 @@ async fn render_post(
 
 // ── Save / Unsave post ────────────────────────────────────────────────────────
 
-/// `POST /blog/:slug/save` — save a post to the subscriber's reading list.
+/// `POST /{slug}/save` — save a post to the subscriber's reading list.
 pub async fn save_post(
     State(state): State<AppState>,
     current_site: CurrentSite,
     Path(slug): Path<String>,
     session: Session,
 ) -> Response {
-    let redirect = axum::response::Redirect::to(&format!("/blog/{}", slug));
+    let redirect = axum::response::Redirect::to(&format!("/{}", slug));
     let session_ctx = super::resolve_session(&state, &session).await;
     let Some(ref u) = session_ctx.user else {
         return redirect.into_response();
@@ -287,7 +292,7 @@ pub async fn save_post(
     redirect.into_response()
 }
 
-/// `POST /blog/:slug/unsave` — remove a post from the subscriber's reading list.
+/// `POST /{slug}/unsave` — remove a post from the subscriber's reading list.
 #[derive(serde::Deserialize, Default)]
 pub struct UnsaveForm {
     pub return_to: Option<String>,
@@ -300,7 +305,7 @@ pub async fn unsave_post(
     session: Session,
     Form(form): Form<UnsaveForm>,
 ) -> Response {
-    let fallback = format!("/blog/{}", slug);
+    let fallback = format!("/{}", slug);
     let return_to = form.return_to
         .as_deref()
         .filter(|s| s.starts_with('/'))

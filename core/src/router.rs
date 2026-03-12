@@ -77,11 +77,10 @@ pub fn build(
         .route("/metrics", get(metrics_handler::metrics))
         // ── Public content routes ──────────────────────────────────────────
         .route("/", get(home::home))
-        .route("/blog/{slug}", get(post_handler::single_post))
-        .route("/blog/{slug}/unlock", post(post_unlock::unlock_post))
-        .route("/blog/{slug}/comment", post(comment_handler::submit))
-        .route("/blog/{slug}/save", post(post_handler::save_post))
-        .route("/blog/{slug}/unsave", post(post_handler::unsave_post))
+        .route("/{slug}", get(post_handler::single_post))
+        .route("/{slug}/comment", post(comment_handler::submit))
+        .route("/{slug}/save", post(post_handler::save_post))
+        .route("/{slug}/unsave", post(post_handler::unsave_post))
         .route("/category/{slug}", get(archive::category_archive))
         .route("/tag/{slug}", get(archive::tag_archive))
         .route("/author/{username}", get(archive::author_archive))
@@ -208,7 +207,7 @@ pub fn build(
     // /:slug/unlock must be registered before the fallback.
     // Nested password-protected pages are not supported in MVP (guarded at handler level).
     router = router.route("/{slug}/unlock", post(post_unlock::unlock_page));
-    // fallback catches any path not matched above, including nested page URLs like /a/b/c.
+    // fallback handles nested page URLs like /a/b/c and any unmatched /{slug} that resolves to a page.
     router = router.fallback(page::single_page);
 
     router

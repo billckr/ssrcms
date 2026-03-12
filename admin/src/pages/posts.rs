@@ -130,7 +130,7 @@ pub fn posts_list_fragment(
         let path = if p.post_type == "page" {
             format!("/{}", p.slug)
         } else {
-            format!("/blog/{}", p.slug)
+            format!("/{}", p.slug)
         };
         let view_href = if ctx.current_site.is_empty() {
             path
@@ -856,7 +856,7 @@ mod tests {
     #[test]
     fn post_view_link_uses_blog_prefix() {
         let html = render_list(&[make_row("post", "my-post")], "post", 1, 1, None, &make_ctx(), None, 0, 0, "");
-        assert!(html.contains("href=\"/blog/my-post\""), "post view href should be /blog/{{slug}}");
+        assert!(html.contains("href=\"/my-post\""), "post view href should be /{{slug}}");
         assert!(html.contains("target=\"_blank\""), "view link should open in new tab");
     }
 

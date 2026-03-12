@@ -26,7 +26,7 @@ async fn test_home_route_200() {
 async fn test_post_route_404_for_nonexistent_slug() {
     // Steps:
     //   1. Build the Axum router
-    //   2. Send GET /blog/this-slug-does-not-exist
+    //   2. Send GET /this-slug-does-not-exist
     //   3. Assert response.status() == 404
     todo!("implement after lib target is added to core/Cargo.toml")
 }

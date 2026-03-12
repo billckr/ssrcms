@@ -61,7 +61,7 @@ impl Function for UrlForFunction {
             .ok_or_else(|| tera::Error::msg("url_for() requires a 'slug' argument"))?;
 
         let url = match resource_type {
-            "post" => format!("{}/blog/{}", self.base_url, slug),
+            "post" => format!("{}/{}", self.base_url, slug),
             "page" => format!("{}/{}", self.base_url, slug),
             "category" => format!("{}/category/{}", self.base_url, slug),
             "tag" => format!("{}/tag/{}", self.base_url, slug),

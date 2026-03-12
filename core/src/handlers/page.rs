@@ -73,7 +73,7 @@ pub async fn single_page(
     }
 }
 
-async fn render_page(
+pub(super) async fn render_page(
     state: AppState,
     segments: Vec<&str>,
     uri: axum::http::Uri,

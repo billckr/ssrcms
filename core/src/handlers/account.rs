@@ -185,7 +185,7 @@ pub async fn saved_posts(
     let rows: Vec<admin::pages::account::SavedPostRow> = records
         .into_iter()
         .map(|r| {
-            let post_url = format!("{}/blog/{}", base_url, r.slug);
+            let post_url = format!("{}/{}", base_url, r.slug);
             admin::pages::account::SavedPostRow {
                 title:    r.title,
                 slug:     r.slug,

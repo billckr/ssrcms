@@ -91,11 +91,7 @@ trap 'rm -rf "$WORK_DIR"' EXIT
 URL_FILE="$WORK_DIR/urls.txt"
 
 psql_q -c "
-    SELECT
-        CASE post_type
-            WHEN 'page' THEN 'http://${DOMAIN}:${PORT}/' || slug
-            ELSE              'http://${DOMAIN}:${PORT}/blog/' || slug
-        END
+    SELECT 'http://${DOMAIN}:${PORT}/' || slug
     FROM posts
     WHERE site_id = '$SITE_ID'
       AND status   = 'published'

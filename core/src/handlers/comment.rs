@@ -1,4 +1,4 @@
-//! Public comment submission handler — POST /blog/:slug/comment.
+//! Public comment submission handler — POST /{slug}/comment.
 
 use axum::{
     extract::{ConnectInfo, Path, State},
@@ -26,7 +26,7 @@ pub struct CommentForm {
     pub human_check: Option<String>,
 }
 
-/// POST /blog/:slug/comment
+/// POST /{slug}/comment
 ///
 /// Requires an account session (subscriber or above).
 /// Validates body length, verifies post has comments enabled,
@@ -40,7 +40,7 @@ pub async fn submit(
     Path(slug): Path<String>,
     Form(form): Form<CommentForm>,
 ) -> impl IntoResponse {
-    let post_url = format!("/blog/{}", slug);
+    let post_url = format!("/{}", slug);
 
     // Session check — redirect to login if not authenticated.
     let user_id_str: Option<String> = session

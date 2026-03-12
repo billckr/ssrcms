@@ -107,8 +107,8 @@ async fn test_single_post_renders_html() {
             page_count: 0,
         },
         request: RequestContext {
-            url: format!("{}/blog/{}", base_url, p.slug),
-            path: format!("/blog/{}", p.slug),
+            url: format!("{}/{}", base_url, p.slug),
+            path: format!("/{}", p.slug),
             query: HashMap::new(),
         },
         session: SessionContext {

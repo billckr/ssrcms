@@ -328,9 +328,13 @@ pub fn render_saved_posts(rows: &[SavedPostRow], page: i64, total_pages: i64, se
 }
 
 fn derive_unsave_url(post_url: &str) -> String {
-    // post_url is like "http://host/blog/slug" — extract the path and append /unsave
-    if let Some(path_start) = post_url.find("/blog/") {
-        return format!("{}/unsave", &post_url[path_start..]);
+    // post_url is like "http://host/slug" — extract the path and append /unsave
+    // Strip the scheme and find the start of the path (first / after host).
+    if let Some(after_scheme) = post_url.find("://").map(|i| i + 3) {
+        if let Some(path_offset) = post_url[after_scheme..].find('/') {
+            let path = &post_url[after_scheme + path_offset..];
+            return format!("{}/unsave", path);
+        }
     }
     "#".to_string()
 }
@@ -421,7 +425,7 @@ pub fn comments_list_fragment(rows: &[MyCommentRow], page: i64, total_pages: i64
               <td class="muted" style="font-size:0.85rem">{preview}</td>
               <td style="white-space:nowrap">{date}</td>
               <td class="actions">
-                <a href="/blog/{slug}#comments" class="icon-btn" title="View post" target="_blank" rel="noopener noreferrer">
+                <a href="/{slug}#comments" class="icon-btn" title="View post" target="_blank" rel="noopener noreferrer">
                   <img src="/admin/static/icons/eye.svg" alt="View">
                 </a>
                 {delete_btn}

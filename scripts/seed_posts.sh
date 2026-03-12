@@ -307,11 +307,7 @@ Vestibulum ante ipsum primis in faucibus orci luctus et ultrices posuere cubilia
     if [[ -n "$POST_ID" ]]; then
         POST_IDS+=("$POST_ID")
         PORT_PART="${PORT:+:$PORT}"
-        if [[ "$TYPE" == "page" ]]; then
-            URL="http://${DOMAIN}${PORT_PART}/${SLUG}"
-        else
-            URL="http://${DOMAIN}${PORT_PART}/blog/${SLUG}"
-        fi
+        URL="http://${DOMAIN}${PORT_PART}/${SLUG}"
         printf "  [%3d/%d] %-10s  %s\n" "$i" "$NUMBER" "$STATUS" "$URL"
         SUCCESS=$((SUCCESS + 1))
     else
@@ -570,7 +566,7 @@ if [[ "$COMMENTS" -gt 0 && "$SUCCESS" -gt 0 ]]; then
                 SLUG=$(command psql "$DATABASE_URL" --tuples-only --no-align \
                     -c "SELECT slug FROM posts WHERE id = '$PID';" 2>/dev/null | tr -d '[:space:]')
                 PORT_PART="${PORT:+:$PORT}"
-                COMMENTED_URLS+=("http://${DOMAIN}${PORT_PART}/blog/${SLUG}")
+                COMMENTED_URLS+=("http://${DOMAIN}${PORT_PART}/${SLUG}")
             done
 
             echo ""

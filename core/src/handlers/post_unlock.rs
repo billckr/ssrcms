@@ -61,7 +61,7 @@ pub fn gate_response(post_title: &str, action: &str, error: Option<&str>) -> Res
 
 // ── Handlers ──────────────────────────────────────────────────────────────────
 
-/// `POST /blog/{slug}/unlock` — verify password for a post.
+/// `POST /{slug}/unlock` — verify password for a post or page.
 pub async fn unlock_post(
     State(state): State<AppState>,
     current_site: CurrentSite,
@@ -76,8 +76,8 @@ pub async fn unlock_post(
         &form.post_password,
         form.human_check.as_deref(),
         jar,
-        &format!("/blog/{}/unlock", slug),
-        &format!("/blog/{}", slug),
+        &format!("/{}/unlock", slug),
+        &format!("/{}", slug),
     )
     .await
 }

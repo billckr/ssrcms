@@ -50,11 +50,11 @@
       <span class="reading-time">{{ post.reading_time }} min read</span>
       {% if session.is_logged_in %}
         {% if is_saved %}
-          <form method="post" action="/blog/{{ post.slug }}/unsave" class="save-post-form">
+          <form method="post" action="/{{ post.slug }}/unsave" class="save-post-form">
             <button type="submit" class="btn-save-post saved">★ Saved</button>
           </form>
         {% else %}
-          <form method="post" action="/blog/{{ post.slug }}/save" class="save-post-form">
+          <form method="post" action="/{{ post.slug }}/save" class="save-post-form">
             <button type="submit" class="btn-save-post">☆ Save</button>
           </form>
         {% endif %}
@@ -116,7 +116,7 @@
     {% endif %}
     {% if session.is_logged_in %}
       <h3>Leave a comment</h3>
-      <form method="post" action="/blog/{{ post.slug }}/comment">
+      <form method="post" action="/{{ post.slug }}/comment">
         <input type="hidden" name="parent_id" value="">
         <textarea name="body" class="comment-textarea" rows="5" maxlength="400" placeholder="Write a comment…" required></textarea>
         <label class="human-check-label">
@@ -152,7 +152,7 @@
           {% if session.is_logged_in and not comment.is_deleted %}
             <a href="#" class="reply-toggle comment-reply-link" data-parent="{{ comment.id }}">Reply</a>
             <div class="reply-form" id="reply-form-{{ comment.id }}">
-              <form method="post" action="/blog/{{ post.slug }}/comment">
+              <form method="post" action="/{{ post.slug }}/comment">
                 <input type="hidden" name="parent_id" value="{{ comment.id }}">
                 <textarea name="body" class="comment-textarea" rows="3" maxlength="400" placeholder="Write a reply…" required></textarea>
                 <label class="human-check-label">

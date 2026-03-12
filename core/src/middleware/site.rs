@@ -109,27 +109,7 @@ impl FromRequestParts<AppState> for CurrentSite {
             }
         }
 
-        // If site_cache is empty (no sites configured yet), fall back to
-        // the default settings so single-site installs keep working.
-        if state.site_cache.read().map(|c| c.is_empty()).unwrap_or(true) {
-            use uuid::Uuid;
-            use chrono::Utc;
-            let fallback_site = Site {
-                id: Uuid::nil(),
-                hostname: hostname.clone(),
-                owner_user_id: None,
-                created_at: Utc::now(),
-                updated_at: Utc::now(),
-            };
-            let settings = (*state.settings).clone();
-            let base_url = make_base_url(&settings);
-            return Ok(CurrentSite {
-                site: fallback_site,
-                settings,
-                base_url,
-            });
-        }
-
+        // No site matched this hostname — return 404.
         Err(SiteResolutionError::UnknownHostname(hostname))
     }
 }

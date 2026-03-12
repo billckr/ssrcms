@@ -132,7 +132,7 @@ impl PostContext {
         } else {
             match post.post_type.as_str() {
                 "page" => format!("{}/{}", base_url, post.slug),
-                _ => format!("{}/blog/{}", base_url, post.slug),
+                _ => format!("{}/{}", base_url, post.slug),
             }
         };
 
@@ -376,7 +376,7 @@ mod tests {
         let ctx = PostContext::build(
             &post, &user, vec![], vec![], None, HashMap::new(), 0, "https://example.com", None, vec![],
         );
-        assert_eq!(ctx.url, "https://example.com/blog/my-post");
+        assert_eq!(ctx.url, "https://example.com/my-post");
     }
 
     #[test]
