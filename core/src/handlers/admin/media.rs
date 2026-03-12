@@ -241,5 +241,6 @@ pub async fn delete_folder(
         }
         let _ = crate::models::media_folder::delete(&state.db, id, site_id).await;
     }
-    Redirect::to("/admin/media").into_response()
+    let redirect_to = body.get("redirect").map(|s| s.as_str()).unwrap_or("/admin/media");
+    Redirect::to(redirect_to).into_response()
 }

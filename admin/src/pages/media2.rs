@@ -7,6 +7,7 @@ pub struct MediaItem {
     pub path: String,
     pub alt_text: String,
     pub title: String,
+    pub caption: String,
     pub width: Option<i32>,
     pub height: Option<i32>,
     pub file_size: i64,
@@ -261,16 +262,8 @@ pub fn render_list(
     let showing_to   = (page * page_size).min(total);
     let footer_info  = format!("Showing {}–{} of {} files", showing_from, showing_to, total);
 
-    // ── Page title (shows active folder name) ───────────────────────────────
-    let page_title: String = if let Some(fid) = active_folder {
-        if let Some(f) = folders.iter().find(|f| f.id == fid) {
-            format!("Media Library — {}", f.name)
-        } else {
-            "Media Library".to_string()
-        }
-    } else {
-        "Media Library".to_string()
-    };
+    // ── Page title ───────────────────────────────────────────────────────────
+    let page_title = "Media Library".to_string();
 
     // ── Upload form: redirect URL + optional folder_id hidden input ──────────
     let redirect_url = if let Some(fid) = active_folder {
@@ -284,9 +277,30 @@ pub fn render_list(
         String::new()
     };
 
+    // ── Section label above type filter (folder name when inside one) ────────
+    let type_section_label: String = if let Some(fid) = active_folder {
+        if let Some(f) = folders.iter().find(|f| f.id == fid) {
+            html_escape(&f.name)
+        } else {
+            String::new()
+        }
+    } else {
+        String::new()
+    };
+
     let flash_html = match flash {
         Some(msg) => format!(r##"<div class="flash success">{}</div>"##, html_escape(msg)),
         None => String::new(),
+    };
+
+    // ── Delete-folder button (only when a folder is active) ──────────────────
+    let delete_folder_btn_html = if let Some(fid) = active_folder {
+        format!(
+            r##"<button class="btn btn-danger mm-new-folder-btn" style="margin-top:.3rem" onclick="promptDeleteFolder('{}')"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>Delete folder</button>"##,
+            html_escape(fid)
+        )
+    } else {
+        String::new()
     };
 
     let content = format!(r##"
@@ -347,8 +361,8 @@ body.sidebar-open .admin-sidebar {{
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: .3rem .6rem;
-  min-width: 180px;
-  max-width: 280px;
+  min-width: 130px;
+  max-width: 200px;
   flex: 1;
 }}
 .mm-search svg {{ color: var(--muted); flex-shrink: 0; }}
@@ -381,8 +395,9 @@ body.sidebar-open .admin-sidebar {{
 .mm-panel-section {{ padding: .65rem .85rem .4rem; }}
 .mm-panel-section + .mm-panel-section {{ border-top: 1px solid var(--border); }}
 .mm-panel-label {{
-  font-size: 10px; font-weight: 700; text-transform: uppercase;
-  letter-spacing: .07em; color: var(--muted); margin-bottom: .45rem;
+  font-size: 13px; font-weight: 600;
+  letter-spacing: .01em; color: var(--text); margin-bottom: .45rem;
+  padding-left: .6rem;
 }}
 
 .mm-type-list {{ list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 1px; }}
@@ -633,7 +648,7 @@ body.sidebar-open .admin-sidebar {{
 }}
 @media (max-width: 600px) {{
   .mm-toolbar {{ gap: .4rem; }}
-  .mm-search {{ min-width: 120px; }}
+  .mm-search {{ min-width: 86px; }}
   .mm-sidebar {{ grid-template-columns: 1fr; }}
   .mm-sidebar .mm-panel-section + .mm-panel-section {{ border-left: none; border-top: 1px solid var(--border); }}
   .mm-grid {{ grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); }}
@@ -674,7 +689,7 @@ body.sidebar-open .admin-sidebar {{
   <!-- Left sidebar -->
   <div class="mm-sidebar">
     <div class="mm-panel-section">
-      <div class="mm-panel-label">Filter by type</div>
+      {type_section_label_html}
       <ul class="mm-type-list">
         <li class="mm-type-item">
           <a href="#" class="active" data-type="all" onclick="setTypeFilter(event,'all')">
@@ -723,6 +738,7 @@ body.sidebar-open .admin-sidebar {{
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></svg>
         Folder +
       </button>
+      {delete_folder_btn}
     </div>
   </div>
 
@@ -788,7 +804,7 @@ body.sidebar-open .admin-sidebar {{
       <p style="color:var(--muted);font-size:13px;text-align:center;padding:2rem 0">Select a file to see details.</p>
     </div>
     <div class="mm-detail-actions" id="mmDetailActions" style="display:none">
-      <button class="btn btn-primary" style="width:100%;justify-content:center">Save changes</button>
+      <button class="btn btn-primary" style="width:100%;justify-content:center" onclick="saveDetail()">Save changes</button>
       <button class="btn btn-danger" style="width:100%;justify-content:center">Delete file</button>
     </div>
   </div>
@@ -815,6 +831,21 @@ body.sidebar-open .admin-sidebar {{
     <button class="mm-bulk-dismiss" onclick="clearSelection()" title="Clear">&#10005;</button>
   </div>
 
+  <!-- Delete folder modal -->
+  <div id="mmDeleteFolderModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;align-items:center;justify-content:center">
+    <div style="background:var(--surface);border-radius:var(--radius);padding:1.5rem;max-width:400px;width:90%;box-shadow:0 4px 24px rgba(0,0,0,.25)">
+      <h3 style="margin:0 0 .75rem;font-size:1rem;font-weight:600">Delete folder</h3>
+      <p id="mmDeleteFolderMsg" style="font-size:14px;color:var(--muted);margin-bottom:1rem"></p>
+      <div id="mmDeleteFolderActions" style="display:flex;flex-direction:column;gap:.5rem">
+        <button class="btn btn-secondary" id="mmDeleteFolderMoveBtn" onclick="confirmDeleteFolder(false)" style="justify-content:center">Move files to All Media, then delete folder</button>
+        <button class="btn btn-danger" onclick="confirmDeleteFolder(true)" style="justify-content:center">Delete folder and all its files permanently</button>
+      </div>
+      <div style="margin-top:.75rem;text-align:right">
+        <button class="btn btn-secondary" onclick="document.getElementById('mmDeleteFolderModal').style.display='none'">Cancel</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Move-to folder modal -->
   <div id="mmMoveModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;align-items:center;justify-content:center">
     <div style="background:var(--surface);border-radius:var(--radius);padding:1.5rem;max-width:360px;width:90%;box-shadow:0 4px 24px rgba(0,0,0,.25)">
@@ -835,8 +866,9 @@ body.sidebar-open .admin-sidebar {{
 
 <script>
 (function() {{
-  var ITEMS   = {items_json};
-  var FOLDERS = {folders_json};
+  var ITEMS        = {items_json};
+  var FOLDERS      = {folders_json};
+  var FOLDER_TOTAL = {total_count};
   var selected = new Set();
   var bulkMode = false;
   var activeType = 'all';
@@ -919,12 +951,37 @@ body.sidebar-open .admin-sidebar {{
       selected.clear();
       el.classList.add('selected');
       selected.add(idx);
-      openDetail(data);
+      openDetail(data, parseInt(idx, 10));
     }}
     syncBulkBar();
   }};
 
-  function openDetail(data) {{
+  var activeDetailId  = null;
+  var activeDetailIdx = null;
+
+  window.saveDetail = function() {{
+    if (!activeDetailId) return;
+    var alt     = (document.getElementById('mmDetailAlt')     || {{}}).value || '';
+    var title   = (document.getElementById('mmDetailTitle')   || {{}}).value || '';
+    var caption = (document.getElementById('mmDetailCaption') || {{}}).value || '';
+    var btn = document.querySelector('#mmDetailActions .btn-primary');
+    if (btn) {{ btn.disabled = true; btn.textContent = 'Saving…'; }}
+    fetch('/admin/api/media/' + activeDetailId + '/meta', {{
+      method: 'POST',
+      headers: {{'Content-Type': 'application/json'}},
+      body: JSON.stringify({{ alt_text: alt.trim(), title: title.trim(), caption: caption.trim() }})
+    }}).then(function(r) {{ return r.json(); }}).then(function(res) {{
+      if (res.ok && activeDetailIdx !== null) {{
+        var item = ITEMS[activeDetailIdx];
+        if (item) {{ item.alt = alt.trim(); item.title = title.trim(); item.caption = caption.trim(); }}
+      }}
+      if (btn) {{ btn.disabled = false; btn.textContent = res.ok ? 'Saved ✓' : 'Error'; setTimeout(function(){{ if(btn) btn.textContent='Save changes'; }}, 2000); }}
+    }}).catch(function() {{
+      if (btn) {{ btn.disabled = false; btn.textContent = 'Error'; setTimeout(function(){{ if(btn) btn.textContent='Save changes'; }}, 2000); }}
+    }});
+  }};
+
+  function openDetail(data, idx) {{
     var body = document.getElementById('mmDetailBody');
     var actions = document.getElementById('mmDetailActions');
     var preview = data.isImage
@@ -938,10 +995,12 @@ body.sidebar-open .admin-sidebar {{
       + '<span class="mm-detail-stat-label">Size</span><span class="mm-detail-stat-value">' + escHtml(data.size) + '</span>'
       + '<span class="mm-detail-stat-label">Dims</span><span class="mm-detail-stat-value">' + escHtml(data.dims) + '</span>'
       + '</div></div>'
-      + '<div class="mm-detail-url"><span>' + escHtml(data.path) + '</span>'
-      + '<button class="btn-link" style="font-size:12px;flex-shrink:0" onclick="navigator.clipboard.writeText(\'' + escHtml(data.path) + '\')">Copy</button></div>'
-      + '<div class="mm-detail-field"><label>Alt text</label><input type="text" value="' + escHtml(data.alt) + '" placeholder="Describe the image…"></div>'
-      + '<div class="mm-detail-field"><label>Title</label><input type="text" value="' + escHtml(data.title) + '"></div>';
+      + '<div class="mm-detail-url"><span>' + escHtml(data.path) + '</span></div>'
+      + '<div class="mm-detail-field"><label>Alt text</label><input type="text" id="mmDetailAlt" value="' + escHtml(data.alt) + '" placeholder="Describe the image…"></div>'
+      + '<div class="mm-detail-field"><label>Title</label><input type="text" id="mmDetailTitle" value="' + escHtml(data.title) + '"></div>'
+      + '<div class="mm-detail-field"><label>Caption</label><textarea id="mmDetailCaption" rows="3" placeholder="Optional caption…">' + escHtml(data.caption || '') + '</textarea></div>';
+    activeDetailId  = data.id;
+    activeDetailIdx = (idx !== undefined) ? idx : null;
     actions.style.display = '';
     document.getElementById('mmDetail').classList.add('open');
   }}
@@ -1102,9 +1161,51 @@ body.sidebar-open .admin-sidebar {{
     form.submit();
   }};
 
+  /* ── Delete folder ─────────────────────────────────────────────── */
+  var pendingDeleteFolderId = null;
+
+  window.promptDeleteFolder = function(folderId) {{
+    pendingDeleteFolderId = folderId;
+    var msg     = document.getElementById('mmDeleteFolderMsg');
+    var moveBtn = document.getElementById('mmDeleteFolderMoveBtn');
+    if (FOLDER_TOTAL > 0) {{
+      msg.textContent = 'This folder contains ' + FOLDER_TOTAL + ' file(s). What would you like to do with them?';
+      moveBtn.style.display = '';
+    }} else {{
+      msg.textContent = 'Are you sure you want to delete this empty folder?';
+      moveBtn.style.display = 'none';
+    }}
+    document.getElementById('mmDeleteFolderModal').style.display = 'flex';
+  }};
+
+  window.confirmDeleteFolder = function(deleteMedia) {{
+    document.getElementById('mmDeleteFolderModal').style.display = 'none';
+    if (!pendingDeleteFolderId) return;
+    var form = document.createElement('form');
+    form.method = 'POST';
+    form.action = '/admin/media/folders/' + pendingDeleteFolderId + '/delete';
+    var dm = document.createElement('input'); dm.type='hidden'; dm.name='delete_media'; dm.value=deleteMedia?'true':'false';
+    var rd = document.createElement('input'); rd.type='hidden'; rd.name='redirect'; rd.value='/admin/media2';
+    form.appendChild(dm); form.appendChild(rd);
+    document.body.appendChild(form);
+    form.submit();
+  }};
+
   function escHtml(s) {{
     return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   }}
+
+  /* ── Click-outside closes detail panel ──────────────────────────── */
+  document.addEventListener('click', function(e) {{
+    var panel = document.getElementById('mmDetail');
+    if (!panel || !panel.classList.contains('open')) return;
+    if (panel.contains(e.target)) return;
+    /* ignore clicks on mm-items (they handle their own open/close) */
+    if (e.target.closest('.mm-item, #mmListBody tr')) return;
+    /* ignore clicks on the bulk action bar */
+    if (e.target.closest('#mmBulkBar')) return;
+    closeDetail();
+  }}, true);
 }})();
 </script>
 "##,
@@ -1116,6 +1217,9 @@ body.sidebar-open .admin-sidebar {{
         count_video  = count_video,
         count_audio  = count_audio,
         count_doc    = count_doc,
+        type_section_label_html = if type_section_label.is_empty() { String::new() } else { format!("<div class=\"mm-panel-label\">{}</div>", type_section_label) },
+        delete_folder_btn = delete_folder_btn_html,
+        total_count  = total,
         folder_items = folder_items_html,
         grid_items   = grid_items,
         list_rows    = list_rows,

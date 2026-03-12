@@ -36,6 +36,7 @@ pub async fn list(
         path: m.path.clone(),
         alt_text: m.alt_text.clone(),
         title: m.title.clone(),
+        caption: m.caption.clone(),
         width: m.width,
         height: m.height,
         file_size: m.file_size,
