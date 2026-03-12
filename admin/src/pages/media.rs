@@ -95,10 +95,18 @@ pub fn render_list(items: &[MediaItem], folders: &[FolderItem], active_folder: O
     let mut content = format!(
         r#"<div class="form-section">
   <form method="POST" action="/admin/media/upload" enctype="multipart/form-data" id="upload-form">
-    <input type="file" id="media-file" name="file" accept="image/*,application/pdf" required
-      style="position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;"
-      onchange="showSelectedFile(this)">
-    <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap">
+    <div class="drop-zone" id="drop-zone">
+      <input type="file" id="media-file" name="file" accept="image/*,application/pdf" required
+        style="position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;"
+        onchange="updateDropZone(this.files[0])">
+      <div class="drop-zone-content">
+        <img src="/admin/static/icons/upload.svg" alt="" class="drop-zone-icon">
+        <p class="drop-zone-text">Drag &amp; drop a file here</p>
+        <p class="drop-zone-sub">or <label for="media-file" class="drop-zone-browse">browse to choose</label></p>
+        <p class="drop-zone-filename" id="drop-filename" style="display:none"></p>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin-top:.75rem">
       <!-- folder dropdown -->
       <select id="folder-select" name="folder_id" form="upload-form"
               style="padding:.4rem .75rem;border:1px solid var(--border);border-radius:var(--radius);font-size:14px;background:var(--surface);color:var(--text)"
@@ -106,6 +114,7 @@ pub fn render_list(items: &[MediaItem], folders: &[FolderItem], active_folder: O
         <option value="">All Media</option>
         {folder_options}
       </select>
+      <button type="submit" form="upload-form" class="btn btn-primary">Upload</button>
       <!-- new folder inline form -->
       <button type="button" class="btn btn-primary" onclick="toggleNewFolder()" id="new-folder-btn">Folder +</button>
       <span id="new-folder-form" style="display:none;gap:.35rem;align-items:center">
@@ -117,9 +126,6 @@ pub fn render_list(items: &[MediaItem], folders: &[FolderItem], active_folder: O
         <button type="button" class="btn btn-primary" onclick="submitNewFolder()">Create</button>
         <button type="button" class="btn btn-secondary" onclick="toggleNewFolder()">Cancel</button>
       </span>
-      <button type="button" class="btn btn-primary" onclick="document.getElementById('media-file').click()">Media +</button>
-      <button type="submit" form="upload-form" class="btn btn-primary" onclick="clearSelectedFile()">Upload</button>
-      <span id="selected-file-info" style="display:none;font-size:.8rem;font-weight:700;color:#111827;background:#e2e8f0;border:1px solid #e2e8f0;border-radius:4px;padding:.2rem .6rem;white-space:nowrap"></span>
       {delete_folder_btn}
       <!-- right side -->
       <button type="button" class="btn btn-primary" onclick="openMediaPicker('browse')" style="margin-left:auto">Browse</button>
@@ -132,25 +138,71 @@ pub fn render_list(items: &[MediaItem], folders: &[FolderItem], active_folder: O
 {delete_folder_modal}
 <div style="margin-bottom:.5rem"><span id="media-count" style="font-size:13px;color:var(--muted)"></span></div>
 <div class="media-grid" id="media-grid">{grid}</div>
-
+<style>
+.drop-zone {{
+  border: 2px dashed var(--border, #cbd5e1);
+  border-radius: 8px;
+  padding: 2rem;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+  background: var(--surface, #f8fafc);
+  position: relative;
+}}
+.drop-zone.drag-over {{
+  border-color: var(--primary, #3b82f6);
+  background: #eff6ff;
+}}
+.drop-zone.has-file {{
+  border-color: #22c55e;
+  background: #f0fdf4;
+}}
+.drop-zone-icon {{ width: 2.5rem; height: 2.5rem; opacity: 0.4; margin-bottom: 0.5rem; }}
+.drop-zone-text {{ font-size: 1rem; color: var(--text, #1e293b); margin: 0 0 0.25rem; font-weight: 500; }}
+.drop-zone-sub {{ font-size: 0.875rem; color: var(--text-muted, #64748b); margin: 0; }}
+.drop-zone-browse {{ color: var(--primary, #3b82f6); cursor: pointer; text-decoration: underline; }}
+.drop-zone-filename {{ font-size: 0.875rem; color: #16a34a; font-weight: 500; margin: 0.5rem 0 0; }}
+</style>
 <script>
-function showSelectedFile(input) {{
-  var span = document.getElementById('selected-file-info');
-  if (!span) return;
-  if (!input.files || !input.files[0]) {{ span.style.display = 'none'; span.textContent = ''; return; }}
-  var f = input.files[0];
-  var size = f.size >= 1048576
-    ? (f.size / 1048576).toFixed(1) + ' MB'
-    : f.size >= 1024
-      ? Math.round(f.size / 1024) + ' KB'
-      : f.size + ' B';
-  span.textContent = f.name + '  ' + size;
-  span.style.display = '';
+(function() {{
+  var zone = document.getElementById('drop-zone');
+  var input = document.getElementById('media-file');
+
+  zone.addEventListener('click', function(e) {{
+    if (e.target.tagName !== 'LABEL') input.click();
+  }});
+
+  zone.addEventListener('dragover', function(e) {{
+    e.preventDefault();
+    zone.classList.add('drag-over');
+  }});
+
+  zone.addEventListener('dragleave', function() {{
+    zone.classList.remove('drag-over');
+  }});
+
+  zone.addEventListener('drop', function(e) {{
+    e.preventDefault();
+    zone.classList.remove('drag-over');
+    var file = e.dataTransfer.files[0];
+    if (file) {{
+      var dt = new DataTransfer();
+      dt.items.add(file);
+      input.files = dt.files;
+      updateDropZone(file);
+    }}
+  }});
+}})();
+
+function updateDropZone(file) {{
+  if (!file) return;
+  var zone = document.getElementById('drop-zone');
+  var label = document.getElementById('drop-filename');
+  zone.classList.add('has-file');
+  label.textContent = file.name;
+  label.style.display = 'block';
 }}
-function clearSelectedFile() {{
-  var span = document.getElementById('selected-file-info');
-  if (span) {{ span.textContent = ''; span.style.display = 'none'; }}
-}}
+
 function filterMediaGrid(q) {{
   var cards = document.querySelectorAll('#media-grid .media-card');
   var lower = q.toLowerCase().trim();
