@@ -5,6 +5,7 @@ pub mod documentation;
 pub mod forms;
 pub mod login;
 pub mod media;
+pub mod media2;
 pub mod menus;
 pub mod plugins;
 pub mod posts;

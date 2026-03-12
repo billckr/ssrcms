@@ -13,7 +13,7 @@ use tower_sessions_sqlx_store::PostgresStore;
 
 use crate::app_state::AppState;
 use crate::handlers::{account, archive, auth, comment as comment_handler, form as form_handler, home, metrics as metrics_handler, page, plugin_route, post as post_handler, post_unlock, search, subscribe, theme_static};
-use crate::handlers::admin::{appearance, comments as admin_comments, dashboard, documentation as admin_documentation, forms as admin_forms, media, menus as admin_menus, posts, profile, settings, sites as admin_sites, taxonomy, upload, users};
+use crate::handlers::admin::{appearance, comments as admin_comments, dashboard, documentation as admin_documentation, forms as admin_forms, media, media2, menus as admin_menus, posts, profile, settings, sites as admin_sites, taxonomy, upload, users};
 
 /// Prevent browsers from caching admin and account pages.
 ///
@@ -128,6 +128,7 @@ pub fn build(
         .route("/admin/api/media/{id}/meta", post(media::api_update_meta))
         // ── Admin media ────────────────────────────────────────────────────
         .route("/admin/media", get(media::list))
+        .route("/admin/media2", get(media2::list))
         .route("/admin/media/upload", post(upload::upload).layer(upload_limit.clone()))
         .route("/admin/media/folders/new", post(media::create_folder))
         .route("/admin/media/folders/{id}/delete", post(media::delete_folder))
