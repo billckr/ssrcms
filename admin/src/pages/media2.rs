@@ -75,8 +75,8 @@ pub fn render_list(
         let is_image = m.mime_type.starts_with("image/");
         let fname = html_escape(&m.filename);
         let alt   = html_escape(&m.alt_text);
-        let fsize = format_bytes(m.file_size);
-        let dims  = match (m.width, m.height) {
+        let _fsize = format_bytes(m.file_size);
+        let _dims  = match (m.width, m.height) {
             (Some(w), Some(h)) => format!("{}×{}", w, h),
             _ => String::from("—"),
         };
@@ -260,6 +260,29 @@ pub fn render_list(
     let showing_from = if total == 0 { 0 } else { (page - 1) * page_size + 1 };
     let showing_to   = (page * page_size).min(total);
     let footer_info  = format!("Showing {}–{} of {} files", showing_from, showing_to, total);
+
+    // ── Page title (shows active folder name) ───────────────────────────────
+    let page_title: String = if let Some(fid) = active_folder {
+        if let Some(f) = folders.iter().find(|f| f.id == fid) {
+            format!("Media Library — {}", f.name)
+        } else {
+            "Media Library".to_string()
+        }
+    } else {
+        "Media Library".to_string()
+    };
+
+    // ── Upload form: redirect URL + optional folder_id hidden input ──────────
+    let redirect_url = if let Some(fid) = active_folder {
+        format!("/admin/media2?folder_id={}", fid)
+    } else {
+        "/admin/media2".to_string()
+    };
+    let folder_hidden = if let Some(fid) = active_folder {
+        format!(r##"<input type="hidden" name="folder_id" value="{}">"##, html_escape(fid))
+    } else {
+        String::new()
+    };
 
     let flash_html = match flash {
         Some(msg) => format!(r##"<div class="flash success">{}</div>"##, html_escape(msg)),
@@ -655,35 +678,35 @@ body.sidebar-open .admin-sidebar {{
       <ul class="mm-type-list">
         <li class="mm-type-item">
           <a href="#" class="active" data-type="all" onclick="setTypeFilter(event,'all')">
-            <span class="mm-type-dot" style="background:#4f46e5"></span>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
             All files
             <span class="mm-type-count" id="tc-all">{count_all}</span>
           </a>
         </li>
         <li class="mm-type-item">
           <a href="#" data-type="image" onclick="setTypeFilter(event,'image')">
-            <span class="mm-type-dot" style="background:#10b981"></span>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
             Images
             <span class="mm-type-count" id="tc-image">{count_image}</span>
           </a>
         </li>
         <li class="mm-type-item">
           <a href="#" data-type="video" onclick="setTypeFilter(event,'video')">
-            <span class="mm-type-dot" style="background:#f59e0b"></span>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><polygon points="23 7 16 12 23 17 23 7"></polygon><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect></svg>
             Video
             <span class="mm-type-count" id="tc-video">{count_video}</span>
           </a>
         </li>
         <li class="mm-type-item">
           <a href="#" data-type="audio" onclick="setTypeFilter(event,'audio')">
-            <span class="mm-type-dot" style="background:#8b5cf6"></span>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
             Audio
             <span class="mm-type-count" id="tc-audio">{count_audio}</span>
           </a>
         </li>
         <li class="mm-type-item">
           <a href="#" data-type="document" onclick="setTypeFilter(event,'document')">
-            <span class="mm-type-dot" style="background:#64748b"></span>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
             Documents
             <span class="mm-type-count" id="tc-document">{count_doc}</span>
           </a>
@@ -696,9 +719,9 @@ body.sidebar-open .admin-sidebar {{
       <ul class="mm-folder-list">
         {folder_items}
       </ul>
-      <button class="btn btn-secondary mm-new-folder-btn" onclick="promptNewFolder()">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-        New folder
+      <button class="btn btn-primary mm-new-folder-btn" onclick="promptNewFolder()">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></svg>
+        Folder +
       </button>
     </div>
   </div>
@@ -708,7 +731,8 @@ body.sidebar-open .admin-sidebar {{
 
     <!-- Drop zone / upload form -->
     <form method="POST" action="/admin/media/upload" enctype="multipart/form-data" id="mm2UploadForm">
-      <input type="hidden" name="redirect" value="/admin/media2">
+      <input type="hidden" name="redirect" value="{redirect_url}">
+      {folder_hidden}
       <input type="file" id="mm2FileInput" name="file" accept="image/*,application/pdf,video/*,audio/*"
              style="position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;pointer-events:none"
              onchange="mm2Submit()">
@@ -1071,6 +1095,9 @@ body.sidebar-open .admin-sidebar {{
     var inp = document.createElement('input');
     inp.name = 'name'; inp.value = name;
     form.appendChild(inp);
+    var redir = document.createElement('input');
+    redir.name = 'redirect'; redir.value = '/admin/media2';
+    form.appendChild(redir);
     document.body.appendChild(form);
     form.submit();
   }};
@@ -1081,7 +1108,9 @@ body.sidebar-open .admin-sidebar {{
 }})();
 </script>
 "##,
-        flash        = flash_html,
+        flash         = flash_html,
+        redirect_url  = redirect_url,
+        folder_hidden = folder_hidden,
         count_all    = count_all,
         count_image  = count_image,
         count_video  = count_video,
@@ -1096,5 +1125,5 @@ body.sidebar-open .admin-sidebar {{
         pagination   = pagination_html,
     );
 
-    admin_page("Media Library", "/admin/media2", flash, &content, ctx)
+    admin_page(&page_title, "/admin/media2", flash, &content, ctx)
 }

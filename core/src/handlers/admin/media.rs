@@ -208,7 +208,11 @@ pub async fn create_folder(
     if let Some(site_id) = admin.site_id {
         let _ = crate::models::media_folder::create(&state.db, site_id, &clean).await;
     }
-    Redirect::to("/admin/media").into_response()
+    let redirect = body.get("redirect")
+        .map(|s| s.as_str())
+        .filter(|s| s.starts_with("/admin/"))
+        .unwrap_or("/admin/media");
+    Redirect::to(redirect).into_response()
 }
 
 pub async fn delete_folder(
