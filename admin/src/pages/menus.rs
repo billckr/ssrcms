@@ -83,7 +83,7 @@ pub fn render_list(menus: &[MenuRow], ctx: &crate::PageContext) -> String {
 
     let content = format!(
         r#"<form method="POST" action="/admin/menus" style="display:flex;gap:.75rem;align-items:flex-end;margin-bottom:1.5rem;flex-wrap:wrap">
-  <div class="form-group" style="margin:0;flex:1;min-width:160px">
+  <div class="form-group" style="margin:0">
     <label for="new-menu-name">Menu Name</label>
     <input id="new-menu-name" type="text" name="name" required placeholder="e.g. Main Menu" maxlength="25" style="width:200px">
   </div>
@@ -91,7 +91,7 @@ pub fn render_list(menus: &[MenuRow], ctx: &crate::PageContext) -> String {
     <label for="new-menu-location">Location</label>
     <select id="new-menu-location" name="location">{location_opts}</select>
   </div>
-  <button type="submit" class="btn btn-primary" style="align-self:flex-end">Create Menu</button>
+  <button type="submit" class="btn btn-primary">Create Menu</button>
 </form>
 <table class="data-table">
   <thead><tr><th>Name</th><th>Location</th><th>Items</th><th>Actions</th></tr></thead>
@@ -184,10 +184,8 @@ pub fn render_edit(
     <div class="menu-item-card__actions">
       <label class="btn btn-primary btn-sm" for="edit-toggle-{item_id}" style="cursor:pointer;padding:.25rem .6rem;font-size:.8rem">Edit</label>
       <form method="POST" action="/admin/menus/{menu_id}/items/{item_id}/delete"
-            onsubmit="return confirm('Delete this item?')" style="display:inline">
-        <button class="icon-btn icon-danger" title="Delete" type="submit">
-          <img src="/admin/static/icons/delete.svg" alt="Delete">
-        </button>
+            onsubmit="return confirm('Delete the following menu item?\n\n{label_val}')" style="display:inline">
+        <button class="btn btn-danger btn-sm" type="submit" style="padding:.25rem .6rem;font-size:.8rem">Delete</button>
       </form>
     </div>
   </div>
@@ -252,7 +250,7 @@ pub fn render_edit(
 
     let items_html = render_items(items, pages, None, &menu.id, 0);
     let items_section = if items.is_empty() {
-        r#"<p style="color:var(--muted);padding:.75rem 0">No items yet. Add one below.</p>"#.to_string()
+        r#"<p style="color:var(--muted);font-size:.875rem;margin:.25rem 0 1rem">No items yet.</p>"#.to_string()
     } else {
         format!(r#"<div class="menu-item-list">{items_html}</div>"#, items_html = items_html)
     };
@@ -303,7 +301,6 @@ pub fn render_edit(
   gap: .5rem;
   margin-top: .75rem;
   padding-top: .75rem;
-  border-top: 1px solid var(--border);
 }}
 .btn-sm {{ font-size: 12px; padding: .2rem .6rem; }}
 .menu-item-list {{
@@ -367,30 +364,34 @@ pub fn render_edit(
 }}
 </style>
 
+<h3 style="margin-bottom:.75rem">Menu Settings</h3>
 <div class="menu-settings-card">
-  <h3 style="margin:0 0 1rem;font-size:1rem">Menu Settings</h3>
-  <form method="POST" action="/admin/menus/{menu_id}">
-    <div class="form-row">
-      <div class="form-group" style="margin:0">
-        <label for="menu-name">Menu Name</label>
-        <input id="menu-name" type="text" name="name" value="{menu_name}" required maxlength="25" style="width:200px">
-      </div>
-      <div class="form-group" style="margin:0">
-        <label for="menu-location">Assign to Location</label>
-        <select id="menu-location" name="location">{location_opts}</select>
-      </div>
+  <div class="form-row">
+    <div class="form-group" style="margin:0">
+      <label for="menu-name">Menu Name</label>
+      <input id="menu-name" type="text" name="name" value="{menu_name}" required maxlength="25" style="width:200px" form="menu-settings-form">
     </div>
-    <div class="form-actions">
-      <button type="submit" class="btn btn-primary">Save Settings</button>
+    <div class="form-group" style="margin:0">
+      <label for="menu-location">Assign to Location</label>
+      <select id="menu-location" name="location" form="menu-settings-form">{location_opts}</select>
     </div>
-  </form>
+  </div>
+  <div class="form-actions">
+    <form id="menu-settings-form" method="POST" action="/admin/menus/{menu_id}" style="margin:0;display:inline">
+      <button type="submit" class="btn btn-primary">Save Menu</button>
+    </form>
+    <form method="POST" action="/admin/menus/{menu_id}/delete"
+          onsubmit="return confirm('Delete this menu and all its items?')" style="margin:0;display:inline">
+      <button type="submit" class="btn btn-danger">Delete Menu</button>
+    </form>
+  </div>
 </div>
 
 <h3 style="margin-bottom:.75rem">Menu Items</h3>
 {items_section}
 
+<h3 style="margin-bottom:.75rem">Add Item</h3>
 <div class="add-item-section">
-  <h4>+ Add Item</h4>
   <form method="POST" action="/admin/menus/{menu_id}/items/new">
     <div class="form-row">
       <div class="form-group" style="margin:0">
@@ -426,18 +427,11 @@ pub fn render_edit(
       </div>
     </div>
     <div class="form-actions">
-      <button type="submit" class="btn btn-primary">Add Item</button>
+      <button type="submit" class="btn btn-primary">Save Item</button>
     </div>
   </form>
-</div>
-
-<div style="display:flex;gap:.75rem;align-items:center;padding-top:.5rem">
-  <a href="/admin/menus" class="btn">← Back to Menus</a>
-  <form method="POST" action="/admin/menus/{menu_id}/delete"
-        onsubmit="return confirm('Delete this menu and all its items?')" style="margin:0">
-    <button type="submit" class="btn btn-danger">Delete Menu</button>
-  </form>
 </div>"#,
+
         menu_id         = crate::html_escape(&menu.id),
         menu_name       = crate::html_escape(&menu.name),
         location_opts   = location_opts,

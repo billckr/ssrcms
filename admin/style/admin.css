@@ -188,7 +188,14 @@ tr.muted td { opacity: .55; }
 .form-group input[type=number],
 .form-group input[type=datetime-local],
 .form-group select,
-.form-group textarea { width: 100%; padding: .45rem .75rem; border: 1px solid var(--border); border-radius: var(--radius); font-size: 14px; }
+.form-group textarea { width: 100%; padding: .45rem .75rem; border: 1px solid var(--border); border-radius: var(--radius); font-size: 14px; box-sizing: border-box; }
+.form-group input[type=text],
+.form-group input[type=email],
+.form-group input[type=url],
+.form-group input[type=password],
+.form-group input[type=number],
+.form-group input[type=datetime-local],
+.form-group select { height: 2.25rem; line-height: 1.4; }
 .form-group textarea { resize: vertical; }
 .form-group select { font-family: inherit; color: var(--text); background: var(--surface); }
 .form-group small { display: block; color: var(--muted); margin-top: .25rem; font-size: 12px; }
