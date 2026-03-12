@@ -214,7 +214,7 @@ pub fn render_theme_editor(
 
     let new_file_form = if ctx.can_manage_appearance && !is_readonly {
         format!(
-            r#"<button type="button" class="btn btn-sm btn-secondary"
+            r#"<button type="button" class="btn btn-sm btn-primary"
         onclick="document.getElementById('new-file-form').style.display='flex'">+ New file</button>
 <div id="new-file-form" style="display:none;align-items:center;gap:.5rem;flex-wrap:wrap;margin-top:.5rem;">
   <form method="POST" action="/admin/appearance/editor/{theme}/new-file"
@@ -243,7 +243,7 @@ pub fn render_theme_editor(
     // Top toolbar — always visible
     let toolbar = format!(
         r#"<div class="editor-topbar">
-  <a href="/admin/appearance" class="btn btn-sm btn-secondary">&#8592; Themes</a>
+  <a href="/admin/appearance" class="btn btn-sm btn-primary">&#8592; Themes</a>
   {picker}
   {new_file_form}
 </div>"#,
@@ -458,7 +458,7 @@ fn render_card(t: &ThemeInfo, ctx: &crate::PageContext, filter: &str) -> String 
         // publish it to global, or remove it entirely.
         let (edit_html, make_global_html, remove_html) = if filter == "private" {
             let edit = format!(
-                r#"<a href="/admin/appearance/editor/{name}?source=private" class="btn btn-edit">Edit</a>"#,
+                r#"<a href="/admin/appearance/editor/{name}?source=private" class="btn btn-primary">Edit</a>"#,
                 name = name_esc,
             );
 
@@ -530,7 +530,7 @@ fn render_card(t: &ThemeInfo, ctx: &crate::PageContext, filter: &str) -> String 
     };
 
     let edit_html = format!(
-        r#"<a href="/admin/appearance/editor/{name}?source={source}" class="btn btn-edit">Edit</a>"#,
+        r#"<a href="/admin/appearance/editor/{name}?source={source}" class="btn btn-primary">Edit</a>"#,
         name   = name_esc,
         source = crate::html_escape(&t.source),
     );
