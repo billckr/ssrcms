@@ -827,8 +827,6 @@ body.sidebar-open .admin-sidebar {{
     <button class="mm-bulk-action" onclick="bulkMoveTo()">Move to…</button>
     <button class="mm-bulk-action" onclick="bulkDownload()">Download</button>
     <button class="mm-bulk-action danger" onclick="bulkDelete()">Delete</button>
-    <div class="mm-bulk-bar-sep"></div>
-    <button class="mm-bulk-dismiss" onclick="clearSelection()" title="Clear">&#10005;</button>
   </div>
 
   <!-- Delete folder modal -->

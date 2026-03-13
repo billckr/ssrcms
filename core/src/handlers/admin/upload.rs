@@ -46,7 +46,7 @@ pub async fn upload(
     let mut file_data: Option<(String, String, Vec<u8>)> = None; // (filename, mime, bytes)
     let mut alt_text: Option<String> = None;
     let mut folder_id: Option<Uuid> = None;
-    let mut redirect_to: String = "/admin/media".to_string();
+    let mut redirect_to: String = "/admin/media2".to_string();
 
     while let Ok(Some(field)) = multipart.next_field().await {
         let name: String = field.name().unwrap_or("").to_string();

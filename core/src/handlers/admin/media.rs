@@ -1,51 +1,10 @@
-use axum::{extract::{Query, State}, response::Html, extract::Path};
+use axum::{extract::{State}, extract::Path};
 use uuid::Uuid;
 use axum::response::{IntoResponse, Redirect};
 
 use crate::app_state::AppState;
 use crate::middleware::admin_auth::AdminUser;
 use super::sanitize_media_text;
-
-pub async fn list(
-    State(state): State<AppState>,
-    admin: AdminUser,
-    Query(params): Query<std::collections::HashMap<String, String>>,
-) -> Html<String> {
-    let folder_id: Option<Uuid> = params.get("folder_id")
-        .and_then(|s| s.parse().ok());
-
-    let folders = if let Some(sid) = admin.site_id {
-        crate::models::media_folder::list(&state.db, sid).await.unwrap_or_default()
-    } else {
-        vec![]
-    };
-
-    let uploaded_by = if admin.site_role == "author" { Some(admin.user.id) } else { None };
-    let raw = crate::models::media::list(&state.db, admin.site_id, uploaded_by, folder_id, 200, 0)
-        .await.unwrap_or_else(|e| {
-            tracing::warn!("failed to list media: {:?}", e);
-            vec![]
-        });
-
-    let items: Vec<admin::pages::media::MediaItem> = raw.iter().map(|m| admin::pages::media::MediaItem {
-        id: m.id.to_string(),
-        filename: m.filename.clone(),
-        mime_type: m.mime_type.clone(),
-        path: m.path.clone(),
-        alt_text: if m.alt_text.is_empty() { None } else { Some(m.alt_text.clone()) },
-    }).collect();
-
-    let folder_items: Vec<admin::pages::media::FolderItem> = folders.iter().map(|f| admin::pages::media::FolderItem {
-        id: f.id.to_string(),
-        name: f.name.clone(),
-    }).collect();
-
-    let active_folder = params.get("folder_id").map(|s| s.as_str());
-
-    let cs = state.site_hostname(admin.site_id);
-    let ctx = super::page_ctx_full(&state, &admin, &cs).await;
-    Html(admin::pages::media::render_list(&items, &folder_items, active_folder, None, &ctx))
-}
 
 pub async fn delete(
     State(state): State<AppState>,
@@ -82,7 +41,7 @@ pub async fn delete(
             tracing::warn!("media {} not found for deletion: {:?}", id, e);
         }
     }
-    Redirect::to("/admin/media").into_response()
+    Redirect::to("/admin/media2").into_response()
 }
 
 /// POST /admin/api/media/{id}/meta — update alt text, title, and caption for a media item.
@@ -203,7 +162,7 @@ pub async fn create_folder(
         .collect();
     let clean = clean.trim_matches('-').to_string();
     if clean.len() < 4 {
-        return Redirect::to("/admin/media").into_response();
+        return Redirect::to("/admin/media2").into_response();
     }
     if let Some(site_id) = admin.site_id {
         let _ = crate::models::media_folder::create(&state.db, site_id, &clean).await;
@@ -211,7 +170,7 @@ pub async fn create_folder(
     let redirect = body.get("redirect")
         .map(|s| s.as_str())
         .filter(|s| s.starts_with("/admin/"))
-        .unwrap_or("/admin/media");
+        .unwrap_or("/admin/media2");
     Redirect::to(redirect).into_response()
 }
 
@@ -241,6 +200,6 @@ pub async fn delete_folder(
         }
         let _ = crate::models::media_folder::delete(&state.db, id, site_id).await;
     }
-    let redirect_to = body.get("redirect").map(|s| s.as_str()).unwrap_or("/admin/media");
+    let redirect_to = body.get("redirect").map(|s| s.as_str()).unwrap_or("/admin/media2");
     Redirect::to(redirect_to).into_response()
 }
