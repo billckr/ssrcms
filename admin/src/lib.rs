@@ -110,7 +110,6 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
         {pages}
         {menus}
         {media}
-        {media2}
         {cats}
         {tags}
         {users}
@@ -173,7 +172,6 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
         },
         pages = if ctx.can_manage_pages { nav_link("/admin/pages", "Pages") } else { String::new() },
         media = nav_link("/admin/media", "Media"),
-        media2 = String::new(),
         cats = if ctx.can_manage_taxonomies { nav_link("/admin/categories", "Categories") } else { String::new() },
         tags = if ctx.can_manage_taxonomies { nav_link("/admin/tags", "Tags") } else { String::new() },
         users = if ctx.can_manage_users { nav_link("/admin/users", "Users") } else { String::new() },
