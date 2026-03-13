@@ -19,6 +19,14 @@ pub struct FolderItem {
     pub name: String,
 }
 
+pub struct TypeCounts {
+    pub all: i64,
+    pub image: i64,
+    pub video: i64,
+    pub audio: i64,
+    pub document: i64,
+}
+
 /// Classify a mime type into a broad category used for the type filter.
 fn media_type_key(mime: &str) -> &'static str {
     if mime.starts_with("image/") { "image" }
@@ -47,27 +55,20 @@ pub fn render_list(
     items: &[MediaItem],
     folders: &[FolderItem],
     active_folder: Option<&str>,
+    active_type: Option<&str>,
     total: i64,
     page: i64,
     page_size: i64,
+    type_counts: TypeCounts,
     flash: Option<&str>,
     ctx: &PageContext,
 ) -> String {
-    // ── Type counts ──────────────────────────────────────────────────────────
-    let mut count_image = 0usize;
-    let mut count_video = 0usize;
-    let mut count_audio = 0usize;
-    let mut count_doc   = 0usize;
-    for item in items {
-        match media_type_key(&item.mime_type) {
-            "image"    => count_image += 1,
-            "video"    => count_video += 1,
-            "audio"    => count_audio += 1,
-            "document" => count_doc   += 1,
-            _          => {}
-        }
-    }
-    let count_all = items.len();
+    // ── Type counts (full library, not just current page) ───────────────────
+    let count_image = type_counts.image;
+    let count_video = type_counts.video;
+    let count_audio = type_counts.audio;
+    let count_doc   = type_counts.document;
+    let count_all   = type_counts.all;
 
     // ── Grid items ───────────────────────────────────────────────────────────
     let grid_items: String = items.iter().enumerate().map(|(i, m)| {
@@ -189,28 +190,51 @@ pub fn render_list(
         format!("[{}]", parts.join(","))
     };
 
-    // ── Folder sidebar items ─────────────────────────────────────────────────
+    // ── Folder dropdown options ──────────────────────────────────────────────
     let folder_items_html: String = {
-        let mut html = String::from(
-            r##"<li class="mm-folder-item"><a href="/admin/media2" class="##,
+        let all_selected = if active_folder.is_none() { " selected" } else { "" };
+        let mut opts = format!(
+            r##"<option value=""{sel}>All Media</option>"##,
+            sel = all_selected,
         );
-        if active_folder.is_none() { html.push_str("active"); }
-        html.push_str(r##""><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>All media</a></li>"##);
-        for f in folders {
-            let active_class = if active_folder == Some(f.id.as_str()) { " active" } else { "" };
-            html.push_str(&format!(
-                r##"<li class="mm-folder-item"><a href="/admin/media2?folder_id={id}" class="{ac}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>{name}</a></li>"##,
+        let mut sorted: Vec<&FolderItem> = folders.iter().collect();
+        sorted.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+        for f in &sorted {
+            let sel = if active_folder == Some(f.id.as_str()) { " selected" } else { "" };
+            opts.push_str(&format!(
+                r##"<option value="{id}"{sel}>{name}</option>"##,
                 id   = html_escape(&f.id),
                 name = html_escape(&f.name),
-                ac   = active_class,
+                sel  = sel,
             ));
         }
-        html
+        opts
     };
+
+    // ── URL param helpers ────────────────────────────────────────────────────
+    let folder_qs      = active_folder.map(|f| format!("&folder_id={}", f)).unwrap_or_default();
+    let type_all_url   = format!("/admin/media{}", active_folder.map(|f| format!("?folder_id={}", f)).unwrap_or_default());
+    let type_image_url = format!("/admin/media?type=image{}",    folder_qs);
+    let type_video_url = format!("/admin/media?type=video{}",    folder_qs);
+    let type_audio_url = format!("/admin/media?type=audio{}",    folder_qs);
+    let type_doc_url   = format!("/admin/media?type=document{}", folder_qs);
+    let type_all_active   = if active_type.is_none()             { "active" } else { "" };
+    let type_image_active = if active_type == Some("image")    { "active" } else { "" };
+    let type_video_active = if active_type == Some("video")    { "active" } else { "" };
+    let type_audio_active = if active_type == Some("audio")    { "active" } else { "" };
+    let type_doc_active   = if active_type == Some("document") { "active" } else { "" };
+    let folder_onchange = format!(
+        "if(this.value)window.location='/admin/media?folder_id='+this.value+'{}';else window.location='{}'",
+        if let Some(t) = active_type { format!("&type={}", t) } else { String::new() },
+        if let Some(t) = active_type { format!("/admin/media?type={}", t) } else { "/admin/media".to_string() },
+    );
+    let mut pager_parts: Vec<String> = Vec::new();
+    if let Some(t) = active_type   { pager_parts.push(format!("type={}", t)); }
+    if let Some(f) = active_folder { pager_parts.push(format!("folder_id={}", f)); }
+    let pager_suffix = if pager_parts.is_empty() { String::new() } else { format!("&{}", pager_parts.join("&")) };
 
     // ── Pagination ───────────────────────────────────────────────────────────
     let total_pages = ((total as f64) / (page_size as f64)).ceil() as i64;
-    let folder_param = active_folder.map(|id| format!("&folder_id={}", id)).unwrap_or_default();
 
     let pagination_html = if total_pages <= 1 {
         String::new()
@@ -219,8 +243,8 @@ pub fn render_list(
         // Prev
         if page > 1 {
             p.push_str(&format!(
-                r##"<a href="/admin/media2?page={}{}" class="page-btn">&lsaquo; Prev</a>"##,
-                page - 1, folder_param
+                r##"<a href="/admin/media?page={}{}" class="page-btn">&lsaquo; Prev</a>"##,
+                page - 1, pager_suffix
             ));
         } else {
             p.push_str(r##"<span class="page-btn page-btn-disabled">&lsaquo; Prev</span>"##);
@@ -229,7 +253,7 @@ pub fn render_list(
         let start = (page - 3).max(1);
         let end   = (page + 3).min(total_pages);
         if start > 1 {
-            p.push_str(&format!(r##"<a href="/admin/media2?page=1{}" class="page-btn">1</a>"##, folder_param));
+            p.push_str(&format!(r##"<a href="/admin/media?page=1{}" class="page-btn">1</a>"##, pager_suffix));
             if start > 2 { p.push_str(r##"<span class="page-btn" style="pointer-events:none;color:var(--muted)">…</span>"##); }
         }
         for n in start..=end {
@@ -237,20 +261,20 @@ pub fn render_list(
                 p.push_str(&format!(r##"<span class="page-btn page-btn-active">{}</span>"##, n));
             } else {
                 p.push_str(&format!(
-                    r##"<a href="/admin/media2?page={n}{fp}" class="page-btn">{n}</a>"##,
-                    n = n, fp = folder_param
+                    r##"<a href="/admin/media?page={n}{ps}" class="page-btn">{n}</a>"##,
+                    n = n, ps = pager_suffix
                 ));
             }
         }
         if end < total_pages {
             if end < total_pages - 1 { p.push_str(r##"<span class="page-btn" style="pointer-events:none;color:var(--muted)">…</span>"##); }
-            p.push_str(&format!(r##"<a href="/admin/media2?page={tp}{fp}" class="page-btn">{tp}</a>"##, tp = total_pages, fp = folder_param));
+            p.push_str(&format!(r##"<a href="/admin/media?page={tp}{ps}" class="page-btn">{tp}</a>"##, tp = total_pages, ps = pager_suffix));
         }
         // Next
         if page < total_pages {
             p.push_str(&format!(
-                r##"<a href="/admin/media2?page={}{}" class="page-btn">Next &rsaquo;</a>"##,
-                page + 1, folder_param
+                r##"<a href="/admin/media?page={}{}" class="page-btn">Next &rsaquo;</a>"##,
+                page + 1, pager_suffix
             ));
         } else {
             p.push_str(r##"<span class="page-btn page-btn-disabled">Next &rsaquo;</span>"##);
@@ -267,23 +291,12 @@ pub fn render_list(
 
     // ── Upload form: redirect URL + optional folder_id hidden input ──────────
     let redirect_url = if let Some(fid) = active_folder {
-        format!("/admin/media2?folder_id={}", fid)
+        format!("/admin/media?folder_id={}", fid)
     } else {
-        "/admin/media2".to_string()
+        "/admin/media".to_string()
     };
     let folder_hidden = if let Some(fid) = active_folder {
         format!(r##"<input type="hidden" name="folder_id" value="{}">"##, html_escape(fid))
-    } else {
-        String::new()
-    };
-
-    // ── Section label above type filter (folder name when inside one) ────────
-    let type_section_label: String = if let Some(fid) = active_folder {
-        if let Some(f) = folders.iter().find(|f| f.id == fid) {
-            html_escape(&f.name)
-        } else {
-            String::new()
-        }
     } else {
         String::new()
     };
@@ -432,6 +445,17 @@ body.sidebar-open .admin-sidebar {{
 .mm-folder-item a.active {{ background: #ede9fe; color: var(--primary); }}
 .mm-folder-item svg {{ flex-shrink: 0; color: var(--muted); }}
 .mm-folder-item a.active svg {{ color: var(--primary); }}
+.mm-folder-select {{
+  margin: .4rem .85rem .3rem;
+  width: calc(100% - 1.7rem);
+  padding: .35rem .5rem;
+  font-size: 13px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+}}
 .mm-new-folder-btn {{ margin: .5rem .85rem .65rem; font-size: 12px; width: calc(100% - 1.7rem); justify-content: flex-start; gap: .4rem; }}
 
 /* ── Main ─────────────────────────────────────────────────────────────── */
@@ -447,23 +471,17 @@ body.sidebar-open .admin-sidebar {{
 }}
 
 .mm-dropzone {{
-  margin: .75rem .85rem .5rem;
-  border: 2px dashed var(--border);
+  width: 2rem; height: 2rem; flex-shrink: 0;
+  border: none;
   border-radius: var(--radius);
-  padding: .85rem 1rem;
-  display: flex; align-items: center; gap: .85rem;
-  background: #fafbfc; cursor: pointer;
-  transition: border-color .2s, background .2s; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--primary); cursor: pointer;
+  color: #fff;
+  transition: background .2s, opacity .2s;
 }}
-.mm-dropzone:hover, .mm-dropzone.drag-over {{ border-color: var(--primary); background: #ede9fe; }}
-.mm-dropzone-icon {{
-  width: 40px; height: 40px; border-radius: 8px;
-  background: #ede9fe; display: flex; align-items: center;
-  justify-content: center; color: var(--primary); flex-shrink: 0;
+.mm-dropzone:hover, .mm-dropzone.drag-over {{
+  opacity: .82;
 }}
-.mm-dropzone-text strong {{ display: block; font-size: 13px; color: var(--text); }}
-.mm-dropzone-text span {{ font-size: 12px; color: var(--muted); }}
-.mm-dropzone-text .mm-browse-link {{ color: var(--primary); font-weight: 600; }}
 
 .mm-grid-wrap {{ flex: 1; overflow-y: auto; padding: 0 .85rem .85rem; min-width: 0; }}
 
@@ -635,7 +653,7 @@ body.sidebar-open .admin-sidebar {{
   padding: .55rem 1rem; border-top: 1px solid var(--border);
   background: #f8fafc; flex-shrink: 0; flex-wrap: wrap; gap: .5rem;
 }}
-.mm-footer-info {{ font-size: 12px; color: var(--muted); }}
+.mm-footer-info {{ font-size: 13px; color: var(--muted); margin-left: auto; }}
 
 /* ── Responsive ───────────────────────────────────────────────────────── */
 @media (max-width: 900px) {{
@@ -652,7 +670,6 @@ body.sidebar-open .admin-sidebar {{
   .mm-sidebar {{ grid-template-columns: 1fr; }}
   .mm-sidebar .mm-panel-section + .mm-panel-section {{ border-left: none; border-top: 1px solid var(--border); }}
   .mm-grid {{ grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); }}
-  .mm-dropzone-text span {{ display: none; }}
 }}
 </style>
 
@@ -679,48 +696,53 @@ body.sidebar-open .admin-sidebar {{
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
         </button>
       </div>
-      <button class="btn btn-primary" style="font-size:13px;height:2rem;padding:.3rem .75rem" onclick="document.getElementById('mm2FileInput').click()">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right:.3rem"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-        Upload
-      </button>
+      <form method="POST" action="/admin/media/upload" enctype="multipart/form-data" id="mm2UploadForm" style="display:contents">
+        <input type="hidden" name="redirect" value="{redirect_url}">
+        {folder_hidden}
+        <input type="file" id="mm2FileInput" name="file" accept="image/*,application/pdf,video/*,audio/*"
+               style="position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;pointer-events:none"
+               onchange="mm2Submit()">
+        <div class="mm-dropzone" id="mmDropzone" title="Upload file">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></svg>
+        </div>
+      </form>
     </div>
   </div>
 
   <!-- Left sidebar -->
   <div class="mm-sidebar">
     <div class="mm-panel-section">
-      {type_section_label_html}
       <ul class="mm-type-list">
         <li class="mm-type-item">
-          <a href="#" class="active" data-type="all" onclick="setTypeFilter(event,'all')">
+          <a href="{type_all_url}" class="{type_all_active}" data-type="all">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
             All files
             <span class="mm-type-count" id="tc-all">{count_all}</span>
           </a>
         </li>
         <li class="mm-type-item">
-          <a href="#" data-type="image" onclick="setTypeFilter(event,'image')">
+          <a href="{type_image_url}" class="{type_image_active}" data-type="image">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>
             Images
             <span class="mm-type-count" id="tc-image">{count_image}</span>
           </a>
         </li>
         <li class="mm-type-item">
-          <a href="#" data-type="video" onclick="setTypeFilter(event,'video')">
+          <a href="{type_video_url}" class="{type_video_active}" data-type="video">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><polygon points="23 7 16 12 23 17 23 7"></polygon><rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect></svg>
             Video
             <span class="mm-type-count" id="tc-video">{count_video}</span>
           </a>
         </li>
         <li class="mm-type-item">
-          <a href="#" data-type="audio" onclick="setTypeFilter(event,'audio')">
+          <a href="{type_audio_url}" class="{type_audio_active}" data-type="audio">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path></svg>
             Audio
             <span class="mm-type-count" id="tc-audio">{count_audio}</span>
           </a>
         </li>
         <li class="mm-type-item">
-          <a href="#" data-type="document" onclick="setTypeFilter(event,'document')">
+          <a href="{type_doc_url}" class="{type_doc_active}" data-type="document">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
             Documents
             <span class="mm-type-count" id="tc-document">{count_doc}</span>
@@ -730,10 +752,9 @@ body.sidebar-open .admin-sidebar {{
     </div>
 
     <div class="mm-panel-section" style="flex:1">
-      <div class="mm-panel-label">Folders</div>
-      <ul class="mm-folder-list">
+      <select class="mm-folder-select" onchange="{folder_onchange}">
         {folder_items}
-      </ul>
+      </select>
       <button class="btn btn-primary mm-new-folder-btn" onclick="promptNewFolder()">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></svg>
         Folder +
@@ -745,25 +766,7 @@ body.sidebar-open .admin-sidebar {{
   <!-- Main content -->
   <div class="mm-main" id="mmMain">
 
-    <!-- Drop zone / upload form -->
-    <form method="POST" action="/admin/media/upload" enctype="multipart/form-data" id="mm2UploadForm">
-      <input type="hidden" name="redirect" value="{redirect_url}">
-      {folder_hidden}
-      <input type="file" id="mm2FileInput" name="file" accept="image/*,application/pdf,video/*,audio/*"
-             style="position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;pointer-events:none"
-             onchange="mm2Submit()">
-      <div class="mm-dropzone" id="mmDropzone">
-        <div class="mm-dropzone-icon">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></svg>
-        </div>
-        <div class="mm-dropzone-text" id="mm2DzText">
-          <strong>Drop files here to upload</strong>
-          <span>or <span class="mm-browse-link">browse your computer</span> — JPG, PNG, GIF, PDF, MP4…</span>
-        </div>
-      </div>
-    </form>
-
-    <!-- Content area: grid + detail panel side by side, below the drop zone -->
+    <!-- Content area: grid + detail panel side by side -->
     <div class="mm-content-area">
 
     <!-- Grid / list wrap -->
@@ -813,10 +816,10 @@ body.sidebar-open .admin-sidebar {{
 
     <!-- Footer -->
     <div class="mm-footer">
-      <span class="mm-footer-info" id="mmFooterInfo">{footer_info}</span>
       <div class="pagination" style="margin:0" id="mmPagination">
         {pagination}
       </div>
+      <span class="mm-footer-info" id="mmFooterInfo">{footer_info}</span>
     </div>
   </div>
 
@@ -869,7 +872,6 @@ body.sidebar-open .admin-sidebar {{
   var FOLDER_TOTAL = {total_count};
   var selected = new Set();
   var bulkMode = false;
-  var activeType = 'all';
 
   /* ── View toggle ─────────────────────────────────────────────────── */
   window.setView = function(v) {{
@@ -885,17 +887,7 @@ body.sidebar-open .admin-sidebar {{
     }}
   }};
 
-  /* ── Type filter ─────────────────────────────────────────────────── */
-  window.setTypeFilter = function(e, type) {{
-    e.preventDefault();
-    activeType = type;
-    document.querySelectorAll('.mm-type-item a').forEach(function(a) {{
-      a.classList.toggle('active', a.dataset.type === type);
-    }});
-    filterItems();
-  }};
-
-  /* ── Live search + type filter ───────────────────────────────────── */
+  /* ── Live search (type filtering is server-side) ─────────────────── */
   window.filterItems = function() {{
     var q = document.getElementById('mmSearch').value.toLowerCase().trim();
     var gridItems = document.querySelectorAll('#mmGrid .mm-item');
@@ -903,15 +895,12 @@ body.sidebar-open .admin-sidebar {{
     var visible = 0, total = gridItems.length;
 
     gridItems.forEach(function(el) {{
-      var match = (activeType === 'all' || el.dataset.type === activeType)
-               && (!q || el.dataset.name.indexOf(q) !== -1);
+      var match = !q || el.dataset.name.indexOf(q) !== -1;
       el.classList.toggle('hidden', !match);
       if (match) visible++;
     }});
     listRows.forEach(function(el) {{
-      var match = (activeType === 'all' || el.dataset.type === activeType)
-               && (!q || el.dataset.name.indexOf(q) !== -1);
-      el.classList.toggle('hidden', !match);
+      el.classList.toggle('hidden', !!q && el.dataset.name.indexOf(q) === -1);
     }});
 
     // Show empty state
@@ -920,15 +909,15 @@ body.sidebar-open .admin-sidebar {{
     // Update footer
     var info = document.getElementById('mmFooterInfo');
     if (info) {{
-      if (q || activeType !== 'all') {{
+      if (q) {{
         info.textContent = visible + ' of ' + total + ' files shown';
       }} else {{
         info.textContent = '{footer_info}';
       }}
     }}
-    // Hide pagination when filtering
+    // Hide pagination when searching
     var pg = document.getElementById('mmPagination');
-    if (pg) pg.style.display = (q || activeType !== 'all') ? 'none' : '';
+    if (pg) pg.style.display = q ? 'none' : '';
   }};
 
   /* ── Item selection ──────────────────────────────────────────────── */
@@ -1082,10 +1071,8 @@ body.sidebar-open .admin-sidebar {{
   }};
 
   function mm2ShowPending(name) {{
-    var txt = document.getElementById('mm2DzText');
-    if (txt) txt.innerHTML = '<strong>Uploading ' + escHtml(name) + '…</strong><span>Please wait</span>';
-    dz.style.borderColor = 'var(--primary)';
-    dz.style.background  = '#ede9fe';
+    dz.style.opacity = '.6';
+    dz.title = 'Uploading ' + escHtml(name) + '…';
   }}
 
   /* ── Bulk actions ────────────────────────────────────────────────── */
@@ -1153,7 +1140,7 @@ body.sidebar-open .admin-sidebar {{
     inp.name = 'name'; inp.value = name;
     form.appendChild(inp);
     var redir = document.createElement('input');
-    redir.name = 'redirect'; redir.value = '/admin/media2';
+    redir.name = 'redirect'; redir.value = '/admin/media';
     form.appendChild(redir);
     document.body.appendChild(form);
     form.submit();
@@ -1183,7 +1170,7 @@ body.sidebar-open .admin-sidebar {{
     form.method = 'POST';
     form.action = '/admin/media/folders/' + pendingDeleteFolderId + '/delete';
     var dm = document.createElement('input'); dm.type='hidden'; dm.name='delete_media'; dm.value=deleteMedia?'true':'false';
-    var rd = document.createElement('input'); rd.type='hidden'; rd.name='redirect'; rd.value='/admin/media2';
+    var rd = document.createElement('input'); rd.type='hidden'; rd.name='redirect'; rd.value='/admin/media';
     form.appendChild(dm); form.appendChild(rd);
     document.body.appendChild(form);
     form.submit();
@@ -1215,10 +1202,20 @@ body.sidebar-open .admin-sidebar {{
         count_video  = count_video,
         count_audio  = count_audio,
         count_doc    = count_doc,
-        type_section_label_html = if type_section_label.is_empty() { String::new() } else { format!("<div class=\"mm-panel-label\">{}</div>", type_section_label) },
         delete_folder_btn = delete_folder_btn_html,
         total_count  = total,
         folder_items = folder_items_html,
+        folder_onchange = folder_onchange,
+        type_all_url  = type_all_url,
+        type_image_url = type_image_url,
+        type_video_url = type_video_url,
+        type_audio_url = type_audio_url,
+        type_doc_url   = type_doc_url,
+        type_all_active   = type_all_active,
+        type_image_active = type_image_active,
+        type_video_active = type_video_active,
+        type_audio_active = type_audio_active,
+        type_doc_active   = type_doc_active,
         grid_items   = grid_items,
         list_rows    = list_rows,
         items_json   = items_json,
@@ -1227,5 +1224,5 @@ body.sidebar-open .admin-sidebar {{
         pagination   = pagination_html,
     );
 
-    admin_page(&page_title, "/admin/media2", flash, &content, ctx)
+    admin_page(&page_title, "/admin/media", flash, &content, ctx)
 }

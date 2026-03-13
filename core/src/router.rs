@@ -128,8 +128,7 @@ pub fn build(
         .route("/admin/api/media/{id}/meta", post(media::api_update_meta))
         .route("/admin/api/media/{id}/folder", post(media::api_update_folder))
         // ── Admin media ────────────────────────────────────────────────────
-        .route("/admin/media", get(|| async { axum::response::Redirect::permanent("/admin/media2") }))
-        .route("/admin/media2", get(media2::list))
+        .route("/admin/media", get(media2::list))
         .route("/admin/media/upload", post(upload::upload).layer(upload_limit.clone()))
         .route("/admin/media/folders/new", post(media::create_folder))
         .route("/admin/media/folders/{id}/delete", post(media::delete_folder))

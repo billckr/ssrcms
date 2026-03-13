@@ -41,7 +41,7 @@ pub async fn delete(
             tracing::warn!("media {} not found for deletion: {:?}", id, e);
         }
     }
-    Redirect::to("/admin/media2").into_response()
+    Redirect::to("/admin/media").into_response()
 }
 
 /// POST /admin/api/media/{id}/meta — update alt text, title, and caption for a media item.
@@ -162,7 +162,7 @@ pub async fn create_folder(
         .collect();
     let clean = clean.trim_matches('-').to_string();
     if clean.len() < 4 {
-        return Redirect::to("/admin/media2").into_response();
+        return Redirect::to("/admin/media").into_response();
     }
     if let Some(site_id) = admin.site_id {
         let _ = crate::models::media_folder::create(&state.db, site_id, &clean).await;
@@ -170,7 +170,7 @@ pub async fn create_folder(
     let redirect = body.get("redirect")
         .map(|s| s.as_str())
         .filter(|s| s.starts_with("/admin/"))
-        .unwrap_or("/admin/media2");
+        .unwrap_or("/admin/media");
     Redirect::to(redirect).into_response()
 }
 
@@ -200,6 +200,6 @@ pub async fn delete_folder(
         }
         let _ = crate::models::media_folder::delete(&state.db, id, site_id).await;
     }
-    let redirect_to = body.get("redirect").map(|s| s.as_str()).unwrap_or("/admin/media2");
+    let redirect_to = body.get("redirect").map(|s| s.as_str()).unwrap_or("/admin/media");
     Redirect::to(redirect_to).into_response()
 }

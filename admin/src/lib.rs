@@ -172,7 +172,7 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
             format!(r#"<li><a href="/admin/posts"{}>{}</a></li>"#, active, format!("Posts{}", pending_badge))
         },
         pages = if ctx.can_manage_pages { nav_link("/admin/pages", "Pages") } else { String::new() },
-        media = nav_link("/admin/media2", "Media"),
+        media = nav_link("/admin/media", "Media"),
         media2 = String::new(),
         cats = if ctx.can_manage_taxonomies { nav_link("/admin/categories", "Categories") } else { String::new() },
         tags = if ctx.can_manage_taxonomies { nav_link("/admin/tags", "Tags") } else { String::new() },
