@@ -73,7 +73,7 @@ pub async fn list(
         .fetch_all(&state.db)
         .await
         .unwrap_or_default();
-        let mut tc = admin::pages::media2::TypeCounts { all: total, image: 0, video: 0, audio: 0, document: 0 };
+        let mut tc = admin::pages::media2::TypeCounts { all: 0, image: 0, video: 0, audio: 0, document: 0 };
         for r in rows {
             let mime: String = r.get("mime_type");
             let n: i64 = r.get("n");
@@ -82,6 +82,7 @@ pub async fn list(
             else if mime.starts_with("audio/") { tc.audio    += n; }
             else                               { tc.document += n; }
         }
+        tc.all = tc.image + tc.video + tc.audio + tc.document;
         tc
     };
 
