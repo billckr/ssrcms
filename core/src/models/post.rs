@@ -460,9 +460,9 @@ pub async fn create(pool: &PgPool, data: &CreatePost) -> Result<Post> {
     let slug = slug.chars().take(200).collect::<String>();
     let format = data.content_format.as_deref().unwrap_or("html");
     let sanitized_content = sanitize_content(&data.content);
-    let clean_title   = ammonia::clean_text(&data.title).chars().take(255).collect::<String>();
+    let clean_title   = data.title.chars().take(255).collect::<String>();
     let clean_excerpt = data.excerpt.as_deref()
-        .map(|e| ammonia::clean_text(e).chars().take(500).collect::<String>());
+        .map(|e| e.chars().take(500).collect::<String>());
 
     let post = sqlx::query_as::<_, Post>(
         r#"
@@ -743,7 +743,7 @@ pub async fn update(pool: &PgPool, id: Uuid, data: &UpdatePost) -> Result<Post> 
     let new_slug = data.slug.clone().unwrap_or(current.slug.clone());
     let new_slug = new_slug.chars().take(200).collect::<String>();
     let new_title = data.title.as_deref()
-        .map(|t| ammonia::clean_text(t).chars().take(255).collect::<String>())
+        .map(|t| t.chars().take(255).collect::<String>())
         .unwrap_or(current.title.clone());
     let new_content = match &data.content {
         Some(html) => sanitize_content(html),
@@ -751,7 +751,7 @@ pub async fn update(pool: &PgPool, id: Uuid, data: &UpdatePost) -> Result<Post> 
     };
     let new_format = data.content_format.clone().unwrap_or(current.content_format.clone());
     let new_excerpt = data.excerpt.as_deref()
-        .map(|e| ammonia::clean_text(e).chars().take(500).collect::<String>())
+        .map(|e| e.chars().take(500).collect::<String>())
         .or(current.excerpt.clone());
     let new_status = data.status.as_ref().map(|s| s.as_str().to_string()).unwrap_or(current.status.clone());
     let new_image = if data.clear_featured_image {
