@@ -1,8 +1,8 @@
 use axum::{
     extract::{Path, Query, State},
     response::{Html, IntoResponse, Redirect},
-    Form,
 };
+use axum_extra::extract::Form;
 use serde::Deserialize;
 use uuid::Uuid;
 
@@ -366,40 +366,6 @@ async fn edit_post_type(state: AppState, id: Uuid, site_id: Option<Uuid>, is_aut
     Html(admin::pages::posts::render_editor(&edit, None, &ctx)).into_response()
 }
 
-/// HTML forms send repeated keys for multiple checkboxes, but only a bare
-/// string when exactly one box is checked.  This deserializer accepts both.
-fn deserialize_string_or_vec<'de, D>(d: D) -> Result<Vec<String>, D::Error>
-where
-    D: serde::Deserializer<'de>,
-{
-    use serde::de::{SeqAccess, Visitor};
-    use std::fmt;
-
-    struct SovVisitor;
-
-    impl<'de> Visitor<'de> for SovVisitor {
-        type Value = Vec<String>;
-
-        fn expecting(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-            write!(f, "a string or a sequence of strings")
-        }
-
-        fn visit_str<E: serde::de::Error>(self, v: &str) -> Result<Vec<String>, E> {
-            Ok(vec![v.to_owned()])
-        }
-
-        fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<Vec<String>, A::Error> {
-            let mut out = Vec::new();
-            while let Some(s) = seq.next_element::<String>()? {
-                out.push(s);
-            }
-            Ok(out)
-        }
-    }
-
-    d.deserialize_any(SovVisitor)
-}
-
 #[derive(Deserialize)]
 pub struct PostForm {
     pub title: String,
@@ -410,9 +376,9 @@ pub struct PostForm {
     pub post_type: String,
     pub published_at: Option<String>,
     pub template: Option<String>,
-    #[serde(default, deserialize_with = "deserialize_string_or_vec")]
+    #[serde(default)]
     pub categories: Vec<String>,
-    #[serde(default, deserialize_with = "deserialize_string_or_vec")]
+    #[serde(default)]
     pub tags: Vec<String>,
     pub featured_image_id: Option<String>,
     pub featured_image_url: Option<String>,
