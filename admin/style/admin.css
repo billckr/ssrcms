@@ -216,7 +216,7 @@ tr.muted td { opacity: .55; }
 .content-editor { font-family: monospace; font-size: 13px; }
 
 /* Editor layout */
-.editor-layout { display: grid; grid-template-columns: 1fr 260px; gap: 1.5rem; }
+.editor-layout { display: grid; grid-template-columns: 1fr 270px; gap: 1.5rem; }
 .editor-main { min-width: 0; }
 .editor-sidebar { }
 
