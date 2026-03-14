@@ -395,7 +395,7 @@ body.sidebar-open .admin-sidebar {{
 .mm-view-btn.active {{ background: var(--primary); color: #fff; }}
 .mm-view-btn:hover:not(.active) {{ background: #f1f5f9; color: var(--text); }}
 
-.mm-bulk-btn {{ font-size: 12px; padding: .3rem .65rem; height: 2rem; }}
+.mm-bulk-btn {{ font-size: 12px; padding: .3rem .65rem; }}
 
 /* ── Left panel ───────────────────────────────────────────────────────── */
 .mm-sidebar {{
@@ -673,7 +673,6 @@ body.sidebar-open .admin-sidebar {{
   .mm-sidebar .mm-panel-section + .mm-panel-section {{ border-left: none; border-top: 1px solid var(--border); }}
   .mm-grid {{ grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); }}
 }}
-.admin-content {{ background: #94a3b8; }}
 </style>
 
 <div class="mm-layout" id="mmLayout">
@@ -826,11 +825,11 @@ body.sidebar-open .admin-sidebar {{
 
   <!-- Bulk action bar -->
   <div class="mm-bulk-bar" id="mmBulkBar">
-    <span class="mm-bulk-bar-count" id="mmBulkCount">0 files</span>
+    <span class="mm-bulk-bar-count"><span class="mm-type-count" id="mmBulkCount">0</span> files</span>
     <div class="mm-bulk-bar-sep"></div>
-    <button class="mm-bulk-action" onclick="bulkMoveTo()">Move to…</button>
-    <button class="mm-bulk-action" onclick="bulkDownload()">Download</button>
-    <button class="mm-bulk-action danger" onclick="bulkDelete()">Delete</button>
+    <button class="btn btn-primary mm-bulk-btn" onclick="bulkMoveTo()">Move</button>
+    <button class="btn btn-primary mm-bulk-btn" onclick="bulkDownload()">Download</button>
+    <button class="btn btn-danger mm-bulk-btn" onclick="bulkDelete()">Delete</button>
   </div>
 
   <!-- Delete folder modal -->
@@ -1027,7 +1026,7 @@ body.sidebar-open .admin-sidebar {{
   function syncBulkBar() {{
     var bar = document.getElementById('mmBulkBar');
     var n = selected.size;
-    document.getElementById('mmBulkCount').textContent = n + ' files';
+    document.getElementById('mmBulkCount').textContent = n;
     bar.classList.toggle('visible', n > 0);
   }}
 

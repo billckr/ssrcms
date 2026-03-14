@@ -680,7 +680,7 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
       </div>
       <div class="form-group" style="margin-bottom:1.25rem">
         <label for="excerpt">Excerpt <span style="color:var(--danger);font-weight:700">*</span> <small style="font-weight:400;color:var(--muted)">Used as meta description — required for SEO</small></label>
-        <textarea id="excerpt" name="excerpt" rows="3" required maxlength="500">{excerpt}</textarea>
+        <textarea id="excerpt" name="excerpt" rows="3" required maxlength="500" style="resize:none">{excerpt}</textarea>
         <small id="excerpt-count" style="color:var(--muted)">500 remaining</small>
       </div>
       <div class="form-group">
