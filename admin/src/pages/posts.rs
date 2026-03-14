@@ -716,6 +716,25 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
 <script src="/admin/static/quill/quill.min.js"></script>
 <script>
 (function() {{
+  // Register a custom Quill format for <audio controls> embeds.
+  // Quill strips unknown tags via dangerouslyPasteHTML; registering a blot
+  // lets us use quill.insertEmbed() which bypasses that sanitisation and
+  // preserves the element in quill.root.innerHTML on submit.
+  var BlockEmbed = Quill.import('blots/block/embed');
+  var AudioBlot = function() {{ BlockEmbed.apply(this, arguments); }};
+  AudioBlot.prototype = Object.create(BlockEmbed.prototype);
+  AudioBlot.prototype.constructor = AudioBlot;
+  AudioBlot.blotName = 'audio';
+  AudioBlot.tagName  = 'audio';
+  AudioBlot.create   = function(src) {{
+    var node = BlockEmbed.create();
+    node.setAttribute('src', src);
+    node.setAttribute('controls', '');
+    return node;
+  }};
+  AudioBlot.value = function(node) {{ return node.getAttribute('src'); }};
+  Quill.register(AudioBlot);
+
   var quill = new Quill('#quill-editor', {{
     theme: 'snow',
     modules: {{

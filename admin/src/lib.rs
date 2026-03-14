@@ -292,6 +292,12 @@ pub fn media_picker_modal_html() -> String {
     if (pickerMode === 'audio') src += '&type=audio';
     frame.src = src;
     frame.setAttribute('data-loaded', '1');
+    // After the iframe loads, push the localised button label into it.
+    var label = pickerMode === 'audio' ? 'Insert Audio' : 'Set Image';
+    frame.addEventListener('load', function onLoad() {
+      frame.removeEventListener('load', onLoad);
+      try { frame.contentWindow.postMessage({ type: 'pickerSetLabel', label: label }, '*'); } catch(e) {}
+    });
     document.getElementById('media-picker-modal').style.display = '';
   };
 
@@ -320,8 +326,9 @@ pub fn media_picker_modal_html() -> String {
       var q = window._quillInstance;
       if (q) {
         var range = window._quillRange || q.getSelection(true);
-        var audioHtml = '<audio controls src="' + escHtml(path) + '"></audio>';
-        q.clipboard.dangerouslyPasteHTML(range.index, audioHtml, 'user');
+        // insertEmbed uses the registered AudioBlot so Quill preserves
+        // the <audio controls> element instead of stripping it.
+        q.insertEmbed(range.index, 'audio', path, 'user');
         q.setSelection(range.index + 1, 0, 'silent');
       }
     } else {

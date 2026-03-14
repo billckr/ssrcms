@@ -320,7 +320,7 @@ pub fn render_list(
     // ── Detail actions HTML (differs in picker/select mode) ───────────────────
     let detail_actions_html = if select_mode {
         r#"    <div class="mm-detail-actions" id="mmDetailActions" style="display:none">
-      <button class="btn btn-primary" style="width:100%;justify-content:center" onclick="pickerSelectImage()">Set Image</button>
+      <button id="mmPickerSetBtn" class="btn btn-primary" style="width:100%;justify-content:center" onclick="pickerSelectImage()">Set Image</button>
       <button id="mmSaveBtn" class="btn btn-secondary" style="width:100%;justify-content:center;margin-top:.3rem" onclick="saveDetail()">Save changes</button>
     </div>"#.to_string()
     } else {
@@ -1254,6 +1254,13 @@ body.sidebar-open .admin-sidebar {{
     closeDetail();
   }}, true);
 {picker_js}
+
+  // Allow the parent page to relabel the Set/Insert button after load.
+  window.addEventListener('message', function(e) {{
+    if (!e.data || e.data.type !== 'pickerSetLabel') return;
+    var btn = document.getElementById('mmPickerSetBtn');
+    if (btn) btn.textContent = e.data.label;
+  }});
 }})();
 </script>
 "##,
