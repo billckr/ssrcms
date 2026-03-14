@@ -169,16 +169,17 @@ pub fn render_list(
                 _ => String::from("—"),
             };
             format!(
-                r##"{{"id":"{id}","filename":"{fn}","type":"{ty}","isImage":{img},"path":"/uploads/{path}","alt":"{alt}","title":"{title}","size":"{size}","dims":"{dims}"}}"##,
-                id    = html_escape(&m.id),
-                fn    = html_escape(&m.filename),
-                ty    = type_key,
-                img   = is_image,
-                path  = html_escape(&m.path),
-                alt   = html_escape(&m.alt_text),
-                title = html_escape(&m.title),
-                size  = format_bytes(m.file_size),
-                dims  = dims,
+                r##"{{"id":"{id}","filename":"{fn}","type":"{ty}","isImage":{img},"path":"/uploads/{path}","alt":"{alt}","title":"{title}","caption":"{caption}","size":"{size}","dims":"{dims}"}}"##,
+                id      = html_escape(&m.id),
+                fn      = html_escape(&m.filename),
+                ty      = type_key,
+                img     = is_image,
+                path    = html_escape(&m.path),
+                alt     = html_escape(&m.alt_text),
+                title   = html_escape(&m.title),
+                caption = html_escape(&m.caption),
+                size    = format_bytes(m.file_size),
+                dims    = dims,
             )
         }).collect();
         format!("[{}]", parts.join(","))
