@@ -762,6 +762,25 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
     openMediaPicker('inline');
   }});
 
+  // Add custom audio button to the Quill toolbar
+  (function() {{
+    var qlToolbar = document.querySelector('.ql-toolbar');
+    if (!qlToolbar) return;
+    var span = document.createElement('span');
+    span.className = 'ql-formats';
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.title = 'Insert audio';
+    btn.style.cssText = 'width:auto;padding:0 4px';
+    btn.innerHTML = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>';
+    btn.addEventListener('click', function() {{
+      window._quillRange = quill.getSelection(true);
+      openMediaPicker('audio');
+    }});
+    span.appendChild(btn);
+    qlToolbar.appendChild(span);
+  }})();
+
   // Remaining character counters for title and excerpt
   (function() {{
     function initCount(inputId, countId, max) {{

@@ -264,7 +264,8 @@ pub fn picker_page(content: &str) -> String {
 
 /// Returns the shared media-picker modal HTML + JS.
 /// Opens the full media manager in an iframe; selection is returned via postMessage.
-/// Supports pickerMode: 'featured' (set featured image) and 'inline' (Quill image insert).
+/// Supports pickerMode: 'featured' (set featured image), 'inline' (Quill image insert),
+/// and 'audio' (Quill audio insert).
 pub fn media_picker_modal_html() -> String {
     String::from(r#"<div id="media-picker-modal" class="mpicker-overlay" style="display:none" onclick="if(event.target===this)closeMediaPicker()">
   <div class="mpicker-dialog" style="display:flex;flex-direction:column">
@@ -277,7 +278,7 @@ pub fn media_picker_modal_html() -> String {
 </div>
 <script>
 (function() {
-  var pickerMode = 'featured'; // 'featured' or 'inline'
+  var pickerMode = 'featured'; // 'featured', 'inline', or 'audio'
 
   function escHtml(s) {
     return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -286,19 +287,22 @@ pub fn media_picker_modal_html() -> String {
   window.openMediaPicker = function(mode) {
     pickerMode = mode || 'featured';
     var frame = document.getElementById('media-picker-frame');
-    // Load the picker iframe on first open; subsequent opens reuse it.
-    if (frame.getAttribute('data-loaded') !== '1') {
-      frame.src = '/admin/media?picker=1';
-      frame.setAttribute('data-loaded', '1');
-    }
+    // Always reload so the correct type filter and fresh state is applied.
+    var src = '/admin/media?picker=1';
+    if (pickerMode === 'audio') src += '&type=audio';
+    frame.src = src;
+    frame.setAttribute('data-loaded', '1');
     document.getElementById('media-picker-modal').style.display = '';
   };
 
   window.closeMediaPicker = function() {
     document.getElementById('media-picker-modal').style.display = 'none';
+    var frame = document.getElementById('media-picker-frame');
+    frame.src = 'about:blank';
+    frame.removeAttribute('data-loaded');
   };
 
-  // Receive the selected image back from the picker iframe.
+  // Receive the selected media back from the picker iframe.
   window.addEventListener('message', function(e) {
     if (!e.data || e.data.type !== 'featuredImageSelected') return;
     var id   = e.data.id   || '';
@@ -310,6 +314,14 @@ pub fn media_picker_modal_html() -> String {
         var range = window._quillRange || q.getSelection(true);
         var imgHtml = '<img src="' + path + '" alt="' + alt.replace(/"/g, '&quot;') + '">';
         q.clipboard.dangerouslyPasteHTML(range.index, imgHtml, 'user');
+        q.setSelection(range.index + 1, 0, 'silent');
+      }
+    } else if (pickerMode === 'audio') {
+      var q = window._quillInstance;
+      if (q) {
+        var range = window._quillRange || q.getSelection(true);
+        var audioHtml = '<audio controls src="' + escHtml(path) + '"></audio>';
+        q.clipboard.dangerouslyPasteHTML(range.index, audioHtml, 'user');
         q.setSelection(range.index + 1, 0, 'silent');
       }
     } else {
