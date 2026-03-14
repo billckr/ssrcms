@@ -147,7 +147,7 @@ pub fn render_list(
             )
         };
         format!(
-            r##"<tr data-idx="{idx}" data-type="{type_key}" data-name="{name_lower}" onclick="selectItem(this)"><td><input type="checkbox" onclick="event.stopPropagation()"></td><td>{thumb}</td><td><strong style="font-size:13px">{fname}</strong></td><td><span class="mm-list-type-pill" style="background:{pbg};color:{pfg}">{plbl}</span></td><td style="color:var(--muted)">{fsize}</td><td style="color:var(--muted)">{dims}</td><td><button class="btn btn-secondary" style="font-size:12px;padding:.2rem .5rem" onclick="event.stopPropagation();selectItem(this.closest('tr'))">Edit</button></td></tr>"##,
+            r##"<tr data-idx="{idx}" data-type="{type_key}" data-name="{name_lower}" onclick="selectItem(this)"><td><input type="checkbox" onclick="event.stopPropagation();selectItem(this.closest('tr'))"></td><td>{thumb}</td><td><strong style="font-size:13px">{fname}</strong></td><td><span class="mm-list-type-pill" style="background:{pbg};color:{pfg}">{plbl}</span></td><td style="color:var(--muted)">{fsize}</td><td style="color:var(--muted)">{dims}</td><td><button class="btn btn-secondary" style="font-size:12px;padding:.2rem .5rem" onclick="event.stopPropagation();selectItem(this.closest('tr'))">Edit</button></td></tr>"##,
             idx        = i,
             type_key   = type_key,
             name_lower = html_escape(&m.filename.to_lowercase()),
