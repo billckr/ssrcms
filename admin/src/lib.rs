@@ -85,7 +85,7 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
   <div class="mpicker-dialog" style="display:flex;flex-direction:column">
     <div class="mpicker-header">
       <span class="mpicker-title">Media Library</span>
-      <button type="button" class="mpicker-close" onclick="closeMediaBrowser()" title="Close">&#x2715;</button>
+      <button type="button" class="btn btn-primary" style="font-size:13px;padding:.3rem .85rem" onclick="closeMediaBrowser()">Close</button>
     </div>
     <iframe id="media-browser-frame" src="about:blank" style="flex:1;width:100%;border:none;display:block;min-height:0"></iframe>
   </div>

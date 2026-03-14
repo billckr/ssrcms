@@ -599,6 +599,9 @@ body.sidebar-open .admin-sidebar {{
 .mm-list tr:hover td {{ background: #f8fafc; }}
 .mm-list tr.selected td {{ background: #ede9fe; }}
 .mm-list tr.hidden {{ display: none !important; }}
+/* Hide checkbox column in list view until Select mode is active */
+#mmLayout:not(.mm-bulk-mode) .mm-list thead th:first-child,
+#mmLayout:not(.mm-bulk-mode) .mm-list tbody td:first-child {{ display: none; }}
 .mm-list .mm-list-thumb {{ width: 40px; height: 40px; border-radius: 4px; object-fit: cover; display: block; background: #f1f5f9; }}
 .mm-list-type-pill {{ display: inline-block; padding: .15rem .45rem; border-radius: 99px; font-size: 11px; font-weight: 600; }}
 
@@ -981,6 +984,8 @@ body.sidebar-open .admin-sidebar {{
       el.classList.toggle('selected');
       if (el.classList.contains('selected')) selected.add(idx);
       else selected.delete(idx);
+      var cb = el.querySelector('input[type=checkbox]');
+      if (cb) cb.checked = el.classList.contains('selected');
     }} else {{
       document.querySelectorAll('.mm-item.selected, #mmListBody tr.selected').forEach(function(e) {{
         e.classList.remove('selected');
@@ -1068,6 +1073,8 @@ body.sidebar-open .admin-sidebar {{
   window.clearSelection = function() {{
     document.querySelectorAll('.mm-item.selected, #mmListBody tr.selected').forEach(function(e) {{
       e.classList.remove('selected');
+      var cb = e.querySelector('input[type=checkbox]');
+      if (cb) cb.checked = false;
     }});
     selected.clear();
     syncBulkBar();
