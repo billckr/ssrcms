@@ -277,7 +277,7 @@ pub fn render_settings(data: &SiteSettingsData, flash: Option<&str>, ctx: &crate
 pub fn render_new(flash: Option<&str>, ctx: &crate::PageContext) -> String {
     let content = r#"<form method="post" action="/admin/sites" class="edit-form" id="new-site-form">
   <div class="form-group">
-    <label for="hostname">Hostname</label>
+    <label for="hostname">Domain Name</label>
     <input type="text" id="hostname" name="hostname" required placeholder="example.com" autofocus
            oninput="hnUpdate()">
     <small>The domain this site will respond to</small>

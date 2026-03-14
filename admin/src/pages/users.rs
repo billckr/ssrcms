@@ -5,7 +5,7 @@ fn role_display(role: &str) -> &str {
     match role {
         "super_admin" => "Super Admin",
         "site_admin"  => "Site Admin",
-        "admin"       => "Admin",
+        "admin"       => "Site Admin",
         "editor"      => "Editor",
         "author"      => "Author",
         "subscriber"  => "Subscriber",
@@ -18,7 +18,7 @@ fn role_badge_class(role: &str) -> &str {
     match role {
         "super_admin" => "badge-super-admin",
         "site_admin"  => "badge-site-admin",
-        "admin"       => "badge-admin",
+        "admin"       => "badge-site-admin",
         _             => "",
     }
 }

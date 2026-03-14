@@ -14,8 +14,8 @@ pub async fn list(
     State(state): State<AppState>,
     admin: AdminUser,
 ) -> impl IntoResponse {
-    // Any logged-in admin can view docs.
-    if !admin.caps.can_manage_settings && !admin.caps.is_global_admin {
+    // Only super admins can view docs.
+    if !admin.caps.is_global_admin {
         return (StatusCode::FORBIDDEN, Html("<h1>403 Forbidden</h1>".to_string())).into_response();
     }
 
