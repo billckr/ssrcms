@@ -588,7 +588,7 @@ body.sidebar-open .admin-sidebar {{
   background: #f1f5f9; border-radius: var(--radius); margin-bottom: .85rem; color: var(--muted);
 }}
 .mm-detail-filename {{ font-weight: 600; font-size: 13px; color: var(--text); word-break: break-all; margin-bottom: .5rem; }}
-.mm-detail-stats {{ display: grid; grid-template-columns: 1fr 1fr; gap: .3rem .75rem; font-size: 12px; }}
+.mm-detail-stats {{ display: grid; grid-template-columns: auto 1fr; gap: .3rem .75rem; font-size: 12px; }}
 .mm-detail-stat-label {{ color: var(--muted); }}
 .mm-detail-stat-value {{ color: var(--text); font-weight: 500; }}
 
@@ -627,25 +627,27 @@ body.sidebar-open .admin-sidebar {{
 .mm-bulk-bar {{
   position: absolute; bottom: 1rem; left: 50%;
   transform: translateX(-50%) translateY(80px);
-  background: #1e293b; color: #f8fafc;
+  background: var(--surface); color: var(--text);
+  border: 1px solid var(--border);
   border-radius: 10px; padding: .6rem 1rem;
   display: flex; align-items: center; gap: .75rem;
-  box-shadow: 0 8px 32px rgba(0,0,0,.25);
+  box-shadow: 0 4px 16px rgba(0,0,0,.10);
   transition: transform .22s cubic-bezier(.4,0,.2,1);
   z-index: 20; white-space: nowrap; font-size: 13px;
 }}
 .mm-bulk-bar.visible {{ transform: translateX(-50%) translateY(0); }}
-.mm-bulk-bar-count {{ font-weight: 700; color: #a5b4fc; }}
-.mm-bulk-bar-sep {{ width: 1px; height: 18px; background: #334155; }}
+.mm-bulk-bar-count {{ font-weight: 700; color: var(--primary); }}
+.mm-bulk-bar-sep {{ width: 1px; height: 18px; background: var(--border); }}
 .mm-bulk-action {{
-  background: none; border: none; color: #cbd5e1; cursor: pointer;
+  background: none; border: none; color: var(--text); cursor: pointer;
   font-size: 13px; padding: .2rem .4rem; border-radius: 5px;
   font-family: inherit; transition: background .15s, color .15s;
 }}
-.mm-bulk-action:hover {{ background: #334155; color: #f8fafc; }}
-.mm-bulk-action.danger:hover {{ background: #7f1d1d; color: #fca5a5; }}
-.mm-bulk-dismiss {{ background: none; border: none; color: #64748b; cursor: pointer; font-size: 16px; line-height: 1; padding: .1rem .25rem; border-radius: 4px; }}
-.mm-bulk-dismiss:hover {{ color: #f8fafc; }}
+.mm-bulk-action:hover {{ background: var(--border); color: var(--text); }}
+.mm-bulk-action.danger {{ color: var(--danger); }}
+.mm-bulk-action.danger:hover {{ background: #fee2e2; color: var(--danger); }}
+.mm-bulk-dismiss {{ background: none; border: none; color: var(--muted); cursor: pointer; font-size: 16px; line-height: 1; padding: .1rem .25rem; border-radius: 4px; }}
+.mm-bulk-dismiss:hover {{ color: var(--text); }}
 
 /* ── Footer / pagination ──────────────────────────────────────────────── */
 .mm-footer {{
@@ -671,6 +673,7 @@ body.sidebar-open .admin-sidebar {{
   .mm-sidebar .mm-panel-section + .mm-panel-section {{ border-left: none; border-top: 1px solid var(--border); }}
   .mm-grid {{ grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); }}
 }}
+.admin-content {{ background: #94a3b8; }}
 </style>
 
 <div class="mm-layout" id="mmLayout">
@@ -801,14 +804,12 @@ body.sidebar-open .admin-sidebar {{
   <div class="mm-detail-panel" id="mmDetail">
     <div class="mm-detail-header">
       <span>File details</span>
-      <button class="btn btn-primary" onclick="closeDetail()" style="padding:.2rem .55rem;height:auto;line-height:1;font-size:14px" title="Close">&#10005;</button>
     </div>
     <div class="mm-detail-body" id="mmDetailBody">
       <p style="color:var(--muted);font-size:13px;text-align:center;padding:2rem 0">Select a file to see details.</p>
     </div>
     <div class="mm-detail-actions" id="mmDetailActions" style="display:none">
       <button class="btn btn-primary" style="width:100%;justify-content:center" onclick="saveDetail()">Save changes</button>
-      <button class="btn btn-danger" style="width:100%;justify-content:center">Delete file</button>
     </div>
   </div>
 
@@ -825,7 +826,7 @@ body.sidebar-open .admin-sidebar {{
 
   <!-- Bulk action bar -->
   <div class="mm-bulk-bar" id="mmBulkBar">
-    <span class="mm-bulk-bar-count" id="mmBulkCount">0 selected</span>
+    <span class="mm-bulk-bar-count" id="mmBulkCount">0 files</span>
     <div class="mm-bulk-bar-sep"></div>
     <button class="mm-bulk-action" onclick="bulkMoveTo()">Move to…</button>
     <button class="mm-bulk-action" onclick="bulkDownload()">Download</button>
@@ -981,9 +982,9 @@ body.sidebar-open .admin-sidebar {{
       + '<span class="mm-detail-stat-label">Type</span><span class="mm-detail-stat-value">' + escHtml(data.type) + '</span>'
       + '<span class="mm-detail-stat-label">Size</span><span class="mm-detail-stat-value">' + escHtml(data.size) + '</span>'
       + '<span class="mm-detail-stat-label">Dims</span><span class="mm-detail-stat-value">' + escHtml(data.dims) + '</span>'
+      + '<span class="mm-detail-stat-label">Path</span><span class="mm-detail-stat-value" style="word-break:break-all">' + escHtml(data.path) + '</span>'
       + '</div></div>'
-      + '<div class="mm-detail-url"><span>' + escHtml(data.path) + '</span></div>'
-      + '<div class="mm-detail-field"><label>Alt text</label><input type="text" id="mmDetailAlt" value="' + escHtml(data.alt) + '" placeholder="Describe the image…"></div>'
+      + '<div class="mm-detail-field" style="margin-top:.85rem"><label>Alt text</label><input type="text" id="mmDetailAlt" value="' + escHtml(data.alt) + '" placeholder="Describe the image…"></div>'
       + '<div class="mm-detail-field"><label>Title</label><input type="text" id="mmDetailTitle" value="' + escHtml(data.title) + '"></div>'
       + '<div class="mm-detail-field"><label>Caption</label><textarea id="mmDetailCaption" rows="3" placeholder="Optional caption…">' + escHtml(data.caption || '') + '</textarea></div>';
     activeDetailId  = data.id;
@@ -1026,7 +1027,7 @@ body.sidebar-open .admin-sidebar {{
   function syncBulkBar() {{
     var bar = document.getElementById('mmBulkBar');
     var n = selected.size;
-    document.getElementById('mmBulkCount').textContent = n + ' selected';
+    document.getElementById('mmBulkCount').textContent = n + ' files';
     bar.classList.toggle('visible', n > 0);
   }}
 
@@ -1112,18 +1113,22 @@ body.sidebar-open .admin-sidebar {{
   window.bulkMoveConfirm = function() {{
     var folderId = document.getElementById('mmMoveSelect').value;
     var ids = Array.from(selected).map(function(i) {{ return ITEMS[parseInt(i,10)].id; }});
-    var chain = Promise.resolve();
+    var chain = Promise.resolve(true);
     ids.forEach(function(id) {{
-      chain = chain.then(function() {{
+      chain = chain.then(function(ok) {{
+        if (!ok) return false;
         return fetch('/admin/api/media/' + id + '/folder', {{
           method:'POST', headers:{{'Content-Type':'application/json'}},
           body: JSON.stringify({{folder_id: folderId}})
-        }});
+        }}).then(function(r) {{ return r.json(); }}).then(function(res) {{ return !!res.ok; }});
       }});
     }});
     chain.then(function() {{
       document.getElementById('mmMoveModal').style.display = 'none';
       window.location.reload();
+    }}).catch(function() {{
+      document.getElementById('mmMoveModal').style.display = 'none';
+      alert('Move failed. Please try again.');
     }});
   }};
 
