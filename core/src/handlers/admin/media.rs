@@ -15,6 +15,7 @@ pub async fn list(
 ) -> Html<String> {
     let folder_id: Option<Uuid> = params.get("folder_id").and_then(|s| s.parse().ok());
     let page_raw: i64 = params.get("page").and_then(|s| s.parse().ok()).unwrap_or(1).max(1);
+    let picker_mode = params.get("picker").map(|s| s == "1").unwrap_or(false);
     // Validate type param — only accept known values
     let active_type: Option<&str> = params.get("type")
         .map(|s| s.as_str())
@@ -141,6 +142,7 @@ pub async fn list(
         PAGE_SIZE,
         type_counts,
         None,
+        picker_mode,
         &ctx,
     ))
 }

@@ -61,6 +61,7 @@ pub fn render_list(
     page_size: i64,
     type_counts: TypeCounts,
     flash: Option<&str>,
+    picker_mode: bool,
     ctx: &PageContext,
 ) -> String {
     // ── Type counts (full library, not just current page) ───────────────────
@@ -212,12 +213,18 @@ pub fn render_list(
     };
 
     // ── URL param helpers ────────────────────────────────────────────────────
+    let picker_qs      = if picker_mode { "&picker=1" } else { "" };
     let folder_qs      = active_folder.map(|f| format!("&folder_id={}", f)).unwrap_or_default();
-    let type_all_url   = format!("/admin/media{}", active_folder.map(|f| format!("?folder_id={}", f)).unwrap_or_default());
-    let type_image_url = format!("/admin/media?type=image{}",    folder_qs);
-    let type_video_url = format!("/admin/media?type=video{}",    folder_qs);
-    let type_audio_url = format!("/admin/media?type=audio{}",    folder_qs);
-    let type_doc_url   = format!("/admin/media?type=document{}", folder_qs);
+    let type_all_url   = match (active_folder, picker_mode) {
+        (Some(f), true)  => format!("/admin/media?folder_id={}&picker=1", f),
+        (Some(f), false) => format!("/admin/media?folder_id={}", f),
+        (None,    true)  => "/admin/media?picker=1".to_string(),
+        (None,    false) => "/admin/media".to_string(),
+    };
+    let type_image_url = format!("/admin/media?type=image{}{}",    folder_qs, picker_qs);
+    let type_video_url = format!("/admin/media?type=video{}{}",    folder_qs, picker_qs);
+    let type_audio_url = format!("/admin/media?type=audio{}{}",    folder_qs, picker_qs);
+    let type_doc_url   = format!("/admin/media?type=document{}{}", folder_qs, picker_qs);
     let type_all_active   = if active_type.is_none()             { "active" } else { "" };
     let type_image_active = if active_type == Some("image")    { "active" } else { "" };
     let type_video_active = if active_type == Some("video")    { "active" } else { "" };
@@ -225,12 +232,19 @@ pub fn render_list(
     let type_doc_active   = if active_type == Some("document") { "active" } else { "" };
     let folder_onchange = format!(
         "if(this.value)window.location='/admin/media?folder_id='+this.value+'{}';else window.location='{}'",
-        if let Some(t) = active_type { format!("&type={}", t) } else { String::new() },
-        if let Some(t) = active_type { format!("/admin/media?type={}", t) } else { "/admin/media".to_string() },
+        if let Some(t) = active_type { format!("&type={}{}", t, picker_qs) } else { picker_qs.to_string() },
+        if let Some(t) = active_type {
+            format!("/admin/media?type={}{}", t, picker_qs)
+        } else if picker_mode {
+            "/admin/media?picker=1".to_string()
+        } else {
+            "/admin/media".to_string()
+        },
     );
     let mut pager_parts: Vec<String> = Vec::new();
     if let Some(t) = active_type   { pager_parts.push(format!("type={}", t)); }
     if let Some(f) = active_folder { pager_parts.push(format!("folder_id={}", f)); }
+    if picker_mode                 { pager_parts.push("picker=1".to_string()); }
     let pager_suffix = if pager_parts.is_empty() { String::new() } else { format!("&{}", pager_parts.join("&")) };
 
     // ── Pagination ───────────────────────────────────────────────────────────
@@ -290,10 +304,50 @@ pub fn render_list(
     let page_title = "Media Library".to_string();
 
     // ── Upload form: redirect URL + optional folder_id hidden input ──────────
-    let redirect_url = if let Some(fid) = active_folder {
+    let redirect_url = if picker_mode {
+        if let Some(fid) = active_folder {
+            format!("/admin/media?folder_id={}&picker=1", fid)
+        } else {
+            "/admin/media?picker=1".to_string()
+        }
+    } else if let Some(fid) = active_folder {
         format!("/admin/media?folder_id={}", fid)
     } else {
         "/admin/media".to_string()
+    };
+    // ── Redirect targets for folder create/delete forms ───────────────────────
+    let new_folder_redirect    = if picker_mode { "/admin/media?picker=1" } else { "/admin/media" };
+    let delete_folder_redirect = if picker_mode { "/admin/media?picker=1" } else { "/admin/media" };
+    // ── Detail actions HTML (differs in picker mode) ──────────────────────────
+    let detail_actions_html = if picker_mode {
+        r#"    <div class="mm-detail-actions" id="mmDetailActions" style="display:none">
+      <button class="btn btn-primary" style="width:100%;justify-content:center" onclick="pickerSelectImage()">Set Image</button>
+      <button class="btn btn-secondary" style="width:100%;justify-content:center;margin-top:.3rem" onclick="saveDetail()">Save changes</button>
+    </div>"#.to_string()
+    } else {
+        r#"    <div class="mm-detail-actions" id="mmDetailActions" style="display:none">
+      <button class="btn btn-primary" style="width:100%;justify-content:center" onclick="saveDetail()">Save changes</button>
+    </div>"#.to_string()
+    };
+    // ── JS bridge for picker mode ─────────────────────────────────────────────
+    let picker_js = if picker_mode {
+        r#"
+  /* ── Picker bridge — sends selected image back to the parent page ─── */
+  window.pickerSelectImage = function() {
+    if (!activeDetailId) return;
+    var alt   = (document.getElementById('mmDetailAlt')   || {}).value || '';
+    var title = (document.getElementById('mmDetailTitle') || {}).value || '';
+    var item  = activeDetailIdx !== null ? ITEMS[activeDetailIdx] : null;
+    window.parent.postMessage({
+      type:  'featuredImageSelected',
+      id:    activeDetailId,
+      path:  item ? item.path : '',
+      alt:   alt.trim(),
+      title: title.trim()
+    }, '*');
+  };"#.to_string()
+    } else {
+        String::new()
     };
     let folder_hidden = if let Some(fid) = active_folder {
         format!(r##"<input type="hidden" name="folder_id" value="{}">"##, html_escape(fid))
@@ -807,9 +861,7 @@ body.sidebar-open .admin-sidebar {{
     <div class="mm-detail-body" id="mmDetailBody">
       <p style="color:var(--muted);font-size:13px;text-align:center;padding:2rem 0">Select a file to see details.</p>
     </div>
-    <div class="mm-detail-actions" id="mmDetailActions" style="display:none">
-      <button class="btn btn-primary" style="width:100%;justify-content:center" onclick="saveDetail()">Save changes</button>
-    </div>
+    {detail_actions}
   </div>
 
     </div><!-- end mm-content-area -->
@@ -1144,7 +1196,7 @@ body.sidebar-open .admin-sidebar {{
     inp.name = 'name'; inp.value = name;
     form.appendChild(inp);
     var redir = document.createElement('input');
-    redir.name = 'redirect'; redir.value = '/admin/media';
+    redir.name = 'redirect'; redir.value = '{new_folder_redirect}';
     form.appendChild(redir);
     document.body.appendChild(form);
     form.submit();
@@ -1174,7 +1226,7 @@ body.sidebar-open .admin-sidebar {{
     form.method = 'POST';
     form.action = '/admin/media/folders/' + pendingDeleteFolderId + '/delete';
     var dm = document.createElement('input'); dm.type='hidden'; dm.name='delete_media'; dm.value=deleteMedia?'true':'false';
-    var rd = document.createElement('input'); rd.type='hidden'; rd.name='redirect'; rd.value='/admin/media';
+    var rd = document.createElement('input'); rd.type='hidden'; rd.name='redirect'; rd.value='{delete_folder_redirect}';
     form.appendChild(dm); form.appendChild(rd);
     document.body.appendChild(form);
     form.submit();
@@ -1195,6 +1247,7 @@ body.sidebar-open .admin-sidebar {{
     if (e.target.closest('#mmBulkBar, #mmMoveModal, #mmDeleteFolderModal')) return;
     closeDetail();
   }}, true);
+{picker_js}
 }})();
 </script>
 "##,
@@ -1226,7 +1279,15 @@ body.sidebar-open .admin-sidebar {{
         folders_json = folders_json,
         footer_info  = footer_info,
         pagination   = pagination_html,
+        detail_actions       = detail_actions_html,
+        new_folder_redirect  = new_folder_redirect,
+        delete_folder_redirect = delete_folder_redirect,
+        picker_js    = picker_js,
     );
 
-    admin_page(&page_title, "/admin/media", flash, &content, ctx)
+    if picker_mode {
+        crate::picker_page(&content)
+    } else {
+        admin_page(&page_title, "/admin/media", flash, &content, ctx)
+    }
 }
