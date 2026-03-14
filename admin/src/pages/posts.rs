@@ -717,23 +717,20 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
 <script>
 (function() {{
   // Register a custom Quill format for <audio controls> embeds.
-  // Quill strips unknown tags via dangerouslyPasteHTML; registering a blot
-  // lets us use quill.insertEmbed() which bypasses that sanitisation and
-  // preserves the element in quill.root.innerHTML on submit.
+  // BlockEmbed is an ES6 class; must use 'class extends' — calling it via
+  // .apply() (ES5 pattern) throws "cannot invoke without 'new'" at instantiation.
   var BlockEmbed = Quill.import('blots/block/embed');
-  var AudioBlot = function() {{ BlockEmbed.apply(this, arguments); }};
-  AudioBlot.prototype = Object.create(BlockEmbed.prototype);
-  AudioBlot.prototype.constructor = AudioBlot;
+  class AudioBlot extends BlockEmbed {{}}
   AudioBlot.blotName = 'audio';
   AudioBlot.tagName  = 'audio';
   AudioBlot.create   = function(src) {{
-    var node = BlockEmbed.create();
+    var node = document.createElement('audio');
     node.setAttribute('src', src);
     node.setAttribute('controls', '');
     return node;
   }};
   AudioBlot.value = function(node) {{ return node.getAttribute('src'); }};
-  Quill.register(AudioBlot);
+  Quill.register('formats/audio', AudioBlot);
 
   var quill = new Quill('#quill-editor', {{
     theme: 'snow',
@@ -749,13 +746,16 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
     }}
   }});
 
-  // Load existing content
+  // Load existing content.
+  // Use clipboard.convert → setContents so that registered blots (e.g. AudioBlot)
+  // are reconstructed from their tag names rather than stripped by the HTML sanitiser
+  // that dangerouslyPasteHTML applies before inserting.
   var existing = document.getElementById('content').value;
   if (!existing) {{
     existing = {content_js};
   }}
   if (existing) {{
-    quill.clipboard.dangerouslyPasteHTML(existing);
+    quill.setContents(quill.clipboard.convert(existing), 'silent');
   }}
 
   // On submit, copy Quill HTML into the hidden input and validate excerpt

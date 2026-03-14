@@ -325,7 +325,7 @@ pub fn media_picker_modal_html() -> String {
     } else if (pickerMode === 'audio') {
       var q = window._quillInstance;
       if (q) {
-        var range = window._quillRange || q.getSelection(true);
+        var range = window._quillRange || q.getSelection(true) || {index: q.getLength(), length: 0};
         // insertEmbed uses the registered AudioBlot so Quill preserves
         // the <audio controls> element instead of stripping it.
         q.insertEmbed(range.index, 'audio', path, 'user');

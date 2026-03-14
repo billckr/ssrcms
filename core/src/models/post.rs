@@ -249,7 +249,15 @@ pub fn sanitize_content(html: &str) -> String {
     // This is intentionally strict for user-submitted content.
     // The Phase 3 admin editor (rich text) should produce clean HTML;
     // sanitization here is the last line of defence.
-    ammonia::clean(html)
+    //
+    // <audio> and <source> are added beyond the default allowlist so that
+    // audio players inserted via the Quill editor survive the save/reload cycle.
+    ammonia::Builder::default()
+        .add_tags(&["audio", "source"])
+        .add_tag_attributes("audio", &["src", "controls", "preload", "loop", "autoplay", "muted"])
+        .add_tag_attributes("source", &["src", "type"])
+        .clean(html)
+        .to_string()
 }
 
 #[cfg(test)]
