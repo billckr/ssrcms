@@ -275,17 +275,57 @@ pub fn render_settings(data: &SiteSettingsData, flash: Option<&str>, ctx: &crate
 }
 
 pub fn render_new(flash: Option<&str>, ctx: &crate::PageContext) -> String {
-    let content = r#"<form method="post" action="/admin/sites" class="edit-form">
+    let content = r#"<form method="post" action="/admin/sites" class="edit-form" id="new-site-form">
   <div class="form-group">
     <label for="hostname">Hostname</label>
-    <input type="text" id="hostname" name="hostname" required placeholder="example.com" autofocus>
+    <input type="text" id="hostname" name="hostname" required placeholder="example.com" autofocus
+           oninput="hnUpdate()">
     <small>The domain this site will respond to</small>
   </div>
+  <div class="form-note" style="margin-bottom:1.25rem">
+    <p><strong>Domain requirements:</strong></p>
+    <ul style="list-style:none;padding-left:0;margin:0.25rem 0 0">
+      <li id="hn-req-dot"><span class="pw-dot" style="display:inline-block;width:1.1rem;font-style:normal">·</span>Contains at least one dot (e.g. example<strong>.com</strong>)</li>
+      <li id="hn-req-tld"><span class="pw-dot" style="display:inline-block;width:1.1rem;font-style:normal">·</span>TLD is 2 or more letters (e.g. .com, .io, .co.uk)</li>
+      <li id="hn-req-chars"><span class="pw-dot" style="display:inline-block;width:1.1rem;font-style:normal">·</span>Letters, numbers, and hyphens only — no spaces or symbols</li>
+      <li id="hn-req-hyphen"><span class="pw-dot" style="display:inline-block;width:1.1rem;font-style:normal">·</span>No label starts or ends with a hyphen</li>
+    </ul>
+  </div>
   <div class="form-actions">
-    <button type="submit" class="btn btn-primary">Create Site</button>
+    <button type="submit" id="create-btn" class="btn btn-primary" disabled>Create Site</button>
     <a href="/admin/sites" class="btn btn-secondary">Cancel</a>
   </div>
-</form>"#;
+</form>
+<script>
+(function() {
+  var hnReqs = [
+    { id: 'hn-req-dot',    test: function(h) { return h.indexOf('.') !== -1; } },
+    { id: 'hn-req-tld',    test: function(h) { var tld = h.split('.').pop(); return tld.length >= 2 && /^[a-z]+$/i.test(tld); } },
+    { id: 'hn-req-chars',  test: function(h) { return /^[a-z0-9.\-]+$/i.test(h); } },
+    { id: 'hn-req-hyphen', test: function(h) { return h.split('.').every(function(l) { return l.length > 0 && !l.startsWith('-') && !l.endsWith('-'); }); } },
+  ];
+
+  window.hnUpdate = function() {
+    var val = document.getElementById('hostname').value.trim();
+    var allPass = val.length > 0;
+    hnReqs.forEach(function(req) {
+      var li  = document.getElementById(req.id);
+      var dot = li ? li.querySelector('.pw-dot') : null;
+      if (!li) return;
+      if (!val) {
+        li.style.color = ''; if (dot) dot.textContent = '·';
+        allPass = false;
+      } else if (req.test(val)) {
+        li.style.color = '#16a34a'; if (dot) dot.textContent = '✓';
+      } else {
+        li.style.color = '#dc2626'; if (dot) dot.textContent = '✗';
+        allPass = false;
+      }
+    });
+    document.getElementById('create-btn').disabled = !allPass;
+  };
+})();
+</script>"#;
 
     crate::admin_page("New Site", "/admin/sites", flash, content, ctx)
 }

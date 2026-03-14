@@ -1,5 +1,21 @@
 //! Admin handlers for site management (list, create, switch, settings).
 
+/// Returns true if `h` is a plausibly valid hostname with a real TLD.
+/// Labels must be alphanumeric + hyphens, not start/end with a hyphen.
+/// TLD must be at least 2 alphabetic characters.
+fn is_valid_hostname(h: &str) -> bool {
+    let parts: Vec<&str> = h.split('.').collect();
+    if parts.len() < 2 { return false; }
+    let tld = parts.last().unwrap();
+    if tld.len() < 2 || !tld.chars().all(|c| c.is_ascii_alphabetic()) { return false; }
+    for label in &parts[..parts.len() - 1] {
+        if label.is_empty() { return false; }
+        if !label.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') { return false; }
+        if label.starts_with('-') || label.ends_with('-') { return false; }
+    }
+    true
+}
+
 use axum::{
     extract::{Path, Query, State},
     response::{Html, IntoResponse, Redirect},
@@ -163,6 +179,12 @@ pub async fn create(
     let hostname = form.hostname.trim().to_lowercase();
     if hostname.is_empty() {
         return Html(admin::pages::sites::render_new(Some("Hostname cannot be empty."), &ctx)).into_response();
+    }
+    if !is_valid_hostname(&hostname) {
+        return Html(admin::pages::sites::render_new(
+            Some("Must be a valid domain (e.g. example.com, my-site.com, sub.example.com)."),
+            &ctx,
+        )).into_response();
     }
 
     let result = crate::models::site::create_with_defaults(&state.db, &hostname, admin.user.id)
