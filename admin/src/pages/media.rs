@@ -321,11 +321,11 @@ pub fn render_list(
     let detail_actions_html = if select_mode {
         r#"    <div class="mm-detail-actions" id="mmDetailActions" style="display:none">
       <button class="btn btn-primary" style="width:100%;justify-content:center" onclick="pickerSelectImage()">Set Image</button>
-      <button class="btn btn-secondary" style="width:100%;justify-content:center;margin-top:.3rem" onclick="saveDetail()">Save changes</button>
+      <button id="mmSaveBtn" class="btn btn-secondary" style="width:100%;justify-content:center;margin-top:.3rem" onclick="saveDetail()">Save changes</button>
     </div>"#.to_string()
     } else {
         r#"    <div class="mm-detail-actions" id="mmDetailActions" style="display:none">
-      <button class="btn btn-primary" style="width:100%;justify-content:center" onclick="saveDetail()">Save changes</button>
+      <button id="mmSaveBtn" class="btn btn-primary" style="width:100%;justify-content:center" onclick="saveDetail()">Save changes</button>
     </div>"#.to_string()
     };
     // ── JS bridge for picker/select mode ─────────────────────────────────────
@@ -1007,7 +1007,7 @@ body.sidebar-open .admin-sidebar {{
     var alt     = (document.getElementById('mmDetailAlt')     || {{}}).value || '';
     var title   = (document.getElementById('mmDetailTitle')   || {{}}).value || '';
     var caption = (document.getElementById('mmDetailCaption') || {{}}).value || '';
-    var btn = document.querySelector('#mmDetailActions .btn-primary');
+    var btn = document.getElementById('mmSaveBtn');
     if (btn) {{ btn.disabled = true; btn.textContent = 'Saving…'; }}
     fetch('/admin/api/media/' + activeDetailId + '/meta', {{
       method: 'POST',
