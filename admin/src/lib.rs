@@ -176,6 +176,9 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
     }}
     function closeMediaBrowser() {{
       document.getElementById('media-browser-modal').style.display = 'none';
+      var frame = document.getElementById('media-browser-frame');
+      frame.src = 'about:blank';
+      frame.removeAttribute('data-loaded');
     }}
   </script>
 </body>
