@@ -79,6 +79,18 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
         None => String::new(),
     };
 
+    let media_nav = "<li><a href=\"#\" onclick=\"openMediaBrowser();return false;\">Media</a></li>".to_string();
+
+    let media_browser_modal = r#"<div id="media-browser-modal" class="mpicker-overlay" style="display:none" onclick="if(event.target===this)closeMediaBrowser()">
+  <div class="mpicker-dialog" style="display:flex;flex-direction:column">
+    <div class="mpicker-header">
+      <span class="mpicker-title">Media Library</span>
+      <button type="button" class="mpicker-close" onclick="closeMediaBrowser()" title="Close">&#x2715;</button>
+    </div>
+    <iframe id="media-browser-frame" src="about:blank" style="flex:1;width:100%;border:none;display:block;min-height:0"></iframe>
+  </div>
+</div>"#;
+
     let nav_link = |href: &str, label: &str| -> String {
         let active = if current_path.starts_with(href) && href != "/admin" {
             " class=\"active\""
@@ -141,6 +153,7 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
       </div>
     </main>
   </div>
+  {media_browser_modal}
   <script>
     function toggleSidebar() {{
       document.body.classList.toggle('sidebar-open');
@@ -149,8 +162,21 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
       document.body.classList.remove('sidebar-open');
     }}
     document.querySelectorAll('.admin-sidebar a').forEach(function(a) {{
-      a.addEventListener('click', closeSidebar);
+      a.addEventListener('click', function(e) {{
+        if (a.getAttribute('href') !== '#') closeSidebar();
+      }});
     }});
+    function openMediaBrowser() {{
+      var frame = document.getElementById('media-browser-frame');
+      if (frame.getAttribute('data-loaded') !== '1') {{
+        frame.src = '/admin/media?browser=1';
+        frame.setAttribute('data-loaded', '1');
+      }}
+      document.getElementById('media-browser-modal').style.display = '';
+    }}
+    function closeMediaBrowser() {{
+      document.getElementById('media-browser-modal').style.display = 'none';
+    }}
   </script>
 </body>
 </html>"#,
@@ -171,7 +197,7 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
             format!(r#"<li><a href="/admin/posts"{}>{}</a></li>"#, active, format!("Posts{}", pending_badge))
         },
         pages = if ctx.can_manage_pages { nav_link("/admin/pages", "Pages") } else { String::new() },
-        media = nav_link("/admin/media", "Media"),
+        media = media_nav,
         cats = if ctx.can_manage_taxonomies { nav_link("/admin/categories", "Categories") } else { String::new() },
         tags = if ctx.can_manage_taxonomies { nav_link("/admin/tags", "Tags") } else { String::new() },
         users = if ctx.can_manage_users { nav_link("/admin/users", "Users") } else { String::new() },
@@ -203,6 +229,7 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
         profile_or_home = if ctx.visiting_foreign_site { "/admin/sites/go-home?next=/admin/profile" } else { "/admin/profile" },
         user_email = html_escape(&ctx.user_email),
         user_role  = html_escape(&ctx.user_role),
+        media_browser_modal = media_browser_modal,
     )
 }
 

@@ -62,6 +62,10 @@ pub fn render_list(
     type_counts: TypeCounts,
     flash: Option<&str>,
     picker_mode: bool,
+    // True only when opened from a post/page "Set Featured Image" button.
+    // When false (opened from the nav media browser), the "Set Image" button
+    // and postMessage JS are omitted.
+    select_mode: bool,
     ctx: &PageContext,
 ) -> String {
     // ── Type counts (full library, not just current page) ───────────────────
@@ -213,18 +217,19 @@ pub fn render_list(
     };
 
     // ── URL param helpers ────────────────────────────────────────────────────
-    let picker_qs      = if picker_mode { "&picker=1" } else { "" };
+    // frame_qs preserves the current mode across internal navigation.
+    let frame_qs = if select_mode { "&picker=1" } else if picker_mode { "&browser=1" } else { "" };
+    let frame_base = if select_mode { "/admin/media?picker=1" } else if picker_mode { "/admin/media?browser=1" } else { "/admin/media" };
     let folder_qs      = active_folder.map(|f| format!("&folder_id={}", f)).unwrap_or_default();
-    let type_all_url   = match (active_folder, picker_mode) {
-        (Some(f), true)  => format!("/admin/media?folder_id={}&picker=1", f),
-        (Some(f), false) => format!("/admin/media?folder_id={}", f),
-        (None,    true)  => "/admin/media?picker=1".to_string(),
-        (None,    false) => "/admin/media".to_string(),
+    let type_all_url   = if let Some(f) = active_folder {
+        format!("/admin/media?folder_id={}{}", f, frame_qs)
+    } else {
+        frame_base.to_string()
     };
-    let type_image_url = format!("/admin/media?type=image{}{}",    folder_qs, picker_qs);
-    let type_video_url = format!("/admin/media?type=video{}{}",    folder_qs, picker_qs);
-    let type_audio_url = format!("/admin/media?type=audio{}{}",    folder_qs, picker_qs);
-    let type_doc_url   = format!("/admin/media?type=document{}{}", folder_qs, picker_qs);
+    let type_image_url = format!("/admin/media?type=image{}{}",    folder_qs, frame_qs);
+    let type_video_url = format!("/admin/media?type=video{}{}",    folder_qs, frame_qs);
+    let type_audio_url = format!("/admin/media?type=audio{}{}",    folder_qs, frame_qs);
+    let type_doc_url   = format!("/admin/media?type=document{}{}", folder_qs, frame_qs);
     let type_all_active   = if active_type.is_none()             { "active" } else { "" };
     let type_image_active = if active_type == Some("image")    { "active" } else { "" };
     let type_video_active = if active_type == Some("video")    { "active" } else { "" };
@@ -232,19 +237,18 @@ pub fn render_list(
     let type_doc_active   = if active_type == Some("document") { "active" } else { "" };
     let folder_onchange = format!(
         "if(this.value)window.location='/admin/media?folder_id='+this.value+'{}';else window.location='{}'",
-        if let Some(t) = active_type { format!("&type={}{}", t, picker_qs) } else { picker_qs.to_string() },
+        if let Some(t) = active_type { format!("&type={}{}", t, frame_qs) } else { frame_qs.to_string() },
         if let Some(t) = active_type {
-            format!("/admin/media?type={}{}", t, picker_qs)
-        } else if picker_mode {
-            "/admin/media?picker=1".to_string()
+            format!("/admin/media?type={}{}", t, frame_qs)
         } else {
-            "/admin/media".to_string()
+            frame_base.to_string()
         },
     );
     let mut pager_parts: Vec<String> = Vec::new();
     if let Some(t) = active_type   { pager_parts.push(format!("type={}", t)); }
     if let Some(f) = active_folder { pager_parts.push(format!("folder_id={}", f)); }
-    if picker_mode                 { pager_parts.push("picker=1".to_string()); }
+    if select_mode      { pager_parts.push("picker=1".to_string()); }
+    else if picker_mode { pager_parts.push("browser=1".to_string()); }
     let pager_suffix = if pager_parts.is_empty() { String::new() } else { format!("&{}", pager_parts.join("&")) };
 
     // ── Pagination ───────────────────────────────────────────────────────────
@@ -304,22 +308,16 @@ pub fn render_list(
     let page_title = "Media Library".to_string();
 
     // ── Upload form: redirect URL + optional folder_id hidden input ──────────
-    let redirect_url = if picker_mode {
-        if let Some(fid) = active_folder {
-            format!("/admin/media?folder_id={}&picker=1", fid)
-        } else {
-            "/admin/media?picker=1".to_string()
-        }
-    } else if let Some(fid) = active_folder {
-        format!("/admin/media?folder_id={}", fid)
+    let redirect_url = if let Some(fid) = active_folder {
+        format!("/admin/media?folder_id={}{}", fid, frame_qs)
     } else {
-        "/admin/media".to_string()
+        frame_base.to_string()
     };
     // ── Redirect targets for folder create/delete forms ───────────────────────
-    let new_folder_redirect    = if picker_mode { "/admin/media?picker=1" } else { "/admin/media" };
-    let delete_folder_redirect = if picker_mode { "/admin/media?picker=1" } else { "/admin/media" };
-    // ── Detail actions HTML (differs in picker mode) ──────────────────────────
-    let detail_actions_html = if picker_mode {
+    let new_folder_redirect    = frame_base;
+    let delete_folder_redirect = frame_base;
+    // ── Detail actions HTML (differs in picker/select mode) ───────────────────
+    let detail_actions_html = if select_mode {
         r#"    <div class="mm-detail-actions" id="mmDetailActions" style="display:none">
       <button class="btn btn-primary" style="width:100%;justify-content:center" onclick="pickerSelectImage()">Set Image</button>
       <button class="btn btn-secondary" style="width:100%;justify-content:center;margin-top:.3rem" onclick="saveDetail()">Save changes</button>
@@ -329,8 +327,8 @@ pub fn render_list(
       <button class="btn btn-primary" style="width:100%;justify-content:center" onclick="saveDetail()">Save changes</button>
     </div>"#.to_string()
     };
-    // ── JS bridge for picker mode ─────────────────────────────────────────────
-    let picker_js = if picker_mode {
+    // ── JS bridge for picker/select mode ─────────────────────────────────────
+    let picker_js = if select_mode {
         r#"
   /* ── Picker bridge — sends selected image back to the parent page ─── */
   window.pickerSelectImage = function() {
