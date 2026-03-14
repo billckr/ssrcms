@@ -830,24 +830,24 @@ pub fn render_site_access(
         "<p><em>No sites available to assign.</em></p>".to_string()
     } else {
         format!(
-            r#"<form id="site-access-form" method="post" action="/admin/users/{user_id}/site-access/add"
-  style="display:flex;gap:0.75rem;align-items:flex-end;flex-wrap:wrap;margin-top:1.5rem">
+            r#"<form id="site-access-form" method="post" action="/admin/users/{user_id}/site-access/add">
   <input type="hidden" name="displaced_action" id="displaced-action-field" value="">
-  <div class="form-group" style="margin:0;flex:1;min-width:160px">
-    <label>Site</label>
-    <select name="site_id" id="site-select" style="width:100%">{site_opts}</select>
+  <div class="form-group">
+    <label for="site-select">Site</label>
+    <select name="site_id" id="site-select" style="width:100%">
+      <option value="" disabled selected>Select Site</option>
+      {site_opts}
+    </select>
   </div>
-  <div class="form-group" style="margin:0;flex:1;min-width:140px">
-    <label>Role</label>
-    <select name="role" id="role-select" style="width:100%">
+  <div class="form-group">
+    <label for="role-select">Role</label>
+    <select name="role" id="role-select" style="width:100%" disabled>
       {site_admin_opt}
       <option value="editor">Editor</option>
       <option value="author">Author</option>
     </select>
   </div>
-  <div class="form-group" style="margin:0">
-    <button type="submit" class="btn btn-primary">Assign</button>
-  </div>
+  <button type="submit" class="btn btn-primary" id="assign-btn" disabled>Assign</button>
 </form>
 
 <!-- Displacement confirmation modal -->
@@ -875,16 +875,25 @@ pub fn render_site_access(
 
 <script>
 (function() {{
-  var form     = document.getElementById('site-access-form');
-  var modal    = document.getElementById('displace-modal');
-  var msgEl    = document.getElementById('displace-msg');
-  var actionFld= document.getElementById('displaced-action-field');
-  var cancelBtn= document.getElementById('displace-cancel');
-  var confirmBtn=document.getElementById('displace-confirm');
+  var form       = document.getElementById('site-access-form');
+  var modal      = document.getElementById('displace-modal');
+  var msgEl      = document.getElementById('displace-msg');
+  var actionFld  = document.getElementById('displaced-action-field');
+  var cancelBtn  = document.getElementById('displace-cancel');
+  var confirmBtn = document.getElementById('displace-confirm');
   var roleSelect = document.getElementById('role-select');
   var siteSelect = document.getElementById('site-select');
+  var assignBtn  = document.getElementById('assign-btn');
+
+  // Enable role and assign button only once a real site is chosen.
+  siteSelect.addEventListener('change', function() {{
+    var hasSite = !!siteSelect.value;
+    roleSelect.disabled = !hasSite;
+    assignBtn.disabled  = !hasSite;
+  }});
 
   form.addEventListener('submit', function(e) {{
+    if (!siteSelect.value) {{ e.preventDefault(); return; }}
     if (roleSelect.value !== 'site_admin') return; // no modal needed
     var opt = siteSelect.options[siteSelect.selectedIndex];
     var existingId   = opt.dataset.existingAdminId   || '';
@@ -908,7 +917,6 @@ pub fn render_site_access(
     form.submit();
   }});
 
-  // Close on backdrop click.
   modal.addEventListener('click', function(e) {{
     if (e.target === modal) {{
       modal.style.display = 'none';
@@ -933,20 +941,21 @@ pub fn render_site_access(
     };
 
     let content = format!(
-        r#"<p><a href="/admin/users">&larr; Back to Users</a></p>
-<h2 style="margin-bottom:0.25rem">{display_name}</h2>
-<p style="margin-top:0;color:var(--muted)">{email}</p>
-<h3>Current Site Access</h3>
-<table class="data-table">
-  <thead><tr><th>Site</th><th>Role</th><th>Actions</th></tr></thead>
-  <tbody>{rows}</tbody>
-</table>
-<h3>Add to a Site</h3>
-{add_form}"#,
-        display_name = crate::html_escape(&data.display_name),
-        email        = crate::html_escape(&data.email),
-        rows         = assignment_rows,
-        add_form     = add_form,
+        r#"<div class="two-col">
+  <div>
+    <h2>Current Site Access</h2>
+    <table class="data-table">
+      <thead><tr><th>Site</th><th>Role</th><th>Actions</th></tr></thead>
+      <tbody>{rows}</tbody>
+    </table>
+  </div>
+  <div>
+    <h2>Add to a Site</h2>
+    {add_form}
+  </div>
+</div>"#,
+        rows     = assignment_rows,
+        add_form = add_form,
     );
 
     crate::admin_page(
