@@ -17,6 +17,9 @@ pub struct SiteRow {
     pub can_manage: bool,
     /// True when a Caddy block exists for this hostname (SSL provisioned).
     pub ssl_active: bool,
+    /// True when this site is the default_site_id of its non-super_admin owner.
+    /// Shown as a blue "primary domain" badge in the super-admin system view only.
+    pub is_primary_domain: bool,
 }
 
 pub fn render_list(
@@ -94,7 +97,13 @@ pub fn render_list(
             </tr>"#,
             id               = crate::html_escape(&s.id),
             hostname         = crate::html_escape(&s.hostname),
-            default_badge    = if s.is_default { r#" <span class="badge-visiting" title="Primary domain — cannot be deleted">system domain</span>"# } else { "" },
+            default_badge    = if s.is_default {
+                r#" <span class="badge-visiting" title="Primary domain — cannot be deleted">system domain</span>"#
+            } else if s.is_primary_domain {
+                r#" <span class="badge-primary-domain" title="Primary domain for this account">primary domain</span>"#
+            } else {
+                ""
+            },
             ssl_badge        = ssl_badge,
             admin_email      = s.admin_email.as_deref().map(|e| crate::html_escape(e)).unwrap_or_else(|| "<em>none</em>".to_string()),
             user_count       = s.user_count,

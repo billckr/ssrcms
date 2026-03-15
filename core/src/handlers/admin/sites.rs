@@ -59,6 +59,77 @@ pub async fn list(
             tracing::warn!("failed to list sites: {:?}", e);
             vec![]
         });
+
+        // Collect the set of site IDs that are the default_site_id of their
+        // non-super_admin owner — these get the "primary domain" badge.
+        let primary_ids: std::collections::HashSet<Uuid> = sqlx::query_scalar(
+            r#"SELECT s.id FROM sites s
+               JOIN users u ON u.id = s.owner_user_id
+               WHERE u.role != 'super_admin'
+                 AND u.default_site_id = s.id
+                 AND u.deleted_at IS NULL"#,
+        )
+        .fetch_all(&state.db)
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .collect();
+
+        for s in &sites {
+            let (admin_email, user_count, subscriber_count, post_count, page_count) = tokio::join!(
+                crate::models::site::admin_email(&state.db, s.id),
+                crate::models::site::user_count(&state.db, s.id),
+                crate::models::site::subscriber_count(&state.db, s.id),
+                crate::models::site::post_count(&state.db, s.id),
+                crate::models::site::page_count(&state.db, s.id),
+            );
+            let is_sys_default = admin.user.default_site_id == Some(s.id);
+            rows.push(SiteRow {
+                id: s.id.to_string(),
+                hostname: s.hostname.clone(),
+                admin_email: admin_email.unwrap_or(None),
+                user_count: user_count.unwrap_or(0),
+                subscriber_count: subscriber_count.unwrap_or(0),
+                post_count: post_count.unwrap_or(0),
+                page_count: page_count.unwrap_or(0),
+                is_default: is_sys_default,
+                can_manage: true,
+                ssl_active: caddy_block_exists(&caddyfile_content, &s.hostname),
+                // Only show primary-domain badge for non-system-domain sites.
+                is_primary_domain: !is_sys_default && primary_ids.contains(&s.id),
+            });
+        }
+    } else if admin.caps.is_global_admin && admin.caps.visiting_foreign_site {
+        // Super admin impersonating — show all sites owned by the current site's owner.
+        let (sites, owner_default_site_id) = if let Some(site_id) = admin.site_id {
+            let owner_row: Option<(Option<Uuid>, Option<Uuid>)> = sqlx::query_as(
+                "SELECT owner_user_id, (SELECT default_site_id FROM users WHERE id = s.owner_user_id) \
+                 FROM sites s WHERE s.id = $1",
+            )
+            .bind(site_id)
+            .fetch_optional(&state.db)
+            .await
+            .ok()
+            .flatten();
+
+            let (owner_id, default_site_id) = owner_row
+                .map(|(oid, dsi)| (oid, dsi))
+                .unwrap_or((None, None));
+
+            let sites = match owner_id {
+                Some(owner) => crate::models::site::list_by_owner(&state.db, owner)
+                    .await
+                    .unwrap_or_default(),
+                None => crate::models::site::get_by_id(&state.db, site_id)
+                    .await
+                    .map(|s| vec![s])
+                    .unwrap_or_default(),
+            };
+            (sites, default_site_id)
+        } else {
+            (vec![], None)
+        };
+
         for s in &sites {
             let (admin_email, user_count, subscriber_count, post_count, page_count) = tokio::join!(
                 crate::models::site::admin_email(&state.db, s.id),
@@ -75,35 +146,11 @@ pub async fn list(
                 subscriber_count: subscriber_count.unwrap_or(0),
                 post_count: post_count.unwrap_or(0),
                 page_count: page_count.unwrap_or(0),
-                is_default: admin.user.default_site_id == Some(s.id),
+                is_default: false,
                 can_manage: true,
                 ssl_active: caddy_block_exists(&caddyfile_content, &s.hostname),
+                is_primary_domain: owner_default_site_id == Some(s.id),
             });
-        }
-    } else if admin.caps.is_global_admin && admin.caps.visiting_foreign_site {
-        // Super admin impersonating — show only the site currently being visited.
-        if let Some(site_id) = admin.site_id {
-            if let Ok(s) = crate::models::site::get_by_id(&state.db, site_id).await {
-                let (admin_email, user_count, subscriber_count, post_count, page_count) = tokio::join!(
-                    crate::models::site::admin_email(&state.db, s.id),
-                    crate::models::site::user_count(&state.db, s.id),
-                    crate::models::site::subscriber_count(&state.db, s.id),
-                    crate::models::site::post_count(&state.db, s.id),
-                    crate::models::site::page_count(&state.db, s.id),
-                );
-                rows.push(SiteRow {
-                    id: s.id.to_string(),
-                    hostname: s.hostname.clone(),
-                    admin_email: admin_email.unwrap_or(None),
-                    user_count: user_count.unwrap_or(0),
-                    subscriber_count: subscriber_count.unwrap_or(0),
-                    post_count: post_count.unwrap_or(0),
-                    page_count: page_count.unwrap_or(0),
-                    is_default: false,
-                    can_manage: true,
-                    ssl_active: caddy_block_exists(&caddyfile_content, &s.hostname),
-                });
-            }
         }
     } else {
         // Non-global-admin: fetch all sites the user has any role on.
@@ -136,6 +183,7 @@ pub async fn list(
                 is_default: admin.user.default_site_id == Some(s.id),
                 can_manage,
                 ssl_active: caddy_block_exists(&caddyfile_content, &s.hostname),
+                is_primary_domain: false,
             });
         }
     }
@@ -187,7 +235,28 @@ pub async fn create(
         )).into_response();
     }
 
-    let result = crate::models::site::create_with_defaults(&state.db, &hostname, admin.user.id)
+    // When impersonating (super_admin visiting a foreign site), assign the new
+    // site to that site's owner rather than to the super admin's own account.
+    let owner_id = if admin.caps.visiting_foreign_site {
+        if let Some(sid) = admin.site_id {
+            sqlx::query_scalar::<_, Option<uuid::Uuid>>(
+                "SELECT owner_user_id FROM sites WHERE id = $1",
+            )
+            .bind(sid)
+            .fetch_optional(&state.db)
+            .await
+            .ok()
+            .flatten()
+            .flatten()
+            .unwrap_or(admin.user.id)
+        } else {
+            admin.user.id
+        }
+    } else {
+        admin.user.id
+    };
+
+    let result = crate::models::site::create_with_defaults(&state.db, &hostname, owner_id)
         .await;
 
     match result {

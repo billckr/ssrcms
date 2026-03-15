@@ -53,6 +53,7 @@ a:hover { text-decoration: underline; }
 .ssl-inactive:hover img { opacity:0.75 !important; }
 .badge-visiting { margin-left: auto; font-size: .78rem; font-weight: 600; background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; border-radius: 4px; padding: .2rem .6rem; white-space: nowrap; text-decoration: none; display: inline-flex; align-items: center; gap: .25rem; }
 .badge-visiting:hover { background: #fde68a; border-color: #f59e0b; color: #78350f; }
+.badge-primary-domain { font-size: .78rem; font-weight: 600; background: #dbeafe; color: #1e40af; border: 1px solid #93c5fd; border-radius: 4px; padding: .2rem .6rem; white-space: nowrap; display: inline-flex; align-items: center; }
 .admin-content { padding: 1.5rem; }
 
 /* Flash messages */

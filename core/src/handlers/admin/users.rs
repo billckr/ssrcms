@@ -42,15 +42,37 @@ pub async fn list(
     let cs = state.site_hostname(admin.site_id);
 
     // Fetch available sites for the filter dropdown (global admin only).
+    // When visiting a foreign site (impersonating), scope to sites owned by
+    // that site's owner — never expose the super admin's own sites.
     let available_sites = if admin.caps.is_global_admin {
-        fetch_site_options(&state).await
+        if admin.caps.visiting_foreign_site {
+            if let Some(sid) = admin.site_id {
+                fetch_site_options_for_site_owner(&state, sid).await
+            } else {
+                fetch_site_options(&state).await
+            }
+        } else {
+            fetch_site_options(&state).await
+        }
     } else {
         vec![]
     };
 
+    // When visiting a foreign site with no explicit ?site= filter, default to
+    // the current site so the user list is scoped correctly out of the box.
+    let effective_site_filter: Option<Uuid> = if !q.site.is_empty() {
+        q.site.parse::<Uuid>().ok()
+    } else if admin.caps.visiting_foreign_site {
+        admin.site_id
+    } else {
+        None
+    };
+    let selected_site_id = effective_site_filter
+        .map(|id| id.to_string())
+        .unwrap_or_default();
+
     let rows: Vec<UserRow> = if admin.caps.is_global_admin {
-        let filter_site = q.site.parse::<Uuid>().ok();
-        if let Some(filter_site_id) = filter_site {
+        if let Some(filter_site_id) = effective_site_filter {
             // Filtered: show only users assigned to this specific site.
             crate::models::site_user::list_for_site(&state.db, filter_site_id)
                 .await.unwrap_or_else(|e| {
@@ -157,7 +179,7 @@ pub async fn list(
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
     Html(admin::pages::users::render_list(
         &staff, &subscribers, None, &current_user_id,
-        can_manage_access, active_tab, &available_sites, &q.site, &ctx,
+        can_manage_access, active_tab, &available_sites, &selected_site_id, &ctx,
     )).into_response()
 }
 
@@ -860,6 +882,48 @@ async fn fetch_site_options(state: &AppState) -> Vec<SiteOption> {
             existing_admin_name: owner_name,
         })
         .collect()
+}
+
+/// Fetch site options scoped to the owner of the given site.
+/// Used when a super_admin is visiting a foreign site (impersonating) so the
+/// dropdown only shows sites belonging to that site's owner, not all sites.
+async fn fetch_site_options_for_site_owner(state: &AppState, site_id: Uuid) -> Vec<SiteOption> {
+    let owner_id: Option<Uuid> = sqlx::query_scalar(
+        "SELECT owner_user_id FROM sites WHERE id = $1",
+    )
+    .bind(site_id)
+    .fetch_optional(&state.db)
+    .await
+    .ok()
+    .flatten();
+
+    match owner_id {
+        Some(owner) => {
+            crate::models::site::list_by_owner(&state.db, owner)
+                .await
+                .unwrap_or_default()
+                .into_iter()
+                .map(|s| SiteOption {
+                    id: s.id.to_string(),
+                    hostname: s.hostname,
+                    existing_admin_id: None,
+                    existing_admin_name: None,
+                })
+                .collect()
+        }
+        None => {
+            // No dedicated owner — show just this site.
+            match crate::models::site::get_by_id(&state.db, site_id).await {
+                Ok(s) => vec![SiteOption {
+                    id: s.id.to_string(),
+                    hostname: s.hostname,
+                    existing_admin_id: None,
+                    existing_admin_name: None,
+                }],
+                Err(_) => vec![],
+            }
+        }
+    }
 }
 
 // ── Site access management ────────────────────────────────────────────────────
