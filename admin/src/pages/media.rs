@@ -428,7 +428,7 @@ body.sidebar-open .admin-sidebar {{
   border-radius: var(--radius);
   padding: .3rem .6rem;
   min-width: 130px;
-  max-width: 200px;
+  max-width: 190px;
   flex: 1;
 }}
 .mm-search svg {{ color: var(--muted); flex-shrink: 0; }}
@@ -1046,6 +1046,13 @@ body.sidebar-open .admin-sidebar {{
     activeDetailIdx = (idx !== undefined) ? idx : null;
     actions.style.display = '';
     document.getElementById('mmDetail').classList.add('open');
+    // Collapse bulk bar when user focuses any detail field (mobile UX)
+    ['mmDetailAlt', 'mmDetailTitle', 'mmDetailCaption'].forEach(function(id) {{
+      var el = document.getElementById(id);
+      if (el) el.addEventListener('focus', function() {{
+        document.getElementById('mmBulkBar').classList.remove('visible');
+      }}, {{ once: true }});
+    }});
   }}
 
   window.closeDetail = function() {{

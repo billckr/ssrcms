@@ -320,14 +320,14 @@ pub fn render_list(posts: &[PostRow], post_type: &str, page: i64, total_pages: i
   <a href="{new_href}" class="btn btn-primary">{new_label}</a>
   <button id="bulk-delete-btn" type="button" class="btn btn-danger" style="display:none"
           onclick="bulkDelete()">Delete Selected (<span id="bulk-count">0</span>)</button>
-</div>
-<div style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;margin-bottom:.75rem">
-  <div>{top_pagination}</div>
-  <input id="post-search"
-         type="search"
-         placeholder="Search {post_type}s&hellip;"
-         value="{search_val}"
-         style="width:100%;max-width:320px;padding:.4rem .75rem;border:1px solid var(--border);border-radius:4px;font-size:14px;background:var(--card-bg);color:inherit">
+  <div style="flex:1;display:flex;align-items:center;justify-content:space-between;gap:.75rem">
+    <div>{top_pagination}</div>
+    <input id="post-search"
+           type="search"
+           placeholder="Search {post_type}s&hellip;"
+           value="{search_val}"
+           style="width:100%;max-width:320px;padding:.4rem .75rem;border:1px solid var(--border);border-radius:4px;font-size:14px;background:var(--card-bg);color:inherit">
+  </div>
 </div>
 <div id="posts-list">{fragment}</div>
 {live_search}
@@ -893,6 +893,33 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
     }}
     initCount('title',   'title-count',   255);
     initCount('excerpt', 'excerpt-count', 500);
+  }})();
+
+  // Auto-populate slug from title
+  (function() {{
+    var titleEl = document.getElementById('title');
+    var slugEl  = document.getElementById('slug');
+    if (!titleEl || !slugEl) return;
+
+    function slugify(s) {{
+      return s.toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '');
+    }}
+
+    // Lock if slug already has a value on load (existing post with a slug set)
+    var locked = slugEl.value.trim() !== '';
+
+    // User manually editing the slug locks it; clearing it unlocks
+    slugEl.addEventListener('input', function() {{
+      locked = slugEl.value.trim() !== '';
+    }});
+
+    titleEl.addEventListener('input', function() {{
+      if (!locked) {{
+        slugEl.value = slugify(titleEl.value);
+      }}
+    }});
   }})();
 
   // ── Accordion checkbox counters (Categories / Tags) ──────────────────

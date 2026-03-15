@@ -618,7 +618,10 @@ pub async fn save_edit(
 
     let update = UpdatePost {
         title: Some(form.title.clone()),
-        slug: form.slug.clone().filter(|s| !s.is_empty()).map(|s| crate::utils::slugify::slugify(&s)),
+        slug: Some(match form.slug.as_deref().map(str::trim) {
+            Some(s) if !s.is_empty() => crate::utils::slugify::slugify(s),
+            _ => crate::utils::slugify::slugify(&form.title),
+        }),
         content: Some(form.content.clone()),
         content_format: None,
         excerpt: form.excerpt.clone(),
