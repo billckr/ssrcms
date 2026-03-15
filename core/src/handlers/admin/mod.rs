@@ -24,7 +24,7 @@ pub fn page_ctx(state: &AppState, admin: &AdminUser, current_site: &str) -> admi
         user_email: admin.user.email.clone(),
         user_role: if admin.caps.is_global_admin { "Super Admin".to_string() } else { role_display_name(&admin.site_role) },
         is_global_admin: admin.caps.is_global_admin,
-        visiting_foreign_site: admin.caps.visiting_foreign_site,
+        is_impersonating: admin.caps.is_impersonating,
         can_manage_users: admin.caps.can_manage_users,
         can_manage_sites: admin.caps.can_manage_sites,
         can_manage_plugins: admin.caps.can_manage_plugins,

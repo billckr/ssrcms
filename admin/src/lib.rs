@@ -14,7 +14,7 @@ pub struct PageContext {
     /// Agency-level super-admin with unrestricted cross-site access.
     pub is_global_admin: bool,
     /// Super-admin viewing a site they do not own.
-    pub visiting_foreign_site: bool,
+    pub is_impersonating: bool,
     /// Can view, create, edit, and delete users.
     pub can_manage_users: bool,
     /// Can create new sites and edit site-level settings.
@@ -45,7 +45,7 @@ pub struct PageContext {
 /// Wrap a rendered content HTML string in the full admin page shell.
 /// The sidebar nav, head, and body wrapper are all here.
 pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content: &str, ctx: &PageContext) -> String {
-    let visiting_badge = if ctx.visiting_foreign_site && !ctx.current_site.is_empty() {
+    let visiting_badge = if ctx.is_impersonating && !ctx.current_site.is_empty() {
         let site = html_escape(&ctx.current_site);
         format!(
             r#"<a href="/admin/sites/go-home" class="badge-visiting" title="Return to your admin panel"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>Super Admin &rarr; {site}</a>"#
@@ -229,7 +229,7 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
         content = content,
         visiting_badge = visiting_badge,
         site_indicator = site_indicator,
-        profile_or_home = if ctx.visiting_foreign_site { "/admin/sites/go-home?next=/admin/profile" } else { "/admin/profile" },
+        profile_or_home = if ctx.is_impersonating { "/admin/sites/go-home?next=/admin/profile" } else { "/admin/profile" },
         user_email = html_escape(&ctx.user_email),
         user_role  = html_escape(&ctx.user_role),
         media_browser_modal = media_browser_modal,

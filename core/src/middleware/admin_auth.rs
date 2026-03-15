@@ -27,7 +27,7 @@ pub struct AdminCaps {
     /// Agency-level super-admin with unrestricted cross-site access.
     pub is_global_admin: bool,
     /// Super-admin viewing a site they do not own.
-    pub visiting_foreign_site: bool,
+    pub is_impersonating: bool,
     /// Can view, create, edit, and delete users.
     pub can_manage_users: bool,
     /// Can create new sites and edit site-level settings.
@@ -64,7 +64,7 @@ impl AdminCaps {
         let is_editor_or_above = is_admin || site_role == "editor";
         Self {
             is_global_admin,
-            visiting_foreign_site: visiting_foreign,
+            is_impersonating: visiting_foreign,
             can_manage_users: is_admin,
             can_manage_sites: is_admin,
             can_manage_plugins: is_global_admin,
@@ -266,7 +266,7 @@ impl FromRequestParts<AppState> for AdminUser {
         // than their own default/home site.  Using default_site_id (not owner_user_id)
         // because a super_admin typically creates every client site themselves, so
         // they technically "own" all of them — but they're still visiting as admin.
-        let is_visiting_foreign_site = is_global_admin
+        let is_is_impersonating = is_global_admin
             && site_id.is_some()
             && site_id != user.default_site_id;
 
@@ -277,7 +277,7 @@ impl FromRequestParts<AppState> for AdminUser {
             && user.default_site_id.is_some()
             && site_id == user.default_site_id;
 
-        let caps = AdminCaps::from_roles(&user.role, &site_role, is_visiting_foreign_site, is_on_default_site);
+        let caps = AdminCaps::from_roles(&user.role, &site_role, is_is_impersonating, is_on_default_site);
 
         Ok(AdminUser { user, site_id, site_role, caps })
     }

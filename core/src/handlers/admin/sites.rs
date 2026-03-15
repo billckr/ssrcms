@@ -53,7 +53,7 @@ pub async fn list(
     // Build site list with per-row manage flag.
     let mut rows: Vec<SiteRow> = Vec::new();
 
-    if admin.caps.is_global_admin && !admin.caps.visiting_foreign_site {
+    if admin.caps.is_global_admin && !admin.caps.is_impersonating {
         // True super admin view — see all sites.
         let sites = crate::models::site::list(&state.db).await.unwrap_or_else(|e| {
             tracing::warn!("failed to list sites: {:?}", e);
@@ -99,7 +99,7 @@ pub async fn list(
                 is_primary_domain: !is_sys_default && primary_ids.contains(&s.id),
             });
         }
-    } else if admin.caps.is_global_admin && admin.caps.visiting_foreign_site {
+    } else if admin.caps.is_global_admin && admin.caps.is_impersonating {
         // Super admin impersonating — show all sites owned by the current site's owner.
         let (sites, owner_default_site_id) = if let Some(site_id) = admin.site_id {
             let owner_row: Option<(Option<Uuid>, Option<Uuid>)> = sqlx::query_as(
@@ -237,7 +237,7 @@ pub async fn create(
 
     // When impersonating (super_admin visiting a foreign site), assign the new
     // site to that site's owner rather than to the super admin's own account.
-    let owner_id = if admin.caps.visiting_foreign_site {
+    let owner_id = if admin.caps.is_impersonating {
         if let Some(sid) = admin.site_id {
             sqlx::query_scalar::<_, Option<uuid::Uuid>>(
                 "SELECT owner_user_id FROM sites WHERE id = $1",

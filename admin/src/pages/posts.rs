@@ -1006,7 +1006,7 @@ mod tests {
             user_email: "test@example.com".to_string(),
             user_role: "admin".to_string(),
             is_global_admin: false,
-            visiting_foreign_site: false,
+            is_impersonating: false,
             can_manage_users: false,
             can_manage_sites: false,
             can_manage_plugins: false,

@@ -45,7 +45,7 @@ pub async fn list(
     // When visiting a foreign site (impersonating), scope to sites owned by
     // that site's owner — never expose the super admin's own sites.
     let available_sites = if admin.caps.is_global_admin {
-        if admin.caps.visiting_foreign_site {
+        if admin.caps.is_impersonating {
             if let Some(sid) = admin.site_id {
                 fetch_site_options_for_site_owner(&state, sid).await
             } else {
@@ -62,7 +62,7 @@ pub async fn list(
     // the current site so the user list is scoped correctly out of the box.
     let effective_site_filter: Option<Uuid> = if !q.site.is_empty() {
         q.site.parse::<Uuid>().ok()
-    } else if admin.caps.visiting_foreign_site {
+    } else if admin.caps.is_impersonating {
         admin.site_id
     } else {
         None
