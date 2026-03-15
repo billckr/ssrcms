@@ -90,6 +90,7 @@ pub async fn list(
                     is_super_admin: u.role == "super_admin",
                     site_hostnames: vec![],
                     site_ids: vec![],
+                    default_site_id: None,
                 })
                 .collect()
         } else {
@@ -119,6 +120,7 @@ pub async fn list(
                 is_super_admin: u.role == "super_admin",
                 site_hostnames: vec![],
                 site_ids: vec![],
+                    default_site_id: None,
             }).collect()
         }
     } else if let Some(site_id) = admin.site_id {
@@ -135,6 +137,7 @@ pub async fn list(
             is_super_admin: false,
             site_hostnames: vec![],
             site_ids: vec![],
+                    default_site_id: None,
         }).collect()
     } else {
         vec![]
@@ -147,7 +150,7 @@ pub async fn list(
     let active_tab = if q.tab == "subscribers" { "subscribers" } else { "site-users" };
     let (mut staff, mut subscribers) = split_by_role(rows);
 
-    // Populate site_hostnames for all users (staff + subscribers) in one query.
+    // Populate site_hostnames and default_site_id for all users in one pass.
     let all_ids: Vec<Uuid> = staff.iter().chain(subscribers.iter())
         .filter_map(|u| u.id.parse::<Uuid>().ok())
         .collect();
@@ -164,6 +167,19 @@ pub async fn list(
         .await
         .unwrap_or_else(|e| { tracing::warn!("failed to fetch user sites: {:?}", e); vec![] });
 
+        // Fetch each user's default_site_id so the primary domain badge can be shown.
+        let default_site_rows: Vec<(Uuid, Option<Uuid>)> = sqlx::query_as(
+            "SELECT id, default_site_id FROM users WHERE id = ANY($1)",
+        )
+        .bind(&all_ids)
+        .fetch_all(&state.db)
+        .await
+        .unwrap_or_default();
+        let default_site_map: std::collections::HashMap<String, Option<String>> = default_site_rows
+            .into_iter()
+            .map(|(uid, dsid)| (uid.to_string(), dsid.map(|id| id.to_string())))
+            .collect();
+
         let mut membership_map: std::collections::HashMap<String, Vec<(String, String)>> = std::collections::HashMap::new();
         for (uid, site_id, hostname) in membership_rows {
             membership_map.entry(uid.to_string()).or_default().push((site_id.to_string(), hostname));
@@ -173,6 +189,7 @@ pub async fn list(
                 u.site_hostnames = memberships.iter().map(|(_, h)| h.clone()).collect();
                 u.site_ids       = memberships.iter().map(|(id, _)| id.clone()).collect();
             }
+            u.default_site_id = default_site_map.get(&u.id).and_then(|v| v.clone());
         }
     }
 
@@ -678,6 +695,7 @@ pub async fn delete_user(
                         is_super_admin: u.role == "super_admin",
                         site_hostnames: vec![],
                         site_ids: vec![],
+                    default_site_id: None,
                     }).collect()
             } else if let Some(site_id) = admin.site_id {
                 crate::models::site_user::list_for_site(&state.db, site_id).await.unwrap_or_default()
@@ -691,6 +709,7 @@ pub async fn delete_user(
                         is_super_admin: false,
                         site_hostnames: vec![],
                         site_ids: vec![],
+                    default_site_id: None,
                     }).collect()
             } else {
                 vec![]
