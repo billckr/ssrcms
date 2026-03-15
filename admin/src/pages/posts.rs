@@ -538,14 +538,39 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
     };
 
     let categories_section = if post.post_type != "page" {
-        format!(r#"<div class="form-section">
-          <h3>Categories</h3>
-          <div class="checkbox-group">{cat_options}</div>
-        </div>
-        <div class="form-section">
-          <h3>Tags</h3>
-          <div class="checkbox-group">{tag_options}</div>
-        </div>"#, cat_options = cat_options, tag_options = tag_options)
+        let cat_count = post.selected_categories.len();
+        let tag_count = post.selected_tags.len();
+        let cat_badge = if cat_count > 0 {
+            format!(r#"<span class="inline-media-count">{}</span>"#, cat_count)
+        } else { String::new() };
+        let tag_badge = if tag_count > 0 {
+            format!(r#"<span class="inline-media-count">{}</span>"#, tag_count)
+        } else { String::new() };
+        format!(r#"<details class="form-section">
+          <summary>
+            <span>Categories</span>
+            {cat_badge}
+            <svg class="section-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+          </summary>
+          <div class="form-section-body">
+            <div class="checkbox-group">{cat_options}</div>
+          </div>
+        </details>
+        <details class="form-section">
+          <summary>
+            <span>Tags</span>
+            {tag_badge}
+            <svg class="section-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+          </summary>
+          <div class="form-section-body">
+            <div class="checkbox-group">{tag_options}</div>
+          </div>
+        </details>"#,
+            cat_badge = cat_badge,
+            tag_badge = tag_badge,
+            cat_options = cat_options,
+            tag_options = tag_options,
+        )
     } else {
         String::new()
     };
@@ -660,6 +685,17 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
         String::new()
     };
 
+    let inline_media_section = r#"<details class="form-section">
+      <summary>
+        <span>Inline Media</span>
+        <span id="inline-media-count" class="inline-media-count" style="display:none"></span>
+        <svg class="section-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+      </summary>
+      <div class="form-section-body">
+        <div id="inline-media-list"><p style="color:var(--muted);font-size:12px;margin:0">No media embedded yet.</p></div>
+      </div>
+    </details>"#;
+
     let mut content = format!(
         r#"<link rel="stylesheet" href="/admin/static/quill/quill.snow.css">
 <form method="POST" action="{action}">
@@ -707,6 +743,7 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
         <button type="submit" class="btn btn-primary">Save</button>
       </div>
       {featured_image_section}
+      {inline_media_section}
       {template_section}
       {parent_section}
       {categories_section}
@@ -772,6 +809,46 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
     }}
   }});
 
+  // ── Inline Media panel ───────────────────────────────────────────────
+  function escHtmlEditor(s) {{
+    return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }}
+  window.refreshInlineMediaList = function() {{
+    var list = document.getElementById('inline-media-list');
+    if (!list) return;
+    var items = [];
+    quill.root.querySelectorAll('audio').forEach(function(el) {{
+      var src = el.getAttribute('src') || '';
+      items.push({{ kind: 'audio', filename: src.split('/').pop() || src }});
+    }});
+    quill.root.querySelectorAll('img[src^="/uploads/"]').forEach(function(el) {{
+      var src = el.getAttribute('src') || '';
+      items.push({{ kind: 'image', filename: src.split('/').pop() || src }});
+    }});
+    var badge = document.getElementById('inline-media-count');
+    if (badge) {{
+      if (items.length > 0) {{ badge.textContent = items.length; badge.style.display = ''; }}
+      else {{ badge.style.display = 'none'; }}
+    }}
+    if (items.length === 0) {{
+      list.innerHTML = '<p style="color:var(--muted);font-size:12px;margin:0">No media embedded yet.</p>';
+      return;
+    }}
+    var labels = {{ audio: 'AUD', image: 'IMG', doc: 'DOC', video: 'VID' }};
+    var html = '<ul style="list-style:none;margin:0;padding:0">';
+    items.forEach(function(item) {{
+      var label = labels[item.kind] || 'DOC';
+      html += '<li style="display:flex;align-items:center;gap:.4rem;padding:.35rem 0;border-bottom:1px solid var(--border)">'
+        + '<span style="flex-shrink:0;display:inline-block;background:#f3f4f6;color:#374151;border-radius:4px;padding:.1rem .35rem;font-size:.6rem;font-weight:600;letter-spacing:.04em">' + label + '</span>'
+        + '<span style="font-size:.75rem;color:var(--muted);word-break:break-all">' + escHtmlEditor(item.filename) + '</span>'
+        + '</li>';
+    }});
+    html += '</ul>';
+    list.innerHTML = html;
+  }};
+  refreshInlineMediaList();
+  quill.on('text-change', function() {{ refreshInlineMediaList(); }});
+
   // Override Quill's image button to open the media library instead of file picker
   window._quillInstance = quill;
   window._quillRange = null;
@@ -817,6 +894,32 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
     initCount('title',   'title-count',   255);
     initCount('excerpt', 'excerpt-count', 500);
   }})();
+
+  // ── Accordion checkbox counters (Categories / Tags) ──────────────────
+  document.querySelectorAll('details.form-section .checkbox-group').forEach(function(group) {{
+    var details = group.closest('details.form-section');
+    if (!details) return;
+    var summary = details.querySelector('summary');
+    if (!summary) return;
+    var chevron = summary.querySelector('.section-chevron');
+
+    function syncBadge() {{
+      var total = group.querySelectorAll('input[type=checkbox]:checked').length;
+      var badge = summary.querySelector('.inline-media-count');
+      if (total > 0) {{
+        if (!badge) {{
+          badge = document.createElement('span');
+          badge.className = 'inline-media-count';
+          summary.insertBefore(badge, chevron);
+        }}
+        badge.textContent = total;
+      }} else if (badge) {{
+        badge.remove();
+      }}
+    }}
+
+    group.addEventListener('change', syncBadge);
+  }});
 }})();
 </script>"#,
         action = action,
@@ -841,6 +944,7 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
         parent_section = parent_section,
         categories_section = categories_section,
         featured_image_section = featured_image_section,
+        inline_media_section = inline_media_section,
         password_section = password_section,
         comments_section = comments_section,
         author_card = author_card,

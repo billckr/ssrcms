@@ -321,6 +321,7 @@ pub fn media_picker_modal_html() -> String {
         var imgHtml = '<img src="' + path + '" alt="' + alt.replace(/"/g, '&quot;') + '">';
         q.clipboard.dangerouslyPasteHTML(range.index, imgHtml, 'user');
         q.setSelection(range.index + 1, 0, 'silent');
+        if (window.refreshInlineMediaList) window.refreshInlineMediaList();
       }
     } else if (pickerMode === 'audio') {
       var q = window._quillInstance;
@@ -330,6 +331,7 @@ pub fn media_picker_modal_html() -> String {
         // the <audio controls> element instead of stripping it.
         q.insertEmbed(range.index, 'audio', path, 'user');
         q.setSelection(range.index + 1, 0, 'silent');
+        if (window.refreshInlineMediaList) window.refreshInlineMediaList();
       }
     } else {
       var fidEl  = document.getElementById('featured_image_id');

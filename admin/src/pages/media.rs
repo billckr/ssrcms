@@ -1039,9 +1039,9 @@ body.sidebar-open .admin-sidebar {{
       + '<span class="mm-detail-stat-label">Dims</span><span class="mm-detail-stat-value">' + escHtml(data.dims) + '</span>'
       + '<span class="mm-detail-stat-label">Path</span><span class="mm-detail-stat-value" style="word-break:break-all">' + escHtml(data.path) + '</span>'
       + '</div></div>'
-      + '<div class="mm-detail-field" style="margin-top:.85rem"><label>Alt text</label><input type="text" id="mmDetailAlt" value="' + escHtml(data.alt) + '" placeholder="Describe the image…"></div>'
-      + '<div class="mm-detail-field"><label>Title</label><input type="text" id="mmDetailTitle" value="' + escHtml(data.title) + '"></div>'
-      + '<div class="mm-detail-field"><label>Caption</label><textarea id="mmDetailCaption" rows="3" placeholder="Optional caption…">' + escHtml(data.caption || '') + '</textarea></div>';
+      + (data.type !== 'audio' ? '<div class="mm-detail-field" style="margin-top:.85rem"><label>Alt text</label><input type="text" id="mmDetailAlt" value="' + escHtml(data.alt) + '" placeholder="Describe the image…"></div>' : '<input type="hidden" id="mmDetailAlt" value="">')
+      + '<div class="mm-detail-field"' + (data.type === 'audio' ? ' style="margin-top:.85rem"' : '') + '><label>Title</label><input type="text" id="mmDetailTitle" value="' + escHtml(data.title) + '"></div>'
+      + '<div class="mm-detail-field"><label>' + (data.type === 'audio' ? 'Description' : 'Caption') + '</label><textarea id="mmDetailCaption" rows="3" placeholder="' + (data.type === 'audio' ? 'Optional description…' : 'Optional caption…') + '">' + escHtml(data.caption || '') + '</textarea></div>';
     activeDetailId  = data.id;
     activeDetailIdx = (idx !== undefined) ? idx : null;
     actions.style.display = '';
