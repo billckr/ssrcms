@@ -98,9 +98,9 @@ pub fn render_list(
             id               = crate::html_escape(&s.id),
             hostname         = crate::html_escape(&s.hostname),
             default_badge    = if s.is_default {
-                r#" <span class="badge-visiting" title="Primary domain — cannot be deleted">system domain</span>"#
+                r#" <span class="badge-visiting" title="Primary domain — cannot be deleted">system</span>"#
             } else if s.is_primary_domain {
-                r#" <span class="badge-primary-domain" title="Primary domain for this account">primary domain</span>"#
+                r#" <span class="badge-primary-domain" title="Primary domain for this account">primary</span>"#
             } else {
                 ""
             },
