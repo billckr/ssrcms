@@ -335,6 +335,20 @@ async fn activate(
         Some(s) => {
             let site_id = resolve_site_id(&pool, s).await?;
 
+            // Bail early if this theme is already active.
+            let current: Option<String> = sqlx::query_scalar(
+                "SELECT value FROM site_settings WHERE site_id = $1 AND key = 'active_theme'"
+            )
+            .bind(site_id)
+            .fetch_optional(&pool)
+            .await
+            .unwrap_or(None);
+
+            if current.as_deref() == Some(&name) {
+                println!("'{}' is already the active theme for '{}'.", name, s);
+                return Ok(());
+            }
+
             let global_src  = themes_root.join("global").join(&name);
             let site_dest   = Path::new("sites").join(site_id.to_string()).join("themes").join(&name);
 
