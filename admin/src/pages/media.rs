@@ -1042,7 +1042,7 @@ body.sidebar-open .admin-sidebar {{
       + '<span class="mm-detail-stat-label">Size</span><span class="mm-detail-stat-value">' + escHtml(data.size) + '</span>'
       + '<span class="mm-detail-stat-label">Dims</span><span class="mm-detail-stat-value">' + escHtml(data.dims) + '</span>'
       + '<span class="mm-detail-stat-label">Path</span><span class="mm-detail-stat-value" style="word-break:break-all">' + escHtml(data.path) + '</span>'
-      + '<span class="mm-detail-stat-label">Uploaded</span><span class="mm-detail-stat-value">' + escHtml(data.uploaded_at) + ' by ' + escHtml(data.uploader) + '</span>'
+      + '<span class="mm-detail-stat-label">Uploaded</span><span class="mm-detail-stat-value">' + escHtml(data.uploader) + ' — ' + escHtml(data.uploaded_at) + '</span>'
       + '</div></div>'
       + (data.type !== 'audio' ? '<div class="mm-detail-field" style="margin-top:.85rem"><label>Alt text</label><input type="text" id="mmDetailAlt" value="' + escHtml(data.alt) + '" placeholder="Describe the image…"></div>' : '<input type="hidden" id="mmDetailAlt" value="">')
       + '<div class="mm-detail-field"' + (data.type === 'audio' ? ' style="margin-top:.85rem"' : '') + '><label>Title</label><input type="text" id="mmDetailTitle" value="' + escHtml(data.title) + '"></div>'
