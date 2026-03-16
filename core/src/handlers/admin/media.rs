@@ -110,6 +110,18 @@ pub async fn list(
             .unwrap_or_default()
     };
 
+    // Bulk-fetch display names for all uploaders on this page.
+    let uploader_ids: Vec<Uuid> = raw.iter().map(|m| m.uploaded_by).collect::<std::collections::HashSet<_>>().into_iter().collect();
+    let uploader_names: std::collections::HashMap<Uuid, String> = sqlx::query_as::<_, (Uuid, String)>(
+        "SELECT id, display_name FROM users WHERE id = ANY($1)"
+    )
+    .bind(&uploader_ids[..])
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default()
+    .into_iter()
+    .collect();
+
     let items: Vec<admin::pages::media::MediaItem> = raw.iter().map(|m| admin::pages::media::MediaItem {
         id: m.id.to_string(),
         filename: m.filename.clone(),
@@ -122,6 +134,8 @@ pub async fn list(
         height: m.height,
         file_size: m.file_size,
         folder_id: m.folder_id.map(|u| u.to_string()),
+        uploaded_by_name: uploader_names.get(&m.uploaded_by).cloned().unwrap_or_else(|| "Unknown".to_string()),
+        uploaded_at: m.created_at.format("%b %-d, %Y").to_string(),
     }).collect();
 
     let folder_items: Vec<admin::pages::media::FolderItem> = folders.iter().map(|f| admin::pages::media::FolderItem {

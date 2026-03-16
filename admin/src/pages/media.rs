@@ -12,6 +12,8 @@ pub struct MediaItem {
     pub height: Option<i32>,
     pub file_size: i64,
     pub folder_id: Option<String>,
+    pub uploaded_by_name: String,
+    pub uploaded_at: String,
 }
 
 pub struct FolderItem {
@@ -169,17 +171,19 @@ pub fn render_list(
                 _ => String::from("—"),
             };
             format!(
-                r##"{{"id":"{id}","filename":"{fn}","type":"{ty}","isImage":{img},"path":"/uploads/{path}","alt":"{alt}","title":"{title}","caption":"{caption}","size":"{size}","dims":"{dims}"}}"##,
-                id      = html_escape(&m.id),
-                fn      = html_escape(&m.filename),
-                ty      = type_key,
-                img     = is_image,
-                path    = html_escape(&m.path),
-                alt     = html_escape(&m.alt_text),
-                title   = html_escape(&m.title),
-                caption = html_escape(&m.caption),
-                size    = format_bytes(m.file_size),
-                dims    = dims,
+                r##"{{"id":"{id}","filename":"{fn}","type":"{ty}","isImage":{img},"path":"/uploads/{path}","alt":"{alt}","title":"{title}","caption":"{caption}","size":"{size}","dims":"{dims}","uploader":"{uploader}","uploaded_at":"{uploaded_at}"}}"##,
+                id          = html_escape(&m.id),
+                fn          = html_escape(&m.filename),
+                ty          = type_key,
+                img         = is_image,
+                path        = html_escape(&m.path),
+                alt         = html_escape(&m.alt_text),
+                title       = html_escape(&m.title),
+                caption     = html_escape(&m.caption),
+                size        = format_bytes(m.file_size),
+                dims        = dims,
+                uploader    = html_escape(&m.uploaded_by_name),
+                uploaded_at = html_escape(&m.uploaded_at),
             )
         }).collect();
         format!("[{}]", parts.join(","))
@@ -1038,6 +1042,7 @@ body.sidebar-open .admin-sidebar {{
       + '<span class="mm-detail-stat-label">Size</span><span class="mm-detail-stat-value">' + escHtml(data.size) + '</span>'
       + '<span class="mm-detail-stat-label">Dims</span><span class="mm-detail-stat-value">' + escHtml(data.dims) + '</span>'
       + '<span class="mm-detail-stat-label">Path</span><span class="mm-detail-stat-value" style="word-break:break-all">' + escHtml(data.path) + '</span>'
+      + '<span class="mm-detail-stat-label">Uploaded</span><span class="mm-detail-stat-value">' + escHtml(data.uploaded_at) + ' by ' + escHtml(data.uploader) + '</span>'
       + '</div></div>'
       + (data.type !== 'audio' ? '<div class="mm-detail-field" style="margin-top:.85rem"><label>Alt text</label><input type="text" id="mmDetailAlt" value="' + escHtml(data.alt) + '" placeholder="Describe the image…"></div>' : '<input type="hidden" id="mmDetailAlt" value="">')
       + '<div class="mm-detail-field"' + (data.type === 'audio' ? ' style="margin-top:.85rem"' : '') + '><label>Title</label><input type="text" id="mmDetailTitle" value="' + escHtml(data.title) + '"></div>'
