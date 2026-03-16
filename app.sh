@@ -195,8 +195,10 @@ cmd_restart() {
 cmd_rebuild() {
     cmd_stop
     if cli_is_stale; then
-        log "CLI source has changed — rebuilding synap-cli..."
+        log "synap-cli — source changed, rebuilding..."
         cmd_update_cli
+    else
+        log "synap-cli — up to date"
     fi
     cmd_build
     sleep 1
