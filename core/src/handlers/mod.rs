@@ -13,6 +13,7 @@ pub mod post_unlock;
 pub mod search;
 pub mod subscribe;
 pub mod theme_static;
+pub mod uploads;
 
 use tower_sessions::Session;
 use uuid::Uuid;

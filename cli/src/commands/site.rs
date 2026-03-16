@@ -52,14 +52,36 @@ pub enum SiteAction {
         #[arg(long, env = "DATABASE_URL", hide = true)]
         database_url: Option<String>,
     },
+    /// Rename a site's hostname — updates DB records, Caddyfile, embedded post
+    /// content URLs, and the hostname symlink in uploads/.
+    Rename {
+        /// UUID of the site to rename
+        #[arg(long)]
+        id: String,
+        /// New hostname (e.g. newdomain.com)
+        #[arg(long)]
+        hostname: String,
+        /// Path to the Caddyfile to update
+        #[arg(long, default_value = "/etc/caddy/Caddyfile")]
+        caddyfile: String,
+        /// Install directory containing the uploads/ folder (for symlink update).
+        /// Defaults to the INSTALL_DIR environment variable set by synap-cli install.
+        #[arg(long, env = "INSTALL_DIR")]
+        install_dir: Option<String>,
+        /// Database URL (overrides DATABASE_URL env var)
+        #[arg(long, env = "DATABASE_URL", hide = true)]
+        database_url: Option<String>,
+    },
 }
 
 pub async fn run(action: SiteAction) -> anyhow::Result<()> {
     match action {
-        SiteAction::Init { hostname, database_url } => init(hostname, database_url).await,
+        SiteAction::Init   { hostname, database_url } => init(hostname, database_url).await,
         SiteAction::Create { hostname, install_dir, database_url } => create(hostname, install_dir, database_url).await,
-        SiteAction::List { database_url } => list(database_url).await,
+        SiteAction::List   { database_url } => list(database_url).await,
         SiteAction::Delete { id, database_url } => delete(id, database_url).await,
+        SiteAction::Rename { id, hostname, caddyfile, install_dir, database_url } =>
+            rename(id, hostname, caddyfile, install_dir, database_url).await,
     }
 }
 
@@ -286,6 +308,15 @@ async fn create(hostname: String, install_dir: Option<String>, database_url: Opt
             println!("Created uploads/{}/", site_id);
         }
 
+        // Create hostname symlink: uploads/{hostname} → uploads/{uuid}/
+        let sym_path = std::path::Path::new(base).join("uploads").join(&hostname);
+        if !sym_path.exists() {
+            match std::os::unix::fs::symlink(&site_uploads_dst, &sym_path) {
+                Ok(()) => println!("Created symlink uploads/{} -> uploads/{}/", hostname, site_id),
+                Err(e) => println!("Warning: could not create upload symlink: {}", e),
+            }
+        }
+
         let theme_src = std::path::Path::new(base).join("themes").join("global").join("default");
         if theme_src.is_dir() {
             match copy_dir_all(&theme_src, &site_themes_dst) {
@@ -325,6 +356,197 @@ fn copy_dir_all(src: &std::path::Path, dst: &std::path::Path) -> std::io::Result
         }
     }
     Ok(())
+}
+
+async fn rename(
+    id_str: String,
+    new_hostname: String,
+    caddyfile: String,
+    install_dir: Option<String>,
+    database_url: Option<String>,
+) -> anyhow::Result<()> {
+    if let Some(url) = database_url {
+        #[allow(unused_unsafe)]
+        unsafe { std::env::set_var("DATABASE_URL", url); }
+    }
+    let pool = super::connect_db().await?;
+
+    let id: Uuid = id_str.parse()
+        .map_err(|_| anyhow::anyhow!("'{}' is not a valid UUID.", id_str))?;
+
+    // Fetch current hostname.
+    let old_hostname: Option<String> = sqlx::query_scalar(
+        "SELECT hostname FROM sites WHERE id = $1"
+    )
+    .bind(id)
+    .fetch_optional(&pool)
+    .await
+    .map_err(|e| anyhow::anyhow!("DB error: {e}"))?;
+
+    let old_hostname = old_hostname
+        .ok_or_else(|| anyhow::anyhow!("No site with id '{}' found.", id))?;
+
+    let new_hostname = new_hostname.trim().to_lowercase();
+    if old_hostname == new_hostname {
+        println!("Site '{}' already uses that hostname — nothing to do.", old_hostname);
+        return Ok(());
+    }
+
+    // Check the new hostname isn't already taken by another site.
+    let conflict: Option<Uuid> = sqlx::query_scalar(
+        "SELECT id FROM sites WHERE hostname = $1"
+    )
+    .bind(&new_hostname)
+    .fetch_optional(&pool)
+    .await
+    .map_err(|e| anyhow::anyhow!("DB error: {e}"))?;
+
+    if let Some(other) = conflict {
+        if other != id {
+            anyhow::bail!("Hostname '{}' is already used by another site ({}).", new_hostname, other);
+        }
+    }
+
+    println!();
+    println!("  Rename site:");
+    println!("    ID:           {}", id);
+    println!("    Old hostname: {}", old_hostname);
+    println!("    New hostname: {}", new_hostname);
+    println!();
+    println!("  This will update:");
+    println!("    • sites.hostname");
+    println!("    • site_settings site_url");
+    println!("    • posts.content — /uploads/{} → /uploads/{}", old_hostname, new_hostname);
+    println!("    • Caddyfile block header: {}", caddyfile);
+    if let Some(ref dir) = install_dir {
+        println!("    • uploads/ symlink in: {}/uploads/", dir);
+    }
+    println!();
+    println!("  Note: hostname text manually typed into post body content (not via");
+    println!("  the media picker) will NOT be automatically updated.");
+    println!();
+
+    print!("  Proceed? [y/N] ");
+    use std::io::Write as _;
+    std::io::stdout().flush().ok();
+    let mut input = String::new();
+    std::io::stdin().read_line(&mut input).ok();
+    if input.trim().to_lowercase() != "y" {
+        println!("Aborted.");
+        return Ok(());
+    }
+
+    // 1. Update sites.hostname.
+    sqlx::query("UPDATE sites SET hostname = $1, updated_at = NOW() WHERE id = $2")
+        .bind(&new_hostname)
+        .bind(id)
+        .execute(&pool)
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to update hostname: {e}"))?;
+    println!("  ✓ Updated sites.hostname");
+
+    // 2. Update site_settings site_url.
+    let new_url = format!("http://{}", new_hostname);
+    sqlx::query(
+        "UPDATE site_settings SET value = $1 WHERE site_id = $2 AND key = 'site_url'"
+    )
+    .bind(&new_url)
+    .bind(id)
+    .execute(&pool)
+    .await
+    .map_err(|e| anyhow::anyhow!("Failed to update site_url: {e}"))?;
+    println!("  ✓ Updated site_settings site_url to {}", new_url);
+
+    // 3. Update embedded media upload URLs in posts.content.
+    let old_prefix = format!("/uploads/{}/", old_hostname);
+    let new_prefix = format!("/uploads/{}/", new_hostname);
+    let updated_posts = sqlx::query(
+        "UPDATE posts SET content = REPLACE(content, $1, $2) \
+         WHERE site_id = $3 AND content LIKE '%' || $1 || '%'"
+    )
+    .bind(&old_prefix)
+    .bind(&new_prefix)
+    .bind(id)
+    .execute(&pool)
+    .await
+    .map(|r| r.rows_affected())
+    .unwrap_or(0);
+    if updated_posts > 0 {
+        println!("  ✓ Updated {} post(s) with embedded upload URLs", updated_posts);
+    } else {
+        println!("  ✓ No embedded upload URLs to update in posts");
+    }
+
+    // 4. Update Caddyfile.
+    match update_caddyfile(&caddyfile, &old_hostname, &new_hostname) {
+        Ok(true) => {
+            println!("  ✓ Updated Caddyfile: {} → {}", old_hostname, new_hostname);
+            // Reload Caddy.
+            let reload = std::process::Command::new("sudo")
+                .args(["caddy", "reload", "--config", &caddyfile, "--adapter", "caddyfile"])
+                .status();
+            match reload {
+                Ok(s) if s.success() => println!("  ✓ Caddy reloaded"),
+                Ok(s) => println!("  Warning: caddy reload exited with {}", s),
+                Err(e) => println!("  Warning: could not reload Caddy: {}", e),
+            }
+        }
+        Ok(false) => println!(
+            "  ✓ Caddyfile: no block for '{}' found (may not be configured yet)",
+            old_hostname
+        ),
+        Err(e) => {
+            println!("  Warning: could not update Caddyfile: {}", e);
+            println!("    Manually replace '{}' with '{}' in {}", old_hostname, new_hostname, caddyfile);
+        }
+    }
+
+    // 5. Update hostname symlink in uploads/.
+    if let Some(ref dir) = install_dir {
+        let uploads = std::path::Path::new(dir).join("uploads");
+        let old_sym = uploads.join(&old_hostname);
+        let new_sym = uploads.join(&new_hostname);
+        let target  = uploads.join(id.to_string());
+
+        if old_sym.is_symlink() {
+            if let Err(e) = std::fs::remove_file(&old_sym) {
+                println!("  Warning: could not remove old symlink: {}", e);
+            }
+        }
+        if target.is_dir() && !new_sym.exists() {
+            match std::os::unix::fs::symlink(&target, &new_sym) {
+                Ok(()) => println!("  ✓ Symlink: uploads/{} -> uploads/{}/", new_hostname, id),
+                Err(e) => {
+                    println!("  Warning: could not create new symlink: {}", e);
+                    println!("    Manually: ln -s {}/{} {}/{}", uploads.display(), id, uploads.display(), new_hostname);
+                }
+            }
+        }
+    } else {
+        println!("  ℹ  --install-dir not provided — skipping symlink update.");
+        println!("     Pass --install-dir <path> or set INSTALL_DIR to update the symlink.");
+    }
+
+    println!();
+    println!("Rename complete. Restart Synaptic Signals to apply the new hostname.");
+    println!();
+    println!("Note: hostname text manually typed into post body content was not");
+    println!("automatically updated. Review posts for any references to '{}'.", old_hostname);
+
+    Ok(())
+}
+
+fn update_caddyfile(path: &str, old: &str, new_host: &str) -> std::io::Result<bool> {
+    let content = std::fs::read_to_string(path)?;
+    // Replace the site block header and log file path.
+    let updated = content
+        .replace(&format!("{} {{", old), &format!("{} {{", new_host))
+        .replace(&format!("{}.log", old), &format!("{}.log", new_host));
+    if updated == content {
+        return Ok(false);
+    }
+    std::fs::write(path, &updated)?;
+    Ok(true)
 }
 
 async fn list(database_url: Option<String>) -> anyhow::Result<()> {

@@ -122,11 +122,22 @@ pub async fn list(
     .into_iter()
     .collect();
 
-    let items: Vec<admin::pages::media::MediaItem> = raw.iter().map(|m| admin::pages::media::MediaItem {
+    let cs = state.site_hostname(admin.site_id);
+
+    let items: Vec<admin::pages::media::MediaItem> = raw.iter().map(|m| {
+        // Replace the UUID prefix in the stored path with the site hostname so
+        // public-facing paths read /uploads/{hostname}/file instead of /uploads/{uuid}/file.
+        let display_path = if !cs.is_empty() {
+            let filename = m.path.splitn(2, '/').nth(1).unwrap_or(&m.path);
+            format!("{}/{}", cs, filename)
+        } else {
+            m.path.clone()
+        };
+        admin::pages::media::MediaItem {
         id: m.id.to_string(),
         filename: m.filename.clone(),
         mime_type: m.mime_type.clone(),
-        path: m.path.clone(),
+        path: display_path,
         alt_text: m.alt_text.clone(),
         title: m.title.clone(),
         caption: m.caption.clone(),
@@ -136,7 +147,7 @@ pub async fn list(
         folder_id: m.folder_id.map(|u| u.to_string()),
         uploaded_by_name: uploader_names.get(&m.uploaded_by).cloned().unwrap_or_else(|| "Unknown".to_string()),
         uploaded_at: m.created_at.format("%b %-d, %Y").to_string(),
-    }).collect();
+    }}).collect();
 
     let folder_items: Vec<admin::pages::media::FolderItem> = folders.iter().map(|f| admin::pages::media::FolderItem {
         id: f.id.to_string(),
@@ -145,7 +156,6 @@ pub async fn list(
 
     let active_folder_id = params.get("folder_id").map(|s| s.as_str());
 
-    let cs = state.site_hostname(admin.site_id);
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
     Html(admin::pages::media::render_list(
         &items,

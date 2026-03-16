@@ -25,8 +25,26 @@ pub struct Media {
 
 impl Media {
     /// Build the public URL for this media item.
+    ///
+    /// In production (real hostname with a dot), generates a hostname-based URL
+    /// (`/uploads/{hostname}/{filename}`) so the site UUID is never exposed in
+    /// page source. In development with `localhost` or bare hostnames, falls back
+    /// to the UUID-based path which the Axum handler serves directly.
     pub fn url(&self, base_url: &str) -> String {
-        format!("{}/uploads/{}", base_url, self.path)
+        let stripped = base_url
+            .trim_start_matches("https://")
+            .trim_start_matches("http://");
+        let hostname = stripped.split(':').next().unwrap_or(stripped);
+
+        // Use hostname-based URL only for real domains (contains a dot and isn't localhost).
+        if hostname.contains('.') && hostname != "localhost" {
+            // self.path is "{uuid}/{filename}" — extract just the filename part.
+            let filename = self.path.splitn(2, '/').nth(1).unwrap_or(&self.path);
+            format!("{}/uploads/{}/{}", base_url, hostname, filename)
+        } else {
+            // Dev/local fallback: UUID-based path.
+            format!("{}/uploads/{}", base_url, self.path)
+        }
     }
 }
 

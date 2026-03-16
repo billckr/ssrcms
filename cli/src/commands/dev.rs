@@ -210,8 +210,8 @@ async fn reset(
     Ok(())
 }
 
-/// Delete every immediate child directory of `parent`, leaving the parent
-/// itself in place.  Skips non-directory entries (e.g. .gitkeep files).
+/// Delete every immediate child directory or symlink of `parent`, leaving the
+/// parent itself in place.  Skips regular files (e.g. .gitkeep).
 fn remove_subdirs(parent: &std::path::Path, label: &str) {
     if !parent.is_dir() {
         return;
@@ -225,7 +225,11 @@ fn remove_subdirs(parent: &std::path::Path, label: &str) {
     };
     let mut removed = 0u32;
     for entry in entries.flatten() {
-        if entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
+        let ft = match entry.file_type() {
+            Ok(t) => t,
+            Err(_) => continue,
+        };
+        if ft.is_dir() {
             match std::fs::remove_dir_all(entry.path()) {
                 Ok(()) => removed += 1,
                 Err(e) => println!(
@@ -233,10 +237,21 @@ fn remove_subdirs(parent: &std::path::Path, label: &str) {
                     entry.path().display()
                 ),
             }
+        } else if ft.is_symlink() {
+            // Hostname symlinks (uploads/{hostname} → uploads/{uuid}/) must be
+            // removed with remove_file, not remove_dir_all, to avoid following
+            // the symlink and deleting the target directory's contents.
+            match std::fs::remove_file(entry.path()) {
+                Ok(()) => removed += 1,
+                Err(e) => println!(
+                    "  Warning: could not remove symlink {}: {e}",
+                    entry.path().display()
+                ),
+            }
         }
     }
     if removed > 0 {
-        println!("  Removed {removed} director{} from {label}", if removed == 1 { "y" } else { "ies" });
+        println!("  Removed {removed} entr{} from {label}", if removed == 1 { "y" } else { "ies" });
     } else {
         println!("  {label} already empty — nothing to remove.");
     }

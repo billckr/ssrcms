@@ -200,6 +200,24 @@ async fn main() -> anyhow::Result<()> {
         Arc::new(RwLock::new(cache))
     };
 
+    // ── Ensure hostname symlinks exist for all sites ──────────────────────────
+    // uploads/{hostname} → uploads/{uuid}/ — lets Caddy and the Axum uploads
+    // handler serve media using the site hostname instead of exposing the UUID.
+    {
+        let cache = site_cache.read().expect("site_cache poisoned");
+        for (hostname, (site, _)) in cache.iter() {
+            let sym = std::path::Path::new(&cfg.uploads_dir).join(hostname);
+            let tgt = std::path::Path::new(&cfg.uploads_dir).join(site.id.to_string());
+            if tgt.is_dir() && !sym.exists() {
+                if let Err(e) = std::os::unix::fs::symlink(&tgt, &sym) {
+                    tracing::warn!("startup: failed to create upload symlink for '{}': {}", hostname, e);
+                } else {
+                    info!("startup: created upload symlink: {} -> {}/", hostname, site.id);
+                }
+            }
+        }
+    }
+
     // ── App-wide settings (from DB) ───────────────────────────────────────────
     let app_settings = AppSettings::load(&pool).await.unwrap_or_default();
     info!("app: {} | tz: {}", app_settings.app_name, app_settings.timezone);
@@ -239,7 +257,7 @@ async fn main() -> anyhow::Result<()> {
     info!("scheduler: view flush task started (60 s interval)");
 
     // ── Router ────────────────────────────────────────────────────────────────
-    let app = router::build(state.clone(), &cfg.uploads_dir, session_layer);
+    let app = router::build(state.clone(), session_layer);
 
     // ── PID file ──────────────────────────────────────────────────────────────
     let pid = std::process::id();

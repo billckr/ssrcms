@@ -12,7 +12,7 @@ use tower_sessions::SessionManagerLayer;
 use tower_sessions_sqlx_store::PostgresStore;
 
 use crate::app_state::AppState;
-use crate::handlers::{account, archive, auth, comment as comment_handler, form as form_handler, home, metrics as metrics_handler, page, plugin_route, post as post_handler, post_unlock, search, subscribe, theme_static};
+use crate::handlers::{account, archive, auth, comment as comment_handler, form as form_handler, home, metrics as metrics_handler, page, plugin_route, post as post_handler, post_unlock, search, subscribe, theme_static, uploads};
 use crate::handlers::admin::{appearance, comments as admin_comments, dashboard, documentation as admin_documentation, forms as admin_forms, media, menus as admin_menus, posts, profile, settings, sites as admin_sites, taxonomy, upload, users};
 
 /// Prevent browsers from caching admin and account pages.
@@ -58,14 +58,11 @@ async fn track_http_metrics(req: Request, next: Next) -> Response {
 
 pub fn build(
     state: AppState,
-    uploads_dir: &str,
     session_layer: SessionManagerLayer<PostgresStore>,
 ) -> Router {
     let upload_limit = DefaultBodyLimit::max(
         (state.config.max_upload_mb as usize).saturating_mul(1024 * 1024),
     );
-    // Static file services
-    let uploads_service = ServeDir::new(uploads_dir);
 
     // Collect plugin route paths so we can register each one individually.
     // Axum requires routes to be registered at build time; we add a dedicated
@@ -181,7 +178,7 @@ pub fn build(
         .route("/admin/sites/go-home", get(admin_sites::go_home))
         .route("/admin/sites/new", get(admin_sites::new_site))
         .route("/admin/sites/switch", post(admin_sites::switch))
-        .route("/admin/sites/{id}/settings", get(admin_sites::site_settings).post(admin_sites::save_site_settings))
+        .route("/admin/sites/{id}/settings", get(admin_sites::site_settings))
         .route("/admin/sites/{id}/site-config", post(admin_sites::save_site_config))
         .route("/admin/sites/{id}/delete", post(admin_sites::delete))
         .route("/admin/sites/{id}/provision-ssl", post(admin_sites::provision_ssl))
@@ -193,7 +190,7 @@ pub fn build(
         .route("/admin/forms/{name}/export", get(admin_forms::export_csv))
         .route("/admin/forms/{name}/toggle-block", post(admin_forms::toggle_block))
     // ── Static files ───────────────────────────────────────────────────
-        .nest_service("/uploads", uploads_service)
+        .route("/uploads/{*path}", get(uploads::serve))
         .route("/theme/static/{*path}", get(theme_static::serve))
         .nest_service("/admin/static", ServeDir::new("admin/static"));
 

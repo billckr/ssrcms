@@ -271,19 +271,29 @@ pub async fn create(
 
             // Seed the new site's directories and copy the default theme so it
             // appears immediately in the site admin's "My Themes" view.
-            let themes_dir = state.config.themes_dir.clone();
-            let sites_dir  = state.config.sites_dir.clone();
-            let uploads_dir = state.config.uploads_dir.clone();
-            let site_id = site.id;
+            let themes_dir   = state.config.themes_dir.clone();
+            let sites_dir    = state.config.sites_dir.clone();
+            let uploads_dir  = state.config.uploads_dir.clone();
+            let site_id      = site.id;
+            let site_hostname = hostname.clone();
             tokio::task::spawn_blocking(move || {
                 // Create sites/{uuid}/themes/ and uploads/{uuid}/ directories.
-                let site_themes_dir = FsPath::new(&sites_dir).join(site_id.to_string()).join("themes");
+                let site_themes_dir  = FsPath::new(&sites_dir).join(site_id.to_string()).join("themes");
                 let site_uploads_dir = FsPath::new(&uploads_dir).join(site_id.to_string());
                 if let Err(e) = std::fs::create_dir_all(&site_themes_dir) {
                     tracing::warn!(site_id = %site_id, "failed to create site themes dir: {}", e);
                 }
                 if let Err(e) = std::fs::create_dir_all(&site_uploads_dir) {
                     tracing::warn!(site_id = %site_id, "failed to create site uploads dir: {}", e);
+                }
+                // Create hostname symlink: uploads/{hostname} → uploads/{uuid}/
+                // so Caddy's file_server and the Axum uploads handler can serve
+                // files without exposing the UUID in public URLs.
+                let sym_path = FsPath::new(&uploads_dir).join(&site_hostname);
+                if !sym_path.exists() {
+                    if let Err(e) = std::os::unix::fs::symlink(&site_uploads_dir, &sym_path) {
+                        tracing::warn!(site_id = %site_id, "failed to create upload symlink for '{}': {}", site_hostname, e);
+                    }
                 }
                 // Copy the global default theme into sites/{uuid}/themes/default/.
                 let src = FsPath::new(&themes_dir).join("global").join("default");
@@ -402,102 +412,6 @@ pub async fn site_settings(
     Html(admin::pages::sites::render_settings(&data, None, &ctx)).into_response()
 }
 
-#[derive(Deserialize)]
-pub struct SiteSettingsForm {
-    pub hostname: String,
-}
-
-/// POST /admin/sites/{id}/settings — save site hostname.
-pub async fn save_site_settings(
-    State(state): State<AppState>,
-    admin: AdminUser,
-    Path(id): Path<Uuid>,
-    Form(form): Form<SiteSettingsForm>,
-) -> impl IntoResponse {
-    let site = match crate::models::site::get_by_id(&state.db, id).await {
-        Ok(s) => s,
-        Err(_) => return Redirect::to("/admin/sites").into_response(),
-    };
-    let is_owner = site.owner_user_id == Some(admin.user.id);
-    let has_role = matches!(
-        crate::models::site_user::get_role(&state.db, id, admin.user.id)
-            .await.ok().flatten().as_deref(),
-        Some("admin" | "site_admin")
-    );
-    if !admin.caps.is_global_admin && !is_owner && !has_role {
-        return (axum::http::StatusCode::FORBIDDEN, "Forbidden").into_response();
-    }
-    let cs = state.site_hostname(admin.site_id);
-    let ctx = super::page_ctx_full(&state, &admin, &cs).await;
-    let hostname = form.hostname.trim().to_lowercase();
-
-    // Helper: load current site config for error re-renders.
-    let cfg = state.get_site_by_id(id)
-        .map(|(_, s)| s)
-        .unwrap_or_else(|| (*state.settings).clone());
-
-    if hostname.is_empty() {
-        let data = SiteSettingsData {
-            id: id.to_string(),
-            hostname: String::new(),
-            site_name: cfg.site_name.clone(),
-            site_description: cfg.site_description.clone(),
-            language: cfg.language.clone(),
-            posts_per_page: cfg.posts_per_page,
-            date_format: cfg.date_format.clone(),
-        };
-        return Html(admin::pages::sites::render_settings(&data, Some("Hostname cannot be empty."), &ctx)).into_response();
-    }
-
-    let result = sqlx::query(
-        "UPDATE sites SET hostname = $1, updated_at = NOW() WHERE id = $2",
-    )
-    .bind(&hostname)
-    .bind(id)
-    .execute(&state.db)
-    .await;
-
-    match result {
-        Ok(_) => {
-            // Keep site_url in sync with the new hostname.
-            // site_url is always derived as http://{hostname} — port/https
-            // overrides are a super_admin concern handled via CLI or direct DB.
-            let derived_url = format!("http://{}", hostname);
-            let _ = sqlx::query(
-                "INSERT INTO site_settings (site_id, key, value)
-                 VALUES ($1, 'site_url', $2)
-                 ON CONFLICT (site_id, key) DO UPDATE SET value = EXCLUDED.value",
-            )
-            .bind(id)
-            .bind(&derived_url)
-            .execute(&state.db)
-            .await;
-
-            if let Err(e) = state.reload_site_cache().await {
-                tracing::warn!("site cache reload failed after settings save: {:?}", e);
-            }
-            Redirect::to("/admin/sites").into_response()
-        }
-        Err(e) => {
-            let msg = if e.to_string().contains("duplicate") || e.to_string().contains("unique") {
-                "A site with that hostname already exists.".to_string()
-            } else {
-                format!("Failed to save: {e}")
-            };
-            let data = SiteSettingsData {
-                id: id.to_string(),
-                hostname,
-                site_name: cfg.site_name.clone(),
-                site_description: cfg.site_description.clone(),
-                language: cfg.language.clone(),
-                posts_per_page: cfg.posts_per_page,
-                date_format: cfg.date_format.clone(),
-            };
-            Html(admin::pages::sites::render_settings(&data, Some(&msg), &ctx)).into_response()
-        }
-    }
-}
-
 /// POST /admin/sites/{id}/delete — delete a site.
 /// super_admin can delete any site.
 /// site_admin (owner) can delete their own site unless it is their default site.
@@ -538,6 +452,13 @@ pub async fn delete(
                 tracing::warn!("failed to remove site data dir for site {}: {:?}", id, e);
             } else {
                 tracing::info!("removed site data dir for deleted site {}", id);
+            }
+        }
+        // Remove hostname symlink: uploads/{hostname} → uploads/{uuid}/
+        let sym_path = std::path::Path::new(&state.config.uploads_dir).join(&site.hostname);
+        if sym_path.is_symlink() {
+            if let Err(e) = std::fs::remove_file(&sym_path) {
+                tracing::warn!("failed to remove upload symlink for '{}': {:?}", site.hostname, e);
             }
         }
         // Also remove the site's upload subdirectory under uploads/{uuid}/.
