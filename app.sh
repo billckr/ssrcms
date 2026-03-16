@@ -188,6 +188,10 @@ cmd_restart() {
 
 cmd_rebuild() {
     cmd_stop
+    if cli_is_stale; then
+        log "CLI source has changed — rebuilding synap-cli..."
+        cmd_update_cli
+    fi
     cmd_build
     sleep 1
     cmd_start
@@ -233,12 +237,14 @@ cmd_update_cli() {
     log "synap-cli updated: $(command -v synap-cli)"
 }
 
-# Returns 0 (true) if synap-cli is missing or older than any migration file.
+# Returns 0 (true) if synap-cli is missing or older than any CLI source or migration file.
 cli_is_stale() {
     local cli_bin
     cli_bin=$(command -v synap-cli 2>/dev/null) || return 0  # not installed = stale
     local newer
-    newer=$(find "$SCRIPT_DIR/migrations" -name "*.sql" -newer "$cli_bin" 2>/dev/null | head -1)
+    newer=$(find "$SCRIPT_DIR/cli/src" "$SCRIPT_DIR/migrations" \
+        \( -name "*.rs" -o -name "*.sql" -o -name "Cargo.toml" \) \
+        -newer "$cli_bin" 2>/dev/null | head -1)
     [[ -n "$newer" ]]
 }
 
@@ -248,7 +254,7 @@ cmd_dev_reset() {
         exit 1
     fi
     if cli_is_stale; then
-        log "Migrations have changed since synap-cli was last built — rebuilding CLI..."
+        log "CLI source has changed — rebuilding synap-cli..."
         cmd_update_cli
     fi
     cd "$SCRIPT_DIR"
@@ -261,7 +267,7 @@ cmd_migrate() {
         exit 1
     fi
     if cli_is_stale; then
-        log "Migrations have changed since synap-cli was last built — rebuilding CLI..."
+        log "CLI source has changed — rebuilding synap-cli..."
         cmd_update_cli
     fi
     cd "$SCRIPT_DIR"
