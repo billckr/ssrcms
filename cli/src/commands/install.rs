@@ -462,27 +462,55 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
     // In non-interactive mode the install script handles deployment — skip the manual steps.
     if !ni {
         let pid_file = std::path::Path::new(&install_dir).join(".synaptic.pid");
-        let rebuild_note = if pid_file.exists() {
-            "⚠️  App is already running — rebuild will restart it"
-        } else {
-            "Builds and starts the app for the first time"
-        };
+        let app_sh   = std::path::Path::new(&install_dir).join("app.sh");
 
         println!("\n── Next Steps ───────────────────────────────────────────");
-        println!("  1. Copy the binary and files to {}", install_dir);
-        println!("  2. Copy {} to /etc/systemd/system/",
-            output_dir.join("synaptic-signals.service").display()
-        );
-        println!("  3. Copy {} to /etc/caddy/Caddyfile (or include it)",
-            output_dir.join("Caddyfile").display()
-        );
-        println!("     Then run: sudo caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile");
-        println!("  4. Run:  sudo synap-cli caddy setup --app-user {}", service_user);
-        println!("     Sets up Caddy write permissions + log directory for SSL provisioning.");
-        println!("  5. Ensure {install_dir}/.env contains DATABASE_URL and SECRET_KEY");
-        println!("     (INSTALL_DIR has been written automatically)");
-        println!("  6. Run:  systemctl daemon-reload && systemctl enable --now synaptic-signals");
-        println!("  7. Run './app.sh rebuild'   — {rebuild_note}");
+
+        if app_sh.exists() {
+            // Dev environment: app.sh is present — start or rebuild automatically.
+            let is_running = pid_file.exists() && {
+                std::fs::read_to_string(&pid_file)
+                    .ok()
+                    .and_then(|s| s.trim().parse::<u32>().ok())
+                    .map(|pid| {
+                        std::process::Command::new("kill")
+                            .args(["-0", &pid.to_string()])
+                            .status()
+                            .map(|s| s.success())
+                            .unwrap_or(false)
+                    })
+                    .unwrap_or(false)
+            };
+
+            let action = if is_running { "rebuild" } else { "start" };
+            println!("  Running ./app.sh {}...\n", action);
+            let status = std::process::Command::new("bash")
+                .arg(&app_sh)
+                .arg(action)
+                .current_dir(&install_dir)
+                .status();
+            match status {
+                Ok(s) if s.success() => {}
+                Ok(s) => println!("  Warning: app.sh {} exited with status {}", action, s),
+                Err(e) => println!("  Warning: could not run app.sh {}: {}", action, e),
+            }
+        } else {
+            // Systemd / production deployment: show manual steps.
+            println!("  1. Copy the binary and files to {}", install_dir);
+            println!("  2. Copy {} to /etc/systemd/system/",
+                output_dir.join("synaptic-signals.service").display()
+            );
+            println!("  3. Copy {} to /etc/caddy/Caddyfile (or include it)",
+                output_dir.join("Caddyfile").display()
+            );
+            println!("     Then run: sudo caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile");
+            println!("  4. Run:  sudo synap-cli caddy setup --app-user {}", service_user);
+            println!("     Sets up Caddy write permissions + log directory for SSL provisioning.");
+            println!("  5. Ensure {install_dir}/.env contains DATABASE_URL and SECRET_KEY");
+            println!("     (INSTALL_DIR has been written automatically)");
+            println!("  6. Run:  systemctl daemon-reload && systemctl enable --now synaptic-signals");
+        }
+
         println!("\nSite will be live at: https://{}", domain);
     }
 
