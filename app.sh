@@ -63,6 +63,12 @@ is_running() {
 free_port() {
     if fuser "${PORT}/tcp" &>/dev/null 2>&1; then
         log "Port ${PORT} is in use — clearing..."
+        # If the systemd service is holding the port, stop it properly so
+        # Restart=always doesn't bring it back before we bind.
+        if systemctl is-active --quiet synaptic-signals 2>/dev/null; then
+            log "Stopping systemd synaptic-signals service..."
+            systemctl stop synaptic-signals 2>/dev/null || true
+        fi
         fuser -k "${PORT}/tcp" 2>/dev/null || true
         sleep 1
     fi
