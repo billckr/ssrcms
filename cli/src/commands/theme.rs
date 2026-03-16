@@ -73,10 +73,11 @@ pub async fn run(action: ThemeAction) -> anyhow::Result<()> {
     }
 }
 
-/// Collect all theme directories under themes/global/ and themes/sites/*/.
+/// Collect all theme directories under themes/global/ and sites/{uuid}/themes/.
 /// Returns (path, source_label) pairs. Falls back to flat themes/ for pre-multisite layouts.
 fn collect_theme_dirs() -> Vec<(std::path::PathBuf, String)> {
     let themes_root = Path::new("themes");
+    let sites_root  = Path::new("sites");
     let mut dirs: Vec<(std::path::PathBuf, String)> = Vec::new();
 
     let global_dir = themes_root.join("global");
@@ -84,13 +85,16 @@ fn collect_theme_dirs() -> Vec<(std::path::PathBuf, String)> {
         dirs.push((global_dir, "global".into()));
     }
 
-    let sites_dir = themes_root.join("sites");
-    if sites_dir.is_dir() {
-        for entry in std::fs::read_dir(&sites_dir).into_iter().flatten().flatten() {
-            let p = entry.path();
-            if p.is_dir() {
-                let label = format!("site:{}", p.file_name().unwrap_or_default().to_string_lossy());
-                dirs.push((p, label));
+    // Per-site themes live at sites/{uuid}/themes/.
+    if sites_root.is_dir() {
+        for entry in std::fs::read_dir(sites_root).into_iter().flatten().flatten() {
+            let site_dir = entry.path();
+            if !site_dir.is_dir() { continue; }
+            let uuid_str = site_dir.file_name().unwrap_or_default().to_string_lossy().to_string();
+            let themes_dir = site_dir.join("themes");
+            if themes_dir.is_dir() {
+                let label = format!("site:{uuid_str}");
+                dirs.push((themes_dir, label));
             }
         }
     }
@@ -332,7 +336,7 @@ async fn activate(
             let site_id = resolve_site_id(&pool, s).await?;
 
             let global_src  = themes_root.join("global").join(&name);
-            let site_dest   = themes_root.join("sites").join(site_id.to_string()).join(&name);
+            let site_dest   = Path::new("sites").join(site_id.to_string()).join("themes").join(&name);
 
             if site_dest.is_dir() {
                 // Already has a local copy — just update the DB setting.
@@ -347,7 +351,7 @@ async fn activate(
                 }
                 copy_dir_all(&global_src, &site_dest)
                     .map_err(|e| anyhow::anyhow!("Failed to copy theme '{}': {e}", name))?;
-                println!("Copied '{}' from global → themes/sites/{}/{}.", name, site_id, name);
+                println!("Copied '{}' from global → sites/{}/themes/{}.", name, site_id, name);
             }
 
             // Update site_settings for this site.
@@ -384,7 +388,6 @@ async fn remove(
     }
 
     let pool = super::connect_db().await?;
-    let themes_root = Path::new("themes");
 
     let site_id = match &site {
         Some(s) => resolve_site_id(&pool, s).await?,
@@ -404,7 +407,7 @@ async fn remove(
         }
     };
 
-    let site_path = themes_root.join("sites").join(site_id.to_string()).join(&name);
+    let site_path = Path::new("sites").join(site_id.to_string()).join("themes").join(&name);
 
     if !site_path.is_dir() {
         anyhow::bail!(
@@ -430,7 +433,7 @@ async fn remove(
     }
 
     // Guard: refuse to remove the last local theme — the site must always have at least one.
-    let site_themes_dir = themes_root.join("sites").join(site_id.to_string());
+    let site_themes_dir = Path::new("sites").join(site_id.to_string()).join("themes");
     let local_theme_count = std::fs::read_dir(&site_themes_dir)
         .map(|entries| {
             entries.flatten()
@@ -449,9 +452,9 @@ async fn remove(
     }
 
     // Path traversal guard: confirm site_path is a direct child of the site's theme dir.
-    let expected_parent = themes_root
-        .join("sites")
+    let expected_parent = Path::new("sites")
         .join(site_id.to_string())
+        .join("themes")
         .canonicalize()
         .map_err(|_| anyhow::anyhow!("Site theme directory not found."))?;
 

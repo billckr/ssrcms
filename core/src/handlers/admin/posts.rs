@@ -848,10 +848,11 @@ async fn fetch_term_options(state: &AppState, site_id: Option<Uuid>) -> (Vec<Ter
 fn scan_templates(state: &AppState, site_id: Option<Uuid>) -> Vec<String> {
     let theme = state.active_theme_for_site(site_id);
     let themes_dir = &state.config.themes_dir;
+    let sites_dir  = &state.config.sites_dir;
 
     // Check site-specific theme dir first, then global.
     let theme_dir = if let Some(sid) = site_id {
-        let site_path = std::path::Path::new(themes_dir).join("sites").join(sid.to_string()).join(&theme);
+        let site_path = std::path::Path::new(sites_dir).join(sid.to_string()).join("themes").join(&theme);
         if site_path.is_dir() {
             site_path
         } else {

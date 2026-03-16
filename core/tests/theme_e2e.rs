@@ -88,6 +88,7 @@ async fn test_single_post_renders_html() {
     let hook_registry = Arc::new(HookRegistry::new());
     let engine = TemplateEngine::new(
         "themes",
+        "sites",
         "default",
         base_url,
         hook_registry,

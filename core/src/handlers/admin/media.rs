@@ -234,6 +234,30 @@ pub async fn api_update_folder(
         }
         Err(_) => return (axum::http::StatusCode::NOT_FOUND, axum::Json(serde_json::json!({"error":"Not found"}))).into_response(),
     }
+    // Verify the target folder belongs to the same site as the media file.
+    // Prevents assigning a file to a folder owned by a different site.
+    if let Some(fid) = folder_id {
+        if !admin.caps.is_global_admin {
+            let folder_site: Option<uuid::Uuid> = sqlx::query_scalar(
+                "SELECT site_id FROM media_folders WHERE id = $1"
+            )
+            .bind(fid)
+            .fetch_optional(&state.db)
+            .await
+            .unwrap_or(None);
+            match folder_site {
+                None => return (axum::http::StatusCode::NOT_FOUND, axum::Json(serde_json::json!({"error":"Folder not found"}))).into_response(),
+                Some(fsid) if Some(fsid) != admin.site_id => {
+                    tracing::warn!(
+                        "api_update_folder: user {} tried to assign media {} to folder {} belonging to site {}",
+                        admin.user.id, id, fid, fsid
+                    );
+                    return (axum::http::StatusCode::FORBIDDEN, axum::Json(serde_json::json!({"error":"Forbidden"}))).into_response();
+                }
+                _ => {}
+            }
+        }
+    }
     match sqlx::query("UPDATE media SET folder_id = $1 WHERE id = $2")
         .bind(folder_id)
         .bind(id)

@@ -32,6 +32,12 @@ pub struct AppConfig {
     #[serde(default = "default_uploads_dir")]
     pub uploads_dir: String,
 
+    /// Path to the per-site data directory (custom themes and uploads for each site).
+    /// Each site gets a subdirectory named by its UUID: `{sites_dir}/{uuid}/themes/` and
+    /// `{sites_dir}/{uuid}/uploads/`. Defaults to "sites".
+    #[serde(default = "default_sites_dir")]
+    pub sites_dir: String,
+
     /// Enable hot-reload of templates and plugins (dev mode)
     #[serde(default)]
     #[allow(dead_code)]
@@ -125,6 +131,10 @@ fn default_plugins_dir() -> String {
 
 fn default_uploads_dir() -> String {
     "uploads".to_string()
+}
+
+fn default_sites_dir() -> String {
+    "sites".to_string()
 }
 
 fn default_log_format() -> String {
@@ -250,6 +260,7 @@ mod tests {
             themes_dir: default_themes_dir(),
             plugins_dir: default_plugins_dir(),
             uploads_dir: default_uploads_dir(),
+            sites_dir: default_sites_dir(),
             dev_mode: false,
             log_level: default_log_level(),
             log_format: default_log_format(),

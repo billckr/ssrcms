@@ -355,25 +355,28 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
         .map_err(|e| anyhow::anyhow!("Failed to seed app_settings: {e}"))?;
     }
 
-    // Copy the global default theme into the new site's own theme folder.
+    // Create the site's data directories and seed the default theme.
+    let site_themes_dst = std::path::Path::new(&install_dir)
+        .join("sites").join(site_id.to_string()).join("themes").join("default");
+    let site_uploads_dst = std::path::Path::new(&install_dir)
+        .join("uploads").join(site_id.to_string());
+    let _ = std::fs::create_dir_all(&site_uploads_dst);
+
     let theme_src = std::path::Path::new(&install_dir)
         .join("themes").join("global").join("default");
-    let theme_dst = std::path::Path::new(&install_dir)
-        .join("themes").join("sites").join(site_id.to_string()).join("default");
     if theme_src.is_dir() {
-        match copy_dir_all(&theme_src, &theme_dst) {
+        match copy_dir_all(&theme_src, &site_themes_dst) {
             Ok(()) => {}
             Err(e) => println!(
                 "Warning: could not copy default theme ({}). \
-                 The site will fall back to the shared global default until \
-                 you copy themes/global/default/ to themes/sites/{}/default/ manually.",
+                 Copy themes/global/default/ to sites/{}/themes/default/ manually.",
                 e, site_id
             ),
         }
     } else {
         println!(
             "Note: themes/global/default/ not found at '{}'. \
-             Copy it to themes/sites/{}/default/ after placing the themes directory.",
+             Copy it to sites/{}/themes/default/ after placing the themes directory.",
             theme_src.display(), site_id
         );
     }

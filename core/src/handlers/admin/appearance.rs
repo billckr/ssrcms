@@ -73,9 +73,10 @@ pub async fn activate(
         return render_appearance_list(&state, Some("Invalid theme name."), &ctx, admin.site_id, "my").await.into_response();
     }
 
+    let sites_dir   = &state.config.sites_dir;
     let global_dir  = FsPath::new(themes_dir).join("global");
     let private_dir = FsPath::new(themes_dir).join("private");
-    let site_dir    = admin.site_id.map(|id| FsPath::new(themes_dir).join("sites").join(id.to_string()));
+    let site_dir    = admin.site_id.map(|id| FsPath::new(sites_dir).join(id.to_string()).join("themes"));
 
     // Resolve which directory the theme lives in.
     let theme_path = if global_dir.join(&form.theme).is_dir() {
@@ -128,9 +129,9 @@ pub async fn activate(
     let is_from_global  = canonical_theme.starts_with(&canonical_global);
     let is_from_private = admin.caps.is_global_admin && canonical_theme.starts_with(&canonical_private);
     if is_from_global || is_from_private {
-        let site_copy = FsPath::new(themes_dir)
-            .join("sites")
+        let site_copy = FsPath::new(&state.config.sites_dir)
             .join(site_id.to_string())
+            .join("themes")
             .join(&form.theme);
         if !site_copy.exists() {
             let src = canonical_theme.clone();
@@ -203,10 +204,11 @@ pub async fn delete(
     }
 
     let themes_dir = &state.config.themes_dir;
+    let sites_dir  = &state.config.sites_dir;
     let global_path  = FsPath::new(themes_dir).join("global").join(&form.theme);
     let private_path = FsPath::new(themes_dir).join("private").join(&form.theme);
     let site_path    = admin.site_id
-        .map(|id| FsPath::new(themes_dir).join("sites").join(id.to_string()).join(&form.theme));
+        .map(|id| FsPath::new(sites_dir).join(id.to_string()).join("themes").join(&form.theme));
 
     // Determine where the theme lives using the explicit source hint from the form.
     // Falling back to filesystem discovery is a security risk — if source is
@@ -276,7 +278,7 @@ pub async fn delete(
         },
         _ => {
             let sid = admin.site_id.unwrap();
-            match FsPath::new(themes_dir).join("sites").join(sid.to_string()).canonicalize() {
+            match FsPath::new(&state.config.sites_dir).join(sid.to_string()).join("themes").canonicalize() {
                 Ok(p) => p,
                 Err(_) => err!("Theme not found."),
             }
@@ -315,7 +317,7 @@ pub async fn screenshot(
     let themes_dir  = FsPath::new(&state.config.themes_dir);
     let global_dir  = themes_dir.join("global");
     let private_dir = themes_dir.join("private");
-    let site_dir    = admin.site_id.map(|id| themes_dir.join("sites").join(id.to_string()));
+    let site_dir    = admin.site_id.map(|id| FsPath::new(&state.config.sites_dir).join(id.to_string()).join("themes"));
 
     // Try global, then private (super_admin only), then site dir.
     let mut dirs_to_search: Vec<PathBuf> = vec![global_dir];
@@ -396,12 +398,13 @@ pub async fn upload_theme(
     };
 
     // Route the upload to the correct subdirectory.
-    // Super admins upload to themes/global/; site admins upload to themes/sites/<site_id>/.
+    // Super admins upload to themes/global/; site admins upload to sites/<site_id>/themes/.
     let themes_parent = state.config.themes_dir.clone();
+    let sites_parent  = state.config.sites_dir.clone();
     let target_dir = if admin.caps.is_global_admin {
         format!("{}/global", themes_parent)
     } else if let Some(sid) = admin.site_id {
-        format!("{}/sites/{}", themes_parent, sid)
+        format!("{}/{}/themes", sites_parent, sid)
     } else {
         return render_appearance_list(&state, Some("No site selected. Cannot install theme."), &ctx, admin.site_id, "my")
             .await
@@ -653,7 +656,7 @@ pub async fn create_theme(
 
     // Determine target directory.
     // super_admin: public → themes/global/<name>/, private → themes/private/<name>/
-    // site_admin:  always → themes/sites/<id>/<name>/  (visibility ignored)
+    // site_admin:  always → sites/<id>/themes/<name>/  (visibility ignored)
     let themes_parent = &state.config.themes_dir;
     let is_public = form.visibility.as_deref() == Some("public");
     let target_dir: PathBuf = if admin.caps.is_global_admin {
@@ -663,7 +666,7 @@ pub async fn create_theme(
             FsPath::new(themes_parent).join("private").join(&name)
         }
     } else if let Some(sid) = admin.site_id {
-        FsPath::new(themes_parent).join("sites").join(sid.to_string()).join(&name)
+        FsPath::new(&state.config.sites_dir).join(sid.to_string()).join("themes").join(&name)
     } else {
         form_err!("No site selected. Cannot create theme.");
     };
@@ -726,7 +729,7 @@ pub async fn new_file(
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
 
     let source = form.source.as_deref().unwrap_or("site");
-    let Some(theme_dir) = resolve_theme_dir_by_source(&state.config.themes_dir, &theme, Some(source), admin.site_id) else {
+    let Some(theme_dir) = resolve_theme_dir_by_source(&state.config.themes_dir, &state.config.sites_dir, &theme, Some(source), admin.site_id) else {
         return render_appearance_list(&state, Some("Theme not found."), &ctx, admin.site_id, "my")
             .await.into_response();
     };
@@ -864,7 +867,7 @@ pub async fn get_theme(
         }
     };
 
-    let dest = FsPath::new(themes_dir).join("sites").join(site_id.to_string()).join(&name);
+    let dest = FsPath::new(&state.config.sites_dir).join(site_id.to_string()).join("themes").join(&name);
     if dest.exists() {
         // Already copied — just send them to their themes.
         return Redirect::to("/admin/appearance?filter=my").into_response();
@@ -1032,12 +1035,13 @@ fn url_encode_param(s: &str) -> String {
 /// correct copy of the theme rather than whichever copy happens to win in the
 /// generic prefer_site search.
 ///
-/// - `"site"` → `themes/sites/<site_id>/<name>/`
+/// - `"site"` → `sites/<site_id>/themes/<name>/`
 /// - `"global"` → `themes/global/<name>/`
 /// - `"private"` → `themes/private/<name>/`
 /// - `None` or unknown → falls back to site copy first, then global, then private
 fn resolve_theme_dir_by_source(
     themes_dir: &str,
+    sites_dir: &str,
     theme_name: &str,
     source: Option<&str>,
     site_id: Option<Uuid>,
@@ -1052,7 +1056,7 @@ fn resolve_theme_dir_by_source(
             // "site" or fallback — use the site-specific copy if one exists,
             // then global, then private (super admins may have no site copy yet)
             if let Some(id) = site_id {
-                let s = FsPath::new(themes_dir).join("sites").join(id.to_string()).join(theme_name);
+                let s = FsPath::new(sites_dir).join(id.to_string()).join("themes").join(theme_name);
                 if s.is_dir() { return Some(s); }
             }
             let g = FsPath::new(themes_dir).join("global").join(theme_name);
@@ -1145,7 +1149,7 @@ pub async fn edit_file(
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
 
     let source = q.source.as_deref().unwrap_or("site");
-    let Some(theme_dir) = resolve_theme_dir_by_source(&state.config.themes_dir, &theme, Some(source), admin.site_id) else {
+    let Some(theme_dir) = resolve_theme_dir_by_source(&state.config.themes_dir, &state.config.sites_dir, &theme, Some(source), admin.site_id) else {
         return render_appearance_list(&state, Some("Theme not found."), &ctx, admin.site_id, "my")
             .await.into_response();
     };
@@ -1261,7 +1265,7 @@ pub async fn save_file(
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
 
     let source = form.source.as_deref().unwrap_or("site");
-    let Some(theme_dir) = resolve_theme_dir_by_source(&state.config.themes_dir, &theme, Some(source), admin.site_id) else {
+    let Some(theme_dir) = resolve_theme_dir_by_source(&state.config.themes_dir, &state.config.sites_dir, &theme, Some(source), admin.site_id) else {
         return render_appearance_list(&state, Some("Theme not found."), &ctx, admin.site_id, "my")
             .await.into_response();
     };
@@ -1339,7 +1343,7 @@ pub async fn restore_file(
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
 
     let source = form.source.as_deref().unwrap_or("site");
-    let Some(theme_dir) = resolve_theme_dir_by_source(&state.config.themes_dir, &theme, Some(source), admin.site_id) else {
+    let Some(theme_dir) = resolve_theme_dir_by_source(&state.config.themes_dir, &state.config.sites_dir, &theme, Some(source), admin.site_id) else {
         return render_appearance_list(&state, Some("Theme not found."), &ctx, admin.site_id, "my")
             .await.into_response();
     };
@@ -1398,7 +1402,7 @@ pub async fn delete_file(
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
 
     let source = form.source.as_deref().unwrap_or("site");
-    let Some(theme_dir) = resolve_theme_dir_by_source(&state.config.themes_dir, &theme, Some(source), admin.site_id) else {
+    let Some(theme_dir) = resolve_theme_dir_by_source(&state.config.themes_dir, &state.config.sites_dir, &theme, Some(source), admin.site_id) else {
         return render_appearance_list(&state, Some("Theme not found."), &ctx, admin.site_id, "my")
             .await.into_response();
     };
@@ -1514,7 +1518,7 @@ async fn render_appearance_list(
 
     let global_dir  = FsPath::new(themes_dir).join("global");
     let private_dir = FsPath::new(themes_dir).join("private");
-    let site_dir    = site_id.map(|id| FsPath::new(themes_dir).join("sites").join(id.to_string()));
+    let site_dir    = site_id.map(|id| FsPath::new(&state.config.sites_dir).join(id.to_string()).join("themes"));
 
     let mut themes = Vec::new();
     scan_theme_dir(&global_dir, &active_theme_from_db, "global", &mut themes);
@@ -1555,7 +1559,7 @@ async fn render_appearance_list(
     // renders correctly for super_admin and site_admin alike.
     if filter == "global" || filter == "private" {
         if let Some(sid) = site_id {
-            let site_dir = FsPath::new(themes_dir).join("sites").join(sid.to_string());
+            let site_dir = FsPath::new(&state.config.sites_dir).join(sid.to_string()).join("themes");
             for theme in &mut themes {
                 theme.has_site_copy = site_dir.join(&theme.name).is_dir();
             }

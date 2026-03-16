@@ -431,6 +431,22 @@ pub async fn save_new(
                                     if let Err(e) = state.reload_site_cache().await {
                                         tracing::warn!("site cache reload failed: {:?}", e);
                                     }
+                                    // Create sites/{uuid}/themes/ and uploads/{uuid}/ directories.
+                                    let sid       = site.id;
+                                    let sites_dir = state.config.sites_dir.clone();
+                                    let upl_dir   = state.config.uploads_dir.clone();
+                                    let thm_dir   = state.config.themes_dir.clone();
+                                    tokio::task::spawn_blocking(move || {
+                                        let site_themes = std::path::Path::new(&sites_dir).join(sid.to_string()).join("themes");
+                                        let site_uploads = std::path::Path::new(&upl_dir).join(sid.to_string());
+                                        let _ = std::fs::create_dir_all(&site_themes);
+                                        let _ = std::fs::create_dir_all(&site_uploads);
+                                        let src = std::path::Path::new(&thm_dir).join("global").join("default");
+                                        let dst = site_themes.join("default");
+                                        if src.is_dir() && !dst.exists() {
+                                            let _ = crate::handlers::admin::appearance::copy_dir_all(&src, &dst);
+                                        }
+                                    });
                                     // If assigning as admin, claim ownership of the new site.
                                     if site_role == "admin" {
                                         let _ = sqlx::query(
@@ -490,6 +506,22 @@ pub async fn save_new(
                                     if let Err(e) = state.reload_site_cache().await {
                                         tracing::warn!("site cache reload failed: {:?}", e);
                                     }
+                                    // Create sites/{uuid}/themes/ and uploads/{uuid}/ directories.
+                                    let sid       = site.id;
+                                    let sites_dir = state.config.sites_dir.clone();
+                                    let upl_dir   = state.config.uploads_dir.clone();
+                                    let thm_dir   = state.config.themes_dir.clone();
+                                    tokio::task::spawn_blocking(move || {
+                                        let site_themes = std::path::Path::new(&sites_dir).join(sid.to_string()).join("themes");
+                                        let site_uploads = std::path::Path::new(&upl_dir).join(sid.to_string());
+                                        let _ = std::fs::create_dir_all(&site_themes);
+                                        let _ = std::fs::create_dir_all(&site_uploads);
+                                        let src = std::path::Path::new(&thm_dir).join("global").join("default");
+                                        let dst = site_themes.join("default");
+                                        if src.is_dir() && !dst.exists() {
+                                            let _ = crate::handlers::admin::appearance::copy_dir_all(&src, &dst);
+                                        }
+                                    });
                                     Some(site.id)
                                 }
                                 Err(e) => {

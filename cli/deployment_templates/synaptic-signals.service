@@ -20,7 +20,7 @@ SyslogIdentifier=synaptic-signals
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
-ReadWritePaths={INSTALL_DIR}/uploads {INSTALL_DIR}/search-index {INSTALL_DIR}/themes/sites {INSTALL_DIR}/plugins/sites {INSTALL_DIR} /etc/caddy/Caddyfile /var/log/caddy
+ReadWritePaths={INSTALL_DIR}/uploads {INSTALL_DIR}/search-index {INSTALL_DIR}/sites {INSTALL_DIR}/plugins/sites {INSTALL_DIR} /etc/caddy/Caddyfile /var/log/caddy
 
 [Install]
 WantedBy=multi-user.target

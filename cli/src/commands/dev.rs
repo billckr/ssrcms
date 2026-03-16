@@ -131,17 +131,17 @@ async fn reset(
 
     // Filesystem paths that will be cleaned.
     if let Some(ref dir) = install_dir {
-        let themes_sites = format!("{dir}/themes/sites/");
+        let sites        = format!("{dir}/sites/");
         let themes_priv  = format!("{dir}/themes/private/");
         let uploads      = format!("{dir}/uploads/");
         println!("  Install dir : {dir}");
-        println!("  Filesystem  : {themes_sites}   (all UUID subdirs)");
+        println!("  Filesystem  : {sites}          (all per-site UUID subdirs)");
         println!("                {themes_priv}  (all subdirs)");
-        println!("                {uploads}        (all uploaded files)");
+        println!("                {uploads}        (all per-site upload subdirs)");
     } else {
         println!("  Filesystem  : INSTALL_DIR not set — DB only, no file cleanup.");
         println!("                Pass --install-dir or set INSTALL_DIR in .env to");
-        println!("                also remove themes/sites/, themes/private/, uploads/.");
+        println!("                also remove sites/, themes/private/, uploads/.");
     }
 
     println!();
@@ -198,48 +198,16 @@ async fn reset(
     if let Some(ref dir) = install_dir {
         let base = std::path::Path::new(dir);
 
-        remove_subdirs(&base.join("themes").join("sites"),  "themes/sites/");
+        remove_subdirs(&base.join("sites"),                  "sites/");
         remove_subdirs(&base.join("themes").join("private"), "themes/private/");
-        // Uploads stores files flat (not in subdirs), so remove files directly.
-        remove_files(&base.join("uploads"), "uploads/");
+        // Uploads are organised into per-site UUID subdirs — remove them as dirs.
+        remove_subdirs(&base.join("uploads"), "uploads/");
     }
 
     println!();
     println!("Reset complete. Next: synap-cli install");
 
     Ok(())
-}
-
-/// Delete every immediate child file of `parent`, leaving the parent itself
-/// and any subdirectories in place.  Skips directories (e.g. future subfolders).
-fn remove_files(parent: &std::path::Path, label: &str) {
-    if !parent.is_dir() {
-        return;
-    }
-    let entries = match std::fs::read_dir(parent) {
-        Ok(e) => e,
-        Err(e) => {
-            println!("  Warning: could not read {label}: {e}");
-            return;
-        }
-    };
-    let mut removed = 0u32;
-    for entry in entries.flatten() {
-        if entry.file_type().map(|t| t.is_file()).unwrap_or(false) {
-            match std::fs::remove_file(entry.path()) {
-                Ok(()) => removed += 1,
-                Err(e) => println!(
-                    "  Warning: could not remove {}: {e}",
-                    entry.path().display()
-                ),
-            }
-        }
-    }
-    if removed > 0 {
-        println!("  Removed {removed} file{} from {label}", if removed == 1 { "" } else { "s" });
-    } else {
-        println!("  {label} already empty — nothing to remove.");
-    }
 }
 
 /// Delete every immediate child directory of `parent`, leaving the parent

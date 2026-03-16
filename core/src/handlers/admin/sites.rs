@@ -269,13 +269,25 @@ pub async fn create(
                 "site created",
             );
 
-            // Copy the global default theme into the new site's theme folder so it
+            // Seed the new site's directories and copy the default theme so it
             // appears immediately in the site admin's "My Themes" view.
             let themes_dir = state.config.themes_dir.clone();
+            let sites_dir  = state.config.sites_dir.clone();
+            let uploads_dir = state.config.uploads_dir.clone();
             let site_id = site.id;
             tokio::task::spawn_blocking(move || {
+                // Create sites/{uuid}/themes/ and uploads/{uuid}/ directories.
+                let site_themes_dir = FsPath::new(&sites_dir).join(site_id.to_string()).join("themes");
+                let site_uploads_dir = FsPath::new(&uploads_dir).join(site_id.to_string());
+                if let Err(e) = std::fs::create_dir_all(&site_themes_dir) {
+                    tracing::warn!(site_id = %site_id, "failed to create site themes dir: {}", e);
+                }
+                if let Err(e) = std::fs::create_dir_all(&site_uploads_dir) {
+                    tracing::warn!(site_id = %site_id, "failed to create site uploads dir: {}", e);
+                }
+                // Copy the global default theme into sites/{uuid}/themes/default/.
                 let src = FsPath::new(&themes_dir).join("global").join("default");
-                let dst = FsPath::new(&themes_dir).join("sites").join(site_id.to_string()).join("default");
+                let dst = site_themes_dir.join("default");
                 if src.is_dir() && !dst.exists() {
                     if let Err(e) = copy_dir_all(&src, &dst) {
                         tracing::warn!(site_id = %site_id, "failed to seed default theme for new site: {}", e);
@@ -519,15 +531,22 @@ pub async fn delete(
             hostname = %site.hostname,
             "site deleted",
         );
-        // Remove the site's theme directory so no orphaned dirs accumulate.
-        let site_theme_dir = std::path::Path::new(&state.config.themes_dir)
-            .join("sites")
-            .join(id.to_string());
-        if site_theme_dir.exists() {
-            if let Err(e) = std::fs::remove_dir_all(&site_theme_dir) {
-                tracing::warn!("failed to remove theme dir for site {}: {:?}", id, e);
+        // Remove the site's data directory (themes + uploads) so no orphaned dirs accumulate.
+        let site_data_dir = std::path::Path::new(&state.config.sites_dir).join(id.to_string());
+        if site_data_dir.exists() {
+            if let Err(e) = std::fs::remove_dir_all(&site_data_dir) {
+                tracing::warn!("failed to remove site data dir for site {}: {:?}", id, e);
             } else {
-                tracing::info!("removed theme dir for deleted site {}", id);
+                tracing::info!("removed site data dir for deleted site {}", id);
+            }
+        }
+        // Also remove the site's upload subdirectory under uploads/{uuid}/.
+        let site_upload_dir = std::path::Path::new(&state.config.uploads_dir).join(id.to_string());
+        if site_upload_dir.exists() {
+            if let Err(e) = std::fs::remove_dir_all(&site_upload_dir) {
+                tracing::warn!("failed to remove upload dir for site {}: {:?}", id, e);
+            } else {
+                tracing::info!("removed upload dir for deleted site {}", id);
             }
         }
         // Remove the site's plugin directory (plugins/sites/{id}/).

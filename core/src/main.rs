@@ -36,10 +36,13 @@ async fn main() -> anyhow::Result<()> {
     // ── Uploads directory ─────────────────────────────────────────────────────
     std::fs::create_dir_all(&cfg.uploads_dir)?;
 
+    // ── Sites data directory ──────────────────────────────────────────────────
+    // Each site gets {sites_dir}/{uuid}/themes/ and {sites_dir}/{uuid}/uploads/.
+    std::fs::create_dir_all(&cfg.sites_dir)?;
+
     // ── Theme directory structure ─────────────────────────────────────────────
-    // Establish themes/global/ and themes/sites/ layout on first startup.
+    // Establish themes/global/ and themes/private/ on first startup.
     let global_themes_dir = format!("{}/global", cfg.themes_dir);
-    let sites_themes_dir = format!("{}/sites", cfg.themes_dir);
     if !std::path::Path::new(&global_themes_dir).exists() {
         std::fs::create_dir_all(&global_themes_dir)?;
         // Move any existing flat theme directories into themes/global/.
@@ -51,7 +54,7 @@ async fn main() -> anyhow::Result<()> {
                     Some(n) => n.to_string(),
                     None => continue,
                 };
-                if name == "global" || name == "sites" { continue; }
+                if name == "global" || name == "private" { continue; }
                 let dest = std::path::Path::new(&global_themes_dir).join(&name);
                 match std::fs::rename(&path, &dest) {
                     Ok(_) => info!("migrated theme '{}' → themes/global/", name),
@@ -61,7 +64,6 @@ async fn main() -> anyhow::Result<()> {
         }
         info!("theme directory structure initialised — themes/global/ ready");
     }
-    std::fs::create_dir_all(&sites_themes_dir)?;
 
     // ── Database ──────────────────────────────────────────────────────────────
     let pool = db::connect(&cfg.database_url).await?;
@@ -146,6 +148,7 @@ async fn main() -> anyhow::Result<()> {
     // Point the engine at themes/global/ — the canonical home for global themes.
     let engine = TemplateEngine::new(
         &cfg.themes_dir,
+        &cfg.sites_dir,
         &startup_theme,
         &settings.base_url,
         hook_registry.clone(),

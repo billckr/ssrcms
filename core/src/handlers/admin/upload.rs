@@ -97,8 +97,22 @@ pub async fn upload(
     let short_id = &Uuid::new_v4().to_string()[..8];
     let stored_name = format!("{}-{}.{}", slug, short_id, ext);
 
-    // Write to uploads directory.
-    let upload_path = Path::new(&state.config.uploads_dir).join(&stored_name);
+    // Resolve the per-site upload subdirectory: uploads/{site_uuid}/{filename}.
+    // Falls back to the flat uploads dir if no site is set (should not happen in practice).
+    let (site_subdir, media_path) = if let Some(sid) = admin.site_id {
+        let subdir = Path::new(&state.config.uploads_dir).join(sid.to_string());
+        if let Err(e) = tokio::fs::create_dir_all(&subdir).await {
+            tracing::error!("failed to create site upload dir {:?}: {}", subdir, e);
+            return Redirect::to(&redirect_to).into_response();
+        }
+        (subdir, format!("{}/{}", sid, stored_name))
+    } else {
+        tracing::warn!("upload with no site_id — falling back to flat uploads dir");
+        (Path::new(&state.config.uploads_dir).to_path_buf(), stored_name.clone())
+    };
+
+    // Write to the resolved directory.
+    let upload_path = site_subdir.join(&stored_name);
     if let Err(e) = tokio::fs::write(&upload_path, &bytes).await {
         tracing::error!("failed to write upload: {}", e);
         return Redirect::to(&redirect_to).into_response();
@@ -119,12 +133,12 @@ pub async fn upload(
         (None, None)
     };
 
-    // Insert into DB.
+    // Insert into DB. `media_path` is relative to uploads_dir, e.g. "{site_uuid}/foo.jpg".
     let create = CreateMedia {
         site_id: admin.site_id,
         filename,
         mime_type: mime,
-        path: stored_name,
+        path: media_path,
         alt_text: alt_text.unwrap_or_default(),
         title: String::new(),
         caption: String::new(),

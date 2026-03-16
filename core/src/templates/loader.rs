@@ -22,8 +22,10 @@ use crate::errors::{AppError, Result};
 pub struct TemplateEngine {
     /// Per-theme Tera instances: theme_name → Tera.
     engines: Arc<RwLock<HashMap<String, Tera>>>,
-    /// Root of the themes directory tree (parent of `global/` and `sites/`).
+    /// Root of the shared themes directory tree (parent of `global/` and `private/`).
     themes_root: PathBuf,
+    /// Root of the per-site data directory. Each site has `{sites_root}/{uuid}/themes/`.
+    sites_root: PathBuf,
     /// Fallback theme name for legacy single-argument render() paths.
     active_theme: Arc<RwLock<String>>,
     base_url: String,
@@ -37,19 +39,23 @@ pub struct TemplateEngine {
 impl TemplateEngine {
     /// Create and initialize a template engine for the given theme and base URL.
     ///
-    /// `themes_root` is the parent of the `global/` and `sites/` subdirectories.
+    /// `themes_root` is the parent of the `global/` and `private/` subdirectories.
+    /// `sites_root` is the per-site data directory — each site has `{sites_root}/{uuid}/themes/`.
     pub fn new(
         themes_root: impl Into<PathBuf>,
+        sites_root: impl Into<PathBuf>,
         active_theme: &str,
         base_url: &str,
         hook_registry: Arc<HookRegistry>,
         db: PgPool,
     ) -> anyhow::Result<Self> {
         let themes_root = themes_root.into();
+        let sites_root = sites_root.into();
 
         let engine = TemplateEngine {
             engines: Arc::new(RwLock::new(HashMap::new())),
             themes_root,
+            sites_root,
             active_theme: Arc::new(RwLock::new(active_theme.to_string())),
             base_url: base_url.to_string(),
             hook_registry,
@@ -67,12 +73,12 @@ impl TemplateEngine {
     /// site-specific copy when `site_id` is provided.
     ///
     /// Resolution order with site_id:
-    ///   1. `themes_root/sites/<site_id>/<name>/`
+    ///   1. `sites_root/<site_id>/themes/<name>/`
     ///   2. `themes_root/global/<name>/`
     ///
     /// Resolution order without site_id (or when site copy does not exist):
     ///   1. `themes_root/global/<name>/`
-    ///   2. Any `themes_root/sites/*/<name>/`
+    ///   2. Any `sites_root/*/<name>/`
     pub fn resolve_theme_dir(&self, name: &str) -> Option<PathBuf> {
         self.resolve_theme_dir_for_site(name, None)
     }
@@ -81,7 +87,7 @@ impl TemplateEngine {
     pub fn resolve_theme_dir_for_site(&self, name: &str, site_id: Option<Uuid>) -> Option<PathBuf> {
         // Prefer the site-specific copy when a site_id is given.
         if let Some(sid) = site_id {
-            let site_candidate = self.themes_root.join("sites").join(sid.to_string()).join(name);
+            let site_candidate = self.sites_root.join(sid.to_string()).join("themes").join(name);
             if site_candidate.is_dir() {
                 return Some(site_candidate);
             }
@@ -97,10 +103,9 @@ impl TemplateEngine {
             return Some(private_candidate);
         }
         // Last resort: any site copy (single-site installs without a site_id).
-        let sites_dir = self.themes_root.join("sites");
-        if let Ok(entries) = std::fs::read_dir(&sites_dir) {
+        if let Ok(entries) = std::fs::read_dir(&self.sites_root) {
             for entry in entries.flatten() {
-                let candidate = entry.path().join(name);
+                let candidate = entry.path().join("themes").join(name);
                 if candidate.is_dir() {
                     return Some(candidate);
                 }
