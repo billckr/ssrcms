@@ -30,6 +30,7 @@ export const FormBlock = {
           ),
         },
       },
+      getItemSummary: (item) => item.label || item.name || 'Field',
       defaultItemProps: {
         label: 'Your name',
         name: 'name',
@@ -47,6 +48,7 @@ export const FormBlock = {
         </label>
       ),
     },
+    successMessage: { type: 'text', label: 'Success message' },
     buttonLabel: { type: 'text', label: 'Button label' },
     buttonColor: {
       type: 'custom',
@@ -71,11 +73,12 @@ export const FormBlock = {
       { label: 'Message',       name: 'message', fieldType: 'text',  required: false },
     ],
     includeHuman: true,
+    successMessage: 'Thank you for your submission!',
     buttonLabel: 'Send Message',
     buttonColor: '#2563eb',
     textColor: '#111827',
   },
-  render: ({ action, formFields, includeHuman, buttonLabel, buttonColor, textColor }) => (
+  render: ({ action, formFields, includeHuman, successMessage, buttonLabel, buttonColor, textColor }) => (
     <div style={{ padding: '32px 40px', boxSizing: 'border-box', width: '100%' }}>
       <form action={action} method="POST" style={{ maxWidth: 640, margin: '0 auto', color: textColor }}>
         {(formFields || []).map((f, i) => (
@@ -113,6 +116,11 @@ export const FormBlock = {
           {buttonLabel}
         </button>
       </form>
+      {successMessage && (
+        <p style={{ marginTop: 12, fontSize: 13, color: '#64748b', fontStyle: 'italic' }}>
+          On success: "{successMessage}"
+        </p>
+      )}
     </div>
   ),
 }
