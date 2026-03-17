@@ -1,0 +1,12 @@
+{% set bg = block_config.bg | default(value="") %}
+{% set padding = block_config.padding | default(value="medium") %}
+{% if padding == "small" %}
+  {% set pad_style = "padding: 1rem" %}
+{% elif padding == "large" %}
+  {% set pad_style = "padding: 3rem" %}
+{% else %}
+  {% set pad_style = "padding: 2rem" %}
+{% endif %}
+<div class="block block-text" style="{% if bg %}background:{{ bg }};{% endif %}{{ pad_style }}">
+  {{ block_config.content | default(value="") | safe }}
+</div>

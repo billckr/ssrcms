@@ -1,0 +1,26 @@
+{% set limit = block_config.limit | default(value=6) | int %}
+{% set columns = block_config.columns | default(value=2) %}
+{% set bg = block_config.bg | default(value="") %}
+{% set category = block_config.category | default(value="") %}
+{% set posts = get_posts(limit=limit, category=category, base_url=site.url) %}
+<div class="block block-posts-grid" style="{% if bg %}background:{{ bg }};{% endif %}">
+  <div class="posts-grid posts-grid--cols-{{ columns }}">
+    {% for post in posts %}
+    <article class="posts-grid__item">
+      {% if post.featured_image %}
+      <a href="{{ post.url | safe }}">
+        <img src="{{ post.featured_image.url | safe }}" alt="{{ post.featured_image.alt_text }}" loading="lazy" class="posts-grid__thumb">
+      </a>
+      {% endif %}
+      <div class="posts-grid__body">
+        <h3 class="posts-grid__title"><a href="{{ post.url | safe }}">{{ post.title }}</a></h3>
+        <p class="posts-grid__excerpt">{{ post.excerpt }}</p>
+        <a href="{{ post.url | safe }}" class="posts-grid__more">Read more &rarr;</a>
+      </div>
+    </article>
+    {% endfor %}
+    {% if not posts %}
+    <p class="posts-grid__empty">No posts found.</p>
+    {% endif %}
+  </div>
+</div>

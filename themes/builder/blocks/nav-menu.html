@@ -1,0 +1,26 @@
+{% set location = block_config.menu_location | default(value="primary") %}
+{% set orientation = block_config.orientation | default(value="horizontal") %}
+{% set bg = block_config.bg | default(value="") %}
+{% set menu = get_menu(location=location) %}
+<nav class="block block-nav-menu block-nav-menu--{{ orientation }}" style="{% if bg %}background:{{ bg }};{% endif %}" aria-label="{{ location }} navigation">
+  {% if menu and menu.items %}
+  <ul class="nav-menu nav-menu--{{ orientation }}">
+    {% for item in menu.items %}
+    <li class="nav-menu__item{% if item.active %} nav-menu__item--active{% endif %}{% if item.children %} nav-menu__item--has-children{% endif %}">
+      <a href="{{ item.url | safe }}"{% if item.target == "_blank" %} target="_blank" rel="noopener"{% endif %}>{{ item.label }}</a>
+      {% if item.children %}
+      <ul class="nav-menu__sub">
+        {% for child in item.children %}
+        <li class="nav-menu__item{% if child.active %} nav-menu__item--active{% endif %}">
+          <a href="{{ child.url | safe }}"{% if child.target == "_blank" %} target="_blank" rel="noopener"{% endif %}>{{ child.label }}</a>
+        </li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="nav-menu__empty" style="opacity:.5;font-size:.85rem">No menu assigned to &ldquo;{{ location }}&rdquo;.</p>
+  {% endif %}
+</nav>

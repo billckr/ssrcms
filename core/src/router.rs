@@ -13,7 +13,7 @@ use tower_sessions_sqlx_store::PostgresStore;
 
 use crate::app_state::AppState;
 use crate::handlers::{account, archive, auth, comment as comment_handler, form as form_handler, home, metrics as metrics_handler, page, plugin_route, post as post_handler, post_unlock, search, subscribe, theme_static, uploads};
-use crate::handlers::admin::{appearance, comments as admin_comments, dashboard, documentation as admin_documentation, forms as admin_forms, media, menus as admin_menus, posts, profile, settings, sites as admin_sites, taxonomy, upload, users};
+use crate::handlers::admin::{appearance, builder as admin_builder, comments as admin_comments, dashboard, documentation as admin_documentation, forms as admin_forms, media, menus as admin_menus, posts, profile, settings, sites as admin_sites, taxonomy, upload, users};
 
 /// Prevent browsers from caching admin and account pages.
 ///
@@ -164,6 +164,13 @@ pub fn build(
         .route("/admin/appearance/editor/{theme}/restore", post(appearance::restore_file))
         .route("/admin/appearance/editor/{theme}/new-file", post(appearance::new_file))
         .route("/admin/appearance/editor/{theme}/delete-file", post(appearance::delete_file))
+        // ── Admin visual builder ───────────────────────────────────────────
+        .route("/admin/appearance/builder",             get(admin_builder::list))
+        .route("/admin/appearance/builder/new",         get(admin_builder::new_form).post(admin_builder::create))
+        .route("/admin/appearance/builder/preview",     post(admin_builder::preview))
+        .route("/admin/appearance/builder/{id}/edit",   get(admin_builder::edit))
+        .route("/admin/appearance/builder/{id}/save",   post(admin_builder::save))
+        .route("/admin/appearance/builder/{id}/delete", post(admin_builder::delete))
         // ── Admin menus ────────────────────────────────────────────────────
         .route("/admin/menus",                                      get(admin_menus::list).post(admin_menus::create))
         .route("/admin/menus/{id}",                                 get(admin_menus::edit).post(admin_menus::update))

@@ -1,3 +1,6 @@
+{# sitemap.xml — Submitted to search engines (Google, Bing, etc.) to help them
+   discover and index all public pages and posts on this site. Served at /sitemap.xml.
+   Add or remove <url> blocks to control what gets indexed. #}
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
 

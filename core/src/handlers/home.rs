@@ -11,8 +11,10 @@ use uuid::Uuid;
 use crate::app_state::AppState;
 use crate::errors::{AppError, Result};
 use crate::middleware::site::CurrentSite;
+use crate::models::page_composition;
 use crate::models::post::{self, ListFilter, PostContext, PostStatus, PostType};
 use crate::models::taxonomy::{self, TaxonomyType};
+use crate::templates::composer;
 use crate::templates::context::{
     ContextBuilder, NavContext, PaginationContext, RequestContext, SessionContext, SiteContext,
 };
@@ -39,6 +41,41 @@ pub async fn home(
     let site_id = current_site.site.id;
     let base_url = current_site.base_url.clone();
     let session_ctx = super::resolve_session(&state, &session).await;
+
+    // Check for an active visual builder composition — if found, render it instead
+    // of the standard index.html template. Existing sites without a composition
+    // are completely unaffected by this check.
+    let theme = state.active_theme_for_site(Some(site_id));
+    if let Ok(Some(comp)) = page_composition::get_by_theme(&state.db, site_id, &theme).await {
+        let site_ctx = match build_site_context(&state, Some(site_id), &base_url).await {
+            Ok(s) => s,
+            Err(e) => {
+                tracing::error!("home handler error building site context: {:?}", e);
+                return render_error_page(e, &state, &path, Some(site_id)).await;
+            }
+        };
+        let nav = crate::models::nav_menu::build_nav_context(&state.db, site_id, uri.path()).await;
+        let base_ctx = ContextBuilder {
+            site: site_ctx,
+            request: RequestContext {
+                url: format!("{}{}", base_url, uri.path()),
+                path: uri.path().to_string(),
+                query: HashMap::new(),
+            },
+            session: session_ctx,
+            nav,
+        }
+        .into_tera_context();
+
+        return match composer::render_composition(&comp, &state.templates, Some(site_id), &theme, &base_ctx) {
+            Ok(html) => Html(html).into_response(),
+            Err(e) => {
+                tracing::error!("composition render error: {:?}", e);
+                render_error_page(e, &state, &path, Some(site_id)).await
+            }
+        };
+    }
+
     match render_home(state.clone(), query, uri, site_id, &base_url, session_ctx).await {
         Ok(html) => Html(html).into_response(),
         Err(e) => {

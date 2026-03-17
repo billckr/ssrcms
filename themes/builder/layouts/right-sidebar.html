@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+
+{% block head_extra %}{{ builder_styles | default(value="") | safe }}{% endblock head_extra %}
+
+{% block content %}
+<div class="layout-right-sidebar">
+  <header class="layout-header">{{ zones.header | default(value="") | safe }}</header>
+  <div class="layout-body">
+    <main class="layout-main">{{ zones.main | default(value="") | safe }}</main>
+    <aside class="layout-sidebar">{{ zones.sidebar | default(value="") | safe }}</aside>
+  </div>
+  <footer class="layout-footer">{{ zones.footer | default(value="") | safe }}</footer>
+</div>
+{% endblock content %}

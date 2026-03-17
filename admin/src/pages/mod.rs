@@ -1,5 +1,6 @@
 pub mod account;
 pub mod appearance;
+pub mod builder;
 pub mod dashboard;
 pub mod documentation;
 pub mod forms;

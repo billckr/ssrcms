@@ -99,6 +99,63 @@
       <p class="sidebar-empty">No tags yet.</p>
       {% endif %}
     </div>
+
+    {#
+      ── Sidebar Menu Widget ───────────────────────────────────────────────────
+      get_menu(name="sidebar") fetches the menu you created in Admin → Menus
+      by its exact name. Change "sidebar" to match whatever you named it.
+
+      The path=request.path argument tells the function the current URL so it
+      can set is_current=true on the matching item — used for the active style.
+
+      The {% if %} guard means this whole widget is hidden if the menu doesn't
+      exist or has no items, so no empty box appears on the page.
+    #}
+    {% set sidebar_items = get_menu(name="sidebar", path=request.path) %}
+    {% if sidebar_items | length > 0 %}
+    <div class="sidebar-widget">
+
+      {# Change this title to whatever label you want shown above the links #}
+      <h3 class="sidebar-widget-title">Navigation</h3>
+
+      {# sidebar-nav uses flex-direction:column so links stack vertically #}
+      <nav class="sidebar-nav">
+
+        {% for item in sidebar_items %}
+
+          {#
+            Each top-level item. The sidebar-nav-link--active class is applied
+            when item.is_current is true (URL matches the current page).
+          #}
+          <a href="{{ item.url }}"
+             target="{{ item.target }}"
+             class="sidebar-nav-link{% if item.is_current %} sidebar-nav-link--active{% endif %}">
+            {{ item.label }}
+          </a>
+
+          {#
+            If this item has children (sub-menu items set via the Parent field
+            in Admin → Menus), they are rendered indented below their parent.
+          #}
+          {% if item.children | length > 0 %}
+          <div class="sidebar-nav-children">
+            {% for child in item.children %}
+            <a href="{{ child.url }}"
+               target="{{ child.target }}"
+               class="sidebar-nav-link sidebar-nav-link--child{% if child.is_current %} sidebar-nav-link--active{% endif %}">
+              {{ child.label }}
+            </a>
+            {% endfor %}
+          </div>
+          {% endif %}
+
+        {% endfor %}
+
+      </nav>
+    </div>
+    {% endif %}
+    {# ── End Sidebar Menu Widget ──────────────────────────────────────────── #}
+
   </aside>
 </div>
 {% endblock content %}

@@ -1,0 +1,21 @@
+{% set bg = block_config.bg | default(value="") %}
+{% set title = block_config.title | default(value="Contact Us") %}
+{% set submit_label = block_config.submit_label | default(value="Send Message") %}
+<div class="block block-contact-form" style="{% if bg %}background:{{ bg }};{% endif %}">
+  <h2>{{ title }}</h2>
+  <form method="POST" action="/form/contact">
+    <div class="contact-form__group">
+      <label for="cf-name">Name</label>
+      <input type="text" id="cf-name" name="name" required>
+    </div>
+    <div class="contact-form__group">
+      <label for="cf-email">Email</label>
+      <input type="email" id="cf-email" name="email" required>
+    </div>
+    <div class="contact-form__group">
+      <label for="cf-message">Message</label>
+      <textarea id="cf-message" name="message" rows="5" required></textarea>
+    </div>
+    <button type="submit" class="contact-form__submit">{{ submit_label }}</button>
+  </form>
+</div>

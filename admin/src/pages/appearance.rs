@@ -73,6 +73,7 @@ pub fn render_with_flash(themes: &[ThemeInfo], flash: Option<&str>, ctx: &crate:
     </select>
   </form>
   <a href="/admin/appearance/create" class="btn btn-primary">+ Create Theme</a>
+  <a href="/admin/appearance/builder" class="btn">Visual Builder</a>
 </div>"#,
             filter_options = filter_options,
         )

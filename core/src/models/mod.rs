@@ -3,6 +3,7 @@ pub mod form_submission;
 pub mod media;
 pub mod media_folder;
 pub mod nav_menu;
+pub mod page_composition;
 pub mod post;
 pub mod saved_post;
 pub mod site;

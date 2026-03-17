@@ -102,6 +102,7 @@ impl Function for GetPostsFunction {
         let category = args
             .get("category")
             .and_then(|v| v.as_str())
+            .filter(|s| !s.is_empty())
             .map(str::to_string);
         let tag = args
             .get("tag")
@@ -118,7 +119,14 @@ impl Function for GetPostsFunction {
             .to_string();
 
         let pool = self.pool.clone();
-        let base_url = self.base_url.clone();
+        // Allow templates to pass the per-site base_url explicitly so post URLs
+        // are correct in multi-site installs (e.g. get_posts(base_url=site.url)).
+        let base_url = args
+            .get("base_url")
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.is_empty())
+            .map(str::to_string)
+            .unwrap_or_else(|| self.base_url.clone());
 
         // Tera functions are synchronous; run the async query on the current Tokio runtime.
         let posts = tokio::task::block_in_place(|| {
