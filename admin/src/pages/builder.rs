@@ -288,6 +288,22 @@ pub fn render_new_page_form(
     document.getElementById('page-slug').required = type !== 'homepage';
   }}
   toggleSlug(document.getElementById('page-type').value);
+
+  var slugEdited = false;
+  document.getElementById('page-slug').addEventListener('input', function() {{
+    slugEdited = true;
+  }});
+  document.getElementById('page-name').addEventListener('input', function() {{
+    if (slugEdited) return;
+    var slug = this.value
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9\s-]/g, '')
+      .replace(/\s+/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '');
+    document.getElementById('page-slug').value = slug;
+  }});
 </script>"#,
         proj_id      = crate::html_escape(&project.id),
         proj_name    = crate::html_escape(&project.name),
