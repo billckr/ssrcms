@@ -83,15 +83,20 @@ pub async fn create_project(
     }
 
     let name = form.name.trim().to_string();
-    if name.is_empty() {
+    if name.is_empty() || name.len() > 35 {
         return Redirect::to("/admin/builder").into_response();
     }
+
+    let description = form.description
+        .map(|d| d.trim().to_string())
+        .filter(|d| !d.is_empty())
+        .map(|d| d.chars().take(100).collect::<String>());
 
     match builder_project::create(
         &state.db,
         site_id,
         &name,
-        form.description.as_deref(),
+        description.as_deref(),
         Some(admin.user.id),
     )
     .await

@@ -88,11 +88,11 @@ pub fn render_project_list(projects: &[ProjectRow], ctx: &crate::PageContext) ->
 <form method="POST" action="/admin/builder/create" style="display:flex;gap:.75rem;align-items:flex-end;flex-wrap:wrap">
   <div class="form-group" style="margin:0">
     <label for="proj-name">Project Name</label>
-    <input id="proj-name" type="text" name="name" required placeholder="e.g. Main Site" maxlength="255" style="width:220px">
+    <input id="proj-name" type="text" name="name" required placeholder="e.g. Main Site" maxlength="35" style="width:220px">
   </div>
   <div class="form-group" style="margin:0">
     <label for="proj-desc">Description <span style="color:var(--muted)">(optional)</span></label>
-    <input id="proj-desc" type="text" name="description" placeholder="e.g. Full site redesign 2026" maxlength="500" style="width:280px">
+    <input id="proj-desc" type="text" name="description" placeholder="e.g. Full site redesign 2026" maxlength="100" style="width:280px">
   </div>
   <button type="submit" class="btn btn-primary">Create Project</button>
 </form>"#,
