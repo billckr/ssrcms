@@ -10,6 +10,9 @@ import { SearchBlock } from './blocks/Search'
 import { CardBlock } from './blocks/Card'
 import { FormBlock } from './blocks/Form'
 import { TextBlock } from './blocks/Text'
+import { PostsBlock } from './blocks/Posts'
+import { CategoriesBlock } from './blocks/Categories'
+import { TagsBlock } from './blocks/Tags'
 
 const config = {
   components: {
@@ -22,6 +25,9 @@ const config = {
     Cards: CardBlock,
     Form: FormBlock,
     Text: TextBlock,
+    Posts: PostsBlock,
+    Categories: CategoriesBlock,
+    Tags: TagsBlock,
   },
 }
 

@@ -1,0 +1,24 @@
+<div style="
+  background: {{ block_config.bgColor | default(value='#ffffff') }};
+  padding: {{ block_config.padding | default(value='32px 40px') }};
+  box-sizing: border-box;
+  width: 100%;
+">
+  {% if block_config.heading %}
+  <h2 style="color: {{ block_config.headingColor | default(value='#111827') }}; margin-top: 0; margin-bottom: 16px; font-size: 20px; font-weight: 700;">
+    {{ block_config.heading }}
+  </h2>
+  {% endif %}
+  <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+    {% for tag in builder_tags %}
+    <a href="{{ tag.url }}" style="
+      background: {{ block_config.tagBgColor | default(value='#f3f4f6') }};
+      color: {{ block_config.tagTextColor | default(value='#374151') }};
+      padding: 4px 12px; border-radius: 20px;
+      font-size: 13px; text-decoration: none; display: inline-block;
+    ">
+      {{ tag.name }}{% if block_config.showCount %} <span style="opacity: 0.6; margin-left: 4px;">({{ tag.post_count }})</span>{% endif %}
+    </a>
+    {% endfor %}
+  </div>
+</div>

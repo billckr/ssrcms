@@ -17,6 +17,7 @@ use crate::app_state::AppState;
 use crate::middleware::site::CurrentSite;
 use crate::models::{page_composition, post};
 use crate::templates::{composer, context::{ContextBuilder, RequestContext, SessionContext}};
+use crate::handlers::home::enrich_builder_context;
 use crate::errors::Result;
 
 #[derive(Serialize)]
@@ -366,6 +367,8 @@ async fn render_builder_page(
         nav,
     }
     .into_tera_context();
+    let mut ctx = ctx;
+    enrich_builder_context(&mut ctx, state, site_id, base_url).await;
     composer::render_composition(&comp.composition, &state.templates, &ctx)
         .map_err(|e| AppError::Internal(e.0))
 }

@@ -64,7 +64,7 @@ async fn render_home(
     if let Ok(Some(comp)) = page_composition::get_homepage(&state.db, site_id).await {
         let site_ctx = build_site_context(&state, Some(site_id), base_url).await?;
         let nav = crate::models::nav_menu::build_nav_context(&state.db, site_id, "/").await;
-        let ctx = ContextBuilder {
+        let mut ctx = ContextBuilder {
             site: site_ctx,
             request: RequestContext {
                 url: base_url.to_string(),
@@ -76,6 +76,7 @@ async fn render_home(
         }
         .into_tera_context();
 
+        enrich_builder_context(&mut ctx, &state, site_id, base_url).await;
         return composer::render_composition(&comp.composition, &state.templates, &ctx)
             .map_err(|e| AppError::Internal(e.0));
     }
@@ -307,6 +308,60 @@ pub(crate) async fn build_post_context(
         page_path,
         breadcrumbs,
     ))
+}
+
+/// Fetch posts, categories, and tags for the current site and inject them into
+/// a Tera context so builder block templates (Posts, Categories, Tags) can use them.
+pub(crate) async fn enrich_builder_context(
+    ctx: &mut tera::Context,
+    state: &AppState,
+    site_id: Uuid,
+    base_url: &str,
+) {
+    // Published posts (up to 20)
+    let posts_raw = post::list(
+        &state.db,
+        &ListFilter {
+            site_id: Some(site_id),
+            status: Some(PostStatus::Published),
+            post_type: Some(PostType::Post),
+            limit: 20,
+            offset: 0,
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap_or_default();
+
+    let mut builder_posts = Vec::new();
+    for p in &posts_raw {
+        if let Ok(post_ctx) = build_post_context(state, p, base_url).await {
+            builder_posts.push(post_ctx);
+        }
+    }
+    ctx.insert("builder_posts", &builder_posts);
+
+    // Categories
+    let cats_raw = taxonomy::list(&state.db, Some(site_id), TaxonomyType::Category)
+        .await
+        .unwrap_or_default();
+    let mut builder_categories = Vec::new();
+    for c in &cats_raw {
+        let count = taxonomy::post_count(&state.db, c.id).await.unwrap_or(0);
+        builder_categories.push(taxonomy::TermContext::from_taxonomy(c, base_url, count));
+    }
+    ctx.insert("builder_categories", &builder_categories);
+
+    // Tags
+    let tags_raw = taxonomy::list(&state.db, Some(site_id), TaxonomyType::Tag)
+        .await
+        .unwrap_or_default();
+    let mut builder_tags = Vec::new();
+    for t in &tags_raw {
+        let count = taxonomy::post_count(&state.db, t.id).await.unwrap_or(0);
+        builder_tags.push(taxonomy::TermContext::from_taxonomy(t, base_url, count));
+    }
+    ctx.insert("builder_tags", &builder_tags);
 }
 
 pub(crate) async fn build_site_context(state: &AppState, site_id: Option<Uuid>, base_url: &str) -> Result<SiteContext> {

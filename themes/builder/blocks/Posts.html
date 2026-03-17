@@ -1,0 +1,46 @@
+{% set limit = block_config.limit | default(value=5) | int %}
+{% set layout = block_config.layout | default(value='cards') %}
+<div style="
+  background: {{ block_config.bgColor | default(value='#ffffff') }};
+  padding: {{ block_config.padding | default(value='32px 40px') }};
+  box-sizing: border-box;
+  width: 100%;
+">
+  {% if block_config.heading %}
+  <h2 style="color: {{ block_config.headingColor | default(value='#111827') }}; margin-top: 0; margin-bottom: 24px; font-size: 24px; font-weight: 700;">
+    {{ block_config.heading }}
+  </h2>
+  {% endif %}
+
+  {% if layout == "cards" %}
+  <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; max-width: 1200px; margin: 0 auto;">
+  {% else %}
+  <div style="max-width: 1200px; margin: 0 auto;">
+  {% endif %}
+
+  {% for post in builder_posts %}
+  {% if loop.index <= limit %}
+    {% if layout == "cards" %}
+    <div style="border: 1px solid #e5e7eb; border-radius: 8px; padding: 20px;">
+    {% else %}
+    <div style="border-bottom: 1px solid #e5e7eb; padding: 16px 0;">
+    {% endif %}
+      <a href="{{ post.url }}" style="color: {{ block_config.linkColor | default(value='#2563eb') }}; font-weight: 600; text-decoration: none; font-size: 16px;">
+        {{ post.title }}
+      </a>
+      {% if block_config.showDate and post.published_at %}
+      <p style="color: {{ block_config.textColor | default(value='#374151') }}; font-size: 12px; margin: 4px 0;">
+        {{ post.published_at }}
+      </p>
+      {% endif %}
+      {% if block_config.showExcerpt and post.excerpt %}
+      <p style="color: {{ block_config.textColor | default(value='#374151') }}; font-size: 14px; margin: 8px 0 0;">
+        {{ post.excerpt }}
+      </p>
+      {% endif %}
+    </div>
+  {% endif %}
+  {% endfor %}
+
+  </div>
+</div>
