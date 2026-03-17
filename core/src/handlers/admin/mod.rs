@@ -96,6 +96,7 @@ pub fn sanitize_media_text(input: &str) -> String {
 }
 
 pub mod appearance;
+pub mod builder;
 pub mod comments;
 pub mod dashboard;
 pub mod documentation;

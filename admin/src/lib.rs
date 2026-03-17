@@ -130,6 +130,7 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
         {plugins}
         {documentation}
         {appearance}
+        {builder}
         {settings}
       </ul>
       <div class="sidebar-footer">
@@ -224,6 +225,7 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
         documentation = if ctx.is_global_admin { nav_link("/admin/documentation", "Documentation") } else { String::new() },
         appearance = if ctx.can_manage_appearance { nav_link("/admin/appearance", "Appearance") } else { String::new() },
         menus = if ctx.can_manage_appearance { nav_link("/admin/menus", "Menus") } else { String::new() },
+        builder = if ctx.can_manage_appearance { nav_link("/admin/builder", "Page Builder") } else { String::new() },
         settings = if ctx.can_manage_settings { nav_link("/admin/settings", "System Settings") } else { String::new() },
         flash_html = flash_html,
         content = content,

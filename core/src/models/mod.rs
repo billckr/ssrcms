@@ -1,4 +1,5 @@
 pub mod comment;
+pub mod page_composition;
 pub mod form_submission;
 pub mod media;
 pub mod media_folder;

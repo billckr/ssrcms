@@ -13,7 +13,7 @@ use tower_sessions_sqlx_store::PostgresStore;
 
 use crate::app_state::AppState;
 use crate::handlers::{account, archive, auth, comment as comment_handler, form as form_handler, home, metrics as metrics_handler, page, plugin_route, post as post_handler, post_unlock, search, subscribe, theme_static, uploads};
-use crate::handlers::admin::{appearance, comments as admin_comments, dashboard, documentation as admin_documentation, forms as admin_forms, media, menus as admin_menus, posts, profile, settings, sites as admin_sites, taxonomy, upload, users};
+use crate::handlers::admin::{appearance, builder as admin_builder, comments as admin_comments, dashboard, documentation as admin_documentation, forms as admin_forms, media, menus as admin_menus, posts, profile, settings, sites as admin_sites, taxonomy, upload, users};
 
 /// Prevent browsers from caching admin and account pages.
 ///
@@ -164,6 +164,15 @@ pub fn build(
         .route("/admin/appearance/editor/{theme}/restore", post(appearance::restore_file))
         .route("/admin/appearance/editor/{theme}/new-file", post(appearance::new_file))
         .route("/admin/appearance/editor/{theme}/delete-file", post(appearance::delete_file))
+        // ── Page builder ───────────────────────────────────────────────────
+        .route("/admin/builder",              get(admin_builder::list))
+        .route("/admin/builder/new",          get(admin_builder::new_editor))
+        .route("/admin/builder/edit/{id}",    get(admin_builder::edit_editor))
+        .route("/admin/builder/save",         post(admin_builder::save))
+        .route("/admin/builder/load/{id}",    get(admin_builder::load))
+        .route("/admin/builder/activate/{id}", post(admin_builder::activate))
+        .route("/admin/builder/deactivate",   post(admin_builder::deactivate))
+        .route("/admin/builder/delete/{id}",  post(admin_builder::delete))
         // ── Admin menus ────────────────────────────────────────────────────
         .route("/admin/menus",                                      get(admin_menus::list).post(admin_menus::create))
         .route("/admin/menus/{id}",                                 get(admin_menus::edit).post(admin_menus::update))
