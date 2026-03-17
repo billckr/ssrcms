@@ -10,6 +10,8 @@ pub struct PageComposition {
     pub site_id: Uuid,
     pub project_id: Option<Uuid>,
     pub name: String,
+    pub slug: Option<String>,
+    pub page_type: String,   // "homepage" | "page"
     pub composition: serde_json::Value,
     pub is_homepage: bool,
     pub created_by: Option<Uuid>,
@@ -48,43 +50,54 @@ pub async fn get_homepage(pool: &PgPool, site_id: Uuid) -> Result<Option<PageCom
     .await?)
 }
 
-pub async fn upsert(
+/// Create a new empty page (called from the new-page form before entering the editor).
+pub async fn create(
     pool: &PgPool,
-    id: Option<Uuid>,
     site_id: Uuid,
-    project_id: Option<Uuid>,
+    project_id: Uuid,
     name: &str,
-    composition: serde_json::Value,
+    page_type: &str,
+    slug: Option<&str>,
+    is_homepage: bool,
     created_by: Option<Uuid>,
 ) -> Result<PageComposition> {
-    let row = if let Some(existing_id) = id {
-        sqlx::query_as::<_, PageComposition>(
-            "UPDATE page_compositions
-             SET name = $1, composition = $2, updated_at = NOW()
-             WHERE id = $3 AND site_id = $4
-             RETURNING *",
-        )
-        .bind(name)
-        .bind(&composition)
-        .bind(existing_id)
-        .bind(site_id)
-        .fetch_one(pool)
-        .await?
-    } else {
-        sqlx::query_as::<_, PageComposition>(
-            "INSERT INTO page_compositions (site_id, project_id, name, composition, created_by)
-             VALUES ($1, $2, $3, $4, $5)
-             RETURNING *",
-        )
-        .bind(site_id)
-        .bind(project_id)
-        .bind(name)
-        .bind(&composition)
-        .bind(created_by)
-        .fetch_one(pool)
-        .await?
-    };
-    Ok(row)
+    Ok(sqlx::query_as::<_, PageComposition>(
+        "INSERT INTO page_compositions
+             (site_id, project_id, name, page_type, slug, is_homepage, composition, created_by)
+         VALUES ($1, $2, $3, $4, $5, $6, '{}', $7)
+         RETURNING *",
+    )
+    .bind(site_id)
+    .bind(project_id)
+    .bind(name)
+    .bind(page_type)
+    .bind(slug)
+    .bind(is_homepage)
+    .bind(created_by)
+    .fetch_one(pool)
+    .await?)
+}
+
+/// Update composition JSON only (called from the Puck editor on publish).
+pub async fn save_composition(
+    pool: &PgPool,
+    id: Uuid,
+    site_id: Uuid,
+    name: &str,
+    composition: serde_json::Value,
+) -> Result<PageComposition> {
+    Ok(sqlx::query_as::<_, PageComposition>(
+        "UPDATE page_compositions
+         SET name = $1, composition = $2, updated_at = NOW()
+         WHERE id = $3 AND site_id = $4
+         RETURNING *",
+    )
+    .bind(name)
+    .bind(&composition)
+    .bind(id)
+    .bind(site_id)
+    .fetch_one(pool)
+    .await?)
 }
 
 pub async fn activate_homepage(pool: &PgPool, id: Uuid, project_id: Uuid) -> Result<()> {

@@ -140,6 +140,8 @@ pub async fn project_pages(
         .map(|p| admin::pages::builder::PageRow {
             id: p.id.to_string(),
             name: p.name.clone(),
+            slug: p.slug.clone(),
+            page_type: p.page_type.clone(),
             is_homepage: p.is_homepage,
             updated_at: p.updated_at.format("%Y-%m-%d %H:%M").to_string(),
         })
@@ -160,9 +162,10 @@ pub async fn project_pages(
     .into_response()
 }
 
-// ── Editor shell ──────────────────────────────────────────────────────────────
+// ── New page form + create ────────────────────────────────────────────────────
 
-pub async fn new_page(
+/// GET /admin/builder/:project_id/pages/new — show the new page form.
+pub async fn new_page_form(
     State(state): State<AppState>,
     admin: AdminUser,
     Path(project_id): Path<Uuid>,
@@ -174,18 +177,111 @@ pub async fn new_page(
         return Redirect::to("/admin").into_response();
     }
 
-    // Verify project belongs to this site
-    if builder_project::get_by_id(&state.db, project_id, site_id).await.ok().flatten().is_none() {
-        return Redirect::to("/admin/builder").into_response();
-    }
+    let project = match builder_project::get_by_id(&state.db, project_id, site_id).await {
+        Ok(Some(p)) => p,
+        _ => return Redirect::to("/admin/builder").into_response(),
+    };
+
+    // Check if a homepage already exists for this project
+    let has_homepage = page_composition::list_by_project(&state.db, project_id)
+        .await
+        .unwrap_or_default()
+        .iter()
+        .any(|p| p.is_homepage);
 
     let cs = state.site_hostname(admin.site_id);
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
 
-    Html(admin::pages::builder::render_editor(
-        None, "", project_id, site_id, &ctx,
+    Html(admin::pages::builder::render_new_page_form(
+        &admin::pages::builder::ProjectRow {
+            id: project.id.to_string(),
+            name: project.name.clone(),
+            description: project.description.clone(),
+            is_active: project.is_active,
+            page_count: 0,
+            updated_at: String::new(),
+        },
+        has_homepage,
+        &ctx,
     )).into_response()
 }
+
+#[derive(Deserialize)]
+pub struct CreatePageForm {
+    pub name: String,
+    pub page_type: String,  // "homepage" | "page"
+    pub slug: Option<String>,
+}
+
+/// POST /admin/builder/:project_id/pages/new — create the page and open editor.
+pub async fn create_page(
+    State(state): State<AppState>,
+    admin: AdminUser,
+    Path(project_id): Path<Uuid>,
+    Form(form): Form<CreatePageForm>,
+) -> Response {
+    let Some(site_id) = admin.site_id else {
+        return Redirect::to("/admin").into_response();
+    };
+    if !admin.caps.can_manage_appearance {
+        return Redirect::to("/admin").into_response();
+    }
+
+    if builder_project::get_by_id(&state.db, project_id, site_id).await.ok().flatten().is_none() {
+        return Redirect::to("/admin/builder").into_response();
+    }
+
+    let name = form.name.trim().to_string();
+    if name.is_empty() || name.len() > 100 {
+        return Redirect::to(&format!("/admin/builder/{project_id}/pages/new")).into_response();
+    }
+
+    let is_homepage = form.page_type == "homepage";
+
+    // Normalise slug: strip leading slash, lowercase, only allow safe chars
+    let slug = if is_homepage {
+        None
+    } else {
+        let raw = form.slug.as_deref().unwrap_or("").trim().to_lowercase();
+        let raw = raw.trim_start_matches('/');
+        let clean: String = raw.chars()
+            .map(|c| if c.is_alphanumeric() || c == '-' || c == '_' { c } else { '-' })
+            .collect();
+        let clean = clean.trim_matches('-').to_string();
+        if clean.is_empty() {
+            return Redirect::to(&format!("/admin/builder/{project_id}/pages/new")).into_response();
+        }
+        Some(clean)
+    };
+
+    // If setting as homepage, clear existing homepage first
+    if is_homepage {
+        let _ = page_composition::deactivate_homepage(&state.db, project_id).await;
+    }
+
+    match page_composition::create(
+        &state.db,
+        site_id,
+        project_id,
+        &name,
+        &form.page_type,
+        slug.as_deref(),
+        is_homepage,
+        Some(admin.user.id),
+    )
+    .await
+    {
+        Ok(page) => Redirect::to(
+            &format!("/admin/builder/{project_id}/pages/{}", page.id)
+        ).into_response(),
+        Err(e) => {
+            tracing::error!("create page error: {e}");
+            Redirect::to(&format!("/admin/builder/{project_id}/pages/new")).into_response()
+        }
+    }
+}
+
+// ── Editor shell ──────────────────────────────────────────────────────────────
 
 pub async fn edit_page(
     State(state): State<AppState>,
@@ -255,22 +351,23 @@ pub async fn save(
         return (StatusCode::FORBIDDEN, "Project not found").into_response();
     }
 
-    let existing_id = body
-        .composition_id
+    let page_id = match body.composition_id
         .as_deref()
         .filter(|s| !s.is_empty())
-        .and_then(|s| Uuid::parse_str(s).ok());
+        .and_then(|s| Uuid::parse_str(s).ok())
+    {
+        Some(id) => id,
+        None => return (StatusCode::BAD_REQUEST, "Missing composition_id").into_response(),
+    };
 
     let name = if body.name.trim().is_empty() { "Untitled".to_string() } else { body.name.trim().to_string() };
 
-    match page_composition::upsert(
+    match page_composition::save_composition(
         &state.db,
-        existing_id,
+        page_id,
         site_id,
-        Some(project_id),
         &name,
         body.data,
-        Some(admin.user.id),
     )
     .await
     {

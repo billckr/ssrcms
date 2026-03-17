@@ -14,6 +14,8 @@ pub struct ProjectRow {
 pub struct PageRow {
     pub id: String,
     pub name: String,
+    pub slug: Option<String>,
+    pub page_type: String,
     pub is_homepage: bool,
     pub updated_at: String,
 }
@@ -118,24 +120,20 @@ pub fn render_page_list(project: &ProjectRow, pages: &[PageRow], ctx: &crate::Pa
             let homepage_badge = if p.is_homepage {
                 r#" <span class="badge badge-success" style="font-size:.7rem">Homepage</span>"#
             } else { "" };
-            let set_hp_btn = if !p.is_homepage {
-                format!(
-                    r#"<form method="POST" action="/admin/builder/{proj}/pages/{page}/set-homepage" style="display:inline">
-                        <button class="btn btn-sm" type="submit" title="Set as homepage">Set Homepage</button>
-                    </form>"#,
-                    proj = crate::html_escape(&project.id),
-                    page = crate::html_escape(&p.id),
-                )
-            } else { String::new() };
+            let url_display = if p.page_type == "homepage" {
+                "/".to_string()
+            } else {
+                format!("/{}", p.slug.as_deref().unwrap_or(""))
+            };
             format!(
                 r#"<tr>
   <td><a href="/admin/builder/{proj}/pages/{page}">{name}</a>{homepage_badge}</td>
+  <td style="color:var(--muted);font-size:.875rem;font-family:monospace">{url}</td>
   <td>{updated}</td>
   <td class="actions">
     <a href="/admin/builder/{proj}/pages/{page}" class="icon-btn" title="Edit">
       <img src="/admin/static/icons/edit.svg" alt="Edit">
     </a>
-    {set_hp_btn}
     <form method="POST" action="/admin/builder/{proj}/pages/{page}/delete" style="display:inline"
           onsubmit="return confirm('Delete this page?')">
       <button class="icon-btn icon-danger" type="submit" title="Delete">
@@ -144,12 +142,12 @@ pub fn render_page_list(project: &ProjectRow, pages: &[PageRow], ctx: &crate::Pa
     </form>
   </td>
 </tr>"#,
-                proj         = crate::html_escape(&project.id),
-                page         = crate::html_escape(&p.id),
-                name         = crate::html_escape(&p.name),
+                proj           = crate::html_escape(&project.id),
+                page           = crate::html_escape(&p.id),
+                name           = crate::html_escape(&p.name),
                 homepage_badge = homepage_badge,
-                updated      = crate::html_escape(&p.updated_at),
-                set_hp_btn   = set_hp_btn,
+                url            = crate::html_escape(&url_display),
+                updated        = crate::html_escape(&p.updated_at),
             )
         }).collect::<Vec<_>>().join("\n")
     };
@@ -165,7 +163,7 @@ pub fn render_page_list(project: &ProjectRow, pages: &[PageRow], ctx: &crate::Pa
 </div>
 <table class="data-table">
   <thead>
-    <tr><th>Page</th><th>Updated</th><th>Actions</th></tr>
+    <tr><th>Page</th><th>URL</th><th>Updated</th><th>Actions</th></tr>
   </thead>
   <tbody>{rows}</tbody>
 </table>"#,
@@ -232,5 +230,75 @@ pub fn render_editor(
         name_escaped = name_escaped,
         project_id   = project_id,
         site_id      = site_id,
+    )
+}
+
+// ── New page form ─────────────────────────────────────────────────────────────
+
+pub fn render_new_page_form(
+    project: &ProjectRow,
+    has_homepage: bool,
+    ctx: &crate::PageContext,
+) -> String {
+    let homepage_option = if has_homepage {
+        r#"<option value="homepage" disabled>Homepage (already exists)</option>"#
+    } else {
+        r#"<option value="homepage">Homepage — serves at /</option>"#
+    };
+
+    let content = format!(
+        r#"<a href="/admin/builder/{proj_id}" style="color:var(--muted);font-size:.875rem;display:inline-block;margin-bottom:1rem">
+  ← Back to {proj_name}
+</a>
+<div style="max-width:520px">
+  <form method="POST" action="/admin/builder/{proj_id}/pages/new">
+    <div class="form-group">
+      <label for="page-name">Page Name</label>
+      <input id="page-name" type="text" name="name" required
+             placeholder="e.g. About Us" maxlength="100" autofocus
+             style="width:100%">
+    </div>
+    <div class="form-group">
+      <label for="page-type">Page Type</label>
+      <select id="page-type" name="page_type" onchange="toggleSlug(this.value)" style="width:100%">
+        {homepage_option}
+        <option value="page" selected>Regular page</option>
+      </select>
+    </div>
+    <div class="form-group" id="slug-group">
+      <label for="page-slug">URL Slug</label>
+      <div style="display:flex;align-items:center;gap:.5rem">
+        <span style="color:var(--muted)">/</span>
+        <input id="page-slug" type="text" name="slug"
+               placeholder="about-us" maxlength="100"
+               style="flex:1"
+               pattern="[a-zA-Z0-9][a-zA-Z0-9\-_]*"
+               title="Letters, numbers, hyphens and underscores only">
+      </div>
+      <p style="margin:.35rem 0 0;font-size:.8rem;color:var(--muted)">
+        Letters, numbers, hyphens and underscores only. No spaces.
+      </p>
+    </div>
+    <button type="submit" class="btn btn-primary">Create Page &amp; Open Editor</button>
+  </form>
+</div>
+<script>
+  function toggleSlug(type) {{
+    document.getElementById('slug-group').style.display = type === 'homepage' ? 'none' : '';
+    document.getElementById('page-slug').required = type !== 'homepage';
+  }}
+  toggleSlug(document.getElementById('page-type').value);
+</script>"#,
+        proj_id      = crate::html_escape(&project.id),
+        proj_name    = crate::html_escape(&project.name),
+        homepage_option = homepage_option,
+    );
+
+    crate::admin_page(
+        &format!("New Page — {}", project.name),
+        "/admin/builder",
+        None,
+        &content,
+        ctx,
     )
 }
