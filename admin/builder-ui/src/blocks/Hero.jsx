@@ -32,13 +32,13 @@ export const HeroBlock = {
   fields: {
     heading:    { type: 'text', label: 'Heading' },
     subheading: { type: 'textarea', label: 'Subheading' },
-    bgColor:    { type: 'custom', label: 'Background colour', render: ({ value, onChange }) => <ColorField value={value} onChange={onChange} /> },
-    textColor:  { type: 'custom', label: 'Text colour',       render: ({ value, onChange }) => <ColorField value={value} onChange={onChange} /> },
+    bgColor:    { type: 'custom', label: 'Background color', render: ({ value, onChange }) => <ColorField value={value} onChange={onChange} /> },
+    textColor:  { type: 'custom', label: 'Text color',       render: ({ value, onChange }) => <ColorField value={value} onChange={onChange} /> },
     showButton: { type: 'radio', label: 'Show button', options: [{ value: true, label: 'Yes' }, { value: false, label: 'No' }] },
     ctaLabel:   { type: 'text', label: 'Button label' },
     ctaUrl:     { type: 'text', label: 'Button URL' },
-    ctaBg:      { type: 'custom', label: 'Button colour',     render: ({ value, onChange }) => <ColorField value={value} onChange={onChange} /> },
-    ctaText:    { type: 'custom', label: 'Button text colour',render: ({ value, onChange }) => <ColorField value={value} onChange={onChange} /> },
+    ctaBg:      { type: 'custom', label: 'Button color',     render: ({ value, onChange }) => <ColorField value={value} onChange={onChange} /> },
+    ctaText:    { type: 'custom', label: 'Button text color',render: ({ value, onChange }) => <ColorField value={value} onChange={onChange} /> },
     minHeight:  { type: 'text', label: 'Min height (e.g. 480px)' },
     align:      { type: 'select', label: 'Alignment', options: [
       { value: 'left', label: 'Left' },

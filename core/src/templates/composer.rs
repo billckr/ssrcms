@@ -21,6 +21,9 @@ struct PuckBlock {
 struct PuckData {
     #[serde(default)]
     content: Vec<PuckBlock>,
+    /// Keyed by "{block-id}:{zone-name}", contains the blocks dropped into that zone.
+    #[serde(default)]
+    zones: std::collections::HashMap<String, Vec<PuckBlock>>,
 }
 
 pub struct ComposerError(pub String);
@@ -58,21 +61,8 @@ pub fn render_composition(
     // Render each block via its Tera template
     let mut body_html = String::new();
     for block in &data.content {
-        let template_name = format!("{}.html", block.block_type);
-        let mut ctx = site_ctx.clone();
-        ctx.insert("block_config", &block.props);
-
-        tracing::debug!("composer: rendering block '{}' via template '{}'", block.block_type, template_name);
-        match templates.render_builder_block(&template_name, &ctx) {
-            Ok(html) => body_html.push_str(&html),
-            Err(e) => {
-                tracing::warn!("composer: block '{}' failed: {}", block.block_type, e);
-                body_html.push_str(&format!(
-                    r#"<!-- block '{}' could not be rendered -->"#,
-                    block.block_type
-                ));
-            }
-        }
+        let html = render_block(block, &data.zones, templates, site_ctx);
+        body_html.push_str(&html);
     }
 
     let style_tag = if styles.is_empty() {
@@ -96,6 +86,49 @@ pub fn render_composition(
         style_tag = style_tag,
         body_html = body_html,
     ))
+}
+
+/// Render a single block, pre-rendering any DropZone content into `zone_html`.
+fn render_block(
+    block: &PuckBlock,
+    zones: &std::collections::HashMap<String, Vec<PuckBlock>>,
+    templates: &TemplateEngine,
+    site_ctx: &tera::Context,
+) -> String {
+    let template_name = format!("{}.html", block.block_type);
+
+    // Get block ID from props (Puck stores it as props.id)
+    let block_id = block.props.get("id")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+
+    // Pre-render any zones belonging to this block.
+    // Zone keys are "{block_id}:{zone_name}" — we strip the prefix to get zone_name.
+    let mut zone_html = std::collections::HashMap::<String, String>::new();
+    for (key, zone_blocks) in zones {
+        if let Some(zone_name) = key.strip_prefix(&format!("{}:", block_id)) {
+            let mut zone_content = String::new();
+            for zone_block in zone_blocks {
+                // One level of nesting — zones within zones not supported yet
+                let inner = render_block(zone_block, &std::collections::HashMap::new(), templates, site_ctx);
+                zone_content.push_str(&inner);
+            }
+            zone_html.insert(zone_name.to_string(), zone_content);
+        }
+    }
+
+    let mut ctx = site_ctx.clone();
+    ctx.insert("block_config", &block.props);
+    ctx.insert("zone_html", &zone_html);
+
+    tracing::debug!("composer: rendering block '{}' via '{}'", block.block_type, template_name);
+    match templates.render_builder_block(&template_name, &ctx) {
+        Ok(html) => html,
+        Err(e) => {
+            tracing::warn!("composer: block '{}' failed: {}", block.block_type, e);
+            format!("<!-- block '{}' could not be rendered -->", block.block_type)
+        }
+    }
 }
 
 fn empty_page_html() -> String {

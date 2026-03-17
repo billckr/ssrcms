@@ -5,6 +5,7 @@ import { HeroBlock } from './blocks/Hero'
 import { HeaderBlock } from './blocks/Header'
 import { FooterBlock } from './blocks/Footer'
 import { ButtonBlock } from './blocks/Button'
+import { ColumnsBlock } from './blocks/Columns'
 
 const config = {
   components: {
@@ -12,6 +13,7 @@ const config = {
     Header: HeaderBlock,
     Footer: FooterBlock,
     Button: ButtonBlock,
+    Columns: ColumnsBlock,
   },
 }
 
@@ -109,9 +111,12 @@ export default function App() {
         body: JSON.stringify({ site_id: SITE_ID, project_id: PROJECT_ID, composition_id: PAGE_ID, name, data }),
       })
       if (!res.ok) throw new Error(`Server error ${res.status}`)
-      window.location.href = `/admin/builder/${PROJECT_ID}`
+      setIsDirty(false)
+      setStatus('Published!', 'saved')
+      setTimeout(() => setStatus('', ''), 4000)
     } catch (err) {
       setStatus('Publish failed — ' + err.message, 'error')
+    } finally {
       setSaving(false)
     }
   }

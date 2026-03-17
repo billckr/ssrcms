@@ -1,0 +1,22 @@
+{% set cols = block_config.columns | default(value=2) | int %}
+<div style="
+  background: {{ block_config.bgColor | default(value='#ffffff') }};
+  padding: {{ block_config.padding | default(value='32px 40px') }};
+  box-sizing: border-box;
+  width: 100%;
+">
+  <div style="
+    display: grid;
+    grid-template-columns: repeat({{ cols }}, 1fr);
+    gap: {{ block_config.gap | default(value='24px') }};
+    max-width: 1200px;
+    margin: 0 auto;
+  ">
+    {% for i in range(end=cols) %}
+    {% set zone_key = "col" ~ i %}
+    <div>
+      {{ zone_html[zone_key] | default(value='') | safe }}
+    </div>
+    {% endfor %}
+  </div>
+</div>

@@ -6,12 +6,12 @@ export const ButtonBlock = {
     label:   { type: 'text', label: 'Label' },
     url:     { type: 'text', label: 'URL' },
     bgColor: {
-      type: 'custom', label: 'Button colour',
-      render: ({ value, onChange }) => <ColorField label="Button colour" value={value ?? '#e94560'} onChange={onChange} />,
+      type: 'custom', label: 'Button color',
+      render: ({ value, onChange }) => <ColorField label="Button color" value={value ?? '#e2e8f0'} onChange={onChange} />,
     },
     textColor: {
-      type: 'custom', label: 'Text colour',
-      render: ({ value, onChange }) => <ColorField label="Text colour" value={value ?? '#ffffff'} onChange={onChange} />,
+      type: 'custom', label: 'Text color',
+      render: ({ value, onChange }) => <ColorField label="Text color" value={value ?? '#1e293b'} onChange={onChange} />,
     },
     align: {
       type: 'select', label: 'Alignment',
@@ -33,8 +33,8 @@ export const ButtonBlock = {
   defaultProps: {
     label:     'Click here',
     url:       '/',
-    bgColor:   '#e94560',
-    textColor: '#ffffff',
+    bgColor:   '#e2e8f0',
+    textColor: '#1e293b',
     align:     'center',
     size:      'medium',
   },

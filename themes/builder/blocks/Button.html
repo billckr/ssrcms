@@ -3,10 +3,11 @@
 {% if block_config.size == "small" %}{% set padding = "8px 20px" %}{% set font_size = "0.875rem" %}{% endif %}
 {% if block_config.size == "large" %}{% set padding = "18px 40px" %}{% set font_size = "1.125rem" %}{% endif %}
 <div style="padding: 16px 24px; text-align: {{ block_config.align | default(value='center') }}; box-sizing: border-box;">
-  <a href="{{ block_config.url | default(value='/') | safe }}" style="
+  {% set btn_url = block_config.url | default(value='/') %}
+  <a href="{{ btn_url | safe }}"{% if btn_url is starting_with("http") %} target="_blank" rel="noopener noreferrer"{% endif %} style="
     display: inline-block;
-    background: {{ block_config.bgColor | default(value='#e94560') }};
-    color: {{ block_config.textColor | default(value='#ffffff') }};
+    background: {{ block_config.bgColor | default(value='#e2e8f0') }};
+    color: {{ block_config.textColor | default(value='#1e293b') }};
     padding: {{ padding }};
     font-size: {{ font_size }};
     font-weight: 600;
