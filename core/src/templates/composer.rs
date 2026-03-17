@@ -144,6 +144,11 @@ fn block_css(block_type: &str) -> Option<&'static str> {
   .builder-hero h1 { font-size: 2rem !important; }
 }
 "#),
+        "Posts" => Some(r#"
+.builder-posts-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; max-width: 1200px; margin: 0 auto; }
+@media (max-width: 768px) { .builder-posts-grid { grid-template-columns: 1fr; } }
+@media (min-width: 769px) and (max-width: 1024px) { .builder-posts-grid { grid-template-columns: repeat(2, 1fr); } }
+"#),
         _ => None,
     }
 }

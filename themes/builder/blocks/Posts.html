@@ -13,7 +13,7 @@
   {% endif %}
 
   {% if layout == "cards" %}
-  <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; max-width: 1200px; margin: 0 auto;">
+  <div class="builder-posts-grid">
   {% else %}
   <div style="max-width: 1200px; margin: 0 auto;">
   {% endif %}
@@ -30,7 +30,7 @@
       </a>
       {% if block_config.showDate and post.published_at %}
       <p style="color: {{ block_config.textColor | default(value='#374151') }}; font-size: 12px; margin: 4px 0;">
-        {{ post.published_at }}
+        {{ post.published_at | date(format="%B %d, %Y") }}
       </p>
       {% endif %}
       {% if block_config.showExcerpt and post.excerpt %}

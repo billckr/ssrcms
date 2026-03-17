@@ -39,12 +39,23 @@ export const HeaderBlock = {
         <ColorField label="Background Color" value={value ?? '#ffffff'} onChange={onChange} />
       ),
     },
+    fixed: {
+      type: 'custom',
+      label: 'Fixed to top of viewport',
+      render: ({ value, onChange }) => (
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer', padding: '4px 0' }}>
+          <input type="checkbox" checked={!!value} onChange={e => onChange(e.target.checked)} />
+          Fixed header (always visible)
+        </label>
+      ),
+    },
   },
   defaultProps: {
     columns: 1,
     gap: '24px',
     bgColor: '#ffffff',
     padding: '32px 40px',
+    fixed: false,
   },
   render: ({ bgColor, padding, columns, gap }) => {
     const cols = Number(columns) || 1
