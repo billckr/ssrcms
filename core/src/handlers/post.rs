@@ -11,10 +11,13 @@ use tower_sessions::Session;
 
 use uuid::Uuid;
 
+use std::collections::HashMap;
+
 use crate::app_state::AppState;
 use crate::middleware::site::CurrentSite;
-use crate::models::post;
-use crate::templates::context::{ContextBuilder, RequestContext, SessionContext};
+use crate::models::{page_composition, post};
+use crate::templates::{composer, context::{ContextBuilder, RequestContext, SessionContext}};
+use crate::errors::Result;
 
 #[derive(Serialize)]
 struct CommentPaginationContext {
@@ -44,6 +47,21 @@ pub async fn single_post(
     let site_id = current_site.site.id;
     let base_url = current_site.base_url.clone();
     let cpage: usize = params.get("cpage").and_then(|v| v.parse().ok()).unwrap_or(1);
+
+    // ── Builder page check ─────────────────────────────────────────────────
+    // If the active builder project owns a page with this slug, render it via
+    // the composer instead of falling through to the theme's single.html.
+    if let Ok(Some(comp)) = page_composition::get_by_slug(&state.db, site_id, &slug).await {
+        let session_ctx = super::resolve_session(&state, &session).await;
+        match render_builder_page(comp, &state, &base_url, &path, session_ctx).await {
+            Ok(html) => return Html(html).into_response(),
+            Err(e) => {
+                tracing::error!("builder page render error for '{}': {:?}", slug, e);
+                return render_error_page(e, &state, &path, Some(site_id)).await;
+            }
+        }
+    }
+    // ── End builder check ──────────────────────────────────────────────────
 
     // Password gate: check before full render.
     if let Ok(post_record) = post::get_published_by_slug(&state.db, Some(site_id), &slug).await {
@@ -324,4 +342,30 @@ pub async fn unsave_post(
         let _ = crate::models::saved_post::unsave(&state.db, uid, post_record.id).await;
     }
     redirect.into_response()
+}
+
+async fn render_builder_page(
+    comp: page_composition::PageComposition,
+    state: &AppState,
+    base_url: &str,
+    path: &str,
+    session_ctx: SessionContext,
+) -> Result<String> {
+    use crate::errors::AppError;
+    let site_id = comp.site_id;
+    let site_ctx = build_site_context(state, Some(site_id), base_url).await?;
+    let nav = crate::models::nav_menu::build_nav_context(&state.db, site_id, path).await;
+    let ctx = ContextBuilder {
+        site: site_ctx,
+        request: RequestContext {
+            url: format!("{}{}", base_url, path),
+            path: path.to_string(),
+            query: HashMap::new(),
+        },
+        session: session_ctx,
+        nav,
+    }
+    .into_tera_context();
+    composer::render_composition(&comp.composition, &state.templates, &ctx)
+        .map_err(|e| AppError::Internal(e.0))
 }

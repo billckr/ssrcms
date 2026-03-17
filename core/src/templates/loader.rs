@@ -270,11 +270,7 @@ impl TemplateEngine {
         const KEY: &str = "__builder__";
         // Load once if not yet cached
         if !self.engines.read().unwrap().contains_key(KEY) {
-            let blocks_dir = self.themes_root
-                .parent()
-                .unwrap_or(&self.themes_root)
-                .join("builder")
-                .join("blocks");
+            let blocks_dir = self.themes_root.join("builder").join("blocks");
             let glob_pattern = blocks_dir.join("*.html");
             let glob_str = glob_pattern.to_string_lossy().to_string();
             let mut tera = Tera::default();
@@ -288,10 +284,13 @@ impl TemplateEngine {
                             .unwrap_or_default()
                             .to_string();
                         if let Ok(src) = std::fs::read_to_string(&path) {
+                            info!("builder: loaded block template '{}'", name);
                             let _ = tera.add_raw_template(&name, &src);
                         }
                     }
                 }
+            } else {
+                tracing::warn!("builder: blocks dir not found at '{}'", blocks_dir.display());
             }
             drop(glob_str);
             self.engines.write().unwrap().insert(KEY.to_string(), tera);

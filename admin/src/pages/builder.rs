@@ -153,12 +153,10 @@ pub fn render_page_list(project: &ProjectRow, pages: &[PageRow], ctx: &crate::Pa
     };
 
     let content = format!(
-        r#"<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.5rem">
-  <div>
-    <a href="/admin/builder" style="color:var(--muted);font-size:.875rem">← All Projects</a>
-    <h2 style="margin:.25rem 0 0">{name}{active_badge}</h2>
-    {desc}
-  </div>
+        r#"<div style="display:flex;justify-content:flex-end;align-items:center;gap:.75rem;margin-bottom:1.5rem">
+  <a href="/admin/builder" class="btn">← Projects</a>
+  {active_badge}
+  <span style="flex:1"></span>
   <a href="/admin/builder/{proj_id}/pages/new" class="btn btn-primary">+ New Page</a>
 </div>
 <table class="data-table">
@@ -167,17 +165,13 @@ pub fn render_page_list(project: &ProjectRow, pages: &[PageRow], ctx: &crate::Pa
   </thead>
   <tbody>{rows}</tbody>
 </table>"#,
-        name         = crate::html_escape(&project.name),
         active_badge = active_badge,
-        desc         = project.description.as_deref()
-            .map(|d| format!(r#"<p style="margin:.25rem 0 0;color:var(--muted);font-size:.875rem">{}</p>"#, crate::html_escape(d)))
-            .unwrap_or_default(),
         proj_id      = crate::html_escape(&project.id),
         rows         = rows,
     );
 
     crate::admin_page(
-        &format!("{} — Page Builder", project.name),
+        &format!("Page Builder — {}", project.name),
         "/admin/builder",
         None,
         &content,
@@ -192,13 +186,17 @@ pub fn render_editor(
     page_name: &str,
     project_id: Uuid,
     site_id: Uuid,
+    project_name: &str,
+    site_label: &str,
     _ctx: &crate::PageContext,
 ) -> String {
     let page_id_js = match page_id {
         Some(id) => format!(r#""{}""#, id),
         None => "null".to_string(),
     };
-    let name_escaped = crate::html_escape(page_name);
+    let name_escaped    = crate::html_escape(page_name);
+    let project_escaped = crate::html_escape(project_name);
+    let site_escaped    = crate::html_escape(site_label);
 
     format!(
         r#"<!DOCTYPE html>
@@ -209,27 +207,64 @@ pub fn render_editor(
   <title>Page Builder — Synaptic Signals</title>
   <link rel="stylesheet" href="/admin/static/builder/builder.css">
   <style>
-    * {{ box-sizing: border-box; margin: 0; padding: 0; }}
-    html, body, #root {{ height: 100%; width: 100%; overflow: hidden; }}
+    *, *::before, *::after {{ box-sizing: border-box; margin: 0; padding: 0; }}
+    body {{ font: 14px/1.5 system-ui, sans-serif; }}
+    html, body {{ height: 100%; width: 100%; overflow: hidden; }}
+    #builder-header {{
+      display: flex; align-items: center; gap: 1rem;
+      padding: 0 1.5rem; height: 53px; flex-shrink: 0;
+      background: #fff; border-bottom: 1px solid #e2e8f0;
+      position: relative; z-index: 9999;
+    }}
+    #builder-header .back-link {{
+      color: #64748b; text-decoration: none; font-size: 13px; white-space: nowrap;
+    }}
+    #builder-header .back-link:hover {{ color: #1e293b; }}
+    #builder-header .sep {{ color: #cbd5e1; }}
+    #builder-header .title {{ font-size: 1rem; font-weight: 600; color: #1e293b; white-space: nowrap; }}
+    #builder-header .spacer {{ flex: 1; }}
+    #builder-header .site-indicator {{
+      font-size: .75rem; font-weight: 700; color: #111827;
+      background: #e2e8f0; border: 1px solid #e2e8f0; border-radius: 4px;
+      padding: .2rem .6rem; white-space: nowrap; text-decoration: none;
+    }}
+    #builder-header .site-indicator:hover {{ background: #cbd5e1; border-color: #cbd5e1; }}
+    #builder-wrap {{ height: calc(100vh - 53px); overflow: hidden; position: relative; }}
+    #root {{ height: 100%; }}
   </style>
 </head>
 <body>
-  <div id="root"></div>
+  <div id="builder-header">
+    <a href="/admin/builder/{project_id}" class="back-link"
+       id="back-btn">← Back</a>
+    <span class="sep">/</span>
+    <span class="title">{project_escaped}</span>
+    <span class="spacer"></span>
+    <span id="status-msg" style="font-size:12px;white-space:nowrap"></span>
+    <a href="/admin/sites" class="site-indicator">{site_escaped}</a>
+  </div>
+  <div id="builder-wrap">
+    <div id="root"></div>
+  </div>
   <script>
     window.__builderInit = {{
-      pageId:     {page_id_js},
-      pageName:   "{name_escaped}",
-      projectId:  "{project_id}",
-      siteId:     "{site_id}",
+      pageId:      {page_id_js},
+      pageName:    "{name_escaped}",
+      projectId:   "{project_id}",
+      siteId:      "{site_id}",
+      projectName: "{project_escaped}",
+      siteLabel:   "{site_escaped}",
     }};
   </script>
   <script type="module" src="/admin/static/builder/builder.js"></script>
 </body>
 </html>"#,
-        page_id_js   = page_id_js,
-        name_escaped = name_escaped,
-        project_id   = project_id,
-        site_id      = site_id,
+        page_id_js      = page_id_js,
+        name_escaped    = name_escaped,
+        project_escaped = project_escaped,
+        site_escaped    = site_escaped,
+        project_id      = project_id,
+        site_id         = site_id,
     )
 }
 

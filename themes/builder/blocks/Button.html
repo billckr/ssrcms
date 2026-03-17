@@ -1,0 +1,18 @@
+{% set padding = "12px 28px" %}
+{% set font_size = "1rem" %}
+{% if block_config.size == "small" %}{% set padding = "8px 20px" %}{% set font_size = "0.875rem" %}{% endif %}
+{% if block_config.size == "large" %}{% set padding = "18px 40px" %}{% set font_size = "1.125rem" %}{% endif %}
+<div style="padding: 16px 24px; text-align: {{ block_config.align | default(value='center') }}; box-sizing: border-box;">
+  <a href="{{ block_config.url | default(value='/') | safe }}" style="
+    display: inline-block;
+    background: {{ block_config.bgColor | default(value='#e94560') }};
+    color: {{ block_config.textColor | default(value='#ffffff') }};
+    padding: {{ padding }};
+    font-size: {{ font_size }};
+    font-weight: 600;
+    border-radius: 6px;
+    text-decoration: none;
+  ">
+    {{ block_config.label | default(value='Click here') }}
+  </a>
+</div>

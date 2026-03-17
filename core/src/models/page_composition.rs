@@ -12,7 +12,8 @@ pub struct PageComposition {
     pub name: String,
     pub slug: Option<String>,
     pub page_type: String,   // "homepage" | "page"
-    pub composition: serde_json::Value,
+    pub composition: serde_json::Value,       // live — what visitors see
+    pub draft_composition: serde_json::Value, // work in progress — what the editor reads/writes
     pub is_homepage: bool,
     pub created_by: Option<Uuid>,
     pub created_at: chrono::DateTime<chrono::Utc>,
@@ -50,6 +51,21 @@ pub async fn get_homepage(pool: &PgPool, site_id: Uuid) -> Result<Option<PageCom
     .await?)
 }
 
+/// Returns a regular builder page matching `slug` for the site's active project.
+pub async fn get_by_slug(pool: &PgPool, site_id: Uuid, slug: &str) -> Result<Option<PageComposition>> {
+    Ok(sqlx::query_as::<_, PageComposition>(
+        "SELECT pc.* FROM page_compositions pc
+         JOIN builder_projects bp ON bp.id = pc.project_id
+         WHERE bp.site_id = $1 AND bp.is_active = TRUE
+           AND pc.page_type = 'page' AND pc.slug = $2
+         LIMIT 1",
+    )
+    .bind(site_id)
+    .bind(slug)
+    .fetch_optional(pool)
+    .await?)
+}
+
 /// Create a new empty page (called from the new-page form before entering the editor).
 pub async fn create(
     pool: &PgPool,
@@ -78,22 +94,44 @@ pub async fn create(
     .await?)
 }
 
-/// Update composition JSON only (called from the Puck editor on publish).
+/// Save to draft only — does not affect what visitors see.
 pub async fn save_composition(
     pool: &PgPool,
     id: Uuid,
     site_id: Uuid,
     name: &str,
-    composition: serde_json::Value,
+    draft: serde_json::Value,
 ) -> Result<PageComposition> {
     Ok(sqlx::query_as::<_, PageComposition>(
         "UPDATE page_compositions
-         SET name = $1, composition = $2, updated_at = NOW()
+         SET name = $1, draft_composition = $2, updated_at = NOW()
          WHERE id = $3 AND site_id = $4
          RETURNING *",
     )
     .bind(name)
-    .bind(&composition)
+    .bind(&draft)
+    .bind(id)
+    .bind(site_id)
+    .fetch_one(pool)
+    .await?)
+}
+
+/// Promote draft to live — updates both columns atomically.
+pub async fn publish_composition(
+    pool: &PgPool,
+    id: Uuid,
+    site_id: Uuid,
+    name: &str,
+    data: serde_json::Value,
+) -> Result<PageComposition> {
+    Ok(sqlx::query_as::<_, PageComposition>(
+        "UPDATE page_compositions
+         SET name = $1, draft_composition = $2, composition = $2, updated_at = NOW()
+         WHERE id = $3 AND site_id = $4
+         RETURNING *",
+    )
+    .bind(name)
+    .bind(&data)
     .bind(id)
     .bind(site_id)
     .fetch_one(pool)

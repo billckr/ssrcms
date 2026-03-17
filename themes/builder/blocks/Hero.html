@@ -18,7 +18,7 @@
     {{ block_config.subheading }}
   </p>
   {% endif %}
-  {% if block_config.ctaLabel %}
+  {% if block_config.showButton and block_config.ctaLabel %}
   <a href="{{ block_config.ctaUrl | default(value='/') | safe }}" style="
     background: {{ block_config.ctaBg | default(value='#e94560') }};
     color: {{ block_config.ctaText | default(value='#ffffff') }};

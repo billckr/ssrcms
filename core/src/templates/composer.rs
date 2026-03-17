@@ -58,10 +58,11 @@ pub fn render_composition(
     // Render each block via its Tera template
     let mut body_html = String::new();
     for block in &data.content {
-        let template_name = format!("blocks/{}.html", block.block_type);
+        let template_name = format!("{}.html", block.block_type);
         let mut ctx = site_ctx.clone();
         ctx.insert("block_config", &block.props);
 
+        tracing::debug!("composer: rendering block '{}' via template '{}'", block.block_type, template_name);
         match templates.render_builder_block(&template_name, &ctx) {
             Ok(html) => body_html.push_str(&html),
             Err(e) => {

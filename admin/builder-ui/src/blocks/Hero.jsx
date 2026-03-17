@@ -34,6 +34,7 @@ export const HeroBlock = {
     subheading: { type: 'textarea', label: 'Subheading' },
     bgColor:    { type: 'custom', label: 'Background colour', render: ({ value, onChange }) => <ColorField value={value} onChange={onChange} /> },
     textColor:  { type: 'custom', label: 'Text colour',       render: ({ value, onChange }) => <ColorField value={value} onChange={onChange} /> },
+    showButton: { type: 'radio', label: 'Show button', options: [{ value: true, label: 'Yes' }, { value: false, label: 'No' }] },
     ctaLabel:   { type: 'text', label: 'Button label' },
     ctaUrl:     { type: 'text', label: 'Button URL' },
     ctaBg:      { type: 'custom', label: 'Button colour',     render: ({ value, onChange }) => <ColorField value={value} onChange={onChange} /> },
@@ -50,6 +51,7 @@ export const HeroBlock = {
     subheading: 'We build great things. Fast, secure, and beautifully simple.',
     bgColor:    '#1a1a2e',
     textColor:  '#ffffff',
+    showButton: true,
     ctaLabel:   'Get Started',
     ctaUrl:     '/contact',
     ctaBg:      '#e94560',
@@ -57,7 +59,7 @@ export const HeroBlock = {
     minHeight:  '480px',
     align:      'center',
   },
-  render: ({ heading, subheading, bgColor, textColor, ctaLabel, ctaUrl, ctaBg, ctaText, minHeight, align }) => (
+  render: ({ heading, subheading, bgColor, textColor, showButton, ctaLabel, ctaUrl, ctaBg, ctaText, minHeight, align }) => (
     <section style={{
       background: bgColor,
       color: textColor,
@@ -76,7 +78,7 @@ export const HeroBlock = {
       <p style={{ margin: '0 0 32px', fontSize: '1.25rem', maxWidth: '640px', opacity: 0.9 }}>
         {subheading}
       </p>
-      {ctaLabel && (
+      {showButton && ctaLabel && (
         <a
           href={ctaUrl}
           style={{

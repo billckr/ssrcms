@@ -304,11 +304,17 @@ pub async fn edit_page(
         _ => return Redirect::to(&format!("/admin/builder/{project_id}")).into_response(),
     };
 
+    let project = match builder_project::get_by_id(&state.db, project_id, site_id).await {
+        Ok(Some(p)) => p,
+        _ => return Redirect::to("/admin/builder").into_response(),
+    };
+
     let cs = state.site_hostname(admin.site_id);
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
+    let site_label = ctx.current_site.clone();
 
     Html(admin::pages::builder::render_editor(
-        Some(page_id), &page.name, project_id, site_id, &ctx,
+        Some(page_id), &page.name, project_id, site_id, &project.name, &site_label, &ctx,
     )).into_response()
 }
 
@@ -392,11 +398,56 @@ pub async fn load(
     };
 
     match page_composition::get_by_id(&state.db, page_id).await {
-        Ok(Some(comp)) if comp.site_id == site_id => Json(comp.composition).into_response(),
+        Ok(Some(comp)) if comp.site_id == site_id => Json(comp.draft_composition).into_response(),
         Ok(_) => StatusCode::NOT_FOUND.into_response(),
         Err(e) => {
             tracing::error!("builder load error: {e}");
             StatusCode::INTERNAL_SERVER_ERROR.into_response()
+        }
+    }
+}
+
+/// POST /admin/builder/publish — promote draft to live.
+pub async fn publish(
+    State(state): State<AppState>,
+    admin: AdminUser,
+    Json(body): Json<SaveRequest>,
+) -> Response {
+    let Some(site_id) = admin.site_id else {
+        return (StatusCode::FORBIDDEN, "No site").into_response();
+    };
+    if !admin.caps.can_manage_appearance {
+        return (StatusCode::FORBIDDEN, "Forbidden").into_response();
+    }
+
+    let project_id = match Uuid::parse_str(&body.project_id) {
+        Ok(id) => id,
+        Err(_) => return (StatusCode::BAD_REQUEST, "Invalid project_id").into_response(),
+    };
+
+    if builder_project::get_by_id(&state.db, project_id, site_id).await.ok().flatten().is_none() {
+        return (StatusCode::FORBIDDEN, "Project not found").into_response();
+    }
+
+    let page_id = match body.composition_id
+        .as_deref()
+        .filter(|s| !s.is_empty())
+        .and_then(|s| Uuid::parse_str(s).ok())
+    {
+        Some(id) => id,
+        None => return (StatusCode::BAD_REQUEST, "Missing composition_id").into_response(),
+    };
+
+    let name = if body.name.trim().is_empty() { "Untitled".to_string() } else { body.name.trim().to_string() };
+
+    match page_composition::publish_composition(&state.db, page_id, site_id, &name, body.data).await {
+        Ok(comp) => Json(SaveResponse {
+            id: comp.id.to_string(),
+            project_id: project_id.to_string(),
+        }).into_response(),
+        Err(e) => {
+            tracing::error!("builder publish error: {e}");
+            (StatusCode::INTERNAL_SERVER_ERROR, "Publish failed").into_response()
         }
     }
 }
