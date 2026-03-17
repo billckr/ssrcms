@@ -1,24 +1,33 @@
 //! Visual page builder handlers.
 //!
-//! Serves the Puck editor shell and provides JSON API endpoints for saving,
-//! loading, activating, and deleting page compositions.
+//! Route structure:
+//!   /admin/builder                        — project list for site
+//!   /admin/builder/new                    — create project form
+//!   /admin/builder/:project_id            — page list within a project
+//!   /admin/builder/:project_id/pages/new  — new page editor
+//!   /admin/builder/:project_id/pages/:id  — edit page editor
+//!   /admin/builder/save                   — JSON API: save page
+//!   /admin/builder/load/:id               — JSON API: load page
+//!   /admin/builder/:project_id/activate   — set project active
+//!   /admin/builder/:project_id/delete     — delete project
+//!   /admin/builder/:project_id/pages/:id/set-homepage  — set page as homepage
+//!   /admin/builder/:project_id/pages/:id/delete        — delete page
 
 use axum::{
     extract::{Path, State},
     http::StatusCode,
     response::{Html, IntoResponse, Json, Redirect, Response},
+    Form,
 };
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::app_state::AppState;
 use crate::middleware::admin_auth::AdminUser;
-use crate::models::page_composition;
+use crate::models::{builder_project, page_composition};
 
-// ── Editor shell ──────────────────────────────────────────────────────────────
+// ── Project list ──────────────────────────────────────────────────────────────
 
-/// GET /admin/builder
-/// Lists all compositions for the current site.
 pub async fn list(
     State(state): State<AppState>,
     admin: AdminUser,
@@ -33,28 +42,38 @@ pub async fn list(
     let cs = state.site_hostname(admin.site_id);
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
 
-    let comps = page_composition::list_by_site(&state.db, site_id)
+    let projects = builder_project::list_by_site(&state.db, site_id)
         .await
         .unwrap_or_default();
 
-    let rows: Vec<admin::pages::builder::CompositionRow> = comps
-        .iter()
-        .map(|c| admin::pages::builder::CompositionRow {
-            id: c.id.to_string(),
-            name: c.name.clone(),
-            is_homepage: c.is_homepage,
-            updated_at: c.updated_at.format("%Y-%m-%d %H:%M").to_string(),
-        })
-        .collect();
+    let mut rows: Vec<admin::pages::builder::ProjectRow> = Vec::with_capacity(projects.len());
+    for p in &projects {
+        let count = builder_project::page_count(&state.db, p.id).await;
+        rows.push(admin::pages::builder::ProjectRow {
+            id: p.id.to_string(),
+            name: p.name.clone(),
+            description: p.description.clone(),
+            is_active: p.is_active,
+            page_count: count,
+            updated_at: p.updated_at.format("%Y-%m-%d %H:%M").to_string(),
+        });
+    }
 
-    Html(admin::pages::builder::render_list(&rows, &ctx)).into_response()
+    Html(admin::pages::builder::render_project_list(&rows, &ctx)).into_response()
 }
 
-/// GET /admin/builder/new
-/// Serves the Puck editor shell for a new composition.
-pub async fn new_editor(
+// ── Create project ─────────────────────────────────────────────────────────────
+
+#[derive(Deserialize)]
+pub struct CreateProjectForm {
+    pub name: String,
+    pub description: Option<String>,
+}
+
+pub async fn create_project(
     State(state): State<AppState>,
     admin: AdminUser,
+    Form(form): Form<CreateProjectForm>,
 ) -> Response {
     let Some(site_id) = admin.site_id else {
         return Redirect::to("/admin").into_response();
@@ -63,24 +82,34 @@ pub async fn new_editor(
         return Redirect::to("/admin").into_response();
     }
 
-    let cs = state.site_hostname(admin.site_id);
-    let ctx = super::page_ctx_full(&state, &admin, &cs).await;
+    let name = form.name.trim().to_string();
+    if name.is_empty() {
+        return Redirect::to("/admin/builder").into_response();
+    }
 
-    Html(admin::pages::builder::render_editor(
-        None,
-        "",
+    match builder_project::create(
+        &state.db,
         site_id,
-        &ctx,
-    ))
-    .into_response()
+        &name,
+        form.description.as_deref(),
+        Some(admin.user.id),
+    )
+    .await
+    {
+        Ok(project) => Redirect::to(&format!("/admin/builder/{}", project.id)).into_response(),
+        Err(e) => {
+            tracing::error!("create project error: {e}");
+            Redirect::to("/admin/builder").into_response()
+        }
+    }
 }
 
-/// GET /admin/builder/edit/:id
-/// Serves the Puck editor shell for an existing composition.
-pub async fn edit_editor(
+// ── Page list within a project ────────────────────────────────────────────────
+
+pub async fn project_pages(
     State(state): State<AppState>,
     admin: AdminUser,
-    Path(id): Path<Uuid>,
+    Path(project_id): Path<Uuid>,
 ) -> Response {
     let Some(site_id) = admin.site_id else {
         return Redirect::to("/admin").into_response();
@@ -89,21 +118,97 @@ pub async fn edit_editor(
         return Redirect::to("/admin").into_response();
     }
 
-    let comp = match page_composition::get_by_id(&state.db, id).await {
-        Ok(Some(c)) if c.site_id == site_id => c,
+    let project = match builder_project::get_by_id(&state.db, project_id, site_id).await {
+        Ok(Some(p)) => p,
         _ => return Redirect::to("/admin/builder").into_response(),
     };
 
     let cs = state.site_hostname(admin.site_id);
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
 
-    Html(admin::pages::builder::render_editor(
-        Some(id),
-        &comp.name,
-        site_id,
+    let pages = page_composition::list_by_project(&state.db, project_id)
+        .await
+        .unwrap_or_default();
+
+    let rows: Vec<admin::pages::builder::PageRow> = pages
+        .iter()
+        .map(|p| admin::pages::builder::PageRow {
+            id: p.id.to_string(),
+            name: p.name.clone(),
+            is_homepage: p.is_homepage,
+            updated_at: p.updated_at.format("%Y-%m-%d %H:%M").to_string(),
+        })
+        .collect();
+
+    Html(admin::pages::builder::render_page_list(
+        &admin::pages::builder::ProjectRow {
+            id: project.id.to_string(),
+            name: project.name.clone(),
+            description: project.description.clone(),
+            is_active: project.is_active,
+            page_count: rows.len() as i64,
+            updated_at: project.updated_at.format("%Y-%m-%d %H:%M").to_string(),
+        },
+        &rows,
         &ctx,
     ))
     .into_response()
+}
+
+// ── Editor shell ──────────────────────────────────────────────────────────────
+
+pub async fn new_page(
+    State(state): State<AppState>,
+    admin: AdminUser,
+    Path(project_id): Path<Uuid>,
+) -> Response {
+    let Some(site_id) = admin.site_id else {
+        return Redirect::to("/admin").into_response();
+    };
+    if !admin.caps.can_manage_appearance {
+        return Redirect::to("/admin").into_response();
+    }
+
+    // Verify project belongs to this site
+    if builder_project::get_by_id(&state.db, project_id, site_id).await.ok().flatten().is_none() {
+        return Redirect::to("/admin/builder").into_response();
+    }
+
+    let cs = state.site_hostname(admin.site_id);
+    let ctx = super::page_ctx_full(&state, &admin, &cs).await;
+
+    Html(admin::pages::builder::render_editor(
+        None, "", project_id, site_id, &ctx,
+    )).into_response()
+}
+
+pub async fn edit_page(
+    State(state): State<AppState>,
+    admin: AdminUser,
+    Path((project_id, page_id)): Path<(Uuid, Uuid)>,
+) -> Response {
+    let Some(site_id) = admin.site_id else {
+        return Redirect::to("/admin").into_response();
+    };
+    if !admin.caps.can_manage_appearance {
+        return Redirect::to("/admin").into_response();
+    }
+
+    if builder_project::get_by_id(&state.db, project_id, site_id).await.ok().flatten().is_none() {
+        return Redirect::to("/admin/builder").into_response();
+    }
+
+    let page = match page_composition::get_by_id(&state.db, page_id).await {
+        Ok(Some(p)) if p.project_id == Some(project_id) => p,
+        _ => return Redirect::to(&format!("/admin/builder/{project_id}")).into_response(),
+    };
+
+    let cs = state.site_hostname(admin.site_id);
+    let ctx = super::page_ctx_full(&state, &admin, &cs).await;
+
+    Html(admin::pages::builder::render_editor(
+        Some(page_id), &page.name, project_id, site_id, &ctx,
+    )).into_response()
 }
 
 // ── JSON API ──────────────────────────────────────────────────────────────────
@@ -111,6 +216,7 @@ pub async fn edit_editor(
 #[derive(Deserialize)]
 pub struct SaveRequest {
     pub composition_id: Option<String>,
+    pub project_id: String,
     pub site_id: String,
     pub name: String,
     pub data: serde_json::Value,
@@ -119,9 +225,9 @@ pub struct SaveRequest {
 #[derive(Serialize)]
 pub struct SaveResponse {
     pub id: String,
+    pub project_id: String,
 }
 
-/// POST /admin/builder/save
 pub async fn save(
     State(state): State<AppState>,
     admin: AdminUser,
@@ -134,29 +240,39 @@ pub async fn save(
         return (StatusCode::FORBIDDEN, "Forbidden").into_response();
     }
 
+    let project_id = match Uuid::parse_str(&body.project_id) {
+        Ok(id) => id,
+        Err(_) => return (StatusCode::BAD_REQUEST, "Invalid project_id").into_response(),
+    };
+
+    // Verify project belongs to this site
+    if builder_project::get_by_id(&state.db, project_id, site_id).await.ok().flatten().is_none() {
+        return (StatusCode::FORBIDDEN, "Project not found").into_response();
+    }
+
     let existing_id = body
         .composition_id
         .as_deref()
         .filter(|s| !s.is_empty())
         .and_then(|s| Uuid::parse_str(s).ok());
 
-    let name = if body.name.trim().is_empty() {
-        "Untitled".to_string()
-    } else {
-        body.name.trim().to_string()
-    };
+    let name = if body.name.trim().is_empty() { "Untitled".to_string() } else { body.name.trim().to_string() };
 
     match page_composition::upsert(
         &state.db,
         existing_id,
         site_id,
+        Some(project_id),
         &name,
         body.data,
         Some(admin.user.id),
     )
     .await
     {
-        Ok(comp) => Json(SaveResponse { id: comp.id.to_string() }).into_response(),
+        Ok(comp) => Json(SaveResponse {
+            id: comp.id.to_string(),
+            project_id: project_id.to_string(),
+        }).into_response(),
         Err(e) => {
             tracing::error!("builder save error: {e}");
             (StatusCode::INTERNAL_SERVER_ERROR, "Save failed").into_response()
@@ -164,20 +280,17 @@ pub async fn save(
     }
 }
 
-/// GET /admin/builder/load/:id
 pub async fn load(
     State(state): State<AppState>,
     admin: AdminUser,
-    Path(id): Path<Uuid>,
+    Path(page_id): Path<Uuid>,
 ) -> Response {
     let Some(site_id) = admin.site_id else {
         return (StatusCode::FORBIDDEN, "No site").into_response();
     };
 
-    match page_composition::get_by_id(&state.db, id).await {
-        Ok(Some(comp)) if comp.site_id == site_id => {
-            Json(comp.composition).into_response()
-        }
+    match page_composition::get_by_id(&state.db, page_id).await {
+        Ok(Some(comp)) if comp.site_id == site_id => Json(comp.composition).into_response(),
         Ok(_) => StatusCode::NOT_FOUND.into_response(),
         Err(e) => {
             tracing::error!("builder load error: {e}");
@@ -186,11 +299,12 @@ pub async fn load(
     }
 }
 
-/// POST /admin/builder/activate/:id
-pub async fn activate(
+// ── Project actions ───────────────────────────────────────────────────────────
+
+pub async fn activate_project(
     State(state): State<AppState>,
     admin: AdminUser,
-    Path(id): Path<Uuid>,
+    Path(project_id): Path<Uuid>,
 ) -> Response {
     let Some(site_id) = admin.site_id else {
         return Redirect::to("/admin/builder").into_response();
@@ -198,16 +312,13 @@ pub async fn activate(
     if !admin.caps.can_manage_appearance {
         return Redirect::to("/admin/builder").into_response();
     }
-
-    if let Err(e) = page_composition::activate_homepage(&state.db, id, site_id).await {
-        tracing::error!("builder activate error: {e}");
+    if let Err(e) = builder_project::activate(&state.db, project_id, site_id).await {
+        tracing::error!("activate project error: {e}");
     }
-
     Redirect::to("/admin/builder").into_response()
 }
 
-/// POST /admin/builder/deactivate
-pub async fn deactivate(
+pub async fn deactivate_project(
     State(state): State<AppState>,
     admin: AdminUser,
 ) -> Response {
@@ -217,19 +328,16 @@ pub async fn deactivate(
     if !admin.caps.can_manage_appearance {
         return Redirect::to("/admin/builder").into_response();
     }
-
-    if let Err(e) = page_composition::deactivate_homepage(&state.db, site_id).await {
-        tracing::error!("builder deactivate error: {e}");
+    if let Err(e) = builder_project::deactivate(&state.db, site_id).await {
+        tracing::error!("deactivate project error: {e}");
     }
-
     Redirect::to("/admin/builder").into_response()
 }
 
-/// POST /admin/builder/delete/:id
-pub async fn delete(
+pub async fn delete_project(
     State(state): State<AppState>,
     admin: AdminUser,
-    Path(id): Path<Uuid>,
+    Path(project_id): Path<Uuid>,
 ) -> Response {
     let Some(site_id) = admin.site_id else {
         return Redirect::to("/admin/builder").into_response();
@@ -237,10 +345,48 @@ pub async fn delete(
     if !admin.caps.can_manage_appearance {
         return Redirect::to("/admin/builder").into_response();
     }
-
-    if let Err(e) = page_composition::delete(&state.db, id, site_id).await {
-        tracing::error!("builder delete error: {e}");
+    if let Err(e) = builder_project::delete(&state.db, project_id, site_id).await {
+        tracing::error!("delete project error: {e}");
     }
-
     Redirect::to("/admin/builder").into_response()
+}
+
+// ── Page actions ──────────────────────────────────────────────────────────────
+
+pub async fn set_homepage(
+    State(state): State<AppState>,
+    admin: AdminUser,
+    Path((project_id, page_id)): Path<(Uuid, Uuid)>,
+) -> Response {
+    let Some(site_id) = admin.site_id else {
+        return Redirect::to("/admin/builder").into_response();
+    };
+    if !admin.caps.can_manage_appearance {
+        return Redirect::to("/admin/builder").into_response();
+    }
+    // Verify project ownership
+    if builder_project::get_by_id(&state.db, project_id, site_id).await.ok().flatten().is_none() {
+        return Redirect::to("/admin/builder").into_response();
+    }
+    if let Err(e) = page_composition::activate_homepage(&state.db, page_id, project_id).await {
+        tracing::error!("set homepage error: {e}");
+    }
+    Redirect::to(&format!("/admin/builder/{project_id}")).into_response()
+}
+
+pub async fn delete_page(
+    State(state): State<AppState>,
+    admin: AdminUser,
+    Path((project_id, page_id)): Path<(Uuid, Uuid)>,
+) -> Response {
+    let Some(site_id) = admin.site_id else {
+        return Redirect::to("/admin/builder").into_response();
+    };
+    if !admin.caps.can_manage_appearance {
+        return Redirect::to("/admin/builder").into_response();
+    }
+    if let Err(e) = page_composition::delete(&state.db, page_id, site_id).await {
+        tracing::error!("delete page error: {e}");
+    }
+    Redirect::to(&format!("/admin/builder/{project_id}")).into_response()
 }

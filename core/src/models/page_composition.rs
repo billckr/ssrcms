@@ -8,6 +8,7 @@ use crate::errors::Result;
 pub struct PageComposition {
     pub id: Uuid,
     pub site_id: Uuid,
+    pub project_id: Option<Uuid>,
     pub name: String,
     pub composition: serde_json::Value,
     pub is_homepage: bool,
@@ -16,11 +17,11 @@ pub struct PageComposition {
     pub updated_at: chrono::DateTime<chrono::Utc>,
 }
 
-pub async fn list_by_site(pool: &PgPool, site_id: Uuid) -> Result<Vec<PageComposition>> {
+pub async fn list_by_project(pool: &PgPool, project_id: Uuid) -> Result<Vec<PageComposition>> {
     Ok(sqlx::query_as::<_, PageComposition>(
-        "SELECT * FROM page_compositions WHERE site_id = $1 ORDER BY updated_at DESC",
+        "SELECT * FROM page_compositions WHERE project_id = $1 ORDER BY is_homepage DESC, updated_at DESC",
     )
-    .bind(site_id)
+    .bind(project_id)
     .fetch_all(pool)
     .await?)
 }
@@ -34,9 +35,13 @@ pub async fn get_by_id(pool: &PgPool, id: Uuid) -> Result<Option<PageComposition
     .await?)
 }
 
+/// Returns the active homepage for a site via its active project.
 pub async fn get_homepage(pool: &PgPool, site_id: Uuid) -> Result<Option<PageComposition>> {
     Ok(sqlx::query_as::<_, PageComposition>(
-        "SELECT * FROM page_compositions WHERE site_id = $1 AND is_homepage = TRUE LIMIT 1",
+        "SELECT pc.* FROM page_compositions pc
+         JOIN builder_projects bp ON bp.id = pc.project_id
+         WHERE bp.site_id = $1 AND bp.is_active = TRUE AND pc.is_homepage = TRUE
+         LIMIT 1",
     )
     .bind(site_id)
     .fetch_optional(pool)
@@ -47,6 +52,7 @@ pub async fn upsert(
     pool: &PgPool,
     id: Option<Uuid>,
     site_id: Uuid,
+    project_id: Option<Uuid>,
     name: &str,
     composition: serde_json::Value,
     created_by: Option<Uuid>,
@@ -66,11 +72,12 @@ pub async fn upsert(
         .await?
     } else {
         sqlx::query_as::<_, PageComposition>(
-            "INSERT INTO page_compositions (site_id, name, composition, created_by)
-             VALUES ($1, $2, $3, $4)
+            "INSERT INTO page_compositions (site_id, project_id, name, composition, created_by)
+             VALUES ($1, $2, $3, $4, $5)
              RETURNING *",
         )
         .bind(site_id)
+        .bind(project_id)
         .bind(name)
         .bind(&composition)
         .bind(created_by)
@@ -80,33 +87,33 @@ pub async fn upsert(
     Ok(row)
 }
 
-pub async fn activate_homepage(pool: &PgPool, id: Uuid, site_id: Uuid) -> Result<()> {
+pub async fn activate_homepage(pool: &PgPool, id: Uuid, project_id: Uuid) -> Result<()> {
     let mut tx = pool.begin().await?;
     sqlx::query(
         "UPDATE page_compositions SET is_homepage = FALSE, updated_at = NOW()
-         WHERE site_id = $1 AND is_homepage = TRUE",
+         WHERE project_id = $1 AND is_homepage = TRUE",
     )
-    .bind(site_id)
+    .bind(project_id)
     .execute(&mut *tx)
     .await?;
     sqlx::query(
         "UPDATE page_compositions SET is_homepage = TRUE, updated_at = NOW()
-         WHERE id = $1 AND site_id = $2",
+         WHERE id = $1 AND project_id = $2",
     )
     .bind(id)
-    .bind(site_id)
+    .bind(project_id)
     .execute(&mut *tx)
     .await?;
     tx.commit().await?;
     Ok(())
 }
 
-pub async fn deactivate_homepage(pool: &PgPool, site_id: Uuid) -> Result<()> {
+pub async fn deactivate_homepage(pool: &PgPool, project_id: Uuid) -> Result<()> {
     sqlx::query(
         "UPDATE page_compositions SET is_homepage = FALSE, updated_at = NOW()
-         WHERE site_id = $1",
+         WHERE project_id = $1",
     )
-    .bind(site_id)
+    .bind(project_id)
     .execute(pool)
     .await?;
     Ok(())
