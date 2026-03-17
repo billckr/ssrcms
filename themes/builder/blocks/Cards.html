@@ -1,0 +1,31 @@
+{% set count = block_config.cards | default(value=2) | int %}
+{% set radius = block_config.radius | default(value='12px') %}
+{% set border_width = block_config.borderWidth | default(value='1px') %}
+<div style="
+  padding: {{ block_config.padding | default(value='32px 40px') }};
+  box-sizing: border-box;
+  width: 100%;
+">
+  <div style="
+    display: grid;
+    grid-template-columns: repeat({{ count }}, 1fr);
+    gap: {{ block_config.gap | default(value='24px') }};
+    max-width: 1200px;
+    margin: 0 auto;
+  ">
+    {% for i in range(end=count) %}
+    {% set zone_key = "col" ~ i %}
+    <div style="
+      background: {{ block_config.cardBgColor | default(value='#ffffff') }};
+      color: {{ block_config.cardTextColor | default(value='#111827') }};
+      border-radius: {{ radius }};
+      {% if border_width != '0px' %}border: {{ border_width }} solid {{ block_config.borderColor | default(value='#e2e8f0') }};{% endif %}
+      padding: 24px;
+      min-height: 120px;
+      box-sizing: border-box;
+    ">
+      {{ zone_html[zone_key] | default(value='') | safe }}
+    </div>
+    {% endfor %}
+  </div>
+</div>

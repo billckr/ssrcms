@@ -6,6 +6,9 @@ import { HeaderBlock } from './blocks/Header'
 import { FooterBlock } from './blocks/Footer'
 import { ButtonBlock } from './blocks/Button'
 import { ColumnsBlock } from './blocks/Columns'
+import { SearchBlock } from './blocks/Search'
+import { CardBlock } from './blocks/Card'
+import { FormBlock } from './blocks/Form'
 
 const config = {
   components: {
@@ -14,6 +17,9 @@ const config = {
     Footer: FooterBlock,
     Button: ButtonBlock,
     Columns: ColumnsBlock,
+    Search: SearchBlock,
+    Cards: CardBlock,
+    Form: FormBlock,
   },
 }
 
@@ -39,6 +45,7 @@ export default function App() {
     setStatusType(type)
   }
   const autoSaveTimer                 = useRef(null)
+  const isFirstChange                 = useRef(true)
 
   useEffect(() => {
     if (!PAGE_ID) { setInitialData({}); return }
@@ -88,6 +95,7 @@ export default function App() {
 
   function handleChange(data) {
     setCurrentData(data)
+    if (isFirstChange.current) { isFirstChange.current = false; return }
     setIsDirty(true)
     setStatus('Unsaved changes', 'dirty')
   }
@@ -160,6 +168,26 @@ export default function App() {
   }
 
   return (
-    <Puck config={config} onPublish={handlePublish} data={initialData} onChange={handleChange} overrides={overrides} />
+    <>
+      {!init.pureMode && (
+        <a
+          href={`/admin/builder/${PROJECT_ID}`}
+          onClick={handleBackClick}
+          title="Back to project"
+          style={{
+            position: 'fixed', top: 0, left: 0, zIndex: 9999,
+            width: 67, height: 60,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            background: '#1e293b', color: '#fff',
+            textDecoration: 'none', fontSize: 20, lineHeight: 1,
+          }}
+        >
+          ←
+        </a>
+      )}
+      {initialData !== null && (
+        <Puck config={config} onPublish={handlePublish} data={initialData} onChange={handleChange} overrides={overrides} />
+      )}
+    </>
   )
 }

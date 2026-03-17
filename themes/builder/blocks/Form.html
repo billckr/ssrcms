@@ -1,0 +1,42 @@
+<div style="padding: 32px 40px; box-sizing: border-box; width: 100%;">
+  <form
+    action="{{ block_config.action | default(value='/form/contact') | safe }}"
+    method="POST"
+    style="max-width: 640px; margin: 0 auto; color: {{ block_config.textColor | default(value='#111827') }};"
+  >
+    {% if block_config.formFields %}
+    {% for field in block_config.formFields %}
+    {% if field.name and field.name != "" %}
+      {% set field_name = field.name %}
+    {% else %}
+      {% set field_name = "field_" ~ loop.index0 %}
+    {% endif %}
+    <div style="margin-bottom: 16px;">
+      <label style="display: block; font-weight: 600; margin-bottom: 4px; font-size: 14px;">{{ field.label }}</label>
+      {% if field.fieldType == "checkbox" %}
+      <input type="checkbox" name="{{ field_name }}"{% if field.required %} required{% endif %} />
+      {% else %}
+      <input
+        type="{% if field.fieldType == 'email' %}email{% else %}text{% endif %}"
+        name="{{ field_name }}"
+        placeholder="{{ field.label }}"
+        {% if field.required %}required{% endif %}
+        style="width: 100%; padding: 10px 14px; font-size: 14px; border: 1px solid #d1d5db; border-radius: 6px; box-sizing: border-box;"
+      />
+      {% endif %}
+    </div>
+    {% endfor %}
+    {% endif %}
+    {% if block_config.includeHuman %}
+    <div style="margin-bottom: 16px; display: flex; align-items: center; gap: 8px; font-size: 14px;">
+      <input type="checkbox" id="human_check" required />
+      <label for="human_check">I am human</label>
+    </div>
+    {% endif %}
+    <button type="submit" style="
+      background: {{ block_config.buttonColor | default(value='#2563eb') }};
+      color: #fff; border: none; padding: 12px 28px; border-radius: 6px;
+      font-weight: 600; font-size: 15px; cursor: pointer;
+    ">{{ block_config.buttonLabel | default(value='Send Message') }}</button>
+  </form>
+</div>
