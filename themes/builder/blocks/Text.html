@@ -1,0 +1,7 @@
+<p style="
+  text-align: {{ block_config.align | default(value='left') }};
+  font-size: {{ block_config.fontSize | default(value='16px') }};
+  color: {{ block_config.textColor | default(value='#111827') }};
+  margin: 0;
+  white-space: pre-wrap;
+">{{ block_config.text | default(value='') }}</p>

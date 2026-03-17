@@ -9,6 +9,7 @@ import { ColumnsBlock } from './blocks/Columns'
 import { SearchBlock } from './blocks/Search'
 import { CardBlock } from './blocks/Card'
 import { FormBlock } from './blocks/Form'
+import { TextBlock } from './blocks/Text'
 
 const config = {
   components: {
@@ -20,6 +21,7 @@ const config = {
     Search: SearchBlock,
     Cards: CardBlock,
     Form: FormBlock,
+    Text: TextBlock,
   },
 }
 

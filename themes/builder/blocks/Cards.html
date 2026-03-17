@@ -1,6 +1,4 @@
-{% set count = block_config.cards | default(value=2) | int %}
-{% set radius = block_config.radius | default(value='12px') %}
-{% set border_width = block_config.borderWidth | default(value='1px') %}
+{% set count = block_config.cards | length %}
 <div style="
   padding: {{ block_config.padding | default(value='32px 40px') }};
   box-sizing: border-box;
@@ -13,16 +11,20 @@
     max-width: 1200px;
     margin: 0 auto;
   ">
-    {% for i in range(end=count) %}
-    {% set zone_key = "col" ~ i %}
+    {% for card in block_config.cards %}
+    {% set zone_key = "col" ~ loop.index0 %}
+    {% set bw = card.borderWidth | default(value='1px') %}
     <div style="
-      background: {{ block_config.cardBgColor | default(value='#ffffff') }};
-      color: {{ block_config.cardTextColor | default(value='#111827') }};
-      border-radius: {{ radius }};
-      {% if border_width != '0px' %}border: {{ border_width }} solid {{ block_config.borderColor | default(value='#e2e8f0') }};{% endif %}
+      background: {{ card.bgColor | default(value='#ffffff') }};
+      color: {{ card.textColor | default(value='#111827') }};
+      border-radius: {{ card.radius | default(value='12px') }};
+      {% if bw != '0px' %}border: {{ bw }} solid {{ card.borderColor | default(value='#e2e8f0') }};{% endif %}
       padding: 24px;
-      min-height: 120px;
+      min-height: 160px;
       box-sizing: border-box;
+      display: flex;
+      flex-direction: column;
+      justify-content: {{ card.valign | default(value='flex-start') }};
     ">
       {{ zone_html[zone_key] | default(value='') | safe }}
     </div>
