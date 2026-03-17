@@ -1,4 +1,4 @@
-import { DropZone } from '@measured/puck'
+import { DropZone } from '@puckeditor/core'
 import { ColorField, PADDING_OPTIONS } from './ColorField'
 
 const COLUMN_OPTIONS = [

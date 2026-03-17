@@ -1,5 +1,5 @@
-import { Puck } from '@measured/puck'
-import '@measured/puck/puck.css'
+import { Puck } from '@puckeditor/core'
+import '@puckeditor/core/dist/index.css'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { HeroBlock } from './blocks/Hero'
 import { HeaderBlock } from './blocks/Header'
@@ -26,18 +26,18 @@ const AUTO_SAVE_MS = 30_000
 
 const STATUS_COLOR = { dirty: '#92400e', saving: '#64748b', saved: '#166534', error: '#b91c1c' }
 
-function setStatus(text, type) {
-  const el = document.getElementById('status-msg')
-  if (!el) return
-  el.textContent = text
-  el.style.color = STATUS_COLOR[type] || ''
-}
-
 export default function App() {
   const [initialData, setInitialData] = useState(null)
   const [currentData, setCurrentData] = useState(null)
   const [isDirty, setIsDirty]         = useState(false)
   const [saving, setSaving]           = useState(false)
+  const [statusText, setStatusText]   = useState('')
+  const [statusType, setStatusType]   = useState('')
+
+  function setStatus(text, type) {
+    setStatusText(text)
+    setStatusType(type)
+  }
   const autoSaveTimer                 = useRef(null)
 
   useEffect(() => {
@@ -48,13 +48,9 @@ export default function App() {
       .catch(() => setInitialData({}))
   }, [])
 
-  useEffect(() => {
-    const btn = document.getElementById('back-btn')
-    if (!btn) return
-    const handler = (e) => { if (isDirty && !confirm('You have unsaved changes. Leave anyway?')) e.preventDefault() }
-    btn.addEventListener('click', handler)
-    return () => btn.removeEventListener('click', handler)
-  }, [isDirty])
+  function handleBackClick(e) {
+    if (isDirty && !confirm('You have unsaved changes. Leave anyway?')) e.preventDefault()
+  }
 
   useEffect(() => {
     const handler = (e) => { if (!isDirty) return; e.preventDefault(); e.returnValue = '' }
@@ -129,7 +125,7 @@ export default function App() {
     )
   }
 
-  const overrides = {
+  const overrides = init.pureMode ? {} : {
     headerActions: ({ children }) => (
       <>
         <button
@@ -144,6 +140,21 @@ export default function App() {
           Save Draft
         </button>
         {children}
+        {statusText && (
+          <span style={{ fontSize: 12, whiteSpace: 'nowrap', color: STATUS_COLOR[statusType] || '#64748b' }}>
+            {statusText}
+          </span>
+        )}
+        <a
+          href="/admin/sites"
+          style={{
+            fontSize: '0.75rem', fontWeight: 700, color: '#111827',
+            background: '#e2e8f0', border: '1px solid #e2e8f0', borderRadius: 4,
+            padding: '0.2rem 0.6rem', whiteSpace: 'nowrap', textDecoration: 'none',
+          }}
+        >
+          {init.siteLabel || ''}
+        </a>
       </>
     ),
   }

@@ -176,6 +176,7 @@ pub fn build(
         .route("/admin/builder/{project_id}/delete",                    post(admin_builder::delete_project))
         .route("/admin/builder/{project_id}/pages/new",                 get(admin_builder::new_page_form).post(admin_builder::create_page))
         .route("/admin/builder/{project_id}/pages/{page_id}",          get(admin_builder::edit_page))
+        .route("/admin/builder2/{project_id}/pages/{page_id}",         get(admin_builder::edit_page2))
         .route("/admin/builder/{project_id}/pages/{page_id}/set-homepage", post(admin_builder::set_homepage))
         .route("/admin/builder/{project_id}/pages/{page_id}/delete",   post(admin_builder::delete_page))
         // ── Admin menus ────────────────────────────────────────────────────

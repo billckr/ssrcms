@@ -188,6 +188,7 @@ pub fn render_editor(
     site_id: Uuid,
     project_name: &str,
     site_label: &str,
+    pure_mode: bool,
     _ctx: &crate::PageContext,
 ) -> String {
     let page_id_js = match page_id {
@@ -197,6 +198,7 @@ pub fn render_editor(
     let name_escaped    = crate::html_escape(page_name);
     let project_escaped = crate::html_escape(project_name);
     let site_escaped    = crate::html_escape(site_label);
+    let pure_mode_js    = if pure_mode { "true" } else { "false" };
 
     format!(
         r#"<!DOCTYPE html>
@@ -209,43 +211,12 @@ pub fn render_editor(
   <style>
     *, *::before, *::after {{ box-sizing: border-box; margin: 0; padding: 0; }}
     body {{ font: 14px/1.5 system-ui, sans-serif; }}
-    html, body {{ height: 100%; width: 100%; overflow: hidden; }}
-    #builder-header {{
-      display: flex; align-items: center; gap: 1rem;
-      padding: 0 1.5rem; height: 53px; flex-shrink: 0;
-      background: #fff; border-bottom: 1px solid #e2e8f0;
-      position: relative; z-index: 9999;
-    }}
-    #builder-header .back-link {{
-      color: #64748b; text-decoration: none; font-size: 13px; white-space: nowrap;
-    }}
-    #builder-header .back-link:hover {{ color: #1e293b; }}
-    #builder-header .sep {{ color: #cbd5e1; }}
-    #builder-header .title {{ font-size: 1rem; font-weight: 600; color: #1e293b; white-space: nowrap; }}
-    #builder-header .spacer {{ flex: 1; }}
-    #builder-header .site-indicator {{
-      font-size: .75rem; font-weight: 700; color: #111827;
-      background: #e2e8f0; border: 1px solid #e2e8f0; border-radius: 4px;
-      padding: .2rem .6rem; white-space: nowrap; text-decoration: none;
-    }}
-    #builder-header .site-indicator:hover {{ background: #cbd5e1; border-color: #cbd5e1; }}
-    #builder-wrap {{ height: calc(100vh - 53px); overflow: hidden; position: relative; }}
+    html, body {{ height: 100%; }}
     #root {{ height: 100%; }}
   </style>
 </head>
 <body>
-  <div id="builder-header">
-    <a href="/admin/builder/{project_id}" class="back-link"
-       id="back-btn">← Back</a>
-    <span class="sep">/</span>
-    <span class="title">{project_escaped}</span>
-    <span class="spacer"></span>
-    <span id="status-msg" style="font-size:12px;white-space:nowrap"></span>
-    <a href="/admin/sites" class="site-indicator">{site_escaped}</a>
-  </div>
-  <div id="builder-wrap">
-    <div id="root"></div>
-  </div>
+  <div id="root"></div>
   <script>
     window.__builderInit = {{
       pageId:      {page_id_js},
@@ -254,6 +225,7 @@ pub fn render_editor(
       siteId:      "{site_id}",
       projectName: "{project_escaped}",
       siteLabel:   "{site_escaped}",
+      pureMode:    {pure_mode_js},
     }};
   </script>
   <script type="module" src="/admin/static/builder/builder.js"></script>
@@ -265,6 +237,7 @@ pub fn render_editor(
         site_escaped    = site_escaped,
         project_id      = project_id,
         site_id         = site_id,
+        pure_mode_js    = pure_mode_js,
     )
 }
 
