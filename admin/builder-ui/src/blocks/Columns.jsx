@@ -1,11 +1,6 @@
 import { DropZone } from '@puckeditor/core'
 import { ColorField, PADDING_OPTIONS } from './ColorField'
 
-const COLUMN_OPTIONS = [
-  { label: '2 Columns', value: 2 },
-  { label: '3 Columns', value: 3 },
-]
-
 const GAP_OPTIONS = [
   { label: 'None',   value: '0px' },
   { label: 'Small',  value: '16px' },
@@ -13,13 +8,41 @@ const GAP_OPTIONS = [
   { label: 'Large',  value: '40px' },
 ]
 
+const VALIGN_OPTIONS = [
+  { label: 'Top',    value: 'flex-start' },
+  { label: 'Middle', value: 'center' },
+  { label: 'Bottom', value: 'flex-end' },
+]
+
+const COL_DEFAULT = {
+  bgColor: 'transparent',
+  valign:  'flex-start',
+}
+
 export const ColumnsBlock = {
   label: 'Columns',
   fields: {
     columns: {
-      type: 'select',
-      label: 'Number of columns',
-      options: COLUMN_OPTIONS,
+      type: 'array',
+      label: 'Columns (add/remove to change count)',
+      max: 3,
+      min: 2,
+      getItemSummary: (_, i) => `Column ${i + 1}`,
+      arrayFields: {
+        bgColor: {
+          type: 'custom',
+          label: 'Background color',
+          render: ({ value, onChange }) => (
+            <ColorField label="Background color" value={value ?? '#ffffff'} onChange={onChange} />
+          ),
+        },
+        valign: {
+          type: 'select',
+          label: 'Vertical alignment',
+          options: VALIGN_OPTIONS,
+        },
+      },
+      defaultItemProps: { ...COL_DEFAULT },
     },
     gap: {
       type: 'select',
@@ -33,39 +56,55 @@ export const ColumnsBlock = {
     },
     bgColor: {
       type: 'custom',
-      label: 'Background color',
+      label: 'Outer background color',
       render: ({ value, onChange }) => (
-        <ColorField label="Background color" value={value ?? '#ffffff'} onChange={onChange} />
+        <ColorField label="Outer background color" value={value ?? '#ffffff'} onChange={onChange} />
       ),
     },
   },
   defaultProps: {
-    columns: 2,
-    gap: '24px',
+    columns: [
+      { ...COL_DEFAULT },
+      { ...COL_DEFAULT },
+    ],
+    gap:     '24px',
     padding: '32px 40px',
     bgColor: '#ffffff',
   },
   render: ({ columns, gap, padding, bgColor }) => {
-    const cols = Number(columns) || 2
+    const colList = columns || []
+    const count   = colList.length
     return (
       <div style={{
-        background: bgColor,
+        background:    bgColor,
         padding,
-        boxSizing: 'border-box',
-        width: '100%',
+        boxSizing:     'border-box',
+        width:         '100%',
       }}>
         <div style={{
-          display: 'grid',
-          gridTemplateColumns: `repeat(${cols}, 1fr)`,
+          display:               'grid',
+          gridTemplateColumns:   `repeat(${count}, 1fr)`,
           gap,
-          maxWidth: 1200,
-          margin: '0 auto',
+          maxWidth:              1200,
+          margin:                '0 auto',
         }}>
-          {Array.from({ length: cols }, (_, i) => (
-            <div key={i} style={{ minHeight: 80 }}>
-              <DropZone zone={`col${i}`} />
-            </div>
-          ))}
+          {colList.map((col, i) => {
+            const topSpacer    = col.valign === 'center' || col.valign === 'flex-end'
+            const bottomSpacer = col.valign === 'flex-start' || col.valign === 'center'
+            return (
+              <div key={i} style={{
+                background:    col.bgColor === 'transparent' ? 'transparent' : col.bgColor,
+                minHeight:     80,
+                boxSizing:     'border-box',
+                display:       'flex',
+                flexDirection: 'column',
+              }}>
+                {topSpacer    && <div style={{ flex: 1 }} />}
+                <DropZone zone={`col${i}`} style={{ flex: 'none', height: 'auto' }} />
+                {bottomSpacer && <div style={{ flex: 1 }} />}
+              </div>
+            )
+          })}
         </div>
       </div>
     )
