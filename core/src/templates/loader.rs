@@ -264,6 +264,44 @@ impl TemplateEngine {
         Ok(Self::resolve_hook_sentinels(rendered, context))
     }
 
+    /// Render a builder block template from `themes/builder/blocks/`.
+    /// Templates are loaded once into the "__builder__" cache slot.
+    pub fn render_builder_block(&self, template_name: &str, context: &tera::Context) -> Result<String> {
+        const KEY: &str = "__builder__";
+        // Load once if not yet cached
+        if !self.engines.read().unwrap().contains_key(KEY) {
+            let blocks_dir = self.themes_root
+                .parent()
+                .unwrap_or(&self.themes_root)
+                .join("builder")
+                .join("blocks");
+            let glob_pattern = blocks_dir.join("*.html");
+            let glob_str = glob_pattern.to_string_lossy().to_string();
+            let mut tera = Tera::default();
+            // Manually read each .html file so we control the template name (just the filename)
+            if blocks_dir.is_dir() {
+                for entry in std::fs::read_dir(&blocks_dir).into_iter().flatten().flatten() {
+                    let path = entry.path();
+                    if path.extension().and_then(|e| e.to_str()) == Some("html") {
+                        let name = path.file_name()
+                            .and_then(|n| n.to_str())
+                            .unwrap_or_default()
+                            .to_string();
+                        if let Ok(src) = std::fs::read_to_string(&path) {
+                            let _ = tera.add_raw_template(&name, &src);
+                        }
+                    }
+                }
+            }
+            drop(glob_str);
+            self.engines.write().unwrap().insert(KEY.to_string(), tera);
+        }
+        let engines = self.engines.read().unwrap();
+        let tera = engines.get(KEY)
+            .ok_or_else(|| crate::errors::AppError::Internal("builder template engine unavailable".to_string()))?;
+        Ok(tera.render(template_name, context)?)
+    }
+
     /// Render a template using the current `active_theme` (legacy / single-site path).
     pub fn render(&self, template_name: &str, context: &tera::Context) -> Result<String> {
         let theme = self.active_theme.read().unwrap().clone();

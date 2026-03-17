@@ -11,8 +11,10 @@ use uuid::Uuid;
 use crate::app_state::AppState;
 use crate::errors::{AppError, Result};
 use crate::middleware::site::CurrentSite;
+use crate::models::page_composition;
 use crate::models::post::{self, ListFilter, PostContext, PostStatus, PostType};
 use crate::models::taxonomy::{self, TaxonomyType};
+use crate::templates::composer;
 use crate::templates::context::{
     ContextBuilder, NavContext, PaginationContext, RequestContext, SessionContext, SiteContext,
 };
@@ -56,6 +58,29 @@ async fn render_home(
     base_url: &str,
     session_ctx: SessionContext,
 ) -> Result<String> {
+    // ── Builder homepage check ─────────────────────────────────────────────
+    // If the site has an active builder project with an active homepage
+    // composition, render it via the composer instead of index.html.
+    if let Ok(Some(comp)) = page_composition::get_homepage(&state.db, site_id).await {
+        let site_ctx = build_site_context(&state, Some(site_id), base_url).await?;
+        let nav = crate::models::nav_menu::build_nav_context(&state.db, site_id, "/").await;
+        let ctx = ContextBuilder {
+            site: site_ctx,
+            request: RequestContext {
+                url: base_url.to_string(),
+                path: "/".to_string(),
+                query: HashMap::new(),
+            },
+            session: session_ctx,
+            nav,
+        }
+        .into_tera_context();
+
+        return composer::render_composition(&comp.composition, &state.templates, &ctx)
+            .map_err(|e| AppError::Internal(e.0));
+    }
+    // ── End builder check ──────────────────────────────────────────────────
+
     let per_page = state.get_site_by_id(site_id)
         .map(|(_, s)| s.posts_per_page)
         .unwrap_or(state.settings.posts_per_page);
