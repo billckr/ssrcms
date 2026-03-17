@@ -39,14 +39,25 @@ export const FooterBlock = {
         <ColorField label="Background Color" value={value ?? '#1a1a2e'} onChange={onChange} />
       ),
     },
+    fixed: {
+      type: 'custom',
+      label: 'Fixed to bottom of viewport',
+      render: ({ value, onChange }) => (
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer', padding: '4px 0' }}>
+          <input type="checkbox" checked={!!value} onChange={e => onChange(e.target.checked)} />
+          Fixed footer (always visible)
+        </label>
+      ),
+    },
   },
   defaultProps: {
     columns: 1,
     gap: '24px',
     bgColor: '#1a1a2e',
     padding: '32px 40px',
+    fixed: false,
   },
-  render: ({ bgColor, padding, columns, gap }) => {
+  render: ({ bgColor, padding, columns, gap, fixed }) => {
     const cols = Number(columns) || 1
     return (
       <footer style={{
@@ -55,6 +66,7 @@ export const FooterBlock = {
         boxSizing: 'border-box',
         width: '100%',
         borderTop: '1px solid rgba(255,255,255,0.08)',
+        ...(fixed ? { position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 100 } : {}),
       }}>
         <div style={{
           maxWidth: 1200,

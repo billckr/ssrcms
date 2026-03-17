@@ -170,6 +170,19 @@ pub async fn deactivate_homepage(pool: &PgPool, project_id: Uuid) -> Result<()> 
     Ok(())
 }
 
+/// Count pages in a project that have been published (composition has at least one block).
+pub async fn count_published(pool: &PgPool, project_id: Uuid) -> Result<i64> {
+    let row: (i64,) = sqlx::query_as(
+        "SELECT COUNT(*) FROM page_compositions
+         WHERE project_id = $1
+           AND jsonb_array_length(composition->'content') > 0",
+    )
+    .bind(project_id)
+    .fetch_one(pool)
+    .await?;
+    Ok(row.0)
+}
+
 pub async fn delete(pool: &PgPool, id: Uuid, site_id: Uuid) -> Result<()> {
     sqlx::query(
         "DELETE FROM page_compositions WHERE id = $1 AND site_id = $2",

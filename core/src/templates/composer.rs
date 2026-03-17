@@ -109,8 +109,7 @@ fn render_block(
         if let Some(zone_name) = key.strip_prefix(&format!("{}:", block_id)) {
             let mut zone_content = String::new();
             for zone_block in zone_blocks {
-                // One level of nesting — zones within zones not supported yet
-                let inner = render_block(zone_block, &std::collections::HashMap::new(), templates, site_ctx);
+                let inner = render_block(zone_block, zones, templates, site_ctx);
                 zone_content.push_str(&inner);
             }
             zone_html.insert(zone_name.to_string(), zone_content);

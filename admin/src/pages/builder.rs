@@ -22,7 +22,7 @@ pub struct PageRow {
 
 // ── Project list ──────────────────────────────────────────────────────────────
 
-pub fn render_project_list(projects: &[ProjectRow], ctx: &crate::PageContext) -> String {
+pub fn render_project_list(projects: &[ProjectRow], flash: Option<&str>, ctx: &crate::PageContext) -> String {
     let rows = if projects.is_empty() {
         r#"<tr><td colspan="5" style="text-align:center;color:var(--muted)">
             No projects yet. Create one below to get started.
@@ -30,12 +30,12 @@ pub fn render_project_list(projects: &[ProjectRow], ctx: &crate::PageContext) ->
     } else {
         projects.iter().map(|p| {
             let active_badge = if p.is_active {
-                r#" <span class="badge badge-success" style="font-size:.7rem">Live</span>"#
+                r#" <span class="badge" style="font-size:.7rem;background:#2563eb;color:#fff">Live</span>"#
             } else { "" };
             let activate_btn = if p.is_active {
                 format!(
                     r#"<form method="POST" action="/admin/builder/deactivate" style="display:inline">
-                        <button class="btn btn-sm" type="submit">Deactivate</button>
+                        <button class="btn btn-sm" type="submit" style="background:#e2e8f0;border-color:#cbd5e1;color:#475569">Deactivate</button>
                     </form>"#
                 )
             } else {
@@ -46,27 +46,36 @@ pub fn render_project_list(projects: &[ProjectRow], ctx: &crate::PageContext) ->
                     id = crate::html_escape(&p.id),
                 )
             };
+            let id_esc    = crate::html_escape(&p.id);
+            let name_esc  = crate::html_escape(&p.name);
+            let is_active = if p.is_active { "true" } else { "false" };
             format!(
                 r#"<tr>
   <td><a href="/admin/builder/{id}">{name}</a>{active_badge}</td>
   <td>{desc}</td>
   <td>{pages}</td>
   <td>{updated}</td>
-  <td class="actions">
-    <a href="/admin/builder/{id}" class="icon-btn" title="Open">
-      <img src="/admin/static/icons/edit.svg" alt="Open">
+  <td class="actions" style="white-space:nowrap">
+    <a href="/admin/builder/{id}/pages/new" class="icon-btn" title="New Page ">
+      <img src="/admin/static/icons/code.svg" alt="New Page">
     </a>
-    {activate_btn}
+    <button class="icon-btn" type="button" title="Rename"
+            onclick="openRenameDialog('{id}', '{name_js}')">
+      <img src="/admin/static/icons/edit.svg" alt="Rename">
+    </button>
     <form method="POST" action="/admin/builder/{id}/delete" style="display:inline"
-          onsubmit="return confirm('Delete this project and all its pages? This cannot be undone.')">
+          onsubmit="return confirmDelete(this, {is_active})">
       <button class="icon-btn icon-danger" type="submit" title="Delete">
-        <img src="/admin/static/icons/delete.svg" alt="Delete">
+        <img src="/admin/static/icons/trash-2.svg" alt="Delete">
       </button>
     </form>
+    {activate_btn}
   </td>
 </tr>"#,
-                id           = crate::html_escape(&p.id),
-                name         = crate::html_escape(&p.name),
+                id           = id_esc,
+                name         = name_esc,
+                name_js      = crate::html_escape(&p.name.replace('\'', "\\'")),
+
                 active_badge = active_badge,
                 desc         = p.description.as_deref().map(crate::html_escape).unwrap_or_default(),
                 pages        = p.page_count,
@@ -76,9 +85,18 @@ pub fn render_project_list(projects: &[ProjectRow], ctx: &crate::PageContext) ->
         }).collect::<Vec<_>>().join("\n")
     };
 
+    let flash_html = match flash {
+        Some(msg) => format!(
+            r#"<div style="background:#fef2f2;border:1px solid #fca5a5;color:#b91c1c;padding:.75rem 1rem;border-radius:6px;margin-bottom:1rem">{}</div>"#,
+            crate::html_escape(msg),
+        ),
+        None => String::new(),
+    };
+
     let content = format!(
-        r#"<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.5rem">
+        r#"{flash_html}<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.5rem">
   <p style="margin:0;color:var(--muted)">Organise your site pages into projects. One project can be live at a time.</p>
+  <button type="button" class="btn btn-primary" onclick="document.getElementById('new-project-dialog').showModal();document.querySelector('.admin-content').style.filter='blur(1.5px)'">+ Project</button>
 </div>
 <table class="data-table" style="margin-bottom:2rem">
   <thead>
@@ -86,18 +104,71 @@ pub fn render_project_list(projects: &[ProjectRow], ctx: &crate::PageContext) ->
   </thead>
   <tbody>{rows}</tbody>
 </table>
-<h3 style="margin-bottom:1rem">Create New Project</h3>
-<form method="POST" action="/admin/builder/create" style="display:flex;gap:.75rem;align-items:flex-end;flex-wrap:wrap">
-  <div class="form-group" style="margin:0">
-    <label for="proj-name">Project Name</label>
-    <input id="proj-name" type="text" name="name" required placeholder="e.g. Main Site" maxlength="35" style="width:220px">
-  </div>
-  <div class="form-group" style="margin:0">
-    <label for="proj-desc">Description <span style="color:var(--muted)">(optional)</span></label>
-    <input id="proj-desc" type="text" name="description" placeholder="e.g. Full site redesign 2026" maxlength="100" style="width:280px">
-  </div>
-  <button type="submit" class="btn btn-primary">Create Project</button>
-</form>"#,
+
+<!-- New project dialog -->
+<dialog id="new-project-dialog" style="border:1px solid #e2e8f0;border-radius:8px;padding:1.5rem;min-width:400px;box-shadow:0 4px 24px rgba(0,0,0,.12);position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);margin:0">
+  <form method="POST" action="/admin/builder/create">
+    <h3 style="margin:0 0 1rem">New Project</h3>
+    <div class="form-group">
+      <label for="proj-name">Project Name</label>
+      <input id="proj-name" type="text" name="name" required maxlength="35"
+             placeholder="e.g. Main Site" style="width:100%">
+    </div>
+    <div class="form-group">
+      <label for="proj-desc">Description <span style="color:var(--muted)">(optional)</span></label>
+      <input id="proj-desc" type="text" name="description" maxlength="100"
+             placeholder="e.g. Full site redesign 2026" style="width:100%">
+    </div>
+    <div style="display:flex;gap:.5rem;justify-content:flex-end;margin-top:1rem">
+      <button type="button" class="btn" onclick="this.closest('form').reset();closeNewProjectDialog()">Cancel</button>
+      <button type="submit" class="btn btn-primary">Save</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- Rename project dialog -->
+<dialog id="rename-dialog" style="border:1px solid #e2e8f0;border-radius:8px;padding:1.5rem;min-width:360px;box-shadow:0 4px 24px rgba(0,0,0,.12);position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);margin:0">
+  <form method="POST" id="rename-form">
+    <h3 style="margin:0 0 1rem">Rename Project</h3>
+    <div class="form-group">
+      <label for="rename-input">Project Name</label>
+      <input id="rename-input" type="text" name="name" required maxlength="35"
+             style="width:100%" autofocus>
+    </div>
+    <div style="display:flex;gap:.5rem;justify-content:flex-end;margin-top:1rem">
+      <button type="button" class="btn" onclick="document.getElementById('rename-dialog').close();document.querySelector('.admin-content').style.filter=''">Cancel</button>
+      <button type="submit" class="btn btn-primary">Save</button>
+    </div>
+  </form>
+</dialog>
+<script>
+function closeNewProjectDialog() {{
+  document.getElementById('new-project-dialog').close();
+  document.querySelector('.admin-content').style.filter = '';
+}}
+document.getElementById('new-project-dialog').addEventListener('close', function() {{
+  document.querySelector('.admin-content').style.filter = '';
+}});
+function confirmDelete(form, isActive) {{
+  if (isActive) {{
+    alert('This project is currently live. Deactivate it before deleting.');
+    return false;
+  }}
+  return confirm('Delete this project and all its pages? This cannot be undone.');
+}}
+function openRenameDialog(id, currentName) {{
+  var dlg = document.getElementById('rename-dialog');
+  var form = document.getElementById('rename-form');
+  document.getElementById('rename-input').value = currentName;
+  form.action = '/admin/builder/' + id + '/rename';
+  dlg.showModal();
+  document.querySelector('.admin-content').style.filter = 'blur(1.5px)';
+}}
+document.getElementById('rename-dialog').addEventListener('close', function() {{
+  document.querySelector('.admin-content').style.filter = '';
+}});
+</script>"#,
+        flash_html = flash_html,
         rows = rows,
     );
 
@@ -137,7 +208,7 @@ pub fn render_page_list(project: &ProjectRow, pages: &[PageRow], ctx: &crate::Pa
     <form method="POST" action="/admin/builder/{proj}/pages/{page}/delete" style="display:inline"
           onsubmit="return confirm('Delete this page?')">
       <button class="icon-btn icon-danger" type="submit" title="Delete">
-        <img src="/admin/static/icons/delete.svg" alt="Delete">
+        <img src="/admin/static/icons/trash-2.svg" alt="Delete">
       </button>
     </form>
   </td>

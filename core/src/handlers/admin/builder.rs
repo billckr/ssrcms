@@ -14,11 +14,12 @@
 //!   /admin/builder/:project_id/pages/:id/delete        — delete page
 
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::StatusCode,
     response::{Html, IntoResponse, Json, Redirect, Response},
     Form,
 };
+use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -31,6 +32,7 @@ use crate::models::{builder_project, page_composition};
 pub async fn list(
     State(state): State<AppState>,
     admin: AdminUser,
+    Query(params): Query<HashMap<String, String>>,
 ) -> Response {
     let Some(site_id) = admin.site_id else {
         return Redirect::to("/admin").into_response();
@@ -59,7 +61,8 @@ pub async fn list(
         });
     }
 
-    Html(admin::pages::builder::render_project_list(&rows, &ctx)).into_response()
+    let flash = params.get("flash").map(|s| s.as_str());
+    Html(admin::pages::builder::render_project_list(&rows, flash, &ctx)).into_response()
 }
 
 // ── Create project ─────────────────────────────────────────────────────────────
@@ -107,6 +110,41 @@ pub async fn create_project(
             Redirect::to("/admin/builder").into_response()
         }
     }
+}
+
+// ── Rename project ─────────────────────────────────────────────────────────────
+
+#[derive(Deserialize)]
+pub struct RenameProjectForm {
+    pub name: String,
+}
+
+pub async fn rename_project(
+    State(state): State<AppState>,
+    admin: AdminUser,
+    Path(project_id): Path<Uuid>,
+    Form(form): Form<RenameProjectForm>,
+) -> Response {
+    let Some(site_id) = admin.site_id else {
+        return Redirect::to("/admin/builder").into_response();
+    };
+    if !admin.caps.can_manage_appearance {
+        return Redirect::to("/admin/builder").into_response();
+    }
+    let name = form.name.trim().to_string();
+    if name.is_empty() || name.len() > 35 {
+        return Redirect::to("/admin/builder").into_response();
+    }
+    // Fetch existing project to preserve description.
+    let existing = builder_project::get_by_id(&state.db, project_id, site_id).await;
+    let description = existing
+        .ok()
+        .flatten()
+        .and_then(|p| p.description);
+    if let Err(e) = builder_project::update(&state.db, project_id, site_id, &name, description.as_deref()).await {
+        tracing::error!("rename project error: {e}");
+    }
+    Redirect::to("/admin/builder").into_response()
 }
 
 // ── Page list within a project ────────────────────────────────────────────────
@@ -495,6 +533,17 @@ pub async fn activate_project(
     if !admin.caps.can_manage_appearance {
         return Redirect::to("/admin/builder").into_response();
     }
+    // Require at least one published page before allowing activation.
+    let published_count = page_composition::count_published(&state.db, project_id)
+        .await
+        .unwrap_or(0);
+    if published_count == 0 {
+        return Redirect::to(
+            "/admin/builder?flash=This+project+cannot+be+set+live+because+none+of+its+pages+have+been+published.+Open+a+page+in+the+editor+and+click+Publish.",
+        )
+        .into_response();
+    }
+
     if let Err(e) = builder_project::activate(&state.db, project_id, site_id).await {
         tracing::error!("activate project error: {e}");
     }
@@ -528,6 +577,20 @@ pub async fn delete_project(
     if !admin.caps.can_manage_appearance {
         return Redirect::to("/admin/builder").into_response();
     }
+    // Block deletion of the currently live project.
+    let is_active = builder_project::get_by_id(&state.db, project_id, site_id)
+        .await
+        .ok()
+        .flatten()
+        .map(|p| p.is_active)
+        .unwrap_or(false);
+    if is_active {
+        return Redirect::to(
+            "/admin/builder?flash=This+project+is+currently+live.+Deactivate+it+before+deleting.",
+        )
+        .into_response();
+    }
+
     if let Err(e) = builder_project::delete(&state.db, project_id, site_id).await {
         tracing::error!("delete project error: {e}");
     }

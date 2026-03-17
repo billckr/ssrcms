@@ -5,6 +5,7 @@
   box-sizing: border-box;
   width: 100%;
   border-top: 1px solid rgba(255,255,255,0.08);
+  {% if block_config.fixed %}position: fixed; bottom: 0; left: 0; right: 0; z-index: 100;{% endif %}
 ">
   <div style="
     max-width: 1200px;

@@ -172,6 +172,7 @@ pub fn build(
         .route("/admin/builder/publish",                                post(admin_builder::publish))
         .route("/admin/builder/load/{id}",                              get(admin_builder::load))
         .route("/admin/builder/{project_id}",                           get(admin_builder::project_pages))
+        .route("/admin/builder/{project_id}/rename",                     post(admin_builder::rename_project))
         .route("/admin/builder/{project_id}/activate",                  post(admin_builder::activate_project))
         .route("/admin/builder/{project_id}/delete",                    post(admin_builder::delete_project))
         .route("/admin/builder/{project_id}/pages/new",                 get(admin_builder::new_page_form).post(admin_builder::create_page))
