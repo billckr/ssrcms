@@ -1,6 +1,6 @@
 {% set limit = block_config.limit | default(value=5) | int %}
 {% set layout = block_config.layout | default(value='cards') %}
-<div style="
+<div class="blk-posts" style="
   background: {{ block_config.bgColor | default(value='#ffffff') }};
   padding: {{ block_config.padding | default(value='32px 40px') }};
   box-sizing: border-box;

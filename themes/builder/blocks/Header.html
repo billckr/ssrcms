@@ -1,5 +1,5 @@
 {% set cols = block_config.columns | default(value=1) | int %}
-<header style="
+<header class="blk-header" style="
   background: {{ block_config.bgColor | default(value='#ffffff') }};
   padding: {{ block_config.padding | default(value='32px 40px') }};
   box-sizing: border-box;
