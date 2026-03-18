@@ -6,7 +6,7 @@
   flex-direction: column;
   align-items: {% if block_config.align == 'left' %}flex-start{% elif block_config.align == 'right' %}flex-end{% else %}center{% endif %};
   justify-content: center;
-  padding: 60px 40px;
+  padding: {{ block_config.paddingV | default(value='60px') }} {{ block_config.paddingH | default(value='40px') }};
   text-align: {{ block_config.align | default(value='center') }};
   box-sizing: border-box;
 ">

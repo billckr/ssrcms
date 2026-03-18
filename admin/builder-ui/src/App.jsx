@@ -10,6 +10,7 @@ import { SearchBlock } from './blocks/Search'
 import { CardBlock } from './blocks/Card'
 import { FormBlock } from './blocks/Form'
 import { TextBlock } from './blocks/Text'
+import { ParagraphBlock } from './blocks/Paragraph'
 import { PostsBlock } from './blocks/Posts'
 import { CategoriesBlock } from './blocks/Categories'
 import { TagsBlock } from './blocks/Tags'
@@ -29,6 +30,7 @@ const config = {
     Cards: CardBlock,
     Form: FormBlock,
     Text: TextBlock,
+    Paragraph: ParagraphBlock,
     Posts: PostsBlock,
     Categories: CategoriesBlock,
     Tags: TagsBlock,

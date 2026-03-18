@@ -1,49 +1,43 @@
-import { HexColorPicker } from 'react-colorful'
-import { useState } from 'react'
-
-function ColorField({ value, onChange }) {
-  const [open, setOpen] = useState(false)
-  return (
-    <div style={{ position: 'relative', display: 'inline-block' }}>
-      <div
-        onClick={() => setOpen(!open)}
-        style={{
-          width: 32, height: 32, borderRadius: 4, cursor: 'pointer',
-          background: value, border: '2px solid #ccc',
-        }}
-      />
-      {open && (
-        <div style={{ position: 'absolute', zIndex: 1000, top: 36, left: 0 }}>
-          <HexColorPicker color={value} onChange={onChange} />
-          <button
-            onClick={() => setOpen(false)}
-            style={{ marginTop: 8, width: '100%', cursor: 'pointer' }}
-          >
-            Close
-          </button>
-        </div>
-      )}
-    </div>
-  )
-}
+import { ColorField } from './ColorField'
 
 export const HeroBlock = {
   label: 'Hero Section',
   fields: {
     heading:    { type: 'text', label: 'Heading' },
     subheading: { type: 'textarea', label: 'Subheading' },
-    bgColor:    { type: 'custom', label: 'Background color', render: ({ value, onChange }) => <ColorField value={value} onChange={onChange} /> },
-    textColor:  { type: 'custom', label: 'Text color',       render: ({ value, onChange }) => <ColorField value={value} onChange={onChange} /> },
-    showButton: { type: 'radio', label: 'Show button', options: [{ value: true, label: 'Yes' }, { value: false, label: 'No' }] },
-    ctaLabel:   { type: 'text', label: 'Button label' },
-    ctaUrl:     { type: 'text', label: 'Button URL' },
-    ctaBg:      { type: 'custom', label: 'Button color',     render: ({ value, onChange }) => <ColorField value={value} onChange={onChange} /> },
-    ctaText:    { type: 'custom', label: 'Button text color',render: ({ value, onChange }) => <ColorField value={value} onChange={onChange} /> },
-    minHeight:  { type: 'text', label: 'Min height (e.g. 480px)' },
     align:      { type: 'select', label: 'Alignment', options: [
       { value: 'left', label: 'Left' },
       { value: 'center', label: 'Center' },
       { value: 'right', label: 'Right' },
+    ]},
+    bgColor:    { type: 'custom', label: 'Background color', render: ({ value, onChange }) => <ColorField label="Background color" value={value} onChange={onChange} /> },
+    textColor:  { type: 'custom', label: 'Text color',       render: ({ value, onChange }) => <ColorField label="Text color"       value={value} onChange={onChange} /> },
+    showButton: { type: 'radio', label: 'Show button', options: [{ value: true, label: 'Yes' }, { value: false, label: 'No' }] },
+    ctaLabel:   { type: 'text', label: 'Button label' },
+    ctaUrl:     { type: 'text', label: 'Button URL' },
+    ctaBg:      { type: 'custom', label: 'Button color',      render: ({ value, onChange }) => <ColorField label="Button color"      value={value} onChange={onChange} /> },
+    ctaText:    { type: 'custom', label: 'Button text color', render: ({ value, onChange }) => <ColorField label="Button text color" value={value} onChange={onChange} /> },
+    minHeight:  { type: 'select', label: 'Min height', options: [
+      { value: '0px',   label: 'None' },
+      { value: '100px', label: 'XSmall (100px)' },
+      { value: '320px', label: 'Small (320px)' },
+      { value: '480px', label: 'Medium (480px)' },
+      { value: '600px', label: 'Large (600px)' },
+      { value: '100vh', label: 'Full screen' },
+    ]},
+    paddingV:   { type: 'select', label: 'Vertical padding (top/bottom)', options: [
+      { value: '0px',   label: 'None' },
+      { value: '16px',  label: 'XSmall (16px)' },
+      { value: '32px',  label: 'Small (32px)' },
+      { value: '60px',  label: 'Medium (60px)' },
+      { value: '80px',  label: 'Large (80px)' },
+      { value: '120px', label: 'XLarge (120px)' },
+    ]},
+    paddingH:   { type: 'select', label: 'Horizontal padding (left/right)', options: [
+      { value: '0px',  label: 'None' },
+      { value: '16px', label: 'Small (16px)' },
+      { value: '40px', label: 'Medium (40px)' },
+      { value: '80px', label: 'Large (80px)' },
     ]},
   },
   defaultProps: {
@@ -57,9 +51,11 @@ export const HeroBlock = {
     ctaBg:      '#e94560',
     ctaText:    '#ffffff',
     minHeight:  '480px',
+    paddingV:   '60px',
+    paddingH:   '40px',
     align:      'center',
   },
-  render: ({ heading, subheading, bgColor, textColor, showButton, ctaLabel, ctaUrl, ctaBg, ctaText, minHeight, align }) => (
+  render: ({ heading, subheading, bgColor, textColor, showButton, ctaLabel, ctaUrl, ctaBg, ctaText, minHeight, paddingV, paddingH, align }) => (
     <section style={{
       background: bgColor,
       color: textColor,
@@ -68,7 +64,7 @@ export const HeroBlock = {
       flexDirection: 'column',
       alignItems: align === 'left' ? 'flex-start' : align === 'right' ? 'flex-end' : 'center',
       justifyContent: 'center',
-      padding: '60px 40px',
+      padding: `${paddingV || '60px'} ${paddingH || '40px'}`,
       textAlign: align,
       boxSizing: 'border-box',
     }}>

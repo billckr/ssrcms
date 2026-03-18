@@ -1,0 +1,16 @@
+<div class="blk-paragraph" style="
+  background: {{ block_config.bgColor | default(value='#ffffff') }};
+  padding: {{ block_config.padding | default(value='32px 40px') }};
+  box-sizing: border-box;
+">
+  <div style="
+    max-width: {{ block_config.maxWidth | default(value='720px') }};
+    margin: 0 auto;
+    font-size: {{ block_config.fontSize | default(value='1rem') }};
+    line-height: {{ block_config.lineHeight | default(value='1.6') }};
+    text-align: {{ block_config.align | default(value='left') }};
+    color: {{ block_config.textColor | default(value='#374151') }};
+  ">
+    {{ block_config.text | default(value='') | safe }}
+  </div>
+</div>

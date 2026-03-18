@@ -500,7 +500,10 @@ pub async fn save_new(
                 // Site admin: handle same assignment options as global admin,
                 // but scoped to sites they own.
                 let target_site_id: Option<Uuid> = match form.site_assignment.as_deref() {
-                    Some("none") | None => None,
+                    Some("none") => None,
+                    // No site_assignment field means the form section was hidden (single-site admin).
+                    // Auto-assign to their current site.
+                    None => admin.site_id,
                     Some("new") => {
                         let hostname = form.new_hostname.as_deref().unwrap_or("").trim().to_lowercase();
                         if hostname.is_empty() {
@@ -994,6 +997,7 @@ async fn fetch_site_options_for_site_owner(state: &AppState, site_id: Uuid) -> V
 #[derive(Deserialize, Default)]
 pub struct SiteAccessQuery {
     pub error: Option<String>,
+    pub success: Option<String>,
 }
 
 /// GET /admin/users/:id/site-access — manage which sites a user can access.
@@ -1060,7 +1064,11 @@ pub async fn site_access_page(
 
     let flash = match query.error.as_deref() {
         Some("site_admin_exists") => Some("This site already has a Site Admin. Remove the existing Site Admin first."),
-        _ => None,
+        Some("db_error") => Some("Failed to update site access. Please try again."),
+        _ => match query.success.as_deref() {
+            Some("assigned") => Some("User added to site successfully."),
+            _ => None,
+        },
     };
 
     Html(admin::pages::users::render_site_access(
@@ -1177,6 +1185,7 @@ pub async fn add_site_access(
 
     if let Err(e) = crate::models::site_user::add(&state.db, site_uuid, user_id, role, Some(admin.user.id)).await {
         tracing::warn!("failed to add user {} to site {}: {:?}", user_id, site_uuid, e);
+        return Redirect::to(&format!("/admin/users/{}/site-access?error=db_error", user_id)).into_response();
     }
 
     // Reload cache so ownership change is immediately reflected.
@@ -1184,7 +1193,7 @@ pub async fn add_site_access(
         tracing::warn!("site cache reload failed after site-access add: {:?}", e);
     }
 
-    Redirect::to(&format!("/admin/users/{}/site-access", user_id)).into_response()
+    Redirect::to(&format!("/admin/users/{}/site-access?success=assigned", user_id)).into_response()
 }
 
 #[derive(Deserialize)]
