@@ -66,7 +66,6 @@ export const FooterBlock = {
         boxSizing: 'border-box',
         width: '100%',
         borderTop: '1px solid rgba(255,255,255,0.08)',
-        ...(fixed ? { position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 100 } : {}),
       }}>
         <div style={{
           maxWidth: 1200,

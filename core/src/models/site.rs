@@ -61,7 +61,7 @@ pub async fn create_with_defaults(
         ("site_url",         &format!("http://{hostname}")),
         ("site_language",    "en-US"),
         ("active_theme",     "default"),
-        ("posts_per_page",   "10"),
+        ("posts_per_page",   "9"),
         ("date_format",      "%B %-d, %Y"),
     ];
     for (key, value) in defaults {

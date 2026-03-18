@@ -37,7 +37,7 @@ impl Default for SiteSettings {
             base_url: "http://localhost:3000".to_string(),
             language: "en-US".to_string(),
             active_theme: "default".to_string(),
-            posts_per_page: 10,
+            posts_per_page: 9,
             date_format: "%B %-d, %Y".to_string(),
         }
     }

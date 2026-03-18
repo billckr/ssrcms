@@ -179,7 +179,8 @@ pub fn build(
         .route("/admin/builder/{project_id}/pages/{page_id}",          get(admin_builder::edit_page))
         .route("/admin/builder2/{project_id}/pages/{page_id}",         get(admin_builder::edit_page2))
         .route("/admin/builder/{project_id}/pages/{page_id}/set-homepage", post(admin_builder::set_homepage))
-        .route("/admin/builder/{project_id}/pages/{page_id}/delete",   post(admin_builder::delete_page))
+        .route("/admin/builder/{project_id}/pages/{page_id}/duplicate",   post(admin_builder::duplicate_page))
+        .route("/admin/builder/{project_id}/pages/{page_id}/delete",      post(admin_builder::delete_page))
         // ── Admin menus ────────────────────────────────────────────────────
         .route("/admin/menus",                                      get(admin_menus::list).post(admin_menus::create))
         .route("/admin/menus/{id}",                                 get(admin_menus::edit).post(admin_menus::update))

@@ -94,6 +94,87 @@ pub async fn create(
     .await?)
 }
 
+/// Create a new page pre-populated with an existing draft composition.
+pub async fn create_with_draft(
+    pool: &PgPool,
+    site_id: Uuid,
+    project_id: Uuid,
+    name: &str,
+    page_type: &str,
+    slug: Option<&str>,
+    is_homepage: bool,
+    draft: serde_json::Value,
+    created_by: Option<Uuid>,
+) -> Result<PageComposition> {
+    Ok(sqlx::query_as::<_, PageComposition>(
+        "INSERT INTO page_compositions
+             (site_id, project_id, name, page_type, slug, is_homepage, composition, draft_composition, created_by)
+         VALUES ($1, $2, $3, $4, $5, $6, '{}', $7, $8)
+         RETURNING *",
+    )
+    .bind(site_id)
+    .bind(project_id)
+    .bind(name)
+    .bind(page_type)
+    .bind(slug)
+    .bind(is_homepage)
+    .bind(&draft)
+    .bind(created_by)
+    .fetch_one(pool)
+    .await?)
+}
+
+/// Duplicate a page: copies its draft_composition into a new page of type "page".
+/// The duplicate is always type "page" — special types (homepage, post_template, etc.)
+/// cannot be duplicated directly since only one of each is allowed per project.
+pub async fn duplicate(
+    pool: &PgPool,
+    source_id: Uuid,
+    site_id: Uuid,
+    project_id: Uuid,
+    name_override: Option<&str>,
+    created_by: Option<Uuid>,
+) -> Result<PageComposition> {
+    let source = sqlx::query_as::<_, PageComposition>(
+        "SELECT * FROM page_compositions WHERE id = $1 AND site_id = $2",
+    )
+    .bind(source_id)
+    .bind(site_id)
+    .fetch_one(pool)
+    .await?;
+
+    let new_name = name_override.map(|s| s.to_string()).unwrap_or_else(|| format!("{} (copy)", source.name));
+    // Derive slug from the new name if the source had none (homepage, post_template, etc.)
+    let new_slug = match source.slug.as_deref() {
+        Some(s) => format!("{}-copy", s),
+        None => new_name
+            .to_lowercase()
+            .chars()
+            .map(|c| if c.is_alphanumeric() { c } else { '-' })
+            .collect::<String>()
+            .split('-')
+            .filter(|s| !s.is_empty())
+            .collect::<Vec<_>>()
+            .join("-"),
+    };
+    let new_slug = Some(new_slug);
+
+    Ok(sqlx::query_as::<_, PageComposition>(
+        "INSERT INTO page_compositions
+             (site_id, project_id, name, page_type, slug, is_homepage, composition, draft_composition, created_by)
+         VALUES ($1, $2, $3, 'page', $4, FALSE, '{}', $5, $6)
+         RETURNING *",
+    )
+    .bind(site_id)
+    .bind(project_id)
+    .bind(&new_name)
+    .bind(new_slug.as_deref())
+    .bind(&source.draft_composition)
+    .bind(created_by)
+    .fetch_one(pool)
+    .await?)
+}
+
 /// Save to draft only — does not affect what visitors see.
 pub async fn save_composition(
     pool: &PgPool,
@@ -192,4 +273,31 @@ pub async fn delete(pool: &PgPool, id: Uuid, site_id: Uuid) -> Result<()> {
     .execute(pool)
     .await?;
     Ok(())
+}
+
+/// Returns the archive template page for a site's active project, if one exists.
+/// Used for both category and tag archive URLs.
+pub async fn get_archive_template(pool: &PgPool, site_id: Uuid) -> Result<Option<PageComposition>> {
+    Ok(sqlx::query_as::<_, PageComposition>(
+        "SELECT pc.* FROM page_compositions pc
+         JOIN builder_projects bp ON bp.id = pc.project_id
+         WHERE bp.site_id = $1 AND bp.is_active = TRUE AND pc.page_type = 'archive_template'
+         LIMIT 1",
+    )
+    .bind(site_id)
+    .fetch_optional(pool)
+    .await?)
+}
+
+/// Returns the post template page for a site's active project, if one exists.
+pub async fn get_post_template(pool: &PgPool, site_id: Uuid) -> Result<Option<PageComposition>> {
+    Ok(sqlx::query_as::<_, PageComposition>(
+        "SELECT pc.* FROM page_compositions pc
+         JOIN builder_projects bp ON bp.id = pc.project_id
+         WHERE bp.site_id = $1 AND bp.is_active = TRUE AND pc.page_type = 'post_template'
+         LIMIT 1",
+    )
+    .bind(site_id)
+    .fetch_optional(pool)
+    .await?)
 }

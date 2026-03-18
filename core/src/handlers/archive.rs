@@ -10,12 +10,12 @@ use uuid::Uuid;
 
 use crate::app_state::AppState;
 use crate::middleware::site::CurrentSite;
-use crate::models::{post, taxonomy};
+use crate::models::{page_composition, post, taxonomy};
 use crate::models::post::{ListFilter, PostStatus, PostType};
 use crate::models::taxonomy::{TaxonomyType, TermContext};
-use crate::templates::context::{
+use crate::templates::{composer, context::{
     ArchiveContext, ContextBuilder, PaginationContext, RequestContext, SessionContext,
-};
+}};
 
 use super::home::{build_post_context, build_site_context, render_error_page};
 
@@ -159,6 +159,14 @@ async fn render_taxonomy_archive(
     ctx.insert("archive_term", &archive.archive_term);
     ctx.insert("posts", &archive.posts);
     ctx.insert("pagination", &archive.pagination);
+
+    // ── Archive template check ────────────────────────────────────────────────
+    if let Ok(Some(comp)) = page_composition::get_archive_template(&state.db, site_id).await {
+        use crate::errors::AppError;
+        return composer::render_composition(&comp.composition, &state.templates, &ctx)
+            .map_err(|e| AppError::Internal(e.0));
+    }
+    // ── End archive template check ────────────────────────────────────────────
 
     let active_plugins = crate::models::site_plugin::active_plugin_names(&state.db, site_id)
         .await

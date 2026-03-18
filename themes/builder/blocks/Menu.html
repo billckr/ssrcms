@@ -1,0 +1,91 @@
+{% set cfg = block_config %}
+{% set menu_id = cfg.menuId | default(value="") %}
+{% set found = builder_menus[menu_id] | default(value=false) %}
+
+<style>
+.bn-menu-{{ block_id }} {
+  background: {{ cfg.bgColor | default(value="transparent") }};
+  padding: {{ cfg.padding | default(value="0") }};
+  box-sizing: border-box;
+}
+.bn-menu-{{ block_id }} nav {
+  display: flex;
+  flex-direction: {% if cfg.orientation == "vertical" %}column{% else %}row{% endif %};
+  gap: {{ cfg.gap | default(value="24px") }};
+  flex-wrap: {% if cfg.orientation == "vertical" %}nowrap{% else %}wrap{% endif %};
+  align-items: {% if cfg.orientation == "vertical" %}flex-start{% else %}center{% endif %};
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.bn-menu-{{ block_id }} a {
+  font-size: {{ cfg.fontSize | default(value="15px") }};
+  color: {{ cfg.linkColor | default(value="#111111") }};
+  text-decoration: none;
+  display: inline-block;
+}
+.bn-menu-{{ block_id }} a:hover {
+  color: {{ cfg.hoverColor | default(value="#555555") }};
+}
+/* Dropdown: shown on hover for top-level items with children */
+.bn-menu-{{ block_id }} .menu-item { position: relative; }
+.bn-menu-{{ block_id }} .menu-submenu {
+  display: none;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  background: #fff;
+  min-width: 180px;
+  border: 1px solid rgba(0,0,0,0.1);
+  border-radius: 4px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+  z-index: 200;
+  flex-direction: column;
+  padding: 4px 0;
+}
+.bn-menu-{{ block_id }} .menu-item:hover > .menu-submenu { display: flex; }
+.bn-menu-{{ block_id }} .menu-submenu a {
+  padding: 8px 16px;
+  display: block;
+  white-space: nowrap;
+  font-size: {{ cfg.fontSize | default(value="15px") }};
+  color: {{ cfg.linkColor | default(value="#111111") }};
+}
+.bn-menu-{{ block_id }} .menu-submenu a:hover {
+  background: rgba(0,0,0,0.05);
+  color: {{ cfg.hoverColor | default(value="#555555") }};
+}
+/* Vertical layout: submenu appears inline below item */
+{% if cfg.orientation == "vertical" %}
+.bn-menu-{{ block_id }} .menu-submenu {
+  position: static;
+  box-shadow: none;
+  border: none;
+  border-left: 2px solid rgba(0,0,0,0.1);
+  border-radius: 0;
+  padding: 0 0 0 12px;
+  margin-top: 4px;
+  background: transparent;
+}
+.bn-menu-{{ block_id }} .menu-item:hover > .menu-submenu { display: flex; }
+{% endif %}
+</style>
+
+<div class="bn-menu-{{ block_id }}">
+  {% if found %}
+    <nav>
+      {% for item in found.items %}
+        <div class="menu-item">
+          <a href="{{ item.url }}" target="{{ item.target }}"{% if item.is_current %} aria-current="page"{% endif %}>{{ item.label }}</a>
+          {% if item.children %}
+            <div class="menu-submenu">
+              {% for child in item.children %}
+                <a href="{{ child.url }}" target="{{ child.target }}"{% if child.is_current %} aria-current="page"{% endif %}>{{ child.label }}</a>
+              {% endfor %}
+            </div>
+          {% endif %}
+        </div>
+      {% endfor %}
+    </nav>
+  {% endif %}
+</div>

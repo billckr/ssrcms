@@ -1,0 +1,84 @@
+<style>
+.builder-archive-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
+@media (max-width: 768px)  { .builder-archive-grid { grid-template-columns: 1fr; } }
+@media (min-width: 769px) and (max-width: 1024px) { .builder-archive-grid { grid-template-columns: repeat(2, 1fr); } }
+</style>
+<div style="
+  background: {{ block_config.bgColor | default(value='#ffffff') }};
+  padding: {{ block_config.padding | default(value='40px') }};
+  box-sizing: border-box;
+  width: 100%;
+">
+  <div style="max-width: 1200px; margin: 0 auto;">
+
+    {% if archive_term %}
+    <h1 style="
+      color: {{ block_config.headingColor | default(value='#111827') }};
+      font-size: 28px;
+      font-weight: 700;
+      margin: 0 0 8px;
+      text-transform: capitalize;
+    ">
+      {{ archive_type | title }}: {{ archive_term.name }}
+    </h1>
+    {% if archive_term.description %}
+    <p style="color: {{ block_config.textColor | default(value='#374151') }}; margin: 0 0 8px; font-size: 15px;">
+      {{ archive_term.description }}
+    </p>
+    {% endif %}
+    <p style="color: {{ block_config.textColor | default(value='#374151') }}; font-size: 13px; margin: 0 0 32px;">
+      {{ archive_term.post_count }} post{% if archive_term.post_count != 1 %}s{% endif %}
+    </p>
+    {% endif %}
+
+    {% if posts | length > 0 %}
+    <div class="builder-archive-grid">
+      {% for post in posts %}
+      <div style="border: 1px solid #e5e7eb; border-radius: 8px; padding: 20px;">
+        <a href="{{ post.url | safe }}" style="
+          color: {{ block_config.linkColor | default(value='#2563eb') }};
+          font-weight: 600;
+          font-size: 15px;
+          text-decoration: none;
+          display: block;
+          margin-bottom: 6px;
+        ">{{ post.title }}</a>
+        {% if block_config.showDate != false and post.published_at %}
+        <p style="color: {{ block_config.textColor | default(value='#374151') }}; font-size: 12px; margin: 0 0 8px;">
+          {{ post.published_at | date(format="%B %d, %Y") }}
+        </p>
+        {% endif %}
+        {% if block_config.showExcerpt != false and post.excerpt %}
+        <p style="color: {{ block_config.textColor | default(value='#374151') }}; font-size: 13px; line-height: 1.6; margin: 0;">
+          {{ post.excerpt }}
+        </p>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+
+    {% if pagination and (pagination.total_pages > 1) %}
+    <nav style="margin-top: 32px; display: flex; gap: 8px; justify-content: center; flex-wrap: wrap;">
+      {% if pagination.prev_page %}
+      <a href="{{ pagination.base_url | safe }}?page={{ pagination.prev_page }}" style="padding: 6px 14px; border: 1px solid #e5e7eb; border-radius: 4px; font-size: 13px; color: {{ block_config.linkColor | default(value='#2563eb') }}; text-decoration: none;">← Prev</a>
+      {% endif %}
+      {% for p in range(end=pagination.total_pages) %}
+      {% set pnum = p + 1 %}
+      {% if pnum == pagination.current_page %}
+      <span style="padding: 6px 12px; border-radius: 4px; font-size: 13px; background: {{ block_config.linkColor | default(value='#2563eb') }}; color: #fff;">{{ pnum }}</span>
+      {% else %}
+      <a href="{{ pagination.base_url | safe }}?page={{ pnum }}" style="padding: 6px 12px; border: 1px solid #e5e7eb; border-radius: 4px; font-size: 13px; color: {{ block_config.linkColor | default(value='#2563eb') }}; text-decoration: none;">{{ pnum }}</a>
+      {% endif %}
+      {% endfor %}
+      {% if pagination.next_page %}
+      <a href="{{ pagination.base_url | safe }}?page={{ pagination.next_page }}" style="padding: 6px 14px; border: 1px solid #e5e7eb; border-radius: 4px; font-size: 13px; color: {{ block_config.linkColor | default(value='#2563eb') }}; text-decoration: none;">Next →</a>
+      {% endif %}
+    </nav>
+    {% endif %}
+
+    {% else %}
+    <p style="color: {{ block_config.textColor | default(value='#374151') }};">No posts found.</p>
+    {% endif %}
+
+  </div>
+</div>

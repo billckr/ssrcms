@@ -8,6 +8,57 @@ use uuid::Uuid;
 use crate::errors::Result;
 use crate::templates::context::{NavContext, NavItemContext, NavMenuContext};
 
+/// Lightweight entry used to inject all site menus into the builder Tera context.
+#[derive(Debug, Clone, Serialize)]
+pub struct BuilderMenuEntry {
+    pub id: Uuid,
+    pub name: String,
+    pub items: Vec<NavItemContext>,
+}
+
+/// Load all menus for a site and build their item trees.
+/// Returns a `HashMap<menu_uuid_string, BuilderMenuEntry>` for easy Tera subscript lookup.
+/// All errors are swallowed — a broken menu never breaks the builder.
+pub async fn load_all_for_builder(
+    pool: &PgPool,
+    site_id: Uuid,
+) -> HashMap<String, BuilderMenuEntry> {
+    let menus = match list_by_site(pool, site_id).await {
+        Ok(m) => m,
+        Err(_) => return HashMap::new(),
+    };
+
+    let mut result = HashMap::new();
+    for menu in menus {
+        let items = match items_for_menu(pool, menu.id).await {
+            Ok(v) => v,
+            Err(_) => continue,
+        };
+
+        // Resolve page_ids → URL paths
+        let page_ids: Vec<Uuid> = items
+            .iter()
+            .filter_map(|i| i.page_id)
+            .collect::<std::collections::HashSet<_>>()
+            .into_iter()
+            .collect();
+        let mut page_urls: HashMap<Uuid, String> = HashMap::new();
+        for pid in page_ids {
+            if let Ok(page) = crate::models::post::get_by_id(pool, pid).await {
+                let path = crate::models::post::get_full_page_path(pool, &page).await;
+                page_urls.insert(pid, path);
+            }
+        }
+
+        let tree = build_tree(&items, &page_urls, None, "");
+        result.insert(
+            menu.id.to_string(),
+            BuilderMenuEntry { id: menu.id, name: menu.name, items: tree },
+        );
+    }
+    result
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct NavMenu {
     pub id: Uuid,

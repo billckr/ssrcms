@@ -118,6 +118,7 @@ fn render_block(
 
     let mut ctx = site_ctx.clone();
     ctx.insert("block_config", &block.props);
+    ctx.insert("block_id", &block_id);
     ctx.insert("zone_html", &zone_html);
 
     tracing::debug!("composer: rendering block '{}' via '{}'", block.block_type, template_name);

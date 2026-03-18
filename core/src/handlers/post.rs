@@ -284,6 +284,17 @@ async fn render_post(
     Some(&active_plugins));
     ContextBuilder::add_hook_outputs(&mut ctx, &hook_outputs);
 
+    // ── Post template check ────────────────────────────────────────────────────
+    // If the active builder project has a page marked as post template, render
+    // the post through the builder composer instead of single.html.
+    if let Ok(Some(comp)) = page_composition::get_post_template(&state.db, site_id).await {
+        use crate::errors::AppError;
+        enrich_builder_context(&mut ctx, &state, site_id, base_url).await;
+        return composer::render_composition(&comp.composition, &state.templates, &ctx)
+            .map_err(|e| AppError::Internal(e.0));
+    }
+    // ── End post template check ────────────────────────────────────────────────
+
     state.templates.render_for_theme(&theme, Some(site_id), "single.html", &ctx)
 }
 

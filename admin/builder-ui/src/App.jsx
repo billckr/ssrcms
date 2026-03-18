@@ -13,6 +13,10 @@ import { TextBlock } from './blocks/Text'
 import { PostsBlock } from './blocks/Posts'
 import { CategoriesBlock } from './blocks/Categories'
 import { TagsBlock } from './blocks/Tags'
+import { PostContentBlock } from './blocks/PostContent'
+import { PostNavigationBlock } from './blocks/PostNavigation'
+import { ArchivePostsBlock } from './blocks/ArchivePosts'
+import { MenuBlock } from './blocks/Menu'
 
 const config = {
   components: {
@@ -28,6 +32,10 @@ const config = {
     Posts: PostsBlock,
     Categories: CategoriesBlock,
     Tags: TagsBlock,
+    PostContent: PostContentBlock,
+    PostNavigation: PostNavigationBlock,
+    ArchivePosts: ArchivePostsBlock,
+    Menu: MenuBlock,
   },
 }
 

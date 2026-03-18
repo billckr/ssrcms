@@ -30,7 +30,7 @@ pub fn render_project_list(projects: &[ProjectRow], flash: Option<&str>, ctx: &c
     } else {
         projects.iter().map(|p| {
             let active_badge = if p.is_active {
-                r#" <span class="badge" style="font-size:.7rem;background:#2563eb;color:#fff">Live</span>"#
+                r#" <span class="badge" style="font-size:.7rem;background:#16a34a;color:#fff">Live</span>"#
             } else { "" };
             let activate_btn = if p.is_active {
                 format!(
@@ -60,7 +60,7 @@ pub fn render_project_list(projects: &[ProjectRow], flash: Option<&str>, ctx: &c
       <img src="/admin/static/icons/code.svg" alt="New Page">
     </a>
     <button class="icon-btn" type="button" title="Rename"
-            onclick="openRenameDialog('{id}', '{name_js}')">
+            onclick="openRenameDialog('{id}', '{name_js}', '{desc_js}')">
       <img src="/admin/static/icons/edit.svg" alt="Rename">
     </button>
     <form method="POST" action="/admin/builder/{id}/delete" style="display:inline"
@@ -75,7 +75,7 @@ pub fn render_project_list(projects: &[ProjectRow], flash: Option<&str>, ctx: &c
                 id           = id_esc,
                 name         = name_esc,
                 name_js      = crate::html_escape(&p.name.replace('\'', "\\'")),
-
+                desc_js      = crate::html_escape(&p.description.as_deref().unwrap_or("").replace('\'', "\\'")),
                 active_badge = active_badge,
                 desc         = p.description.as_deref().map(crate::html_escape).unwrap_or_default(),
                 pages        = p.page_count,
@@ -127,13 +127,18 @@ pub fn render_project_list(projects: &[ProjectRow], flash: Option<&str>, ctx: &c
 </dialog>
 
 <!-- Rename project dialog -->
-<dialog id="rename-dialog" style="border:1px solid #e2e8f0;border-radius:8px;padding:1.5rem;min-width:360px;box-shadow:0 4px 24px rgba(0,0,0,.12);position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);margin:0">
+<dialog id="rename-dialog" style="border:1px solid #e2e8f0;border-radius:8px;padding:1.5rem;min-width:400px;box-shadow:0 4px 24px rgba(0,0,0,.12);position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);margin:0">
   <form method="POST" id="rename-form">
-    <h3 style="margin:0 0 1rem">Rename Project</h3>
+    <h3 style="margin:0 0 1rem">Edit Project</h3>
     <div class="form-group">
       <label for="rename-input">Project Name</label>
-      <input id="rename-input" type="text" name="name" required maxlength="35"
-             style="width:100%" autofocus>
+      <input id="rename-input" type="text" name="project_name" required maxlength="35"
+             style="width:100%" autocomplete="off">
+    </div>
+    <div class="form-group">
+      <label for="rename-desc-input">Description <span style="color:var(--muted)">(optional)</span></label>
+      <input id="rename-desc-input" type="text" name="description" maxlength="100"
+             style="width:100%" autocomplete="off">
     </div>
     <div style="display:flex;gap:.5rem;justify-content:flex-end;margin-top:1rem">
       <button type="button" class="btn" onclick="document.getElementById('rename-dialog').close();document.querySelector('.admin-content').style.filter=''">Cancel</button>
@@ -156,12 +161,14 @@ function confirmDelete(form, isActive) {{
   }}
   return confirm('Delete this project and all its pages? This cannot be undone.');
 }}
-function openRenameDialog(id, currentName) {{
+function openRenameDialog(id, currentName, currentDesc) {{
   var dlg = document.getElementById('rename-dialog');
   var form = document.getElementById('rename-form');
   document.getElementById('rename-input').value = currentName;
+  document.getElementById('rename-desc-input').value = currentDesc || '';
   form.action = '/admin/builder/' + id + '/rename';
   dlg.showModal();
+  document.getElementById('rename-input').select();
   document.querySelector('.admin-content').style.filter = 'blur(1.5px)';
 }}
 document.getElementById('rename-dialog').addEventListener('close', function() {{
@@ -179,7 +186,7 @@ document.getElementById('rename-dialog').addEventListener('close', function() {{
 
 pub fn render_page_list(project: &ProjectRow, pages: &[PageRow], ctx: &crate::PageContext) -> String {
     let active_badge = if project.is_active {
-        r#" <span class="badge badge-success" style="font-size:.7rem">Live</span>"#
+        r#" <span class="badge" style="font-size:.7rem;background:#16a34a;color:#fff">Live</span>"#
     } else { "" };
 
     let rows = if pages.is_empty() {
@@ -189,22 +196,33 @@ pub fn render_page_list(project: &ProjectRow, pages: &[PageRow], ctx: &crate::Pa
     } else {
         pages.iter().map(|p| {
             let homepage_badge = if p.is_homepage {
-                r#" <span class="badge badge-success" style="font-size:.7rem">Homepage</span>"#
+                r#" <img src="/admin/static/icons/home.svg" title="Homepage" style="width:18px;height:18px;vertical-align:middle;margin-left:4px;filter:invert(35%) sepia(1) saturate(5) hue-rotate(200deg) brightness(0.9)">"#
             } else { "" };
-            let url_display = if p.page_type == "homepage" {
-                "/".to_string()
-            } else {
-                format!("/{}", p.slug.as_deref().unwrap_or(""))
+            let post_template_badge = if p.page_type == "post_template" {
+                r#" <img src="/admin/static/icons/layout.svg" title="Post Template" style="width:18px;height:18px;vertical-align:middle;margin-left:4px;filter:invert(45%) sepia(1) saturate(4) hue-rotate(10deg) brightness(0.95)">"#
+            } else { "" };
+            let archive_template_badge = if p.page_type == "archive_template" {
+                r#" <img src="/admin/static/icons/archive.svg" title="Archive Template" style="width:18px;height:18px;vertical-align:middle;margin-left:4px;filter:invert(45%) sepia(1) saturate(4) hue-rotate(10deg) brightness(0.95)">"#
+            } else { "" };
+            let url_display = match p.page_type.as_str() {
+                "homepage"         => "/".to_string(),
+                "post_template"    => "(all posts)".to_string(),
+                "archive_template" => "(categories &amp; tags)".to_string(),
+                _                  => format!("/{}", p.slug.as_deref().unwrap_or("")),
             };
             format!(
                 r#"<tr>
-  <td><a href="/admin/builder/{proj}/pages/{page}">{name}</a>{homepage_badge}</td>
+  <td><a href="/admin/builder/{proj}/pages/{page}">{name}</a>{homepage_badge}{post_template_badge}{archive_template_badge}</td>
   <td style="color:var(--muted);font-size:.875rem;font-family:monospace">{url}</td>
   <td>{updated}</td>
   <td class="actions">
     <a href="/admin/builder/{proj}/pages/{page}" class="icon-btn" title="Edit">
       <img src="/admin/static/icons/edit.svg" alt="Edit">
     </a>
+    <button class="icon-btn" type="button" title="Duplicate page"
+            onclick="openDuplicateDialog('{proj}', '{page}', '{name_js}')">
+      <img src="/admin/static/icons/copy.svg" alt="Duplicate">
+    </button>
     <form method="POST" action="/admin/builder/{proj}/pages/{page}/delete" style="display:inline"
           onsubmit="return confirm('Delete this page?')">
       <button class="icon-btn icon-danger" type="submit" title="Delete">
@@ -213,12 +231,15 @@ pub fn render_page_list(project: &ProjectRow, pages: &[PageRow], ctx: &crate::Pa
     </form>
   </td>
 </tr>"#,
-                proj           = crate::html_escape(&project.id),
-                page           = crate::html_escape(&p.id),
-                name           = crate::html_escape(&p.name),
-                homepage_badge = homepage_badge,
-                url            = crate::html_escape(&url_display),
-                updated        = crate::html_escape(&p.updated_at),
+                proj                    = crate::html_escape(&project.id),
+                page                    = crate::html_escape(&p.id),
+                name                    = crate::html_escape(&p.name),
+                name_js                 = crate::html_escape(&p.name.replace('\'', "\\'")),
+                homepage_badge          = homepage_badge,
+                post_template_badge     = post_template_badge,
+                archive_template_badge  = archive_template_badge,
+                url                     = url_display,
+                updated                 = crate::html_escape(&p.updated_at),
             )
         }).collect::<Vec<_>>().join("\n")
     };
@@ -235,7 +256,43 @@ pub fn render_page_list(project: &ProjectRow, pages: &[PageRow], ctx: &crate::Pa
     <tr><th>Page</th><th>URL</th><th>Updated</th><th>Actions</th></tr>
   </thead>
   <tbody>{rows}</tbody>
-</table>"#,
+</table>
+
+<!-- Duplicate page dialog -->
+<dialog id="duplicate-dialog" style="border:1px solid #e2e8f0;border-radius:8px;padding:1.5rem;min-width:380px;box-shadow:0 4px 24px rgba(0,0,0,.12);position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);margin:0">
+  <form method="POST" id="duplicate-form">
+    <input type="hidden" name="name" id="duplicate-name-input-hidden">
+    <h3 style="margin:0 0 1rem">Duplicate Page</h3>
+    <div class="form-group">
+      <label for="duplicate-name-input">New Page Name</label>
+      <input id="duplicate-name-input" type="text" required maxlength="100"
+             style="width:100%" autofocus>
+    </div>
+    <div style="display:flex;gap:.5rem;justify-content:flex-end;margin-top:1rem">
+      <button type="button" class="btn" onclick="document.getElementById('duplicate-dialog').close();document.querySelector('.admin-content').style.filter=''">Cancel</button>
+      <button type="submit" class="btn btn-primary">Duplicate &amp; Open Editor</button>
+    </div>
+  </form>
+</dialog>
+<script>
+function openDuplicateDialog(projId, pageId, currentName) {{
+  var dlg  = document.getElementById('duplicate-dialog');
+  var form = document.getElementById('duplicate-form');
+  var inp  = document.getElementById('duplicate-name-input');
+  inp.value = currentName + ' (copy)';
+  form.action = '/admin/builder/' + projId + '/pages/' + pageId + '/duplicate';
+  dlg.showModal();
+  inp.select();
+  document.querySelector('.admin-content').style.filter = 'blur(1.5px)';
+}}
+document.getElementById('duplicate-dialog').addEventListener('close', function() {{
+  document.querySelector('.admin-content').style.filter = '';
+}});
+document.getElementById('duplicate-form').addEventListener('submit', function() {{
+  document.getElementById('duplicate-name-input-hidden').value =
+    document.getElementById('duplicate-name-input').value;
+}});
+</script>"#,
         active_badge = active_badge,
         proj_id      = crate::html_escape(&project.id),
         rows         = rows,
@@ -260,6 +317,7 @@ pub fn render_editor(
     project_name: &str,
     site_label: &str,
     pure_mode: bool,
+    menus_json: &str,
     _ctx: &crate::PageContext,
 ) -> String {
     let page_id_js = match page_id {
@@ -297,6 +355,7 @@ pub fn render_editor(
       projectName: "{project_escaped}",
       siteLabel:   "{site_escaped}",
       pureMode:    {pure_mode_js},
+      menus:       {menus_json},
     }};
   </script>
   <script type="module" src="/admin/static/builder/builder.js"></script>
@@ -309,6 +368,7 @@ pub fn render_editor(
         project_id      = project_id,
         site_id         = site_id,
         pure_mode_js    = pure_mode_js,
+        menus_json      = menus_json,
     )
 }
 
@@ -317,12 +377,50 @@ pub fn render_editor(
 pub fn render_new_page_form(
     project: &ProjectRow,
     has_homepage: bool,
+    has_post_template: bool,
+    has_archive_template: bool,
+    existing_pages: &[PageRow],
     ctx: &crate::PageContext,
 ) -> String {
     let homepage_option = if has_homepage {
         r#"<option value="homepage" disabled>Homepage (already exists)</option>"#
     } else {
         r#"<option value="homepage">Homepage — serves at /</option>"#
+    };
+    let post_template_option = if has_post_template {
+        r#"<option value="post_template" disabled>Post Template (already exists)</option>"#
+    } else {
+        r#"<option value="post_template">Post Template — wraps all post URLs</option>"#
+    };
+    let archive_template_option = if has_archive_template {
+        r#"<option value="archive_template" disabled>Archive Template (already exists)</option>"#
+    } else {
+        r#"<option value="archive_template">Archive Template — wraps category &amp; tag pages</option>"#
+    };
+
+    let copy_from_field = if existing_pages.is_empty() {
+        String::new()
+    } else {
+        let options = existing_pages.iter().map(|p| {
+            format!(
+                r#"<option value="{id}">{name}</option>"#,
+                id   = crate::html_escape(&p.id),
+                name = crate::html_escape(&p.name),
+            )
+        }).collect::<Vec<_>>().join("\n");
+        format!(
+            r#"<div class="form-group">
+      <label for="copy-from">Copy layout from <span style="color:var(--muted)">(optional)</span></label>
+      <select id="copy-from" name="copy_from" style="width:100%">
+        <option value="">— Start blank —</option>
+        {options}
+      </select>
+      <p style="margin:.35rem 0 0;font-size:.8rem;color:var(--muted)">
+        Opens the editor pre-filled with that page's current draft layout.
+      </p>
+    </div>"#,
+            options = options,
+        )
     };
 
     let content = format!(
@@ -342,6 +440,8 @@ pub fn render_new_page_form(
       <select id="page-type" name="page_type" onchange="toggleSlug(this.value)" style="width:100%">
         {homepage_option}
         <option value="page" selected>Regular page</option>
+        {post_template_option}
+        {archive_template_option}
       </select>
     </div>
     <div class="form-group" id="slug-group">
@@ -358,13 +458,15 @@ pub fn render_new_page_form(
         Letters, numbers, hyphens and underscores only. No spaces.
       </p>
     </div>
+    {copy_from_field}
     <button type="submit" class="btn btn-primary">Create Page &amp; Open Editor</button>
   </form>
 </div>
 <script>
   function toggleSlug(type) {{
-    document.getElementById('slug-group').style.display = type === 'homepage' ? 'none' : '';
-    document.getElementById('page-slug').required = type !== 'homepage';
+    var noSlug = type === 'homepage' || type === 'post_template';
+    document.getElementById('slug-group').style.display = noSlug ? 'none' : '';
+    document.getElementById('page-slug').required = !noSlug;
   }}
   toggleSlug(document.getElementById('page-type').value);
 
@@ -384,9 +486,12 @@ pub fn render_new_page_form(
     document.getElementById('page-slug').value = slug;
   }});
 </script>"#,
-        proj_id      = crate::html_escape(&project.id),
-        proj_name    = crate::html_escape(&project.name),
-        homepage_option = homepage_option,
+        proj_id                  = crate::html_escape(&project.id),
+        proj_name                = crate::html_escape(&project.name),
+        homepage_option          = homepage_option,
+        post_template_option     = post_template_option,
+        archive_template_option  = archive_template_option,
+        copy_from_field          = copy_from_field,
     );
 
     crate::admin_page(

@@ -14,6 +14,7 @@ use crate::middleware::site::CurrentSite;
 use crate::models::page_composition;
 use crate::models::post::{self, ListFilter, PostContext, PostStatus, PostType};
 use crate::models::taxonomy::{self, TaxonomyType};
+use crate::models::nav_menu;
 use crate::templates::composer;
 use crate::templates::context::{
     ContextBuilder, NavContext, PaginationContext, RequestContext, SessionContext, SiteContext,
@@ -362,6 +363,10 @@ pub(crate) async fn enrich_builder_context(
         builder_tags.push(taxonomy::TermContext::from_taxonomy(t, base_url, count));
     }
     ctx.insert("builder_tags", &builder_tags);
+
+    // Menus (keyed by UUID string for Tera subscript lookup)
+    let builder_menus = nav_menu::load_all_for_builder(&state.db, site_id).await;
+    ctx.insert("builder_menus", &builder_menus);
 }
 
 pub(crate) async fn build_site_context(state: &AppState, site_id: Option<Uuid>, base_url: &str) -> Result<SiteContext> {
