@@ -1,16 +1,4 @@
 {% set count = block_config.cards | length %}
-{% set cols_setting = block_config.columns | default(value='0') %}
-{% if cols_setting == '0' %}
-{% set grid_cols = count %}
-{% elif cols_setting == '1' %}
-{% set grid_cols = 1 %}
-{% elif cols_setting == '2' %}
-{% set grid_cols = 2 %}
-{% elif cols_setting == '3' %}
-{% set grid_cols = 3 %}
-{% else %}
-{% set grid_cols = 4 %}
-{% endif %}
 <div class="blk-cards" style="
   background: {{ block_config.sectionBg | default(value='#ffffff') }};
   padding: {{ block_config.padding | default(value='32px 40px') }};
@@ -19,14 +7,14 @@
 ">
   <div style="
     display: grid;
-    grid-template-columns: repeat({{ grid_cols }}, 1fr);
+    grid-template-columns: repeat({{ block_config.columns | default(value=count) }}, 1fr);
     gap: {{ block_config.gap | default(value='24px') }};
     max-width: {{ block_config.maxWidth | default(value='1200px') }};
     margin: 0 auto;
   ">
     {% for card in block_config.cards %}
     {% set zone_key = "col" ~ loop.index0 %}
-    {% set bw = card.borderWidth | default(value='1px') %}
+    {% set bw = card.borderWidth | default(value='0px') %}
     {% set shadow = card.shadow | default(value='none') %}
     <div style="
       background: {{ card.bgColor | default(value='#ffffff') }};
@@ -34,12 +22,12 @@
       border-radius: {{ card.radius | default(value='12px') }};
       {% if bw != '0px' %}border: {{ bw }} solid {{ card.borderColor | default(value='#e2e8f0') }};{% endif %}
       {% if shadow != 'none' %}box-shadow: {{ shadow }};{% endif %}
-      padding: {{ card.innerPadding | default(value='24px') }};
-      min-height: {{ card.minHeight | default(value='160px') }};
+      padding: {{ card.innerPadding | default(value='0px') }};
+      min-height: {{ card.minHeight | default(value='0px') }};
       box-sizing: border-box;
       display: flex;
       flex-direction: column;
-      justify-content: {{ card.valign | default(value='flex-start') }};
+      justify-content: {{ card.valign | default(value='center') }};
     ">
       {{ zone_html[zone_key] | default(value='') | safe }}
     </div>

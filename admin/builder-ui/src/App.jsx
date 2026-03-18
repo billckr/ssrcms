@@ -64,6 +64,7 @@ export default function App() {
   }
   const autoSaveTimer                 = useRef(null)
   const isFirstChange                 = useRef(true)
+  const isSaving                      = useRef(false)
 
   useEffect(() => {
     if (!PAGE_ID) { setInitialData({}); return }
@@ -91,6 +92,8 @@ export default function App() {
   }, [currentData, isDirty])
 
   const doSave = useCallback(async (data, isAuto = false) => {
+    if (isSaving.current) return
+    isSaving.current = true
     const name = init.pageName || 'Untitled'
     setSaving(true)
     setStatus('Saving…', 'saving')
@@ -107,6 +110,7 @@ export default function App() {
     } catch (err) {
       if (!isAuto) setStatus('Save failed — ' + err.message, 'error')
     } finally {
+      isSaving.current = false
       setSaving(false)
     }
   }, [])
@@ -123,6 +127,10 @@ export default function App() {
       setStatus('Add at least one block before publishing.', 'error')
       return
     }
+    // Cancel any pending auto-save and block concurrent saves.
+    clearTimeout(autoSaveTimer.current)
+    if (isSaving.current) return
+    isSaving.current = true
     const name = init.pageName || 'Untitled'
     setSaving(true)
     setStatus('Publishing…', 'saving')
@@ -139,6 +147,7 @@ export default function App() {
     } catch (err) {
       setStatus('Publish failed — ' + err.message, 'error')
     } finally {
+      isSaving.current = false
       setSaving(false)
     }
   }

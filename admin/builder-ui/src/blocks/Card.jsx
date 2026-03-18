@@ -63,7 +63,7 @@ const MAX_WIDTH_OPTIONS = [
 ]
 
 const COLUMNS_OPTIONS = [
-  { label: 'Auto (match card count)', value: '0' },
+  { label: 'Auto (match card count)', value: null },
   { label: '1', value: '1' },
   { label: '2', value: '2' },
   { label: '3', value: '3' },
@@ -74,11 +74,11 @@ const CARD_DEFAULT = {
   bgColor:      '#ffffff',
   textColor:    '#111827',
   radius:       '12px',
-  borderWidth:  '1px',
+  borderWidth:  '0px',
   borderColor:  '#e2e8f0',
   shadow:       'none',
-  valign:       'flex-start',
-  innerPadding: '24px',
+  valign:       'center',
+  innerPadding: '0px',
   minHeight:    '160px',
 }
 
@@ -179,7 +179,7 @@ export const CardBlock = {
       { ...CARD_DEFAULT },
       { ...CARD_DEFAULT },
     ],
-    columns:   '0',
+    columns:   null,
     gap:       '24px',
     sectionBg: '#ffffff',
     maxWidth:  '1200px',
@@ -188,7 +188,7 @@ export const CardBlock = {
   render: ({ cards, columns, gap, sectionBg, maxWidth, padding }) => {
     const cardList = cards || []
     const count = cardList.length
-    const cols = parseInt(columns) || count
+    const cols = columns ? parseInt(columns) : count
     return (
       <div style={{ background: sectionBg, padding, boxSizing: 'border-box', width: '100%' }}>
         <div style={{
