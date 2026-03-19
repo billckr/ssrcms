@@ -1,4 +1,4 @@
-import { ColorField } from './ColorField'
+import { ColorField, MAX_WIDTH_OPTIONS } from './ColorField'
 
 export const HeroBlock = {
   label: 'Hero Section',
@@ -39,6 +39,11 @@ export const HeroBlock = {
       { value: '40px', label: 'Medium (40px)' },
       { value: '80px', label: 'Large (80px)' },
     ]},
+    maxWidth: {
+      type: 'select',
+      label: 'Content max width',
+      options: MAX_WIDTH_OPTIONS,
+    },
   },
   defaultProps: {
     heading:    'Welcome to our site',
@@ -54,42 +59,44 @@ export const HeroBlock = {
     paddingV:   '60px',
     paddingH:   '40px',
     align:      'center',
+    maxWidth:   '1200px',
   },
-  render: ({ heading, subheading, bgColor, textColor, showButton, ctaLabel, ctaUrl, ctaBg, ctaText, minHeight, paddingV, paddingH, align }) => (
+  render: ({ heading, subheading, bgColor, textColor, showButton, ctaLabel, ctaUrl, ctaBg, ctaText, minHeight, paddingV, paddingH, align, maxWidth }) => (
     <section style={{
       background: bgColor,
       color: textColor,
       minHeight,
       display: 'flex',
       flexDirection: 'column',
-      alignItems: align === 'left' ? 'flex-start' : align === 'right' ? 'flex-end' : 'center',
+      alignItems: 'center',
       justifyContent: 'center',
       padding: `${paddingV || '60px'} ${paddingH || '40px'}`,
-      textAlign: align,
       boxSizing: 'border-box',
     }}>
-      <h1 style={{ margin: '0 0 16px', fontSize: '3rem', fontWeight: 700, lineHeight: 1.15 }}>
-        {heading}
-      </h1>
-      <p style={{ margin: '0 0 32px', fontSize: '1.25rem', maxWidth: '640px', opacity: 0.9 }}>
-        {subheading}
-      </p>
-      {showButton && ctaLabel && (
-        <a
-          href={ctaUrl}
-          style={{
-            background: ctaBg,
-            color: ctaText,
-            padding: '14px 32px',
-            borderRadius: '6px',
-            textDecoration: 'none',
-            fontWeight: 600,
-            fontSize: '1rem',
-          }}
-        >
-          {ctaLabel}
-        </a>
-      )}
+      <div style={{ maxWidth: maxWidth || '1200px', width: '100%', textAlign: align }}>
+        <h1 style={{ margin: '0 0 16px', fontSize: '3rem', fontWeight: 700, lineHeight: 1.15 }}>
+          {heading}
+        </h1>
+        <p style={{ margin: '0 0 32px', fontSize: '1.25rem', opacity: 0.9 }}>
+          {subheading}
+        </p>
+        {showButton && ctaLabel && (
+          <a
+            href={ctaUrl}
+            style={{
+              background: ctaBg,
+              color: ctaText,
+              padding: '14px 32px',
+              borderRadius: '6px',
+              textDecoration: 'none',
+              fontWeight: 600,
+              fontSize: '1rem',
+            }}
+          >
+            {ctaLabel}
+          </a>
+        )}
+      </div>
     </section>
   ),
 }

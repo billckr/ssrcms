@@ -1,4 +1,4 @@
-import { ColorField, PADDING_OPTIONS } from './ColorField'
+import { ColorField, PADDING_OPTIONS, MAX_WIDTH_OPTIONS } from './ColorField'
 
 const PLACEHOLDER_CATS = ['Technology', 'Design', 'Business', 'Lifestyle']
 
@@ -20,6 +20,11 @@ export const CategoriesBlock = {
       type: 'select',
       label: 'Outer padding',
       options: PADDING_OPTIONS.map(o => ({ label: o.label, value: o.value })),
+    },
+    maxWidth: {
+      type: 'select',
+      label: 'Content max width',
+      options: MAX_WIDTH_OPTIONS,
     },
     bgColor: {
       type: 'custom',
@@ -47,12 +52,14 @@ export const CategoriesBlock = {
     heading:      'Categories',
     showCount:    true,
     padding:      '32px 40px',
+    maxWidth:     '1200px',
     bgColor:      '#ffffff',
     headingColor: '#111827',
     linkColor:    '#2563eb',
   },
-  render: ({ heading, showCount, padding, bgColor, headingColor, linkColor }) => (
+  render: ({ heading, showCount, padding, maxWidth, bgColor, headingColor, linkColor }) => (
     <div style={{ background: bgColor, padding, boxSizing: 'border-box', width: '100%' }}>
+      <div style={{ maxWidth: maxWidth || '1200px', margin: '0 auto' }}>
       {heading && (
         <h2 style={{ color: headingColor, marginTop: 0, marginBottom: 16, fontSize: 20, fontWeight: 700 }}>
           {heading}
@@ -67,6 +74,7 @@ export const CategoriesBlock = {
           </li>
         ))}
       </ul>
+      </div>
     </div>
   ),
 }

@@ -4,31 +4,36 @@
   min-height: {{ block_config.minHeight | default(value='480px') }};
   display: flex;
   flex-direction: column;
-  align-items: {% if block_config.align == 'left' %}flex-start{% elif block_config.align == 'right' %}flex-end{% else %}center{% endif %};
+  align-items: center;
   justify-content: center;
   padding: {{ block_config.paddingV | default(value='60px') }} {{ block_config.paddingH | default(value='40px') }};
-  text-align: {{ block_config.align | default(value='center') }};
   box-sizing: border-box;
 ">
-  <h1 style="margin: 0 0 16px; font-size: 3rem; font-weight: 700; line-height: 1.15;">
-    {{ block_config.heading | default(value='') }}
-  </h1>
-  {% if block_config.subheading %}
-  <p style="margin: 0 0 32px; font-size: 1.25rem; max-width: 640px; opacity: 0.9;">
-    {{ block_config.subheading }}
-  </p>
-  {% endif %}
-  {% if block_config.showButton and block_config.ctaLabel %}
-  <a href="{{ block_config.ctaUrl | default(value='/') | safe }}" style="
-    background: {{ block_config.ctaBg | default(value='#e94560') }};
-    color: {{ block_config.ctaText | default(value='#ffffff') }};
-    padding: 14px 32px;
-    border-radius: 6px;
-    text-decoration: none;
-    font-weight: 600;
-    font-size: 1rem;
+  <div style="
+    max-width: {{ block_config.maxWidth | default(value='1200px') }};
+    width: 100%;
+    text-align: {{ block_config.align | default(value='center') }};
   ">
-    {{ block_config.ctaLabel }}
-  </a>
-  {% endif %}
+    <h1 style="margin: 0 0 16px; font-size: 3rem; font-weight: 700; line-height: 1.15;">
+      {{ block_config.heading | default(value='') }}
+    </h1>
+    {% if block_config.subheading %}
+    <p style="margin: 0 0 32px; font-size: 1.25rem; opacity: 0.9;">
+      {{ block_config.subheading }}
+    </p>
+    {% endif %}
+    {% if block_config.showButton and block_config.ctaLabel %}
+    <a href="{{ block_config.ctaUrl | default(value='/') | safe }}" style="
+      background: {{ block_config.ctaBg | default(value='#e94560') }};
+      color: {{ block_config.ctaText | default(value='#ffffff') }};
+      padding: 14px 32px;
+      border-radius: 6px;
+      text-decoration: none;
+      font-weight: 600;
+      font-size: 1rem;
+    ">
+      {{ block_config.ctaLabel }}
+    </a>
+    {% endif %}
+  </div>
 </section>

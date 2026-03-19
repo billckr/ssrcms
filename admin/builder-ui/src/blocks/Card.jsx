@@ -1,5 +1,5 @@
 import { DropZone } from '@puckeditor/core'
-import { ColorField, PADDING_OPTIONS } from './ColorField'
+import { ColorField, PADDING_OPTIONS, MAX_WIDTH_OPTIONS } from './ColorField'
 
 const GAP_OPTIONS = [
   { label: 'None',   value: '0px' },
@@ -55,12 +55,6 @@ const MIN_HEIGHT_OPTIONS = [
   { label: 'XLarge (400px)', value: '400px' },
 ]
 
-const MAX_WIDTH_OPTIONS = [
-  { label: 'Full',          value: '100%' },
-  { label: 'Wide (1400px)', value: '1400px' },
-  { label: 'Medium (1200px)', value: '1200px' },
-  { label: 'Narrow (900px)', value: '900px' },
-]
 
 const COLUMNS_OPTIONS = [
   { label: 'Auto (match card count)', value: null },

@@ -13,9 +13,9 @@
   {% endif %}
 
   {% if layout == "cards" %}
-  <div class="builder-posts-grid">
+  <div class="builder-posts-grid" style="max-width: {{ block_config.maxWidth | default(value='1200px') }}; margin: 0 auto;">
   {% else %}
-  <div style="max-width: 1200px; margin: 0 auto;">
+  <div style="max-width: {{ block_config.maxWidth | default(value='1200px') }}; margin: 0 auto;">
   {% endif %}
 
   {% for post in builder_posts %}

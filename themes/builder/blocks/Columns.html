@@ -8,7 +8,7 @@
     display: grid;
     grid-template-columns: repeat({{ block_config.columns | length }}, 1fr);
     gap: {{ block_config.gap | default(value='24px') }};
-    max-width: 1200px;
+    max-width: {{ block_config.maxWidth | default(value='1200px') }};
     margin: 0 auto;
   ">
     {% for col in block_config.columns %}

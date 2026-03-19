@@ -1,4 +1,4 @@
-import { ColorField, PADDING_OPTIONS } from './ColorField'
+import { ColorField, PADDING_OPTIONS, MAX_WIDTH_OPTIONS } from './ColorField'
 
 const LIMIT_OPTIONS = [
   { label: '3',  value: 3 },
@@ -57,6 +57,11 @@ export const PostsBlock = {
       label: 'Outer padding',
       options: PADDING_OPTIONS.map(o => ({ label: o.label, value: o.value })),
     },
+    maxWidth: {
+      type: 'select',
+      label: 'Content max width',
+      options: MAX_WIDTH_OPTIONS,
+    },
     bgColor: {
       type: 'custom',
       label: 'Background color',
@@ -93,12 +98,13 @@ export const PostsBlock = {
     showExcerpt: true,
     showDate:    true,
     padding:     '32px 40px',
+    maxWidth:    '1200px',
     bgColor:     '#ffffff',
     headingColor: '#111827',
     textColor:   '#374151',
     linkColor:   '#2563eb',
   },
-  render: ({ heading, limit, layout, showExcerpt, showDate, padding, bgColor, headingColor, textColor, linkColor }) => {
+  render: ({ heading, limit, layout, showExcerpt, showDate, padding, maxWidth, bgColor, headingColor, textColor, linkColor }) => {
     const preview = PLACEHOLDER_POSTS.slice(0, Math.min(limit, 3))
     const isCards = layout === 'cards'
     return (
@@ -112,7 +118,7 @@ export const PostsBlock = {
           display: isCards ? 'grid' : 'block',
           gridTemplateColumns: isCards ? 'repeat(3, 1fr)' : undefined,
           gap: isCards ? 24 : undefined,
-          maxWidth: 1200,
+          maxWidth: maxWidth || '1200px',
           margin: '0 auto',
         }}>
           {preview.map((p, i) => (

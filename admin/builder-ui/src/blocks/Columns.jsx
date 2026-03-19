@@ -1,5 +1,5 @@
 import { DropZone } from '@puckeditor/core'
-import { ColorField, PADDING_OPTIONS } from './ColorField'
+import { ColorField, PADDING_OPTIONS, MAX_WIDTH_OPTIONS } from './ColorField'
 
 const GAP_OPTIONS = [
   { label: 'None',   value: '0px' },
@@ -61,17 +61,23 @@ export const ColumnsBlock = {
         <ColorField label="Outer background color" value={value ?? '#ffffff'} onChange={onChange} />
       ),
     },
+    maxWidth: {
+      type: 'select',
+      label: 'Content max width',
+      options: MAX_WIDTH_OPTIONS,
+    },
   },
   defaultProps: {
     columns: [
       { ...COL_DEFAULT },
       { ...COL_DEFAULT },
     ],
-    gap:     '24px',
-    padding: '32px 40px',
-    bgColor: '#ffffff',
+    gap:      '24px',
+    padding:  '32px 40px',
+    bgColor:  '#ffffff',
+    maxWidth: '1200px',
   },
-  render: ({ columns, gap, padding, bgColor }) => {
+  render: ({ columns, gap, padding, bgColor, maxWidth }) => {
     const colList = columns || []
     const count   = colList.length
     return (
@@ -85,7 +91,7 @@ export const ColumnsBlock = {
           display:               'grid',
           gridTemplateColumns:   `repeat(${count}, 1fr)`,
           gap,
-          maxWidth:              1200,
+          maxWidth:              maxWidth || '1200px',
           margin:                '0 auto',
         }}>
           {colList.map((col, i) => {

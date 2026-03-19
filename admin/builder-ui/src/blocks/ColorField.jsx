@@ -62,3 +62,11 @@ export const PADDING_OPTIONS = [
   { label: 'Medium', value: '32px 40px' },
   { label: 'Large',  value: '64px 80px' },
 ]
+
+export const MAX_WIDTH_OPTIONS = [
+  { label: 'Full (100%)',        value: '100%' },
+  { label: 'Wide (1400px)',      value: '1400px' },
+  { label: 'Standard (1200px)', value: '1200px' },
+  { label: 'Medium (960px)',     value: '960px' },
+  { label: 'Narrow (720px)',     value: '720px' },
+]

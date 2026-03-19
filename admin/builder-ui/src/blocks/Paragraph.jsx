@@ -1,5 +1,5 @@
 import { RichTextMenu } from '@puckeditor/core'
-import { ColorField, PADDING_OPTIONS } from './ColorField'
+import { ColorField, PADDING_OPTIONS, MAX_WIDTH_OPTIONS } from './ColorField'
 
 export const ParagraphBlock = {
   label: 'Paragraph',
@@ -50,14 +50,8 @@ export const ParagraphBlock = {
     },
     maxWidth: {
       type: 'select',
-      label: 'Max width',
-      options: [
-        { value: '100%',   label: 'Full width' },
-        { value: '900px',  label: 'Wide (900px)' },
-        { value: '720px',  label: 'Medium (720px)' },
-        { value: '600px',  label: 'Narrow (600px)' },
-        { value: '480px',  label: 'XNarrow (480px)' },
-      ],
+      label: 'Content max width',
+      options: MAX_WIDTH_OPTIONS,
     },
     align: {
       type: 'select',
@@ -93,7 +87,7 @@ export const ParagraphBlock = {
     text:       'Your paragraph text here.',
     fontSize:   '1rem',
     lineHeight: '1.6',
-    maxWidth:   '100%',
+    maxWidth:   '1200px',
     align:      'left',
     textColor:  '#374151',
     bgColor:    '#ffffff',

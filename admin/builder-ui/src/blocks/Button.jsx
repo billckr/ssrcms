@@ -1,4 +1,4 @@
-import { ColorField } from './ColorField'
+import { ColorField, PADDING_OPTIONS } from './ColorField'
 
 export const ButtonBlock = {
   label: 'Button',
@@ -29,6 +29,11 @@ export const ButtonBlock = {
         { value: 'large',  label: 'Large' },
       ],
     },
+    padding: {
+      type: 'select',
+      label: 'Outer padding',
+      options: PADDING_OPTIONS.map(o => ({ label: o.label, value: o.value })),
+    },
   },
   defaultProps: {
     label:     'Click here',
@@ -37,19 +42,20 @@ export const ButtonBlock = {
     textColor: '#1e293b',
     align:     'center',
     size:      'medium',
+    padding:   '16px 24px',
   },
-  render: ({ label, url, bgColor, textColor, align, size }) => {
-    const padding = size === 'small' ? '8px 20px' : size === 'large' ? '18px 40px' : '12px 28px'
+  render: ({ label, url, bgColor, textColor, align, size, padding }) => {
+    const btnPadding = size === 'small' ? '8px 20px' : size === 'large' ? '18px 40px' : '12px 28px'
     const fontSize = size === 'small' ? '0.875rem' : size === 'large' ? '1.125rem' : '1rem'
     return (
-      <div style={{ padding: '16px 24px', textAlign: align, boxSizing: 'border-box' }}>
+      <div style={{ padding: padding || '16px 24px', textAlign: align, boxSizing: 'border-box' }}>
         <a
           href={url}
           style={{
             display: 'inline-block',
             background: bgColor,
             color: textColor,
-            padding,
+            padding: btnPadding,
             fontSize,
             fontWeight: 600,
             borderRadius: 6,

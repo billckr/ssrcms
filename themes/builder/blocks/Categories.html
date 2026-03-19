@@ -4,18 +4,20 @@
   box-sizing: border-box;
   width: 100%;
 ">
-  {% if block_config.heading %}
-  <h2 style="color: {{ block_config.headingColor | default(value='#111827') }}; margin-top: 0; margin-bottom: 16px; font-size: 20px; font-weight: 700;">
-    {{ block_config.heading }}
-  </h2>
-  {% endif %}
-  <ul style="list-style: none; margin: 0; padding: 0;">
-    {% for cat in builder_categories %}
-    <li style="padding: 6px 0; border-bottom: 1px solid #f3f4f6;">
-      <a href="{{ cat.url }}" style="color: {{ block_config.linkColor | default(value='#2563eb') }}; text-decoration: none; font-size: 14px;">
-        {{ cat.name }}{% if block_config.showCount %} <span style="color: #9ca3af; margin-left: 4px;">({{ cat.post_count }})</span>{% endif %}
-      </a>
-    </li>
-    {% endfor %}
-  </ul>
+  <div style="max-width: {{ block_config.maxWidth | default(value='1200px') }}; margin: 0 auto;">
+    {% if block_config.heading %}
+    <h2 style="color: {{ block_config.headingColor | default(value='#111827') }}; margin-top: 0; margin-bottom: 16px; font-size: 20px; font-weight: 700;">
+      {{ block_config.heading }}
+    </h2>
+    {% endif %}
+    <ul style="list-style: none; margin: 0; padding: 0;">
+      {% for cat in builder_categories %}
+      <li style="padding: 6px 0; border-bottom: 1px solid #f3f4f6;">
+        <a href="{{ cat.url }}" style="color: {{ block_config.linkColor | default(value='#2563eb') }}; text-decoration: none; font-size: 14px;">
+          {{ cat.name }}{% if block_config.showCount %} <span style="color: #9ca3af; margin-left: 4px;">({{ cat.post_count }})</span>{% endif %}
+        </a>
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
 </div>

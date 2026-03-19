@@ -2,7 +2,7 @@
 {% set font_size = "1rem" %}
 {% if block_config.size == "small" %}{% set padding = "8px 20px" %}{% set font_size = "0.875rem" %}{% endif %}
 {% if block_config.size == "large" %}{% set padding = "18px 40px" %}{% set font_size = "1.125rem" %}{% endif %}
-<div class="blk-button" style="padding: 16px 24px; text-align: {{ block_config.align | default(value='center') }}; box-sizing: border-box;">
+<div class="blk-button" style="padding: {{ block_config.padding | default(value='16px 24px') }}; text-align: {{ block_config.align | default(value='center') }}; box-sizing: border-box;">
   {% set btn_url = block_config.url | default(value='/') %}
   <a href="{{ btn_url | safe }}"{% if btn_url is starting_with("http") %} target="_blank" rel="noopener noreferrer"{% endif %} style="
     display: inline-block;
