@@ -56,6 +56,29 @@ export function ColorField({ label, value, onChange }) {
   )
 }
 
+// ─── SHARED LAYOUT CONSTANTS ────────────────────────────────────────────────
+// PADDING_OPTIONS and MAX_WIDTH_OPTIONS are the single source of truth for
+// layout controls across ALL builder blocks. Every section-level block must
+// import and use these — never define local copies with different values.
+//
+// This ensures that setting "Standard (1200px)" on a Hero, a Cards block,
+// and a Paragraph block all produce the same max-width, so content edges
+// visually align across the page.
+//
+// When adding a new top-level block:
+//   1. import { ColorField, PADDING_OPTIONS, MAX_WIDTH_OPTIONS } from './ColorField'
+//   2. Add a `padding` field using PADDING_OPTIONS
+//   3. Add a `maxWidth` field using MAX_WIDTH_OPTIONS (default: '1200px')
+//   4. Apply them in the render: outer div gets `padding`, inner content
+//      div gets `maxWidth` + `margin: '0 auto'`
+//   5. Mirror both in the matching Tera template using
+//      `{{ block_config.padding | default(value='32px 40px') }}` and
+//      `{{ block_config.maxWidth | default(value='1200px') }}`
+//
+// Blocks dropped inside zones (Text, etc.) do NOT need these — they inherit
+// layout from their container (Cards, Columns, etc.).
+// ────────────────────────────────────────────────────────────────────────────
+
 export const PADDING_OPTIONS = [
   { label: 'None',   value: '0px' },
   { label: 'Small',  value: '16px 24px' },
