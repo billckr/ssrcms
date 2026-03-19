@@ -1,19 +1,56 @@
-{% set padding = "12px 28px" %}
+{% set btn_size = block_config.layout.size | default(value='medium') %}
+{% set btn_inner = "12px 28px" %}
 {% set font_size = "1rem" %}
-{% if block_config.size == "small" %}{% set padding = "8px 20px" %}{% set font_size = "0.875rem" %}{% endif %}
-{% if block_config.size == "large" %}{% set padding = "18px 40px" %}{% set font_size = "1.125rem" %}{% endif %}
-<div class="blk-button" style="padding: {{ block_config.padding | default(value='16px 24px') }}; text-align: {{ block_config.align | default(value='center') }}; box-sizing: border-box;">
-  {% set btn_url = block_config.url | default(value='/') %}
-  <a href="{{ btn_url | safe }}"{% if btn_url is starting_with("http") %} target="_blank" rel="noopener noreferrer"{% endif %} style="
+{% if btn_size == "small" %}{% set btn_inner = "8px 20px" %}{% set font_size = "0.875rem" %}{% endif %}
+{% if btn_size == "large" %}{% set btn_inner = "18px 40px" %}{% set font_size = "1.125rem" %}{% endif %}
+
+{% set bw           = block_config.customization.borderWidth | default(value='0px') %}
+{% set border_color = block_config.customization.borderColor | default(value='#000000') %}
+{% set br           = block_config.customization.borderRadius | default(value='6px') %}
+{% set hover_effect = block_config.customization.hoverEffect | default(value='dim') %}
+{% set hover_anim   = block_config.customization.hoverAnimation | default(value='none') %}
+{% set hover_color  = block_config.customization.hoverColor | default(value='#000000') %}
+
+{# Unique class so multiple buttons on the same page don't collide #}
+{% set uid = block_config.id | default(value='btn') %}
+
+<style>
+  .blk-btn-{{ uid }} {
     display: inline-block;
-    background: {{ block_config.bgColor | default(value='#e2e8f0') }};
-    color: {{ block_config.textColor | default(value='#1e293b') }};
-    padding: {{ padding }};
-    font-size: {{ font_size }};
     font-weight: 600;
-    border-radius: 6px;
     text-decoration: none;
-  ">
+    cursor: pointer;
+    transition: all 0.15s ease;
+    background: var(--btn-bg);
+    color: var(--btn-text);
+    {% if bw != '0px' %}border: {{ bw }} solid {{ border_color }};{% else %}border: none;{% endif %}
+    border-radius: {{ br }};
+    padding: {{ btn_inner }};
+    font-size: {{ font_size }};
+  }
+  .blk-btn-{{ uid }}:hover {
+    {% if hover_effect == 'dim' %}filter: brightness(0.85);{% endif %}
+    {% if hover_effect == 'custom' %}background: {{ hover_color }};{% endif %}
+    {% if hover_anim == 'up' %}transform: translateY(-3px);{% endif %}
+    {% if hover_anim == 'down' %}transform: translateY(3px);{% endif %}
+  }
+</style>
+
+<div class="blk-button" style="
+  padding: {{ block_config.layout.padding | default(value='16px 24px') }};
+  text-align: {{ block_config.layout.align | default(value='center') }};
+  box-sizing: border-box;
+">
+  {% set btn_url = block_config.url | default(value='/') %}
+  <a
+    href="{{ btn_url | safe }}"
+    {% if btn_url is starting_with("http") %}target="_blank" rel="noopener noreferrer"{% endif %}
+    class="blk-btn-{{ uid }}"
+    style="
+      --btn-bg: {{ block_config.bgColor | default(value='#1652F0') }};
+      --btn-text: {{ block_config.textColor | default(value='#ffffff') }};
+    "
+  >
     {{ block_config.label | default(value='Click here') }}
   </a>
 </div>
