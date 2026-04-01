@@ -78,6 +78,17 @@ remove_pid() {
     rm -f "$PID_FILE"
 }
 
+check_caddy() {
+    if ! systemctl is-active --quiet caddy 2>/dev/null; then
+        local state
+        state=$(systemctl is-active caddy 2>/dev/null || true)
+        log "WARNING: Caddy is not running (systemd state: ${state})."
+        log "  Sites will be unreachable on port 80/443 until Caddy is restored."
+        log "  Fix:   sudo chown -R caddy:caddy /var/log/caddy && sudo systemctl restart caddy"
+        log "  Check: sudo journalctl -u caddy -n 30"
+    fi
+}
+
 check_postgres() {
     local db_url="${DATABASE_URL:-}"
     if [[ -z "$db_url" && -f "$SCRIPT_DIR/.env" ]]; then
@@ -138,6 +149,7 @@ cmd_start() {
         find "$SEARCH_INDEX" -name "*.lock" -delete 2>/dev/null || true
     fi
 
+    check_caddy
     log "Starting Synaptic Signals..."
     cd "$SCRIPT_DIR"
     nohup "$BINARY" >> "$LOG_FILE" 2>&1 &
@@ -212,6 +224,7 @@ cmd_status() {
         log "Not running."
         remove_pid
     fi
+    check_caddy
 }
 
 cmd_logs() {
