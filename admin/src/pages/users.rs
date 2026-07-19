@@ -214,7 +214,7 @@ pub fn render_list(
               <td style="width:2rem;text-align:center">{cb}</td>
               <td><a href="/admin/users/{id}/edit">{display_name}</a></td>
               <td>{username}</td>
-              <td>{email}</td>
+              <td><button type="button" class="copy-email-btn" data-email="{email_raw}" title="Click to copy email">{email}</button></td>
               <td>{domain_badges}</td>
               <td><span class="badge {badge_class}">{role}</span></td>
               <td class="actions">
@@ -230,6 +230,7 @@ pub fn render_list(
             display_name = crate::html_escape(&u.display_name),
             username = crate::html_escape(&u.username),
             email = crate::html_escape(&u.email),
+            email_raw = crate::html_escape(&u.email),
             domain_badges = domain_badges,
             role = crate::html_escape(role_display(&u.role)),
             badge_class = role_badge_class(&u.role),
@@ -338,6 +339,63 @@ pub fn render_list(
   document.querySelectorAll('.bulk-cb-subs').forEach(function(c) {
     c.addEventListener('change', function() { if (!c.checked && selAllS) selAllS.checked = false; syncSubs(); });
   });
+
+  // Copy email to clipboard
+  document.querySelectorAll('.copy-email-btn').forEach(function(btn) {
+    btn.addEventListener('click', function(e) {
+      e.preventDefault();
+      var email = btn.getAttribute('data-email');
+
+      // Try modern clipboard API first
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(email).then(function() {
+          showCopyTooltip(btn);
+        }).catch(function(err) {
+          console.error('Clipboard failed:', err);
+          fallbackCopy(email, btn);
+        });
+      } else {
+        // Fallback for older browsers
+        fallbackCopy(email, btn);
+      }
+    });
+  });
+
+  function fallbackCopy(text, btn) {
+    var textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.style.position = 'fixed';
+    textarea.style.opacity = '0';
+    document.body.appendChild(textarea);
+    textarea.select();
+    try {
+      document.execCommand('copy');
+      showCopyTooltip(btn);
+    } catch (err) {
+      console.error('Copy failed:', err);
+    }
+    document.body.removeChild(textarea);
+  }
+
+  function showCopyTooltip(btn) {
+    var tooltip = document.createElement('div');
+    tooltip.textContent = 'Copied!';
+    tooltip.style.cssText = 'position:absolute;background:#16a34a;color:#fff;padding:.4rem .6rem;border-radius:4px;font-size:12px;white-space:nowrap;pointer-events:none;z-index:1000;box-shadow:0 2px 8px rgba(0,0,0,0.15)';
+
+    document.body.appendChild(tooltip);
+
+    var rect = btn.getBoundingClientRect();
+    tooltip.style.left = (rect.left + rect.width / 2 - tooltip.offsetWidth / 2) + 'px';
+    tooltip.style.top = (rect.top - 35) + 'px';
+
+    setTimeout(function() {
+      tooltip.style.opacity = '0';
+      tooltip.style.transition = 'opacity 0.3s ease';
+      setTimeout(function() {
+        document.body.removeChild(tooltip);
+      }, 300);
+    }, 1500);
+  }
 })();
 
 function bulkDeleteUsers(tab) {

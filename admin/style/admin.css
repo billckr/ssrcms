@@ -171,6 +171,8 @@ tr.muted td { opacity: .55; }
 .btn-secondary { background: #e2e8f0; color: var(--text); border-color: var(--border); }
 .btn-secondary:hover { background: #d1d9e6; text-decoration: none; }
 .btn:disabled, .btn[disabled] { opacity: .45; cursor: not-allowed; pointer-events: none; box-shadow: none; transform: none; }
+.copy-email-btn { background: none; border: none; cursor: pointer; color: var(--primary); font-size: 13px; padding: 0; transition: none; will-change: auto; text-decoration: underline; }
+.copy-email-btn:hover { color: var(--primary-dark); }
 
 /* Icon buttons */
 .icon-btn { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0; background: none; border: 1px solid var(--border); border-radius: var(--radius); cursor: pointer; color: var(--primary); transition: background .2s, border-color .2s; }
