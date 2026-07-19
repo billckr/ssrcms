@@ -72,7 +72,7 @@ pub async fn profile_update(
     };
 
     let flash = match crate::models::user::update(&state.db, account.user.id, &update).await {
-        Ok(_)  => "Profile updated successfully!",
+        Ok(_)  => "Profile updated!",
         Err(_) => "Error saving profile. Please try again.",
     };
 
