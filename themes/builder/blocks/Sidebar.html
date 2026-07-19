@@ -1,0 +1,20 @@
+{% set sidebar_side = block_config.sidebarSide | default(value='left') %}
+{% set sidebar_width = block_config.sidebarWidth | default(value='30%') %}
+{% set gap = block_config.gap | default(value='24px') %}
+{% set padding = block_config.padding | default(value='32px 40px') %}
+{% set max_width = block_config.maxWidth | default(value='1200px') %}
+{% set bg_color = block_config.bgColor | default(value='transparent') %}
+
+{% set sidebar_html = zone_html["sidebar"] | default(value='') %}
+{% set main_html = zone_html["main"] | default(value='') %}
+
+<div style="background: {{ bg_color }}; padding: {{ padding }}; box-sizing: border-box; width: 100%;">
+  <div style="display: flex; flex-direction: {% if sidebar_side == 'right' %}row-reverse{% else %}row{% endif %}; gap: {{ gap }}; max-width: {{ max_width }}; margin: 0 auto; flex-wrap: wrap;">
+    <div style="width: {{ sidebar_width }}; flex-shrink: 0; min-width: 0; box-sizing: border-box;">
+      {{ sidebar_html | safe }}
+    </div>
+    <div style="flex: 1 1 0; min-width: 0; box-sizing: border-box;">
+      {{ main_html | safe }}
+    </div>
+  </div>
+</div>

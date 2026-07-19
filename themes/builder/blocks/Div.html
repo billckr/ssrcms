@@ -1,0 +1,31 @@
+{% set count = block_config.sections | default(value='1') | int %}
+{% set direction = block_config.direction | default(value='row') %}
+{% set flex_dir = "row" %}
+{% if direction == "column" %}{% set flex_dir = "column" %}{% endif %}
+
+<div class="blk-div" style="
+  background: {{ block_config.bgColor | default(value='transparent') }};
+  padding: {{ block_config.padding | default(value='32px 40px') }};
+  box-sizing: border-box;
+">
+  <div style="
+    display: flex;
+    flex-direction: {{ flex_dir }};
+    gap: {{ block_config.gap | default(value='0px') }};
+    max-width: {{ block_config.maxWidth | default(value='1200px') }};
+    margin: 0 auto;
+    width: 100%;
+  ">
+    {% for i in range(end=count) %}
+    {% set zone_key = "zone" ~ i %}
+    <div style="
+      flex: 1;
+      min-width: 0;
+      min-height: {{ block_config.minHeight | default(value='0px') }};
+      box-sizing: border-box;
+    ">
+      {{ zone_html[zone_key] | default(value='') | safe }}
+    </div>
+    {% endfor %}
+  </div>
+</div>
