@@ -282,7 +282,7 @@ pub fn render_list(
               <td style="width:2rem;text-align:center">{cb}</td>
               <td><a href="/admin/users/{id}/edit">{display_name}</a></td>
               <td>{username}</td>
-              <td>{email}</td>
+              <td><button type="button" class="copy-email-btn" data-email="{email_raw}" title="Click to copy email">{email}</button></td>
               <td>{domain_badges}</td>
               <td class="actions">
                 <a href="/admin/users/{id}/edit" class="icon-btn" title="Edit">
@@ -296,6 +296,7 @@ pub fn render_list(
             display_name = crate::html_escape(&u.display_name),
             username = crate::html_escape(&u.username),
             email = crate::html_escape(&u.email),
+            email_raw = crate::html_escape(&u.email),
             domain_badges = domain_badges,
             delete_btn = delete_btn,
         )
