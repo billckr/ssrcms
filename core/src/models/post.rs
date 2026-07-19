@@ -547,6 +547,8 @@ pub struct ListFilter {
     pub search: Option<String>,
     pub limit: i64,
     pub offset: i64,
+    /// When true, exclude trashed posts from results (used for admin "All" view).
+    pub exclude_trashed: bool,
 }
 
 impl Default for ListFilter {
@@ -561,6 +563,7 @@ impl Default for ListFilter {
             search: None,
             limit: 10,
             offset: 0,
+            exclude_trashed: false,
         }
     }
 }
@@ -647,16 +650,17 @@ pub async fn list(pool: &PgPool, filter: &ListFilter) -> Result<Vec<Post>> {
                        WHERE ($1::text IS NULL OR status = $1) \
                          AND ($2::text IS NULL OR post_type = $2) \
                          AND ($3::uuid IS NULL OR author_id = $3) \
-                         AND ($4::uuid IS NULL OR site_id = $4)"
+                         AND ($4::uuid IS NULL OR site_id = $4) \
+                         AND (NOT $5::bool OR status != 'trashed')"
             .to_string();
 
         for i in 0..terms.len() {
-            let n = i + 5;
+            let n = i + 6;
             sql.push_str(&format!(" AND LOWER(title) LIKE ${n}"));
         }
 
-        let limit_n  = terms.len() + 5;
-        let offset_n = terms.len() + 6;
+        let limit_n  = terms.len() + 6;
+        let offset_n = terms.len() + 7;
         sql.push_str(&format!(
             " ORDER BY published_at DESC NULLS LAST LIMIT ${limit_n} OFFSET ${offset_n}"
         ));
@@ -665,7 +669,8 @@ pub async fn list(pool: &PgPool, filter: &ListFilter) -> Result<Vec<Post>> {
             .bind(filter.status.as_ref().map(|s| s.as_str()))
             .bind(filter.post_type.as_ref().map(|t| t.as_str()))
             .bind(filter.author_id)
-            .bind(filter.site_id);
+            .bind(filter.site_id)
+            .bind(filter.exclude_trashed);
         for term in &terms {
             q = q.bind(format!("%{term}%"));
         }

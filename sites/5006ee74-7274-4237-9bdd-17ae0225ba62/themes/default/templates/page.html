@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+
+{% block title %}{{ page.title }} — {{ site.name }}{% endblock title %}
+
+{% block content %}
+<article class="single-page">
+  <header class="page-header">
+    <h1 class="page-title">{{ page.title }}</h1>
+  </header>
+
+  {% if page.featured_image %}
+    <figure class="featured-image-wrap">
+      <img src="{{ page.featured_image.url | safe }}" alt="{{ page.featured_image.alt_text }}"{% if page.featured_image.title %} title="{{ page.featured_image.title }}"{% endif %} class="featured-image" fetchpriority="high"{% if page.featured_image.width %} width="{{ page.featured_image.width }}" height="{{ page.featured_image.height }}"{% endif %}>
+      {% if page.featured_image.caption %}<figcaption class="featured-image-caption">{{ page.featured_image.caption }}</figcaption>{% endif %}
+    </figure>
+  {% endif %}
+
+  <div class="page-content">
+    {{ page.content | safe }}
+  </div>
+</article>
+{% endblock content %}

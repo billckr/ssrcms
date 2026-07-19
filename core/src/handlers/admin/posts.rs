@@ -53,7 +53,7 @@ async fn list_type(state: AppState, post_type: &str, page: Option<i64>, status_f
     let page = page.unwrap_or(1).max(1);
     let offset = (page - 1) * per_page;
 
-    // Resolve the PostStatus filter (None = all statuses)
+    // Resolve the PostStatus filter. When no filter is selected ("All"), exclude trashed posts.
     let status_enum: Option<PostStatus> = match status_filter {
         Some("draft")     => Some(PostStatus::Draft),
         Some("pending")   => Some(PostStatus::Pending),
@@ -63,6 +63,7 @@ async fn list_type(state: AppState, post_type: &str, page: Option<i64>, status_f
         _                 => None,
     };
     let status_sql = status_enum.as_ref().map(|s| s.as_str());
+    let exclude_trashed = status_enum.is_none(); // When viewing "All", exclude trashed posts
 
     // Strip stop words from the search input once; reuse for both COUNT and SELECT.
     let search_str = search.unwrap_or("").trim();
@@ -75,7 +76,8 @@ async fn list_type(state: AppState, post_type: &str, page: Option<i64>, status_f
                          WHERE ($1::uuid IS NULL OR site_id = $1) \
                            AND post_type = $2 \
                            AND ($3::uuid IS NULL OR author_id = $3) \
-                           AND ($4::text IS NULL OR status = $4)"
+                           AND ($4::text IS NULL OR status = $4) \
+                           AND (NOT $5::bool OR status != 'trashed')"
         .to_string();
     for i in 0..terms.len() {
         let n = i + 5;
@@ -85,7 +87,8 @@ async fn list_type(state: AppState, post_type: &str, page: Option<i64>, status_f
         .bind(site_id)
         .bind(post_type)
         .bind(author_id)
-        .bind(status_sql);
+        .bind(status_sql)
+        .bind(exclude_trashed);
     for term in &terms {
         count_q = count_q.bind(format!("%{term}%"));
     }
@@ -135,6 +138,7 @@ async fn list_type(state: AppState, post_type: &str, page: Option<i64>, status_f
         limit: per_page,
         offset,
         search: search_opt.map(|s| s.to_string()),
+        exclude_trashed,
         ..Default::default()
     };
 

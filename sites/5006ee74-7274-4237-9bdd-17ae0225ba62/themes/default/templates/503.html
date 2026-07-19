@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+
+{% block title %}Service Unavailable — {{ site.name }}{% endblock title %}
+
+{% block content %}
+<section class="error-page service-unavailable">
+  <h1>503 — Service Unavailable</h1>
+  <p>The site is temporarily unavailable. Please try again shortly.</p>
+  <p><a href="/">← Back to home</a></p>
+</section>
+{% endblock content %}
