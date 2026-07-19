@@ -141,13 +141,13 @@ pub fn render_profile(data: &ProfileData, flash: Option<&str>, ctx: &AccountCont
     <fieldset>
 
       <div class="form-group">
-        <label for="email">Email</label>
-        <input type="email" id="email" name="email" value="{email}" required>
+        <label for="display_name">Display Name</label>
+        <input type="text" id="display_name" name="display_name" value="{display_name}">
       </div>
 
       <div class="form-group">
-        <label for="display_name">Display Name</label>
-        <input type="text" id="display_name" name="display_name" value="{display_name}">
+        <label for="email">Email</label>
+        <input type="email" id="email" name="email" value="{email}" required>
       </div>
     </fieldset>
 
