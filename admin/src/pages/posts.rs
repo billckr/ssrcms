@@ -154,6 +154,15 @@ pub fn posts_list_fragment(
                 </a>"#,
                 prefix = edit_prefix, id = crate::html_escape(&p.id))
         };
+        // View button: only for published/scheduled posts
+        let view_btn = if p.status == "published" || p.status == "scheduled" {
+            format!(r#"<a href="{view_href}" class="icon-btn" title="View" target="_blank" rel="noopener noreferrer">
+                  <img src="/admin/static/icons/eye.svg" alt="View">
+                </a>"#,
+                view_href = crate::html_escape(&view_href))
+        } else {
+            String::new()
+        };
         // Date cell: only for tabs where it's meaningful.
         let date_td = if show_date_col {
             let val = if p.status == "published" || p.status == "scheduled" {
@@ -206,9 +215,7 @@ pub fn posts_list_fragment(
               <td><span class="badge badge-{status_cls}">{status_label}</span>{protected_badge}</td>
               {middle_tds}
               <td class="actions">
-                <a href="{view_href}" class="icon-btn" title="View" target="_blank" rel="noopener noreferrer">
-                  <img src="/admin/static/icons/eye.svg" alt="View">
-                </a>
+                {view_btn}
                 {edit_btn}
                 {delete_btn}
               </td>
@@ -219,7 +226,7 @@ pub fn posts_list_fragment(
             status_label  = crate::html_escape(if p.status == "pending" { "Pending Review" } else { &p.status }),
             protected_badge = if p.post_password_set { r#" <span class="badge badge-protected" title="Protected">&#x1F512;</span>"# } else { "" },
             middle_tds    = middle_tds,
-            view_href     = crate::html_escape(&view_href),
+            view_btn      = view_btn,
             edit_btn      = edit_btn,
             delete_btn    = delete_btn,
         )

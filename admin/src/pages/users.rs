@@ -103,9 +103,10 @@ pub fn render_list(
             )
         }).collect::<Vec<_>>().join("\n");
         format!(
-            r#"<form method="GET" action="/admin/users" style="display:inline-flex;align-items:center;margin:0">
+            r#"<form method="GET" action="/admin/users" style="display:inline-flex;align-items:center;gap:.5rem;margin:0">
   <input type="hidden" name="tab" value="site-users">
-  <select name="site" onchange="this.form.submit()" style="height:2.25rem;padding:0 .5rem;border:1px solid var(--border,#e5e7eb);border-radius:6px;font-size:.875rem;background:#fff;cursor:pointer">
+  <label for="site-filter-staff" style="font-size:.875rem;font-weight:500;margin:0">Display users for:</label>
+  <select id="site-filter-staff" name="site" onchange="this.form.submit()" style="height:2.25rem;padding:0 .5rem;border:1px solid var(--border,#e5e7eb);border-radius:6px;font-size:.875rem;background:#fff;cursor:pointer">
     <option value="">All Sites</option>
     {opts}
   </select>
@@ -127,9 +128,10 @@ pub fn render_list(
             )
         }).collect::<Vec<_>>().join("\n");
         format!(
-            r#"<form method="GET" action="/admin/users" style="display:inline-flex;align-items:center;margin:0">
+            r#"<form method="GET" action="/admin/users" style="display:inline-flex;align-items:center;gap:.5rem;margin:0">
   <input type="hidden" name="tab" value="subscribers">
-  <select name="site" onchange="this.form.submit()" style="height:2.25rem;padding:0 .5rem;border:1px solid var(--border,#e5e7eb);border-radius:6px;font-size:.875rem;background:#fff;cursor:pointer">
+  <label for="site-filter-subs" style="font-size:.875rem;font-weight:500;margin:0">Display users for:</label>
+  <select id="site-filter-subs" name="site" onchange="this.form.submit()" style="height:2.25rem;padding:0 .5rem;border:1px solid var(--border,#e5e7eb);border-radius:6px;font-size:.875rem;background:#fff;cursor:pointer">
     <option value="">All Sites</option>
     {opts}
   </select>
@@ -591,12 +593,13 @@ function toggleSiteFields() {{
       {site_section}
     </div>
     <div class="form-note" style="margin-bottom:1.25rem">
-      <p><strong>Password requirements:</strong></p>
+      <p><strong>New user requirements:</strong></p>
       <ul style="list-style:none;padding-left:0;margin:0.25rem 0 0">
         <li id="pw-req-len"><span class="pw-dot" style="display:inline-block;width:1.1rem;font-style:normal">·</span>8–12 characters</li>
         <li id="pw-req-upper"><span class="pw-dot" style="display:inline-block;width:1.1rem;font-style:normal">·</span>At least one uppercase letter</li>
         <li id="pw-req-num"><span class="pw-dot" style="display:inline-block;width:1.1rem;font-style:normal">·</span>At least one number</li>
         <li id="pw-req-sym"><span class="pw-dot" style="display:inline-block;width:1.1rem;font-style:normal">·</span>At least one symbol: ! @ # $ % &amp;</li>
+        <li id="role-req"><span class="pw-dot" style="display:inline-block;width:1.1rem;font-style:normal">·</span>Role selected</li>
       </ul>
     </div>
     <div style="display:flex;gap:0.75rem">
@@ -646,6 +649,19 @@ function toggleSiteFields() {{
       {{ id: 'pw-req-sym',   test: function(p) {{ return /[!@#$%&]/.test(p); }} }},
     ];
     var updateFeedback = function() {{
+      // Update role requirement
+      var roleEl = document.getElementById('role');
+      var roleHasValue = roleEl && roleEl.value && roleEl.value !== '';
+      var roleLi = document.getElementById('role-req');
+      var roleDot = roleLi ? roleLi.querySelector('.pw-dot') : null;
+      if (roleLi) {{
+        if (roleHasValue) {{
+          roleLi.style.color = '#16a34a'; if (roleDot) roleDot.textContent = '✓';
+        }} else {{
+          roleLi.style.color = '#dc2626'; if (roleDot) roleDot.textContent = '✗';
+        }}
+      }}
+
       var pw = pwInput ? pwInput.value : '';
       pwReqs.forEach(function(req) {{
         var li  = document.getElementById(req.id);

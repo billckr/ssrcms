@@ -64,15 +64,16 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
     let flash_html = match flash {
         Some(msg) => {
             // Detect error messages by looking for error indicators
-            let is_error = msg.starts_with("Error") 
-                || msg.contains("error") 
-                || msg.contains("does not") 
+            let is_error = msg.starts_with("Error")
+                || msg.contains("error")
+                || msg.contains("does not")
                 || msg.contains("incorrect")
                 || msg.contains("must")
                 || msg.contains("cannot")
                 || msg.contains("invalid")
                 || msg.contains("failed")
-                || msg.contains("Failed");
+                || msg.contains("Failed")
+                || msg.contains("already exists");
             let class = if is_error { "error" } else { "success" };
             format!(r#"<div class="flash {}">{}</div>"#, class, html_escape(msg))
         }

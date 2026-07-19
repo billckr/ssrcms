@@ -32,7 +32,8 @@ pub fn account_page(
                 || msg.contains("cannot")
                 || msg.contains("invalid")
                 || msg.contains("failed")
-                || msg.contains("do not match");
+                || msg.contains("do not match")
+                || msg.contains("already exists");
             let class = if is_error { "error" } else { "success" };
             format!(r#"<div class="flash {}">{}</div>"#, class, crate::html_escape(msg))
         }
