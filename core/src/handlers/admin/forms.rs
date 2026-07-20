@@ -213,18 +213,36 @@ pub async fn export_csv(
 // ── helpers ───────────────────────────────────────────────────────────────────
 
 /// Build an ordered, deduplicated column list from a set of JSONB objects.
+/// Prioritizes: name, email, subject, message; then all others.
 fn collect_columns(values: &[&serde_json::Value]) -> Vec<String> {
-    let mut seen = std::collections::HashSet::new();
-    let mut cols = Vec::new();
+    let mut all_keys = std::collections::HashSet::new();
+
+    // Collect all unique keys from all values
     for v in values {
         if let serde_json::Value::Object(map) = v {
             for key in map.keys() {
-                if seen.insert(key.clone()) {
-                    cols.push(key.clone());
-                }
+                all_keys.insert(key.clone());
             }
         }
     }
+
+    // Define priority order
+    let priority = ["name", "email", "subject", "message"];
+    let mut cols = Vec::new();
+
+    // Add priority columns first (if they exist)
+    for p in &priority {
+        if all_keys.contains(*p) {
+            cols.push(p.to_string());
+            all_keys.remove(*p);
+        }
+    }
+
+    // Add remaining columns (sorted for consistency)
+    let mut remaining: Vec<_> = all_keys.into_iter().collect();
+    remaining.sort();
+    cols.extend(remaining);
+
     cols
 }
 

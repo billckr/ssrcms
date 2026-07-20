@@ -154,7 +154,7 @@ pub fn render_form_detail(
     }).collect::<Vec<_>>().join("");
 
     let rows = if submissions.is_empty() {
-        let span = columns.len() + 3; // data cols + submitted_at + ip + actions
+        let span = columns.len() + 3; // data cols + ip + submitted_at + actions
         format!(r#"<tr><td colspan="{span}" class="empty-state">No submissions yet.</td></tr>"#)
     } else {
         submissions.iter().map(|s| {
@@ -169,8 +169,8 @@ pub fn render_form_detail(
             format!(
                 r#"<tr>
   {cells}
-  <td>{submitted}</td>
   <td>{ip}</td>
+  <td>{submitted}</td>
   <td>
     <form method="POST" action="/admin/forms/{fname}/{id}/delete"
           onsubmit="return confirm('Delete this submission?')">
@@ -179,8 +179,8 @@ pub fn render_form_detail(
   </td>
 </tr>"#,
                 cells = cells,
-                submitted = html_escape(&s.submitted_at),
                 ip = html_escape(s.ip_address.as_deref().unwrap_or("—")),
+                submitted = html_escape(&s.submitted_at),
                 fname = html_escape(form_name),
                 id = html_escape(&s.id),
             )
@@ -201,8 +201,8 @@ pub fn render_form_detail(
   <thead>
     <tr>
       {col_headers}
-      <th>Submitted</th>
       <th>IP</th>
+      <th>Submitted</th>
       <th>Actions</th>
     </tr>
   </thead>
