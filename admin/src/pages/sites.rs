@@ -77,9 +77,15 @@ pub fn render_list(
             )
         };
 
+        let site_url = format!(
+            "{scheme}://{hostname}",
+            scheme = if s.ssl_active { "https" } else { "http" },
+            hostname = s.hostname,
+        );
+
         format!(
             r#"<tr>
-              <td>{hostname}{default_badge} {ssl_badge}</td>
+              <td><a href="{site_url}" target="_blank" rel="noopener noreferrer">{hostname}</a>{default_badge} {ssl_badge}</td>
               <td style="color:var(--muted);font-size:0.875rem">{admin_email}</td>
               <td><span style="display:inline-block;background:#f3f4f6;color:#374151;border-radius:4px;padding:.15rem .5rem;font-size:.78rem;font-weight:500">{user_count}</span></td>
               <td><span style="display:inline-block;background:#f3f4f6;color:#374151;border-radius:4px;padding:.15rem .5rem;font-size:.78rem;font-weight:500">{subscriber_count}</span></td>
@@ -97,6 +103,7 @@ pub fn render_list(
             </tr>"#,
             id               = crate::html_escape(&s.id),
             hostname         = crate::html_escape(&s.hostname),
+            site_url         = crate::html_escape(&site_url),
             default_badge    = if s.is_default {
                 r#" <span class="badge-visiting" title="Primary domain — cannot be deleted">system</span>"#
             } else if s.is_primary_domain {
@@ -122,7 +129,7 @@ pub fn render_list(
 
     let content = format!(
         r#"{new_site_btn}<table class="data-table">
-  <thead><tr><th>Hostname</th><th>Admin</th><th>Users</th><th>Subs</th><th>Posts</th><th>Pages</th><th>Actions</th></tr></thead>
+  <thead><tr><th>Site</th><th>Admin</th><th>Users</th><th>Subs</th><th>Posts</th><th>Pages</th><th>Actions</th></tr></thead>
   <tbody>{rows}</tbody>
 </table>"#,
         new_site_btn = new_site_btn,
