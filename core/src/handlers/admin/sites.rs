@@ -579,7 +579,6 @@ pub async fn provision_ssl(
         hostname,
         state.config.port,
         &state.config.uploads_dir,
-        &state.config.themes_dir,
     );
     let new_content = format!("{}\n{}\n", existing.trim_end(), block);
 
@@ -629,16 +628,18 @@ pub fn caddy_block_exists(caddyfile: &str, hostname: &str) -> bool {
 }
 
 /// Build the Caddyfile block to append for a new site.
-fn build_caddy_block(hostname: &str, port: u16, uploads_dir: &str, themes_dir: &str) -> String {
+///
+/// `/theme/static/*` deliberately has no theme name in the URL — which
+/// theme's files get served is resolved per-request in
+/// `handlers/theme_static.rs` (Host header -> site -> active theme). A flat
+/// Caddy file_server can't do that resolution, so `/theme/*` must fall
+/// through to `reverse_proxy` -> Axum, not be handled here. See
+/// deployment/Caddyfile.template for the same rule.
+fn build_caddy_block(hostname: &str, port: u16, uploads_dir: &str) -> String {
     format!(
         r#"{hostname} {{
     handle /uploads/* {{
         root * {uploads_dir}
-        file_server
-    }}
-
-    handle /theme/* {{
-        root * {themes_dir}
         file_server
     }}
 
@@ -662,6 +663,5 @@ fn build_caddy_block(hostname: &str, port: u16, uploads_dir: &str, themes_dir: &
         hostname    = hostname,
         port        = port,
         uploads_dir = uploads_dir,
-        themes_dir  = themes_dir,
     )
 }
