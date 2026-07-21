@@ -317,11 +317,23 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
         .await
         .map_err(|e| anyhow::anyhow!("Failed to look up site: {e}"))?;
 
-    let site_url = args.site_url.clone().unwrap_or_else(|| match port {
+    let derived_site_url = match port {
         80  => format!("http://{domain}"),
         443 => format!("https://{domain}"),
         _   => format!("http://{domain}:{port}"),
-    });
+    };
+    let site_url = if ni {
+        args.site_url.clone().unwrap_or(derived_site_url)
+    } else {
+        Input::new()
+            .with_prompt(
+                "Public site URL (the address visitors actually use — if a reverse \
+                 proxy like Caddy fronts this on 443, that's https://domain with NO \
+                 port, even though Axum itself listens on the port above)"
+            )
+            .default(args.site_url.clone().unwrap_or(derived_site_url))
+            .interact_text()?
+    };
     let settings_defaults: &[(&str, &str)] = &[
         ("site_name",        &domain),
         ("site_description", ""),
@@ -476,6 +488,18 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
     }
     println!("  Site URL    : {}", site_url);
 
+    // The running server (if any) loaded its site cache at startup and does not
+    // watch the database for new sites — a restart is required to pick this one
+    // up, even though the DB write above already succeeded. Print this
+    // unconditionally (interactive and --non-interactive) since it's easy to
+    // miss otherwise: no errors are shown, but the homepage 404s with
+    // "No site found for hostname" until the service is restarted.
+    println!();
+    println!("  IMPORTANT: if synaptic-signals is already running, restart it now");
+    println!("  so it picks up this site — the DB write above does not take effect");
+    println!("  on a running server until it restarts:");
+    println!("    systemctl restart synaptic-signals");
+
     // In non-interactive mode the install script handles deployment — skip the manual steps.
     if !ni {
         let pid_file = std::path::Path::new(&install_dir).join(".synaptic.pid");
@@ -512,20 +536,48 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
                 Err(e) => println!("  Warning: could not run app.sh {}: {}", action, e),
             }
         } else {
-            // Systemd / production deployment: show manual steps.
-            println!("  1. Copy the binary and files to {}", install_dir);
-            println!("  2. Copy {} to /etc/systemd/system/",
-                output_dir.join("synaptic-signals.service").display()
-            );
-            println!("  3. Copy {} to /etc/caddy/Caddyfile (or include it)",
-                output_dir.join("Caddyfile").display()
-            );
-            println!("     Then run: sudo caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile");
-            println!("  4. Run:  sudo synap-cli caddy setup --app-user {}", service_user);
-            println!("     Sets up Caddy write permissions + log directory for SSL provisioning.");
-            println!("  5. Ensure {install_dir}/.env contains DATABASE_URL and SECRET_KEY");
-            println!("     (INSTALL_DIR has been written automatically)");
-            println!("  6. Run:  systemctl daemon-reload && systemctl enable --now synaptic-signals");
+            // Systemd / production deployment. Check whether this is a genuinely
+            // fresh install or a re-run against an already-deployed service —
+            // printing the full "copy these files, enable the service" checklist
+            // every time is actively misleading on a re-run: it reads like
+            // required steps even when everything is already in place and the
+            // only real action needed is restarting to pick up this run's
+            // database changes (see the restart notice above).
+            let live_unit_path = std::path::Path::new("/etc/systemd/system/synaptic-signals.service");
+            let live_caddy_path = std::path::Path::new("/etc/caddy/Caddyfile");
+            let generated_unit = output_dir.join("synaptic-signals.service");
+            let generated_caddy = output_dir.join("Caddyfile");
+
+            if live_unit_path.exists() {
+                let unit_matches = std::fs::read(&generated_unit).ok() == std::fs::read(live_unit_path).ok();
+                let caddy_matches = std::fs::read(&generated_caddy).ok() == std::fs::read(live_caddy_path).ok();
+
+                if unit_matches && caddy_matches {
+                    println!("  systemd unit and Caddyfile already match what's live — nothing to copy.");
+                } else {
+                    println!("  This run changed the generated systemd unit and/or Caddyfile");
+                    println!("  (e.g. domain, port, or service user) — re-apply the changed one(s):");
+                    if !unit_matches {
+                        println!("    cp {} /etc/systemd/system/ && systemctl daemon-reload",
+                            generated_unit.display());
+                    }
+                    if !caddy_matches {
+                        println!("    cp {} /etc/caddy/Caddyfile && caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile",
+                            generated_caddy.display());
+                    }
+                }
+            } else {
+                // No unit installed yet — this really is a fresh systemd deployment.
+                println!("  1. Copy the binary and files to {}", install_dir);
+                println!("  2. Copy {} to /etc/systemd/system/", generated_unit.display());
+                println!("  3. Copy {} to /etc/caddy/Caddyfile (or include it)", generated_caddy.display());
+                println!("     Then run: sudo caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile");
+                println!("  4. Run:  sudo synap-cli caddy setup --app-user {}", service_user);
+                println!("     Sets up Caddy write permissions + log directory for SSL provisioning.");
+                println!("  5. Ensure {install_dir}/.env contains DATABASE_URL and SECRET_KEY");
+                println!("     (INSTALL_DIR has been written automatically)");
+                println!("  6. Run:  systemctl daemon-reload && systemctl enable --now synaptic-signals");
+            }
         }
 
         println!("\nSite will be live at: https://{}", domain);
