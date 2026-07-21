@@ -220,6 +220,7 @@ else
     INSTALL_DIR='${INSTALL_DIR}' \
     APP_NAME='${APP_NAME}' \
     SYNAPTIC_DOMAIN='${VPS_DOMAIN}' \
+    SITE_URL='https://${VPS_DOMAIN}' \
     ADMIN_EMAIL='${ADMIN_EMAIL}' \
     ADMIN_USERNAME='${ADMIN_USERNAME}' \
     ${INSTALL_DIR}/synap-cli install --non-interactive --output-dir ${INSTALL_DIR} 2>&1") \
@@ -286,9 +287,12 @@ if [[ "$NO_INSTALL" -eq 1 ]]; then
   echo "  Next step, on the VPS (must run as ${SYNAPTIC_USER} — synap-cli checks"
   echo "  that it owns \$INSTALL_DIR. Use the full path, not the bare command —"
   echo "  sudo's secure_path on RHEL/AlmaLinux drops /usr/local/bin):"
-  echo "    sudo -u ${SYNAPTIC_USER} bash -c 'cd ${INSTALL_DIR} && ./synap-cli install'"
+  echo "    sudo -u ${SYNAPTIC_USER} bash -c 'cd ${INSTALL_DIR} && SITE_URL=https://${VPS_DOMAIN} ./synap-cli install'"
   echo ""
-  echo "  (Answer the prompts for domain, admin email/username/password, etc."
+  echo "  (SITE_URL matters if Caddy fronts this on 443 — without it, the site_url"
+  echo "   setting defaults to http://domain:${APP_PORT}, baking the internal Axum"
+  echo "   port into permalinks. Answer the prompts for domain, admin email/username/"
+  echo "   password, etc."
   echo "   This also regenerates the Caddyfile/systemd unit for the values you choose —"
   echo "   re-run this deploy script, or 'systemctl reload caddy' + 'systemctl restart"
   echo "   synaptic-signals', afterwards to pick them up.)"

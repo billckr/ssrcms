@@ -23,6 +23,15 @@ pub struct InstallArgs {
     #[arg(long, env = "PORT", default_value = "3000")]
     pub port: u16,
 
+    /// Public-facing site URL, e.g. https://example.com. Env: SITE_URL
+    /// Overrides the default derivation from domain+port. Set this whenever
+    /// a reverse proxy (Caddy) fronts the app on a different port than
+    /// Axum's own listen port — the default derivation otherwise bakes the
+    /// internal port (e.g. :3000) into permalinks, which breaks external
+    /// links since the public port is actually 443/none.
+    #[arg(long, env = "SITE_URL")]
+    pub site_url: Option<String>,
+
     /// Install directory (full path). Env: INSTALL_DIR
     #[arg(long, env = "INSTALL_DIR")]
     pub install_dir: Option<String>,
@@ -308,11 +317,11 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
         .await
         .map_err(|e| anyhow::anyhow!("Failed to look up site: {e}"))?;
 
-    let site_url = match port {
+    let site_url = args.site_url.clone().unwrap_or_else(|| match port {
         80  => format!("http://{domain}"),
         443 => format!("https://{domain}"),
         _   => format!("http://{domain}:{port}"),
-    };
+    });
     let settings_defaults: &[(&str, &str)] = &[
         ("site_name",        &domain),
         ("site_description", ""),

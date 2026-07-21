@@ -1,16 +1,22 @@
 {DOMAIN} {
-    # Serve uploads and theme static files directly — bypass Axum
+    # Serve uploads directly — bypass Axum. Safe because Caddy serves via the
+    # uploads/{hostname}/ -> uploads/{site-uuid}/ symlink the app maintains,
+    # so the flat file_server root resolves correctly without any app logic.
+    #
+    # /theme/static/*path is NOT handled here — it deliberately falls through
+    # to Axum below. The URL never includes a theme name (every theme's
+    # base.html links the same "/theme/static/css/style.css"); which theme's
+    # files actually get served is resolved dynamically per-request by
+    # core/src/handlers/theme_static.rs (Host header -> site -> active theme,
+    # falling back to the global active theme). A flat Caddy file_server has
+    # no way to do that resolution, so bypassing Axum here 404s for any theme
+    # whose assets aren't coincidentally reachable at the literal request path.
     handle /uploads/* {
         root * {UPLOADS_DIR}
         file_server
     }
 
-    handle /theme/* {
-        root * {THEME_DIR}
-        file_server
-    }
-
-    # Everything else goes to Axum
+    # Everything else (including /theme/static/*) goes to Axum
     reverse_proxy localhost:{PORT}
 
     # Compression
