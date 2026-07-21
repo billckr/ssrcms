@@ -69,6 +69,8 @@ pub fn build(
     // handler for each plugin-registered path.
     let plugin_route_paths: Vec<String> = state.plugin_routes.keys().cloned().collect();
 
+    let maintenance_layer = middleware::from_fn_with_state(state.clone(), crate::middleware::maintenance::gate);
+
     let mut router = Router::new()
         // ── Observability ──────────────────────────────────────────────────
         .route("/metrics", get(metrics_handler::metrics))
@@ -227,6 +229,7 @@ pub fn build(
 
     router
         .layer(middleware::from_fn(no_store_for_protected))
+        .layer(maintenance_layer)
         .layer(middleware::from_fn(track_http_metrics))
         .layer(session_layer)
         .layer(TraceLayer::new_for_http())

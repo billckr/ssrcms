@@ -5,9 +5,16 @@
 //!   synap-cli site create --hostname <domain>  # add a new empty site
 //!   synap-cli site list                        # list all sites
 //!   synap-cli site delete --id <uuid>          # remove a site and all its content
+//!   synap-cli site maintenance on [--hostname <domain>] [--message <text>]
+//!   synap-cli site maintenance off [--hostname <domain>]
+//!   synap-cli site maintenance status [--hostname <domain>]
 
 use clap::Subcommand;
+use sqlx::PgPool;
 use uuid::Uuid;
+
+const DEFAULT_MAINTENANCE_MESSAGE: &str =
+    "This site is currently undergoing scheduled maintenance. Please check back soon.";
 
 #[derive(Subcommand)]
 pub enum SiteAction {
@@ -72,6 +79,49 @@ pub enum SiteAction {
         #[arg(long, env = "DATABASE_URL", hide = true)]
         database_url: Option<String>,
     },
+    /// Toggle a WordPress-style maintenance page for a site.
+    /// Checked live (no cache, no restart needed) on every public request —
+    /// see core/src/middleware/maintenance.rs. /admin/* is always exempt so
+    /// you can still log in to turn it back off.
+    Maintenance {
+        #[command(subcommand)]
+        state: MaintenanceState,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum MaintenanceState {
+    /// Turn maintenance mode on.
+    On {
+        /// Hostname of the site (required if more than one site exists)
+        #[arg(long)]
+        hostname: Option<String>,
+        /// Message shown on the maintenance page. Reuses the last message
+        /// (or a default) if omitted.
+        #[arg(long)]
+        message: Option<String>,
+        /// Database URL (overrides DATABASE_URL env var)
+        #[arg(long, env = "DATABASE_URL", hide = true)]
+        database_url: Option<String>,
+    },
+    /// Turn maintenance mode off.
+    Off {
+        /// Hostname of the site (required if more than one site exists)
+        #[arg(long)]
+        hostname: Option<String>,
+        /// Database URL (overrides DATABASE_URL env var)
+        #[arg(long, env = "DATABASE_URL", hide = true)]
+        database_url: Option<String>,
+    },
+    /// Show whether maintenance mode is currently on, and the stored message.
+    Status {
+        /// Hostname of the site (required if more than one site exists)
+        #[arg(long)]
+        hostname: Option<String>,
+        /// Database URL (overrides DATABASE_URL env var)
+        #[arg(long, env = "DATABASE_URL", hide = true)]
+        database_url: Option<String>,
+    },
 }
 
 pub async fn run(action: SiteAction) -> anyhow::Result<()> {
@@ -82,7 +132,118 @@ pub async fn run(action: SiteAction) -> anyhow::Result<()> {
         SiteAction::Delete { id, database_url } => delete(id, database_url).await,
         SiteAction::Rename { id, hostname, caddyfile, install_dir, database_url } =>
             rename(id, hostname, caddyfile, install_dir, database_url).await,
+        SiteAction::Maintenance { state } => match state {
+            MaintenanceState::On     { hostname, message, database_url } => maintenance_on(hostname, message, database_url).await,
+            MaintenanceState::Off    { hostname, database_url } => maintenance_off(hostname, database_url).await,
+            MaintenanceState::Status { hostname, database_url } => maintenance_status(hostname, database_url).await,
+        },
     }
+}
+
+/// Resolve a site by hostname, or auto-pick the only site if none is given.
+async fn resolve_site(pool: &PgPool, hostname: Option<String>) -> anyhow::Result<(Uuid, String)> {
+    if let Some(h) = hostname {
+        let h = h.trim().to_lowercase();
+        let id: Uuid = sqlx::query_scalar("SELECT id FROM sites WHERE hostname = $1")
+            .bind(&h)
+            .fetch_optional(pool)
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("No site found with hostname '{h}'"))?;
+        Ok((id, h))
+    } else {
+        let rows: Vec<(Uuid, String)> = sqlx::query_as("SELECT id, hostname FROM sites ORDER BY created_at")
+            .fetch_all(pool)
+            .await?;
+        match rows.len() {
+            0 => anyhow::bail!("No sites found."),
+            1 => Ok(rows.into_iter().next().unwrap()),
+            _ => {
+                let list = rows.into_iter().map(|(_, h)| h).collect::<Vec<_>>().join(", ");
+                anyhow::bail!("Multiple sites found — specify --hostname. Available: {list}")
+            }
+        }
+    }
+}
+
+async fn set_site_setting(pool: &PgPool, site_id: Uuid, key: &str, value: &str) -> anyhow::Result<()> {
+    sqlx::query(
+        "INSERT INTO site_settings (site_id, key, value) VALUES ($1, $2, $3)
+         ON CONFLICT (site_id, key) WHERE site_id IS NOT NULL DO UPDATE SET value = EXCLUDED.value"
+    )
+    .bind(site_id)
+    .bind(key)
+    .bind(value)
+    .execute(pool)
+    .await
+    .map_err(|e| anyhow::anyhow!("Failed to set {key}: {e}"))?;
+    Ok(())
+}
+
+async fn get_site_setting(pool: &PgPool, site_id: Uuid, key: &str) -> Option<String> {
+    sqlx::query_scalar("SELECT value FROM site_settings WHERE site_id = $1 AND key = $2")
+        .bind(site_id)
+        .bind(key)
+        .fetch_optional(pool)
+        .await
+        .ok()
+        .flatten()
+}
+
+async fn maintenance_on(hostname: Option<String>, message: Option<String>, database_url: Option<String>) -> anyhow::Result<()> {
+    if let Some(url) = database_url {
+        #[allow(unused_unsafe)]
+        unsafe { std::env::set_var("DATABASE_URL", url); }
+    }
+    let pool = super::connect_db().await?;
+    let (site_id, hostname) = resolve_site(&pool, hostname).await?;
+
+    let message = match message {
+        Some(m) => m,
+        None => get_site_setting(&pool, site_id, "maintenance_message")
+            .await
+            .unwrap_or_else(|| DEFAULT_MAINTENANCE_MESSAGE.to_string()),
+    };
+
+    set_site_setting(&pool, site_id, "maintenance_mode", "true").await?;
+    set_site_setting(&pool, site_id, "maintenance_message", &message).await?;
+
+    println!("Maintenance mode is now ON for '{hostname}'.");
+    println!("Message: {message}");
+    println!("Takes effect immediately — no restart needed. /admin/* stays reachable.");
+    Ok(())
+}
+
+async fn maintenance_off(hostname: Option<String>, database_url: Option<String>) -> anyhow::Result<()> {
+    if let Some(url) = database_url {
+        #[allow(unused_unsafe)]
+        unsafe { std::env::set_var("DATABASE_URL", url); }
+    }
+    let pool = super::connect_db().await?;
+    let (site_id, hostname) = resolve_site(&pool, hostname).await?;
+
+    set_site_setting(&pool, site_id, "maintenance_mode", "false").await?;
+
+    println!("Maintenance mode is now OFF for '{hostname}'.");
+    Ok(())
+}
+
+async fn maintenance_status(hostname: Option<String>, database_url: Option<String>) -> anyhow::Result<()> {
+    if let Some(url) = database_url {
+        #[allow(unused_unsafe)]
+        unsafe { std::env::set_var("DATABASE_URL", url); }
+    }
+    let pool = super::connect_db().await?;
+    let (site_id, hostname) = resolve_site(&pool, hostname).await?;
+
+    let mode = get_site_setting(&pool, site_id, "maintenance_mode").await.unwrap_or_else(|| "false".to_string());
+    let message = get_site_setting(&pool, site_id, "maintenance_message").await;
+
+    println!("Site: {hostname}");
+    println!("Maintenance mode: {}", if mode == "true" { "ON" } else { "OFF" });
+    if let Some(m) = message {
+        println!("Message: {m}");
+    }
+    Ok(())
 }
 
 async fn init(hostname: String, database_url: Option<String>) -> anyhow::Result<()> {
