@@ -70,6 +70,8 @@ pub fn build(
     let plugin_route_paths: Vec<String> = state.plugin_routes.keys().cloned().collect();
 
     let maintenance_layer = middleware::from_fn_with_state(state.clone(), crate::middleware::maintenance::gate);
+    let ip_allowlist_layer = middleware::from_fn_with_state(state.clone(), crate::middleware::ip_allowlist::gate);
+    let ip_denylist_layer = middleware::from_fn_with_state(state.clone(), crate::middleware::ip_denylist::gate);
 
     let mut router = Router::new()
         // ── Observability ──────────────────────────────────────────────────
@@ -230,6 +232,8 @@ pub fn build(
     router
         .layer(middleware::from_fn(no_store_for_protected))
         .layer(maintenance_layer)
+        .layer(ip_allowlist_layer)
+        .layer(ip_denylist_layer)
         .layer(middleware::from_fn(track_http_metrics))
         .layer(session_layer)
         .layer(TraceLayer::new_for_http())
