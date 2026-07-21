@@ -287,18 +287,26 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
     }
 
     // ── Initial site ───────────────────────────────────────────────────────
-    let site_id = Uuid::new_v4();
     sqlx::query(
         "INSERT INTO sites (id, hostname, owner_user_id, created_at, updated_at)
          VALUES ($1, $2, $3, NOW(), NOW())
          ON CONFLICT (hostname) DO NOTHING"
     )
-    .bind(site_id)
+    .bind(Uuid::new_v4())
     .bind(&domain)
     .bind(admin_id)
     .execute(&pool)
     .await
     .map_err(|e| anyhow::anyhow!("Failed to create initial site: {e}"))?;
+
+    // Fetch the actual ID — on a re-run the site may already exist (ON CONFLICT
+    // DO NOTHING), in which case the freshly generated UUID above was never
+    // inserted and would break the FK constraints below.
+    let site_id: Uuid = sqlx::query_scalar("SELECT id FROM sites WHERE hostname = $1")
+        .bind(&domain)
+        .fetch_one(&pool)
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to look up site: {e}"))?;
 
     let site_url = match port {
         80  => format!("http://{domain}"),

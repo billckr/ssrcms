@@ -1,340 +1,188 @@
 # Synaptic Signals VPS Deployment Guide
 
-This guide covers deploying Synaptic Signals to your VPS at `178.156.176.60` with domain `bckr.dev`.
+This guide covers deploying Synaptic Signals to a test VPS from your local dev
+machine, currently `178.156.176.60` with domain `bckr.dev`.
 
 ## Quick Start
 
-### Phase 1: VPS Setup (One-time, ~10 minutes)
-
-```bash
-# SSH into VPS
-ssh root@178.156.176.60
-
-# Run the setup script (installs PostgreSQL, Caddy, creates directories)
-bash /tmp/deploy-vps-setup.sh
-
-# Save the database credentials shown at the end!
-```
-
-### Phase 2: Build Locally & Deploy (From your dev machine)
-
-```bash
-# Build release binary
-cd /home/ssrust26/synaptic-signals
-cargo build --release
-
-# Copy binary to VPS
-scp target/release/synaptic root@178.156.176.60:/var/www/bckr.dev/
-
-# Copy themes
-scp -r themes/* root@178.156.176.60:/var/www/bckr.dev/themes/
-
-# (Optional) Copy migrations if they've changed
-scp -r migrations root@178.156.176.60:/var/www/bckr.dev/
-```
-
-### Phase 3: Configure & Start (On VPS)
-
-```bash
-# SSH into VPS
-ssh root@178.156.176.60
-
-# Create .env from template
-cp /var/www/bckr.dev/.env.template /var/www/bckr.dev/.env
-nano /var/www/bckr.dev/.env
-
-# Edit these values:
-# - DATABASE_URL: Use credentials from Phase 1 output
-# - SECRET_KEY: Generate a random 64-byte string
-# - ADMIN_EMAIL: Your email
-# - LOG_LEVEL: info (or debug for troubleshooting)
-
-# Run service setup
-bash /var/www/bckr.dev/deploy-service-setup.sh
-
-# Check status
-systemctl status synaptic-signals
-```
-
-Visit `https://bckr.dev` - it should be live! 🚀
-
----
-
-## Detailed Breakdown
-
-### Step 1: Initial VPS Setup
-
-Run this **once** on your VPS to prepare everything:
-
-```bash
-ssh root@178.156.176.60
-curl -O https://raw.githubusercontent.com/yourusername/synaptic-signals/main/scripts/deploy-vps-setup.sh
-bash deploy-vps-setup.sh
-```
-
-This script:
-- ✅ Updates system packages
-- ✅ Installs PostgreSQL (if needed)
-- ✅ Creates database and user
-- ✅ Installs Caddy
-- ✅ Creates directory structure
-- ✅ Generates random DB password
-
-**Save the output!** You'll need the `DATABASE_URL` for your `.env` file.
-
-### Step 2: Build Locally
-
-On your **development machine** (where you have Rust installed):
-
 ```bash
 cd /home/ssrust26/synaptic-signals
-
-# Build in release mode (optimized, smaller binary)
-cargo build --release
-
-# Binary location: target/release/synaptic (~50-100MB)
+VPS_PASSWORD='...' ./scripts/deploy-vps.sh
 ```
 
-### Step 3: Deploy Binary & Assets
+That's it. The script:
 
-Copy the compiled binary and theme files to VPS:
+1. Checks the VPS's glibc version is >= your local machine's (aborts with a
+   clear message rather than shipping a binary that fails to run).
+2. Runs `cargo build --release` **fresh, every time** — the binary always
+   embeds exactly your current `migrations/` directory (migrations are
+   compiled in via `sqlx::migrate!`, not read from disk at runtime, so a
+   stale binary is the classic way to get a "missing migration" error even
+   though the `.sql` file is sitting right there on the VPS).
+3. Ships the binary, `synap-cli`, `themes/`, `plugins/`, and `admin/static/`
+   to the VPS.
+4. Runs `synap-cli install --non-interactive`, which handles DB sync,
+   running migrations, creating the admin user, and generating the
+   Caddyfile + systemd unit.
+5. Installs the Caddy config and systemd service, restarts, and verifies
+   the app responds with a 200.
+
+Re-run it any time you want to push local changes — it's idempotent and
+reuses the existing `.env`/DB credentials unless you pass `--clean`.
+
+### First-time / full-reset install
 
 ```bash
-# Copy binary
-scp target/release/synaptic root@178.156.176.60:/var/www/bckr.dev/
-
-# Copy themes directory
-scp -r themes/* root@178.156.176.60:/var/www/bckr.dev/themes/
-
-# (Optional) Copy migrations if they changed
-scp -r migrations root@178.156.176.60:/var/www/bckr.dev/
+VPS_PASSWORD='...' ./scripts/deploy-vps.sh --clean
 ```
 
-### Step 4: Configure Environment
+`--clean` additionally: stops any crash-looping leftover service, drops and
+recreates the `synaptic_signals` database from scratch, and removes any
+orphaned install directories from previous attempts. Use this if the VPS is
+in an unknown/broken state (which is exactly what happened before this
+script existed — see "Why this exists" below).
 
-SSH into VPS and create `.env`:
+### Configuration
+
+All defaults match the current test VPS; override with env vars for a
+different target:
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `VPS_HOST` | `178.156.176.60` | VPS IP/hostname |
+| `VPS_USER` | `root` | SSH user |
+| `VPS_PORT` | `22` | SSH port |
+| `VPS_PASSWORD` | *(unset)* | If set, uses `sshpass` instead of key auth |
+| `VPS_DOMAIN` | `bckr.dev` | Site domain (also used for Caddy + site record) |
+| `INSTALL_DIR` | `/var/www/bckr.dev` | Install path on the VPS |
+| `SYNAPTIC_USER` | `www-data` | System user the service runs as |
+| `APP_PORT` | `3000` | Port Axum listens on |
+| `ADMIN_EMAIL` | `bill.coker@gmail.com` | Admin login email (seeded on first install) |
+| `ADMIN_USERNAME` | `admin` | Admin username |
+| `APP_NAME` | `Synaptic Signals` | Admin panel brand name |
+
+## Why this exists
+
+An earlier pair of ad-hoc scripts (`deploy-vps-setup.sh` +
+`deploy-service-setup.sh`, now removed) copied a binary that had been built
+*before* certain migrations were added, then separately copied the
+migrations folder — which does nothing, since `sqlx::migrate!("../migrations")`
+bakes migration files into the binary **at compile time on whichever
+machine ran `cargo build`**. The fix is procedural: always rebuild
+immediately before shipping, which `deploy-vps.sh` now does automatically
+every run.
+
+## Two deploy modes
 
 ```bash
-ssh root@178.156.176.60
+VPS_PASSWORD='...' ./scripts/deploy-vps.sh              # auto-configures a site + admin (fast dev path)
+VPS_PASSWORD='...' ./scripts/deploy-vps.sh --no-install  # infra only: build, ship, migrate, start — no site/admin
+```
+
+Use `--no-install` to mirror the intended post-release flow: get the binary
+running as a service first, then configure the app yourself via
+`synap-cli install` (interactive prompts) once it's up. This is what the
+real `scripts/install.sh` (the GitHub-release-based production installer)
+is designed around — `deploy-vps.sh --no-install` gives you the same
+"infra up, configure by hand" shape for local test builds.
+
+After a `--no-install` deploy, on the VPS:
+
+```bash
+sudo -u www-data bash -c 'cd /var/www/bckr.dev && ./synap-cli install'
+```
+
+Must run as the service user (`synap-cli` checks it owns `$INSTALL_DIR`),
+and must use `./synap-cli` (the full/relative path) rather than the bare
+command — `sudo`'s `secure_path` on RHEL/AlmaLinux strips `/usr/local/bin`,
+so the global symlink isn't found under `sudo -u`. This regenerates the
+Caddyfile/systemd unit for whatever domain/admin you choose; reload/restart
+afterwards:
+
+```bash
+cp /var/www/bckr.dev/Caddyfile /etc/caddy/Caddyfile && caddy reload --config /etc/caddy/Caddyfile
+cp /var/www/bckr.dev/synaptic-signals.service /etc/systemd/system/ && systemctl daemon-reload && systemctl restart synaptic-signals
+```
+
+## Managing the app on the VPS
+
+`deploy-vps.sh` symlinks `synap-cli` into `/usr/local/bin`, so it's runnable
+from anywhere **when logged in directly** (not through `sudo -u`, see note
+above). It reads `DATABASE_URL` from the `.env` in the **current
+directory**, so `cd` into the install dir first:
+
+```bash
 cd /var/www/bckr.dev
-
-# Copy template
-cp .env.template .env
-
-# Edit with your values
-nano .env
+synap-cli site list
+synap-cli user list
+synap-cli plugin list
+synap-cli theme list
+synap-cli --help          # full command list
 ```
-
-**Required environment variables:**
-
-```env
-# From Phase 1 setup script output
-DATABASE_URL=postgres://synaptic:PASSWORD@localhost:5432/synaptic_signals
-
-# Generate random string: openssl rand -base64 48
-SECRET_KEY=YOUR_64_BYTE_RANDOM_STRING_HERE
-
-# Logging level
-LOG_LEVEL=info
-
-# Installation directory
-INSTALL_DIR=/var/www/bckr.dev
-
-# Your email for admin alerts
-ADMIN_EMAIL=bill.coker@gmail.com
-
-# Max upload size in MB
-MAX_UPLOAD_MB=25
-```
-
-### Step 5: Set Up Service & Start
-
-```bash
-# Run service setup script
-bash /var/www/bckr.dev/deploy-service-setup.sh
-```
-
-This script:
-- ✅ Sets binary permissions
-- ✅ Verifies .env exists
-- ✅ Creates systemd service
-- ✅ Configures Caddy
-- ✅ Starts both services
-- ✅ Shows status
-
-If all looks good, you're done!
-
----
 
 ## Verification
 
-### Test the deployment:
-
 ```bash
-# Check service status
-systemctl status synaptic-signals
-
-# View recent logs
-journalctl -u synaptic-signals -n 50
-
-# Check if listening on port 3000
-netstat -tlnp | grep 3000
-
-# Check Caddy config
-caddy validate --config /etc/caddy/Caddyfile
+ssh root@178.156.176.60 systemctl status synaptic-signals
+ssh root@178.156.176.60 journalctl -u synaptic-signals -n 50
+curl -I https://bckr.dev
 ```
-
-### Access the app:
-
-- **User-facing site**: https://bckr.dev
-- **Admin panel**: https://bckr.dev/admin
-- **Check logs**: `sudo journalctl -u synaptic-signals -f`
-
----
-
-## Future Deployments (After Initial Setup)
-
-Once the VPS is configured, **subsequent updates** are much faster:
-
-```bash
-# On your local machine
-cd /home/ssrust26/synaptic-signals
-cargo build --release
-scp target/release/synaptic root@178.156.176.60:/var/www/bckr.dev/
-
-# On VPS, restart the service
-ssh root@178.156.176.60 "systemctl restart synaptic-signals"
-```
-
-The systemd service will automatically pick up the new binary.
-
----
 
 ## Troubleshooting
 
-### Service won't start?
+### Service won't start
 
 ```bash
-# Check what's wrong
 journalctl -u synaptic-signals -n 100
-
-# Common issues:
-# - .env file missing or incorrect
-# - DATABASE_URL wrong
-# - Database not running (systemctl start postgresql)
-# - Port 3000 already in use
 ```
 
-### Database connection failed?
+Common causes: `.env` missing/wrong `DATABASE_URL`, Postgres not running
+(`systemctl status postgresql`), port already in use.
+
+### Database connection failed
 
 ```bash
-# Test connection manually
 psql "postgres://synaptic:PASSWORD@localhost:5432/synaptic_signals"
-
-# Check PostgreSQL is running
 systemctl status postgresql
-systemctl restart postgresql
 ```
 
-### Caddy not proxying traffic?
+### Caddy not proxying traffic
 
 ```bash
-# Check Caddy is running
 systemctl status caddy
-
-# Reload Caddy config
 caddy reload --config /etc/caddy/Caddyfile
-
-# Check logs
 tail -f /var/log/caddy/bckr.dev.log
 ```
 
-### Reset to redeploy everything?
+### Full reset
 
 ```bash
-# Stop services
-systemctl stop synaptic-signals caddy
-
-# Clean app directory (but preserve uploads, sites)
-rm -f /var/www/bckr.dev/synaptic
-rm -f /var/www/bckr.dev/.env
-
-# Redeploy from Phase 2 above
+VPS_PASSWORD='...' ./scripts/deploy-vps.sh --clean
 ```
 
----
+## Security notes
 
-## Security Notes
+⚠️ **Change the VPS root password** after testing — it was shared in plain
+text during setup.
 
-⚠️ **After deployment, change the SSH password:**
+⚠️ **The database password** is auto-generated by the script and stored only
+in `${INSTALL_DIR}/.env` on the VPS (`chmod 600`).
 
-```bash
-ssh root@178.156.176.60
-passwd  # Change from AnAwpWeqJWvc to something secure
-```
+⚠️ This VPS hosts other sites (`ioncode.com`, `servermesh.dev`) — `deploy-vps.sh`
+only ever touches the `synaptic_signals` DB/role and `bckr.dev`'s own
+Caddy/systemd entries, never the shared Caddy install or other sites' data.
 
-⚠️ **SECRET_KEY must be random and long:**
-
-```bash
-openssl rand -base64 48  # Generate secure key
-```
-
-⚠️ **Database password is auto-generated** during Phase 1 - it's random and secure by default.
-
----
-
-## Directory Structure on VPS
+## Directory structure on VPS
 
 ```
 /var/www/bckr.dev/
-├── synaptic                 # Binary (deployed)
-├── .env                      # Environment config (created manually)
+├── synaptic                  # Binary (deployed, rebuilt every deploy)
+├── synap-cli                 # CLI (deployed)
+├── .env                      # Environment config (generated once, preserved after)
 ├── themes/                   # Theme files (deployed)
+├── admin/static/             # Admin UI static assets (deployed)
 ├── uploads/                  # User uploads (created on first run)
 ├── sites/                    # Multi-site data (created on first run)
 ├── search-index/             # Search index (created on first run)
-├── plugins/                  # Plugins directory (created on first run)
-└── migrations/               # Database migrations (optional, deployed)
+└── plugins/                  # Plugins directory (deployed)
 ```
-
----
-
-## Monitoring & Maintenance
-
-### View logs:
-
-```bash
-# Synaptic app logs
-sudo journalctl -u synaptic-signals -f
-
-# Caddy reverse proxy logs
-sudo tail -f /var/log/caddy/bckr.dev.log
-
-# System logs
-sudo dmesg | tail
-```
-
-### Restart services:
-
-```bash
-sudo systemctl restart synaptic-signals
-sudo systemctl restart caddy
-```
-
-### Check disk usage:
-
-```bash
-du -sh /var/www/bckr.dev/uploads
-du -sh /var/www/bckr.dev/sites
-```
-
----
-
-## Support
-
-If issues arise, check:
-1. Logs: `journalctl -u synaptic-signals -n 100`
-2. `.env` file is correct
-3. PostgreSQL is running: `systemctl status postgresql`
-4. Port 3000 is free: `lsof -i :3000`
-5. Caddy config: `caddy validate --config /etc/caddy/Caddyfile`
