@@ -707,20 +707,7 @@ function toggleSiteFields() {{
     };
 
     let content = format!(
-        r#"<style>
-.user-form-grid {{
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0 1.25rem;
-}}
-.user-form-grid .form-group {{ margin-bottom: 1rem; }}
-.user-form-grid .span-2 {{ grid-column: 1 / -1; }}
-@media (max-width: 540px) {{
-  .user-form-grid {{ grid-template-columns: 1fr; }}
-  .user-form-grid .span-2 {{ grid-column: 1; }}
-}}
-</style>
-<div class="profile-container">
+        r#"<div class="profile-container">
   <h2>{form_title}</h2>
   <form method="POST" action="{action}" style="max-width:580px">
     <div class="user-form-grid">
@@ -952,6 +939,9 @@ pub struct SiteAssignmentRow {
     pub site_id: String,
     pub hostname: String,
     pub role: String,
+    /// True when this row is the only 'admin'-role user on the site — removing
+    /// or demoting them would leave the site with no site-scoped admin.
+    pub is_last_admin: bool,
 }
 
 pub struct SiteAccessData {
@@ -976,13 +966,22 @@ pub fn render_site_access(
         "<tr><td colspan=\"3\"><em>No site assignments yet.</em></td></tr>".to_string()
     } else {
         data.assignments.iter().map(|a| {
+            let confirm_msg = if a.is_last_admin {
+                format!(
+                    "{hostname} has no other Site Admin. Removing this access will leave the site \
+                     with no one able to manage it (other than a super admin). Continue?",
+                    hostname = a.hostname,
+                )
+            } else {
+                format!("Remove {hostname} from site access?", hostname = a.hostname)
+            };
             format!(
                 r#"<tr>
                   <td>{hostname}</td>
                   <td><span class="badge">{role}</span></td>
                   <td class="actions">
                     <form method="post" action="/admin/users/{user_id}/site-access/remove" style="display:inline"
-                          data-confirm="Remove {hostname} from site access?" onsubmit="return confirm(this.dataset.confirm)">
+                          data-confirm="{confirm_msg}" onsubmit="return confirm(this.dataset.confirm)">
                       <input type="hidden" name="site_id" value="{site_id}">
                       <button type="submit" class="icon-btn icon-danger" title="Remove from site">
                         <img src="/admin/static/icons/trash-2.svg" alt="Remove">
@@ -990,10 +989,11 @@ pub fn render_site_access(
                     </form>
                   </td>
                 </tr>"#,
-                user_id   = crate::html_escape(&data.user_id),
-                site_id   = crate::html_escape(&a.site_id),
-                hostname  = crate::html_escape(&a.hostname),
-                role      = crate::html_escape(role_display(&a.role)),
+                user_id     = crate::html_escape(&data.user_id),
+                site_id     = crate::html_escape(&a.site_id),
+                hostname    = crate::html_escape(&a.hostname),
+                role        = crate::html_escape(role_display(&a.role)),
+                confirm_msg = crate::html_escape(&confirm_msg),
             )
         }).collect::<Vec<_>>().join("\n")
     };
@@ -1045,25 +1045,29 @@ pub fn render_site_access(
   <button type="submit" class="btn btn-primary" id="assign-btn" disabled>Assign</button>
 </form>
 
-<!-- Displacement confirmation modal -->
+<!-- Existing Site Admin modal -->
 <div id="displace-modal" style="display:none;position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,0.5);align-items:center;justify-content:center">
   <div style="background:#fff;border-radius:8px;padding:2rem;max-width:480px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,0.18)">
-    <h3 style="margin-top:0;color:var(--danger,#dc2626)">Replace Site Admin?</h3>
+    <h3 style="margin-top:0;color:var(--danger,#dc2626)">This site already has a Site Admin</h3>
     <p id="displace-msg" style="margin-bottom:1.5rem"></p>
-    <p style="font-size:0.9rem;color:var(--muted)">Their posts and media will remain attributed to them. Choose what happens to their site access:</p>
+    <p style="font-size:0.9rem;color:var(--muted)">A site can have more than one Site Admin. Choose what should happen:</p>
     <div style="display:flex;flex-direction:column;gap:0.75rem;margin:1.25rem 0">
       <label style="display:flex;align-items:flex-start;gap:0.6rem;cursor:pointer;padding:0.75rem;border:1.5px solid var(--border,#e5e7eb);border-radius:6px">
-        <input type="radio" name="displace_choice" value="remove" style="margin-top:0.2rem;flex-shrink:0" checked>
-        <span><strong>Remove from site</strong><br><span style="font-size:0.875rem;color:var(--muted)">They lose all access immediately. Recommended if you no longer trust them.</span></span>
+        <input type="radio" name="displace_choice" value="add_additional" style="margin-top:0.2rem;flex-shrink:0" checked>
+        <span><strong>Add as an additional Site Admin</strong><br><span style="font-size:0.875rem;color:var(--muted)">The existing Site Admin keeps their access and ownership of the site unchanged.</span></span>
+      </label>
+      <label style="display:flex;align-items:flex-start;gap:0.6rem;cursor:pointer;padding:0.75rem;border:1.5px solid var(--border,#e5e7eb);border-radius:6px">
+        <input type="radio" name="displace_choice" value="remove" style="margin-top:0.2rem;flex-shrink:0">
+        <span><strong>Remove from site</strong><br><span style="font-size:0.875rem;color:var(--muted)">They lose all access immediately, and ownership transfers to the new assignee. Recommended if you no longer trust them.</span></span>
       </label>
       <label style="display:flex;align-items:flex-start;gap:0.6rem;cursor:pointer;padding:0.75rem;border:1.5px solid var(--border,#e5e7eb);border-radius:6px">
         <input type="radio" name="displace_choice" value="demote_author" style="margin-top:0.2rem;flex-shrink:0">
-        <span><strong>Demote to Author</strong><br><span style="font-size:0.875rem;color:var(--muted)">They keep read and write access to their own posts only.</span></span>
+        <span><strong>Demote to Author, transfer ownership</strong><br><span style="font-size:0.875rem;color:var(--muted)">They keep read and write access to their own posts only, and ownership transfers to the new assignee.</span></span>
       </label>
     </div>
     <div style="display:flex;justify-content:flex-end;gap:0.75rem;margin-top:1.5rem">
       <button type="button" id="displace-cancel" class="btn btn-secondary">Cancel</button>
-      <button type="button" id="displace-confirm" class="btn btn-danger">Confirm &amp; Assign</button>
+      <button type="button" id="displace-confirm" class="btn btn-primary">Confirm &amp; Assign</button>
     </div>
   </div>
 </div>
@@ -1100,7 +1104,7 @@ pub fn render_site_access(
     if (!existingId) return; // no existing site admin — proceed normally
     e.preventDefault();
     var siteName = opt.text;
-    msgEl.innerHTML = '<strong>' + escHtml(existingName) + '</strong> is currently the Site Admin for <strong>' + escHtml(siteName) + '</strong>. Assigning <strong>{assignee}</strong> will replace them.';
+    msgEl.innerHTML = '<strong>' + escHtml(existingName) + '</strong> is currently the Site Admin for <strong>' + escHtml(siteName) + '</strong>.';
     modal.style.display = 'flex';
   }});
 
@@ -1111,7 +1115,7 @@ pub fn render_site_access(
 
   confirmBtn.addEventListener('click', function() {{
     var choice = document.querySelector('input[name="displace_choice"]:checked');
-    actionFld.value = choice ? choice.value : 'remove';
+    actionFld.value = choice ? choice.value : 'add_additional';
     modal.style.display = 'none';
     form.submit();
   }});
@@ -1130,13 +1134,12 @@ pub fn render_site_access(
 </script>"#,
             user_id              = crate::html_escape(&data.user_id),
             site_opts            = site_options,
-            assignee             = crate::html_escape(&data.display_name),
             placeholder_selected = placeholder_selected,
             editor_selected      = sel("editor"),
             author_selected      = sel("author"),
             subscriber_selected  = sel("subscriber"),
             site_admin_opt = if ctx.is_global_admin {
-                r#"<option value="site_admin">Site Admin (owner)</option>"#
+                r#"<option value="site_admin">Site Admin</option>"#
             } else {
                 ""
             },

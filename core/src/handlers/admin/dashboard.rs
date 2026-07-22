@@ -62,6 +62,31 @@ pub async fn dashboard(
         0
     };
 
+    // Sites card: total sites system-wide for a true super_admin; sites owned by
+    // the current site's owner when impersonating; otherwise sites the user has
+    // any role on (owner or site admin) — same scoping as /admin/sites.
+    let total_sites = if admin.caps.is_global_admin && !admin.caps.is_impersonating {
+        crate::models::site::count(&state.db).await
+            .unwrap_or_else(|e| { tracing::warn!("dashboard sites count error: {:?}", e); 0 })
+    } else if admin.caps.is_global_admin && admin.caps.is_impersonating {
+        match admin.site_id {
+            Some(sid) => {
+                let owner: Option<uuid::Uuid> = sqlx::query_scalar(
+                    "SELECT owner_user_id FROM sites WHERE id = $1"
+                ).bind(sid).fetch_optional(&state.db).await.ok().flatten();
+                match owner {
+                    Some(o) => crate::models::site::count_by_owner(&state.db, o).await.unwrap_or(0),
+                    None => 1,
+                }
+            }
+            None => 0,
+        }
+    } else {
+        crate::models::site_user::list_for_user(&state.db, admin.user.id).await
+            .map(|rows| rows.len() as i64)
+            .unwrap_or_else(|e| { tracing::warn!("dashboard user sites count error: {:?}", e); 0 })
+    };
+
     // Author-scoped stats: only their own posts.
     let (author_published_posts, author_draft_posts, author_pending_posts) = if is_author {
         let aid = admin.user.id;
@@ -277,6 +302,7 @@ pub async fn dashboard(
         draft_posts,
         pending_posts,
         total_pages,
+        total_sites,
         total_users,
         total_subscribers,
         author_published_posts,

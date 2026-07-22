@@ -4,6 +4,7 @@ pub struct DashboardData {
     pub published_posts: i64,
     pub draft_posts: i64,
     pub total_pages: i64,
+    pub total_sites: i64,
     pub total_users: i64,
     pub total_subscribers: i64,
     /// Posts waiting for editor review (all roles see this on their dashboard).
@@ -319,7 +320,7 @@ pub fn render(data: &DashboardData, flash: Option<&str>, ctx: &crate::PageContex
         )
     } else {
         format!(
-            r#"<div class="stat-panel stat-panel-6">
+            r#"<div class="stat-panel stat-panel-7">
   <a href="/admin/posts?status=published" class="stat-cell stat-cell-link{published_empty}">
     <div class="stat-cell-top"><span class="stat-label">Posts</span></div>
     <div class="stat-num">{published_posts}</div>
@@ -338,6 +339,10 @@ pub fn render(data: &DashboardData, flash: Option<&str>, ctx: &crate::PageContex
     </div>
     <div class="stat-num">{pending}</div>
   {pending_close}
+  <a href="/admin/sites" class="stat-cell stat-cell-link{sites_empty}">
+    <div class="stat-cell-top"><span class="stat-label">Sites</span></div>
+    <div class="stat-num">{total_sites}</div>
+  </a>
   <a href="/admin/users" class="stat-cell stat-cell-link{users_empty}">
     <div class="stat-cell-top"><span class="stat-label">Users</span></div>
     <div class="stat-num">{total_users}</div>
@@ -350,9 +355,11 @@ pub fn render(data: &DashboardData, flash: Option<&str>, ctx: &crate::PageContex
             published_posts = data.published_posts,
             draft_posts = data.draft_posts,
             pending = data.pending_posts,
+            total_sites = data.total_sites,
             published_empty = if data.published_posts == 0 { " is-empty" } else { "" },
             drafts_empty    = if data.draft_posts == 0 { " is-empty" } else { "" },
             pages_empty     = if data.total_pages == 0 { " is-empty" } else { "" },
+            sites_empty     = if data.total_sites == 0 { " is-empty" } else { "" },
             users_empty     = if data.total_users == 0 { " is-empty" } else { "" },
             subscribers_empty = if data.total_subscribers == 0 { " is-empty" } else { "" },
             pending_open = if data.pending_posts > 0 {

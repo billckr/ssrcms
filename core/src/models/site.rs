@@ -136,6 +136,23 @@ pub async fn list(pool: &PgPool) -> Result<Vec<Site>> {
     Ok(sites)
 }
 
+/// Total number of sites in the system (dashboard stat for super_admins).
+pub async fn count(pool: &PgPool) -> Result<i64> {
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM sites")
+        .fetch_one(pool)
+        .await?;
+    Ok(count)
+}
+
+/// Number of sites owned by the given user (dashboard stat when impersonating).
+pub async fn count_by_owner(pool: &PgPool, owner_user_id: Uuid) -> Result<i64> {
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM sites WHERE owner_user_id = $1")
+        .bind(owner_user_id)
+        .fetch_one(pool)
+        .await?;
+    Ok(count)
+}
+
 
 pub async fn delete(pool: &PgPool, id: Uuid) -> Result<()> {
     let mut tx = pool.begin().await?;

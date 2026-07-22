@@ -1079,16 +1079,20 @@ pub async fn site_access_page(
     }
 
     // Current site assignments for the target user.
-    let assignments = crate::models::site_user::list_for_user(&state.db, user_id)
+    let raw_assignments = crate::models::site_user::list_for_user(&state.db, user_id)
         .await
-        .unwrap_or_default()
-        .into_iter()
-        .map(|(s, role)| admin::pages::users::SiteAssignmentRow {
+        .unwrap_or_default();
+    let mut assignments = Vec::with_capacity(raw_assignments.len());
+    for (s, role) in raw_assignments {
+        let is_last_admin = role == "admin"
+            && crate::models::site_user::count_admins(&state.db, s.id).await.unwrap_or(0) <= 1;
+        assignments.push(admin::pages::users::SiteAssignmentRow {
             site_id: s.id.to_string(),
             hostname: s.hostname.clone(),
             role,
-        })
-        .collect::<Vec<_>>();
+            is_last_admin,
+        });
+    }
 
     // Available sites for this admin to assign to: all for super_admin, owned for site_admin.
     let available_sites: Vec<SiteOption> = if admin.caps.is_global_admin {
@@ -1118,7 +1122,7 @@ pub async fn site_access_page(
     };
 
     let flash = match query.error.as_deref() {
-        Some("site_admin_exists") => Some("This site already has a Site Admin. Remove the existing Site Admin first."),
+        Some("site_admin_exists") => Some("Please choose what to do about the site's existing Site Admin."),
         Some("db_error") => Some("Failed to update site access. Please try again."),
         Some("invalid_role") => Some("Please select a role before assigning this user to a site."),
         _ => match query.success.as_deref() {
@@ -1138,8 +1142,11 @@ pub async fn site_access_page(
 pub struct SiteAccessAddForm {
     pub site_id: String,
     pub role: String,
-    /// "remove" or "demote_author" — sent by the displacement modal when
-    /// the target site already has a non-super_admin site admin.
+    /// "remove", "demote_author", or "add_additional" — sent by the modal when
+    /// the target site already has an existing Site Admin. "remove"/"demote_author"
+    /// transfer ownership to the new assignee; "add_additional" just grants them
+    /// the same 'admin' site role alongside the existing Site Admin, with no
+    /// change to site ownership.
     pub displaced_action: Option<String>,
 }
 
@@ -1168,7 +1175,10 @@ pub async fn add_site_access(
     }
 
     // Sanitise role.
-    // site_admin may only be assigned by a global_admin and only if the site has no owner yet.
+    // site_admin may only be assigned by a global_admin. Multiple users may hold
+    // the 'admin' site role on the same site — the modal only fires to ask
+    // whether adding *this* one should also transfer ownership away from the
+    // site's existing owner, not to force a 1-admin-per-site limit.
     let role = match form.role.as_str() {
         "site_admin" if admin.caps.is_global_admin => {
             // Check if site already has a non-super_admin owner.
@@ -1186,9 +1196,15 @@ pub async fn add_site_access(
             .ok()
             .flatten();
 
+            let mut transfer_ownership = true;
+
             if let Some(old_owner_id) = existing_owner {
-                // An existing site admin must be displaced. Require the modal action.
                 match form.displaced_action.as_deref() {
+                    Some("add_additional") => {
+                        // Grant admin access alongside the existing Site Admin —
+                        // ownership and the existing admin's access are untouched.
+                        transfer_ownership = false;
+                    }
                     Some("remove") => {
                         // Remove displaced admin from this site entirely.
                         let _ = crate::models::site_user::remove(&state.db, site_uuid, old_owner_id).await;
@@ -1210,29 +1226,23 @@ pub async fn add_site_access(
                         )).into_response();
                     }
                 }
-                // Clear the old owner so it can be reassigned below.
+            }
+
+            if transfer_ownership {
                 let _ = sqlx::query(
-                    "UPDATE sites SET owner_user_id = NULL, updated_at = NOW() WHERE id = $1"
+                    "UPDATE sites SET owner_user_id = $1, updated_at = NOW() WHERE id = $2"
                 )
+                .bind(user_id)
                 .bind(site_uuid)
                 .execute(&state.db)
                 .await;
+                let _ = sqlx::query(
+                    "UPDATE users SET role = 'site_admin' WHERE id = $1 AND role NOT IN ('super_admin', 'site_admin')"
+                )
+                .bind(user_id)
+                .execute(&state.db)
+                .await;
             }
-
-            // Set the new owner and promote user's global role.
-            let _ = sqlx::query(
-                "UPDATE sites SET owner_user_id = $1, updated_at = NOW() WHERE id = $2"
-            )
-            .bind(user_id)
-            .bind(site_uuid)
-            .execute(&state.db)
-            .await;
-            let _ = sqlx::query(
-                "UPDATE users SET role = 'site_admin' WHERE id = $1 AND role NOT IN ('super_admin', 'site_admin')"
-            )
-            .bind(user_id)
-            .execute(&state.db)
-            .await;
             "admin" // site_users role for a site_admin is 'admin'
         }
         "editor" | "author" | "subscriber" => form.role.as_str(),

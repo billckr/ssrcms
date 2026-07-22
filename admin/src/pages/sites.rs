@@ -207,12 +207,59 @@ pub fn render_settings(data: &SiteSettingsData, flash: Option<&str>, ctx: &crate
     crate::admin_page("Site Settings", "/admin/sites", flash, &content, ctx)
 }
 
-pub fn render_new(flash: Option<&str>, ctx: &crate::PageContext) -> String {
-    let content = r#"<form method="post" action="/admin/sites" class="edit-form" id="new-site-form">
+/// An existing user selectable as the new site's admin.
+pub struct UserOption {
+    pub id: String,
+    pub label: String,
+}
+
+pub struct NewSiteData {
+    /// Preserved on validation failure so the admin doesn't have to retype it.
+    pub hostname: String,
+    /// "none" | "existing" | "new" — which Site Admin sub-form was active.
+    pub user_assignment: String,
+    pub existing_user_id: String,
+    pub new_username: String,
+    pub new_email: String,
+    pub new_display_name: String,
+    /// Assignable users (excludes super_admins, who can't be scoped to a site).
+    pub existing_users: Vec<UserOption>,
+}
+
+impl Default for NewSiteData {
+    fn default() -> Self {
+        Self {
+            hostname: String::new(),
+            user_assignment: "none".to_string(),
+            existing_user_id: String::new(),
+            new_username: String::new(),
+            new_email: String::new(),
+            new_display_name: String::new(),
+            existing_users: Vec::new(),
+        }
+    }
+}
+
+pub fn render_new(data: &NewSiteData, flash: Option<&str>, ctx: &crate::PageContext) -> String {
+    let checked = |val: &str| if data.user_assignment == val { " checked" } else { "" };
+    let existing_opts = data.existing_users.iter().map(|u| {
+        let sel = if data.existing_user_id == u.id { " selected" } else { "" };
+        format!(
+            r#"<option value="{id}"{sel}>{label}</option>"#,
+            id    = crate::html_escape(&u.id),
+            label = crate::html_escape(&u.label),
+            sel   = sel,
+        )
+    }).collect::<Vec<_>>().join("\n");
+
+    let content = format!(
+        r#"<div class="profile-container">
+  <h2>New Site</h2>
+  <form method="post" action="/admin/sites" class="edit-form" id="new-site-form" style="max-width:580px">
   <div class="form-group">
     <label for="hostname">Domain Name</label>
     <input type="text" id="hostname" name="hostname" required placeholder="example.com" autofocus
-           oninput="hnUpdate()">
+           value="{hostname}" oninput="hnUpdate()">
     <small>The domain this site will respond to</small>
   </div>
   <div class="form-note" style="margin-bottom:1.25rem">
@@ -224,41 +271,197 @@ pub fn render_new(flash: Option<&str>, ctx: &crate::PageContext) -> String {
       <li id="hn-req-hyphen"><span class="pw-dot" style="display:inline-block;width:1.1rem;font-style:normal">·</span>No label starts or ends with a hyphen</li>
     </ul>
   </div>
+
+  <div class="form-group">
+    <label>Site Admin</label>
+    <div style="display:flex;gap:1.5rem;margin:0.4rem 0 0.75rem;flex-wrap:wrap">
+      <label class="radio-label">
+        <input type="radio" name="user_assignment" value="none"{none_checked} onchange="toggleUserFields()"> Assign later
+      </label>
+      <label class="radio-label">
+        <input type="radio" name="user_assignment" value="existing"{existing_checked} onchange="toggleUserFields()"> Existing user
+      </label>
+      <label class="radio-label">
+        <input type="radio" name="user_assignment" value="new"{new_checked} onchange="toggleUserFields()"> New user
+      </label>
+    </div>
+    <div id="user-none">
+      <small>You will be this site's admin and owner until you assign someone else.</small>
+    </div>
+    <div id="user-existing" style="display:none">
+      <select name="existing_user_id" id="user-existing-select">
+        <option value="" disabled selected>Select User</option>
+        {existing_opts}
+      </select>
+      <small>The selected user will be the site admin.</small>
+    </div>
+    <div id="user-new" style="display:none">
+      <div class="user-form-grid stacked">
+        <div class="form-group">
+          <label for="new_username">Username <span class="field-hint">(letters, numbers, hyphens only)</span></label>
+          <input type="text" id="new_username" name="new_username" value="{new_username}" autocomplete="off"
+                 pattern="[a-z0-9][a-z0-9\-]*[a-z0-9]|[a-z0-9]" title="Lowercase letters, numbers and hyphens only">
+          <span id="new-username-hint" class="field-error" style="display:none">Only lowercase letters, numbers and hyphens allowed.</span>
+        </div>
+        <div class="form-group">
+          <label for="new_display_name">Display Name</label>
+          <input type="text" id="new_display_name" name="new_display_name" value="{new_display_name}" autocomplete="off">
+        </div>
+        <div class="form-group">
+          <label for="new_email">Email</label>
+          <input type="email" id="new_email" name="new_email" value="{new_email}" autocomplete="off">
+          <small id="new-email-hint" style="color:#dc2626;display:none">Please enter a valid email address.</small>
+        </div>
+        <div class="form-group">
+          <label for="new_password">Password</label>
+          <input type="password" id="new_password" name="new_password" autocomplete="new-password">
+        </div>
+      </div>
+      <div class="form-note" style="margin-bottom:1.25rem">
+        <p><strong>New user requirements:</strong></p>
+        <ul style="list-style:none;padding-left:0;margin:0.25rem 0 0">
+          <li id="new-pw-req-len"><span class="pw-dot" style="display:inline-block;width:1.1rem;font-style:normal">·</span>8–12 characters</li>
+          <li id="new-pw-req-upper"><span class="pw-dot" style="display:inline-block;width:1.1rem;font-style:normal">·</span>At least one uppercase letter</li>
+          <li id="new-pw-req-num"><span class="pw-dot" style="display:inline-block;width:1.1rem;font-style:normal">·</span>At least one number</li>
+          <li id="new-pw-req-sym"><span class="pw-dot" style="display:inline-block;width:1.1rem;font-style:normal">·</span>At least one symbol: ! @ # $ % &amp;</li>
+        </ul>
+      </div>
+      <small>A new account is created and assigned as this site's admin and owner.</small>
+    </div>
+  </div>
+
   <div class="form-actions">
     <button type="submit" id="create-btn" class="btn btn-primary" disabled>Create Site</button>
     <a href="/admin/sites" class="btn btn-secondary">Cancel</a>
   </div>
-</form>
+  </form>
+</div>
 <script>
-(function() {
+(function() {{
   var hnReqs = [
-    { id: 'hn-req-dot',    test: function(h) { return h.indexOf('.') !== -1; } },
-    { id: 'hn-req-tld',    test: function(h) { var tld = h.split('.').pop(); return tld.length >= 2 && /^[a-z]+$/i.test(tld); } },
-    { id: 'hn-req-chars',  test: function(h) { return /^[a-z0-9.\-]+$/i.test(h); } },
-    { id: 'hn-req-hyphen', test: function(h) { return h.split('.').every(function(l) { return l.length > 0 && !l.startsWith('-') && !l.endsWith('-'); }); } },
+    {{ id: 'hn-req-dot',    test: function(h) {{ return h.indexOf('.') !== -1; }} }},
+    {{ id: 'hn-req-tld',    test: function(h) {{ var tld = h.split('.').pop(); return tld.length >= 2 && /^[a-z]+$/i.test(tld); }} }},
+    {{ id: 'hn-req-chars',  test: function(h) {{ return /^[a-z0-9.\-]+$/i.test(h); }} }},
+    {{ id: 'hn-req-hyphen', test: function(h) {{ return h.split('.').every(function(l) {{ return l.length > 0 && !l.startsWith('-') && !l.endsWith('-'); }}); }} }},
   ];
+  var pwReqs = [
+    {{ id: 'new-pw-req-len',   test: function(p) {{ return p.length >= 8 && p.length <= 12; }} }},
+    {{ id: 'new-pw-req-upper', test: function(p) {{ return /[A-Z]/.test(p); }} }},
+    {{ id: 'new-pw-req-num',   test: function(p) {{ return /[0-9]/.test(p); }} }},
+    {{ id: 'new-pw-req-sym',   test: function(p) {{ return /[!@#$%&]/.test(p); }} }},
+  ];
+  var slugPattern = /^[a-z0-9][a-z0-9\-]*[a-z0-9]$|^[a-z0-9]$/;
+  var usernameTouched = false;
 
-  window.hnUpdate = function() {
+  function isValidHostname(h) {{
+    return /^(?:[a-z0-9](?:[a-z0-9\-]*[a-z0-9])?\.)+[a-z]{{2,}}$/i.test(h);
+  }}
+  function isValidPassword(p) {{
+    return p.length >= 8 && p.length <= 12 && /[A-Z]/.test(p) && /[0-9]/.test(p) && /[!@#$%&]/.test(p);
+  }}
+  function toSlug(s) {{
+    return s.toLowerCase().replace(/[^a-z0-9\s-]/g, '').trim()
+      .replace(/[\s]+/g, '-').replace(/-{{2,}}/g, '-').replace(/^-|-$/g, '');
+  }}
+
+  window.hnUpdate = function() {{
     var val = document.getElementById('hostname').value.trim();
     var allPass = val.length > 0;
-    hnReqs.forEach(function(req) {
+    hnReqs.forEach(function(req) {{
       var li  = document.getElementById(req.id);
       var dot = li ? li.querySelector('.pw-dot') : null;
       if (!li) return;
-      if (!val) {
+      if (!val) {{
         li.style.color = ''; if (dot) dot.textContent = '·';
         allPass = false;
-      } else if (req.test(val)) {
+      }} else if (req.test(val)) {{
         li.style.color = '#16a34a'; if (dot) dot.textContent = '✓';
-      } else {
+      }} else {{
         li.style.color = '#dc2626'; if (dot) dot.textContent = '✗';
         allPass = false;
-      }
-    });
-    document.getElementById('create-btn').disabled = !allPass;
-  };
-})();
-</script>"#;
+      }}
+    }});
+    syncCreateBtn(allPass);
+  }};
 
-    crate::admin_page("New Site", "/admin/sites", flash, content, ctx)
+  function updateNewUserFeedback() {{
+    var pw = document.getElementById('new_password').value;
+    pwReqs.forEach(function(req) {{
+      var li  = document.getElementById(req.id);
+      var dot = li ? li.querySelector('.pw-dot') : null;
+      if (!li) return;
+      if (!pw) {{
+        li.style.color = ''; if (dot) dot.textContent = '·';
+      }} else if (req.test(pw)) {{
+        li.style.color = '#16a34a'; if (dot) dot.textContent = '✓';
+      }} else {{
+        li.style.color = '#dc2626'; if (dot) dot.textContent = '✗';
+      }}
+    }});
+    var uname = document.getElementById('new_username');
+    var unameHint = document.getElementById('new-username-hint');
+    if (unameHint) unameHint.style.display = (uname.value && !slugPattern.test(uname.value)) ? '' : 'none';
+    var email = document.getElementById('new_email').value.trim();
+    var emailHint = document.getElementById('new-email-hint');
+    if (emailHint) emailHint.style.display = (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) ? '' : 'none';
+  }}
+
+  function newUserComplete() {{
+    var uname = document.getElementById('new_username').value.trim();
+    var dname = document.getElementById('new_display_name').value.trim();
+    var email = document.getElementById('new_email').value.trim();
+    var pw    = document.getElementById('new_password').value;
+    if (!uname || !dname || !email || !pw) return false;
+    if (!slugPattern.test(uname)) return false;
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return false;
+    if (!isValidPassword(pw)) return false;
+    return true;
+  }}
+
+  function syncCreateBtn(hostnameOk) {{
+    var assign = document.querySelector('input[name="user_assignment"]:checked').value;
+    var userOk = true;
+    if (assign === 'existing') {{
+      userOk = !!document.getElementById('user-existing-select').value;
+    }} else if (assign === 'new') {{
+      updateNewUserFeedback();
+      userOk = newUserComplete();
+    }}
+    document.getElementById('create-btn').disabled = !(hostnameOk && userOk);
+  }}
+
+  window.toggleUserFields = function() {{
+    var val = document.querySelector('input[name="user_assignment"]:checked').value;
+    document.getElementById('user-none').style.display     = val === 'none'     ? '' : 'none';
+    document.getElementById('user-existing').style.display = val === 'existing' ? '' : 'none';
+    document.getElementById('user-new').style.display      = val === 'new'      ? '' : 'none';
+    hnUpdate();
+  }};
+
+  document.getElementById('user-existing-select').addEventListener('change', function() {{ hnUpdate(); }});
+  ['new_email', 'new_password'].forEach(function(id) {{
+    document.getElementById(id).addEventListener('input', function() {{ hnUpdate(); }});
+  }});
+  var unameEl = document.getElementById('new_username');
+  var dnameEl = document.getElementById('new_display_name');
+  unameEl.addEventListener('input', function() {{ usernameTouched = true; hnUpdate(); }});
+  dnameEl.addEventListener('input', function() {{
+    if (!usernameTouched) unameEl.value = toSlug(dnameEl.value);
+    hnUpdate();
+  }});
+
+  toggleUserFields();
+}})();
+</script>"#,
+        hostname            = crate::html_escape(&data.hostname),
+        none_checked        = checked("none"),
+        existing_checked    = checked("existing"),
+        new_checked         = checked("new"),
+        existing_opts       = existing_opts,
+        new_username        = crate::html_escape(&data.new_username),
+        new_email           = crate::html_escape(&data.new_email),
+        new_display_name    = crate::html_escape(&data.new_display_name),
+    );
+
+    crate::admin_page("New Site", "/admin/sites", flash, &content, ctx)
 }

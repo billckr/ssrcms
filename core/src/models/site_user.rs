@@ -55,6 +55,19 @@ pub async fn remove(pool: &PgPool, site_id: Uuid, user_id: Uuid) -> Result<()> {
     Ok(())
 }
 
+/// Number of users holding the 'admin' role on a site — used to warn before
+/// removing/demoting the last one, since that leaves the site with no one
+/// (other than a super_admin) able to manage it.
+pub async fn count_admins(pool: &PgPool, site_id: Uuid) -> Result<i64> {
+    let count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM site_users WHERE site_id = $1 AND role = 'admin'",
+    )
+    .bind(site_id)
+    .fetch_one(pool)
+    .await?;
+    Ok(count)
+}
+
 pub async fn get_role(pool: &PgPool, site_id: Uuid, user_id: Uuid) -> Result<Option<String>> {
     let role: Option<String> = sqlx::query_scalar(
         "SELECT role FROM site_users WHERE site_id = $1 AND user_id = $2",
