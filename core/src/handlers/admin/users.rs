@@ -18,6 +18,12 @@ pub struct UsersTabQuery {
     /// Optional site UUID to filter the user list (super_admin only).
     #[serde(default)]
     pub site: String,
+    /// Search term matched against display name, username, and email (case-insensitive).
+    #[serde(default)]
+    pub search: String,
+    /// When set (any value), return only the table rows HTML for JS live-search.
+    #[serde(default)]
+    pub partial: String,
 }
 
 /// Split a flat list of UserRows into (staff, subscribers).
@@ -146,6 +152,19 @@ pub async fn list(
     let current_user_id = admin.user.id.to_string();
     // Exclude the currently logged-in user — they manage their own account via /admin/profile.
     let rows: Vec<_> = rows.into_iter().filter(|u| u.id != current_user_id).collect();
+
+    // Search: match display name, username, or email (case-insensitive substring).
+    let search_term = q.search.trim().to_lowercase();
+    let rows: Vec<_> = if search_term.is_empty() {
+        rows
+    } else {
+        rows.into_iter().filter(|u| {
+            u.display_name.to_lowercase().contains(&search_term)
+                || u.username.to_lowercase().contains(&search_term)
+                || u.email.to_lowercase().contains(&search_term)
+        }).collect()
+    };
+
     let can_manage_access = admin.caps.can_manage_users;
     let active_tab = if q.tab == "subscribers" { "subscribers" } else { "site-users" };
     let (mut staff, mut subscribers) = split_by_role(rows);
@@ -193,10 +212,18 @@ pub async fn list(
         }
     }
 
+    // `partial=<anything>` means the JS live-search is requesting only the table
+    // rows HTML so the browser can swap tbody#users-tbody without a full reload.
+    if !q.partial.is_empty() {
+        return Html(admin::pages::users::users_list_fragment(
+            &staff, &subscribers, &current_user_id, can_manage_access, active_tab, &q.search,
+        )).into_response();
+    }
+
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
     Html(admin::pages::users::render_list(
         &staff, &subscribers, None, &current_user_id,
-        can_manage_access, active_tab, &available_sites, &selected_site_id, &ctx,
+        can_manage_access, active_tab, &available_sites, &selected_site_id, &q.search, &ctx,
     )).into_response()
 }
 
@@ -771,6 +798,7 @@ pub async fn delete_user(
                 can_manage_access,
                 "site-users",
                 &[],
+                "",
                 "",
                 &ctx,
             )).into_response();

@@ -64,86 +64,9 @@ pub struct UserEdit {
     pub is_super_admin_target: bool,
 }
 
-pub fn render_list(
-    staff: &[UserRow],
-    subscribers: &[UserRow],
-    flash: Option<&str>,
-    current_user_id: &str,
-    can_manage_access: bool,
-    active_tab: &str,
-    available_sites: &[SiteOption],
-    selected_site_id: &str,
-    ctx: &crate::PageContext,
-) -> String {
-    let is_subscribers = active_tab == "subscribers";
-
-    // ── Tab bar ───────────────────────────────────────────────────────────────
-    let staff_active = if !is_subscribers { " active" } else { "" };
-    let sub_active   = if  is_subscribers { " active" } else { "" };
-    let tabs = format!(
-        r#"<div class="page-tabs">
-  <a href="/admin/users?tab=site-users" class="page-tab{staff_active}">Site Users <span class="badge" style="margin-left:.35rem;font-size:.75rem;padding:.1rem .45rem">{staff_count}</span></a>
-  <a href="/admin/users?tab=subscribers" class="page-tab{sub_active}">Subscribers <span class="badge" style="margin-left:.35rem;font-size:.75rem;padding:.1rem .45rem">{sub_count}</span></a>
-</div>"#,
-        staff_active = staff_active,
-        sub_active   = sub_active,
-        staff_count  = staff.len(),
-        sub_count    = subscribers.len(),
-    );
-
-    // ── Site filter dropdowns (global admin only) ─────────────────────────────
-    let site_filter_staff = if ctx.is_global_admin && !available_sites.is_empty() {
-        let opts = available_sites.iter().map(|s| {
-            let sel = if s.id == selected_site_id { " selected" } else { "" };
-            format!(
-                r#"<option value="{id}"{sel}>{hostname}</option>"#,
-                id = crate::html_escape(&s.id),
-                hostname = crate::html_escape(&s.hostname),
-                sel = sel,
-            )
-        }).collect::<Vec<_>>().join("\n");
-        format!(
-            r#"<form method="GET" action="/admin/users" style="display:inline-flex;align-items:center;gap:.5rem;margin:0">
-  <input type="hidden" name="tab" value="site-users">
-  <label for="site-filter-staff" style="font-size:.875rem;font-weight:500;margin:0">Display users for:</label>
-  <select id="site-filter-staff" name="site" onchange="this.form.submit()" style="height:2.25rem;padding:0 .5rem;border:1px solid var(--border,#e5e7eb);border-radius:6px;font-size:.875rem;background:#fff;cursor:pointer">
-    <option value="">All Sites</option>
-    {opts}
-  </select>
-</form>"#,
-            opts = opts,
-        )
-    } else {
-        String::new()
-    };
-
-    let site_filter_subs = if ctx.is_global_admin && !available_sites.is_empty() {
-        let opts = available_sites.iter().map(|s| {
-            let sel = if s.id == selected_site_id { " selected" } else { "" };
-            format!(
-                r#"<option value="{id}"{sel}>{hostname}</option>"#,
-                id = crate::html_escape(&s.id),
-                hostname = crate::html_escape(&s.hostname),
-                sel = sel,
-            )
-        }).collect::<Vec<_>>().join("\n");
-        format!(
-            r#"<form method="GET" action="/admin/users" style="display:inline-flex;align-items:center;gap:.5rem;margin:0">
-  <input type="hidden" name="tab" value="subscribers">
-  <label for="site-filter-subs" style="font-size:.875rem;font-weight:500;margin:0">Display users for:</label>
-  <select id="site-filter-subs" name="site" onchange="this.form.submit()" style="height:2.25rem;padding:0 .5rem;border:1px solid var(--border,#e5e7eb);border-radius:6px;font-size:.875rem;background:#fff;cursor:pointer">
-    <option value="">All Sites</option>
-    {opts}
-  </select>
-</form>"#,
-            opts = opts,
-        )
-    } else {
-        String::new()
-    };
-
-    // ── Site Users table ──────────────────────────────────────────────────────
-    let staff_rows = staff.iter().map(|u| {
+/// Render the `<tr>` rows for the Site Users (staff) table.
+fn build_staff_rows(staff: &[UserRow], current_user_id: &str, can_manage_access: bool) -> String {
+    staff.iter().map(|u| {
         let site_access_btn = if can_manage_access && !u.is_super_admin {
             format!(
                 r#"<a href="/admin/users/{id}/site-access" class="icon-btn" title="Manage site access">
@@ -237,10 +160,12 @@ pub fn render_list(
             site_access_btn = site_access_btn,
             delete_btn = delete_btn,
         )
-    }).collect::<Vec<_>>().join("\n");
+    }).collect::<Vec<_>>().join("\n")
+}
 
-    // ── Subscribers table ─────────────────────────────────────────────────────
-    let sub_rows = subscribers.iter().map(|u| {
+/// Render the `<tr>` rows for the Subscribers table.
+fn build_sub_rows(subscribers: &[UserRow], current_user_id: &str) -> String {
+    subscribers.iter().map(|u| {
         let delete_btn = if u.id != current_user_id && !u.is_protected {
             let warn_msg = format!(
                 "Delete subscriber \\u2018{}\\u2019? This cannot be undone.",
@@ -300,66 +225,179 @@ pub fn render_list(
             domain_badges = domain_badges,
             delete_btn = delete_btn,
         )
-    }).collect::<Vec<_>>().join("\n");
+    }).collect::<Vec<_>>().join("\n")
+}
+
+/// Renders only the two tables' `<tr>` rows (+ empty-state row) — the content of
+/// `tbody#users-tbody`. Called by `render_list` on full page loads and returned
+/// directly for `?partial=1` JS live-search requests so the browser can swap
+/// just the rows without a full reload.
+pub fn users_list_fragment(
+    staff: &[UserRow],
+    subscribers: &[UserRow],
+    current_user_id: &str,
+    can_manage_access: bool,
+    active_tab: &str,
+    search: &str,
+) -> String {
+    if active_tab != "subscribers" {
+        let rows = build_staff_rows(staff, current_user_id, can_manage_access);
+        let empty_msg = if staff.is_empty() {
+            let msg = if search.is_empty() { "No users yet." } else { "No users matched your search." };
+            format!(r#"<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:2rem">{}</td></tr>"#, msg)
+        } else {
+            String::new()
+        };
+        format!("{rows}{empty_msg}")
+    } else {
+        let rows = build_sub_rows(subscribers, current_user_id);
+        let empty_msg = if subscribers.is_empty() {
+            let msg = if search.is_empty() { "No subscribers yet." } else { "No subscribers matched your search." };
+            format!(r#"<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:2rem">{}</td></tr>"#, msg)
+        } else {
+            String::new()
+        };
+        format!("{rows}{empty_msg}")
+    }
+}
+
+pub fn render_list(
+    staff: &[UserRow],
+    subscribers: &[UserRow],
+    flash: Option<&str>,
+    current_user_id: &str,
+    can_manage_access: bool,
+    active_tab: &str,
+    available_sites: &[SiteOption],
+    selected_site_id: &str,
+    search: &str,
+    ctx: &crate::PageContext,
+) -> String {
+    let is_subscribers = active_tab == "subscribers";
+
+    // ── Tab bar ───────────────────────────────────────────────────────────────
+    let staff_active = if !is_subscribers { " active" } else { "" };
+    let sub_active   = if  is_subscribers { " active" } else { "" };
+    let tabs = format!(
+        r#"<div class="page-tabs">
+  <a href="/admin/users?tab=site-users" class="page-tab{staff_active}">Site Users <span class="badge" style="margin-left:.35rem;font-size:.75rem;padding:.1rem .45rem">{staff_count}</span></a>
+  <a href="/admin/users?tab=subscribers" class="page-tab{sub_active}">Subscribers <span class="badge" style="margin-left:.35rem;font-size:.75rem;padding:.1rem .45rem">{sub_count}</span></a>
+</div>"#,
+        staff_active = staff_active,
+        sub_active   = sub_active,
+        staff_count  = staff.len(),
+        sub_count    = subscribers.len(),
+    );
+
+    // ── Site filter dropdowns (global admin only) ─────────────────────────────
+    let site_filter_staff = if ctx.is_global_admin && !available_sites.is_empty() {
+        let opts = available_sites.iter().map(|s| {
+            let sel = if s.id == selected_site_id { " selected" } else { "" };
+            format!(
+                r#"<option value="{id}"{sel}>{hostname}</option>"#,
+                id = crate::html_escape(&s.id),
+                hostname = crate::html_escape(&s.hostname),
+                sel = sel,
+            )
+        }).collect::<Vec<_>>().join("\n");
+        format!(
+            r#"<form method="GET" action="/admin/users" style="display:inline-flex;align-items:center;gap:.5rem;margin:0">
+  <input type="hidden" name="tab" value="site-users">
+  <label for="site-filter-staff" style="font-size:.875rem;font-weight:500;margin:0">Display users for:</label>
+  <select id="site-filter-staff" name="site" onchange="this.form.submit()" style="height:2.25rem;padding:0 .5rem;border:1px solid var(--border,#e5e7eb);border-radius:6px;font-size:.875rem;background:#fff;cursor:pointer">
+    <option value="">All Sites</option>
+    {opts}
+  </select>
+</form>"#,
+            opts = opts,
+        )
+    } else {
+        String::new()
+    };
+
+    let site_filter_subs = if ctx.is_global_admin && !available_sites.is_empty() {
+        let opts = available_sites.iter().map(|s| {
+            let sel = if s.id == selected_site_id { " selected" } else { "" };
+            format!(
+                r#"<option value="{id}"{sel}>{hostname}</option>"#,
+                id = crate::html_escape(&s.id),
+                hostname = crate::html_escape(&s.hostname),
+                sel = sel,
+            )
+        }).collect::<Vec<_>>().join("\n");
+        format!(
+            r#"<form method="GET" action="/admin/users" style="display:inline-flex;align-items:center;gap:.5rem;margin:0">
+  <input type="hidden" name="tab" value="subscribers">
+  <label for="site-filter-subs" style="font-size:.875rem;font-weight:500;margin:0">Display users for:</label>
+  <select id="site-filter-subs" name="site" onchange="this.form.submit()" style="height:2.25rem;padding:0 .5rem;border:1px solid var(--border,#e5e7eb);border-radius:6px;font-size:.875rem;background:#fff;cursor:pointer">
+    <option value="">All Sites</option>
+    {opts}
+  </select>
+</form>"#,
+            opts = opts,
+        )
+    } else {
+        String::new()
+    };
+
+    // ── Site Users table ──────────────────────────────────────────────────────
+    let staff_rows = build_staff_rows(staff, current_user_id, can_manage_access);
+
+    // ── Subscribers table ─────────────────────────────────────────────────────
+    let sub_rows = build_sub_rows(subscribers, current_user_id);
 
     // Shared bulk-delete + select-all script (handles both tabs).
+    // Uses event delegation throughout — rows in tbody#users-tbody are replaced
+    // wholesale by the live-search fetch, so listeners can't be bound once at load.
     let bulk_script = r#"<script>
 (function() {
-  var selAll = document.getElementById('select-all-staff');
-  var btnS   = document.getElementById('bulk-delete-btn-staff');
-  var cntS   = document.getElementById('bulk-count-staff');
-  function syncStaff() {
-    var n = document.querySelectorAll('.bulk-cb-staff:checked').length;
-    if (btnS) { btnS.style.display = n > 0 ? '' : 'none'; }
-    if (cntS) { cntS.textContent = n; }
+  function syncGroup(cbClass, btnId, cntId, selAllId) {
+    var checked = document.querySelectorAll('.' + cbClass + ':checked');
+    var total = document.querySelectorAll('.' + cbClass).length;
+    var btn = document.getElementById(btnId);
+    var cnt = document.getElementById(cntId);
+    if (cnt) cnt.textContent = checked.length;
+    if (btn) btn.style.display = checked.length > 0 ? '' : 'none';
+    var sa = document.getElementById(selAllId);
+    if (sa) {
+      sa.indeterminate = checked.length > 0 && checked.length < total;
+      sa.checked = total > 0 && checked.length === total;
+    }
   }
-  if (selAll) {
-    selAll.addEventListener('change', function() {
-      document.querySelectorAll('.bulk-cb-staff').forEach(function(c) { c.checked = selAll.checked; });
-      syncStaff();
-    });
-  }
-  document.querySelectorAll('.bulk-cb-staff').forEach(function(c) {
-    c.addEventListener('change', function() { if (!c.checked && selAll) selAll.checked = false; syncStaff(); });
+
+  document.addEventListener('change', function(e) {
+    if (e.target.classList.contains('bulk-cb-staff')) {
+      syncGroup('bulk-cb-staff', 'bulk-delete-btn-staff', 'bulk-count-staff', 'select-all-staff');
+    } else if (e.target.classList.contains('bulk-cb-subs')) {
+      syncGroup('bulk-cb-subs', 'bulk-delete-btn-subs', 'bulk-count-subs', 'select-all-subs');
+    } else if (e.target.id === 'select-all-staff') {
+      document.querySelectorAll('.bulk-cb-staff').forEach(function(c) { c.checked = e.target.checked; });
+      syncGroup('bulk-cb-staff', 'bulk-delete-btn-staff', 'bulk-count-staff', 'select-all-staff');
+    } else if (e.target.id === 'select-all-subs') {
+      document.querySelectorAll('.bulk-cb-subs').forEach(function(c) { c.checked = e.target.checked; });
+      syncGroup('bulk-cb-subs', 'bulk-delete-btn-subs', 'bulk-count-subs', 'select-all-subs');
+    }
   });
 
-  var selAllS = document.getElementById('select-all-subs');
-  var btnSu   = document.getElementById('bulk-delete-btn-subs');
-  var cntSu   = document.getElementById('bulk-count-subs');
-  function syncSubs() {
-    var n = document.querySelectorAll('.bulk-cb-subs:checked').length;
-    if (btnSu) { btnSu.style.display = n > 0 ? '' : 'none'; }
-    if (cntSu) { cntSu.textContent = n; }
-  }
-  if (selAllS) {
-    selAllS.addEventListener('change', function() {
-      document.querySelectorAll('.bulk-cb-subs').forEach(function(c) { c.checked = selAllS.checked; });
-      syncSubs();
-    });
-  }
-  document.querySelectorAll('.bulk-cb-subs').forEach(function(c) {
-    c.addEventListener('change', function() { if (!c.checked && selAllS) selAllS.checked = false; syncSubs(); });
-  });
+  // Copy email to clipboard (delegated — buttons are recreated on live-search swaps)
+  document.addEventListener('click', function(e) {
+    var btn = e.target.closest('.copy-email-btn');
+    if (!btn) return;
+    e.preventDefault();
+    var email = btn.getAttribute('data-email');
 
-  // Copy email to clipboard
-  document.querySelectorAll('.copy-email-btn').forEach(function(btn) {
-    btn.addEventListener('click', function(e) {
-      e.preventDefault();
-      var email = btn.getAttribute('data-email');
-
-      // Try modern clipboard API first
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(email).then(function() {
-          showCopyTooltip(btn);
-        }).catch(function(err) {
-          console.error('Clipboard failed:', err);
-          fallbackCopy(email, btn);
-        });
-      } else {
-        // Fallback for older browsers
+    // Try modern clipboard API first
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(email).then(function() {
+        showCopyTooltip(btn);
+      }).catch(function(err) {
+        console.error('Clipboard failed:', err);
         fallbackCopy(email, btn);
-      }
-    });
+      });
+    } else {
+      // Fallback for older browsers
+      fallbackCopy(email, btn);
+    }
   });
 
   function fallbackCopy(text, btn) {
@@ -417,10 +455,28 @@ function bulkDeleteUsers(tab) {
 }
 </script>"#;
 
+    // ── Live search ──────────────────────────────────────────────────────────
+    let search_input = format!(
+        r#"<input id="user-search"
+               type="search"
+               placeholder="Search users&hellip;"
+               value="{search_val}"
+               style="margin-left:auto;width:100%;max-width:320px;padding:.4rem .75rem;border:1px solid var(--border);border-radius:4px;font-size:14px;background:var(--card-bg);color:inherit">"#,
+        search_val = crate::html_escape(search),
+    );
+    let site_qs = if selected_site_id.is_empty() {
+        String::new()
+    } else {
+        format!("&site={}", crate::html_escape(selected_site_id))
+    };
+    let fetch_prefix = format!("/admin/users?partial=1&tab={}{}", active_tab, site_qs);
+    let live_search = crate::live_search_script("user-search", "users-tbody", &fetch_prefix);
+
     let content = if !is_subscribers {
         let empty_msg = if staff.is_empty() {
-            r#"<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:2rem">No users yet.</td></tr>"#
-        } else { "" };
+            let msg = if search.is_empty() { "No users yet." } else { "No users matched your search." };
+            format!(r#"<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:2rem">{}</td></tr>"#, msg)
+        } else { String::new() };
         format!(
             r#"{tabs}
 <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:1rem;flex-wrap:wrap">
@@ -428,45 +484,54 @@ function bulkDeleteUsers(tab) {
   {site_filter_staff}
   <button id="bulk-delete-btn-staff" type="button" class="btn btn-danger" style="display:none"
           onclick="bulkDeleteUsers('site-users')">Delete Selected (<span id="bulk-count-staff">0</span>)</button>
+  {search_input}
 </div>
 <table class="data-table">
   <thead><tr>
     <th style="width:2rem"><input type="checkbox" id="select-all-staff" title="Select all" aria-label="Select all"></th>
     <th>Name</th><th>Username</th><th>Email</th><th>Domain</th><th>Role</th><th>Actions</th>
   </tr></thead>
-  <tbody>{staff_rows}{empty_msg}</tbody>
+  <tbody id="users-tbody">{staff_rows}{empty_msg}</tbody>
 </table>
-{bulk_script}"#,
+{bulk_script}
+{live_search}"#,
             tabs = tabs,
             site_filter_staff = site_filter_staff,
             staff_rows = staff_rows,
             empty_msg = empty_msg,
             bulk_script = bulk_script,
+            search_input = search_input,
+            live_search = live_search,
         )
     } else {
         let empty_msg = if subscribers.is_empty() {
-            r#"<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:2rem">No subscribers yet.</td></tr>"#
-        } else { "" };
+            let msg = if search.is_empty() { "No subscribers yet." } else { "No subscribers matched your search." };
+            format!(r#"<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:2rem">{}</td></tr>"#, msg)
+        } else { String::new() };
         format!(
             r#"{tabs}
 <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:1rem;flex-wrap:wrap">
   {site_filter_subs}
   <button id="bulk-delete-btn-subs" type="button" class="btn btn-danger" style="display:none"
           onclick="bulkDeleteUsers('subscribers')">Delete Selected (<span id="bulk-count-subs">0</span>)</button>
+  {search_input}
 </div>
 <table class="data-table">
   <thead><tr>
     <th style="width:2rem"><input type="checkbox" id="select-all-subs" title="Select all" aria-label="Select all"></th>
     <th>Name</th><th>Username</th><th>Email</th><th>Domain</th><th>Actions</th>
   </tr></thead>
-  <tbody>{sub_rows}{empty_msg}</tbody>
+  <tbody id="users-tbody">{sub_rows}{empty_msg}</tbody>
 </table>
-{bulk_script}"#,
+{bulk_script}
+{live_search}"#,
             tabs = tabs,
             site_filter_subs = site_filter_subs,
             sub_rows = sub_rows,
             empty_msg = empty_msg,
             bulk_script = bulk_script,
+            search_input = search_input,
+            live_search = live_search,
         )
     };
 
