@@ -43,10 +43,10 @@ pub async fn dashboard(
     ).await.unwrap_or_else(|e| { tracing::warn!("dashboard pages count error: {:?}", e); 0 });
 
     let total_users = if admin.caps.is_global_admin {
-        crate::models::user::count_staff(&state.db).await
+        crate::models::user::count_staff(&state.db, admin.user.id).await
             .unwrap_or_else(|e| { tracing::warn!("dashboard users count error: {:?}", e); 0 })
     } else if let Some(sid) = admin.site_id {
-        crate::models::user::count_staff_for_site(&state.db, sid).await
+        crate::models::user::count_staff_for_site(&state.db, sid, admin.user.id).await
             .unwrap_or_else(|e| { tracing::warn!("dashboard site users count error: {:?}", e); 0 })
     } else {
         0
