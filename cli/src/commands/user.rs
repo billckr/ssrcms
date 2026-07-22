@@ -10,6 +10,12 @@ pub enum UserAction {
     List,
     /// Reset a user's password
     ResetPassword,
+    /// Hash a password non-interactively and print the Argon2 hash to stdout.
+    /// Intended for scripting (e.g. seed scripts) — does not touch the database.
+    HashPassword {
+        /// Plaintext password to hash
+        password: String,
+    },
 }
 
 pub async fn run(action: UserAction) -> anyhow::Result<()> {
@@ -17,6 +23,10 @@ pub async fn run(action: UserAction) -> anyhow::Result<()> {
         UserAction::Create => create().await,
         UserAction::List => list().await,
         UserAction::ResetPassword => reset_password().await,
+        UserAction::HashPassword { password } => {
+            println!("{}", hash_password(&password)?);
+            Ok(())
+        }
     }
 }
 
