@@ -228,10 +228,42 @@ fn build_sub_rows(subscribers: &[UserRow], current_user_id: &str) -> String {
     }).collect::<Vec<_>>().join("\n")
 }
 
-/// Renders only the two tables' `<tr>` rows (+ empty-state row) — the content of
-/// `tbody#users-tbody`. Called by `render_list` on full page loads and returned
-/// directly for `?partial=1` JS live-search requests so the browser can swap
-/// just the rows without a full reload.
+/// Build pagination controls for the users list.
+/// Preserves `search_qs`/`site_qs` (each already prefixed with `&`) across page nav.
+fn users_pagination(active_tab: &str, page: i64, total_pages: i64, search_qs: &str, site_qs: &str) -> String {
+    if total_pages <= 1 {
+        return String::new();
+    }
+    let base = format!("/admin/users?tab={}", active_tab);
+    let qs = format!("{search_qs}{site_qs}");
+    let prev = if page > 1 {
+        format!(r#"<a href="{base}&page={}{qs}" class="page-btn">&laquo; Prev</a>"#, page - 1)
+    } else {
+        r#"<span class="page-btn page-btn-disabled">&laquo; Prev</span>"#.to_string()
+    };
+    let next = if page < total_pages {
+        format!(r#"<a href="{base}&page={}{qs}" class="page-btn">Next &raquo;</a>"#, page + 1)
+    } else {
+        r#"<span class="page-btn page-btn-disabled">Next &raquo;</span>"#.to_string()
+    };
+    let start = (page - 3).max(1);
+    let end   = (page + 3).min(total_pages);
+    let mut nums = String::new();
+    for p in start..=end {
+        if p == page {
+            nums.push_str(&format!(r#"<span class="page-btn page-btn-active">{p}</span>"#));
+        } else {
+            nums.push_str(&format!(r#"<a href="{base}&page={p}{qs}" class="page-btn">{p}</a>"#));
+        }
+    }
+    format!(r#"<div class="pagination">{prev}{nums}{next}</div>"#)
+}
+
+/// Renders the full table (+ bottom pagination) for the active tab — the content of
+/// `div#users-list`. Called by `render_list` on full page loads and returned directly
+/// for `?partial=1` JS live-search requests so the browser can swap the whole table
+/// (rows + pagination) without a full reload. `staff`/`subscribers` are expected to
+/// already be sliced to the current page.
 pub fn users_list_fragment(
     staff: &[UserRow],
     subscribers: &[UserRow],
@@ -239,7 +271,12 @@ pub fn users_list_fragment(
     can_manage_access: bool,
     active_tab: &str,
     search: &str,
+    page: i64,
+    total_pages: i64,
 ) -> String {
+    let search_qs = if search.is_empty() { String::new() } else { format!("&search={}", crate::html_escape(search)) };
+    let pagination = users_pagination(active_tab, page, total_pages, &search_qs, "");
+
     if active_tab != "subscribers" {
         let rows = build_staff_rows(staff, current_user_id, can_manage_access);
         let empty_msg = if staff.is_empty() {
@@ -248,7 +285,16 @@ pub fn users_list_fragment(
         } else {
             String::new()
         };
-        format!("{rows}{empty_msg}")
+        format!(
+            r#"<table class="data-table">
+  <thead><tr>
+    <th style="width:2rem"><input type="checkbox" id="select-all-staff" title="Select all" aria-label="Select all"></th>
+    <th>Name</th><th>Username</th><th>Email</th><th>Domain</th><th>Role</th><th>Actions</th>
+  </tr></thead>
+  <tbody id="users-tbody">{rows}{empty_msg}</tbody>
+</table>
+{pagination}"#
+        )
     } else {
         let rows = build_sub_rows(subscribers, current_user_id);
         let empty_msg = if subscribers.is_empty() {
@@ -257,13 +303,26 @@ pub fn users_list_fragment(
         } else {
             String::new()
         };
-        format!("{rows}{empty_msg}")
+        format!(
+            r#"<table class="data-table">
+  <thead><tr>
+    <th style="width:2rem"><input type="checkbox" id="select-all-subs" title="Select all" aria-label="Select all"></th>
+    <th>Name</th><th>Username</th><th>Email</th><th>Domain</th><th>Actions</th>
+  </tr></thead>
+  <tbody id="users-tbody">{rows}{empty_msg}</tbody>
+</table>
+{pagination}"#
+        )
     }
 }
 
 pub fn render_list(
     staff: &[UserRow],
     subscribers: &[UserRow],
+    staff_total: i64,
+    sub_total: i64,
+    page: i64,
+    total_pages: i64,
     flash: Option<&str>,
     current_user_id: &str,
     can_manage_access: bool,
@@ -285,8 +344,8 @@ pub fn render_list(
 </div>"#,
         staff_active = staff_active,
         sub_active   = sub_active,
-        staff_count  = staff.len(),
-        sub_count    = subscribers.len(),
+        staff_count  = staff_total,
+        sub_count    = sub_total,
     );
 
     // ── Site filter dropdowns (global admin only) ─────────────────────────────
@@ -339,12 +398,6 @@ pub fn render_list(
     } else {
         String::new()
     };
-
-    // ── Site Users table ──────────────────────────────────────────────────────
-    let staff_rows = build_staff_rows(staff, current_user_id, can_manage_access);
-
-    // ── Subscribers table ─────────────────────────────────────────────────────
-    let sub_rows = build_sub_rows(subscribers, current_user_id);
 
     // Shared bulk-delete + select-all script (handles both tabs).
     // Uses event delegation throughout — rows in tbody#users-tbody are replaced
@@ -470,13 +523,11 @@ function bulkDeleteUsers(tab) {
         format!("&site={}", crate::html_escape(selected_site_id))
     };
     let fetch_prefix = format!("/admin/users?partial=1&tab={}{}", active_tab, site_qs);
-    let live_search = crate::live_search_script("user-search", "users-tbody", &fetch_prefix);
+    let live_search = crate::live_search_script("user-search", "users-list", &fetch_prefix);
+
+    let fragment = users_list_fragment(staff, subscribers, current_user_id, can_manage_access, active_tab, search, page, total_pages);
 
     let content = if !is_subscribers {
-        let empty_msg = if staff.is_empty() {
-            let msg = if search.is_empty() { "No users yet." } else { "No users matched your search." };
-            format!(r#"<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:2rem">{}</td></tr>"#, msg)
-        } else { String::new() };
         format!(
             r#"{tabs}
 <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:1rem;flex-wrap:wrap">
@@ -486,28 +537,17 @@ function bulkDeleteUsers(tab) {
           onclick="bulkDeleteUsers('site-users')">Delete Selected (<span id="bulk-count-staff">0</span>)</button>
   {search_input}
 </div>
-<table class="data-table">
-  <thead><tr>
-    <th style="width:2rem"><input type="checkbox" id="select-all-staff" title="Select all" aria-label="Select all"></th>
-    <th>Name</th><th>Username</th><th>Email</th><th>Domain</th><th>Role</th><th>Actions</th>
-  </tr></thead>
-  <tbody id="users-tbody">{staff_rows}{empty_msg}</tbody>
-</table>
+<div id="users-list">{fragment}</div>
 {bulk_script}
 {live_search}"#,
             tabs = tabs,
             site_filter_staff = site_filter_staff,
-            staff_rows = staff_rows,
-            empty_msg = empty_msg,
+            fragment = fragment,
             bulk_script = bulk_script,
             search_input = search_input,
             live_search = live_search,
         )
     } else {
-        let empty_msg = if subscribers.is_empty() {
-            let msg = if search.is_empty() { "No subscribers yet." } else { "No subscribers matched your search." };
-            format!(r#"<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:2rem">{}</td></tr>"#, msg)
-        } else { String::new() };
         format!(
             r#"{tabs}
 <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:1rem;flex-wrap:wrap">
@@ -516,19 +556,12 @@ function bulkDeleteUsers(tab) {
           onclick="bulkDeleteUsers('subscribers')">Delete Selected (<span id="bulk-count-subs">0</span>)</button>
   {search_input}
 </div>
-<table class="data-table">
-  <thead><tr>
-    <th style="width:2rem"><input type="checkbox" id="select-all-subs" title="Select all" aria-label="Select all"></th>
-    <th>Name</th><th>Username</th><th>Email</th><th>Domain</th><th>Actions</th>
-  </tr></thead>
-  <tbody id="users-tbody">{sub_rows}{empty_msg}</tbody>
-</table>
+<div id="users-list">{fragment}</div>
 {bulk_script}
 {live_search}"#,
             tabs = tabs,
             site_filter_subs = site_filter_subs,
-            sub_rows = sub_rows,
-            empty_msg = empty_msg,
+            fragment = fragment,
             bulk_script = bulk_script,
             search_input = search_input,
             live_search = live_search,

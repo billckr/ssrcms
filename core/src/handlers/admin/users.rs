@@ -24,7 +24,11 @@ pub struct UsersTabQuery {
     /// When set (any value), return only the table rows HTML for JS live-search.
     #[serde(default)]
     pub partial: String,
+    /// 1-indexed page number for the active tab's table.
+    pub page: Option<i64>,
 }
+
+const USERS_PER_PAGE: i64 = 20;
 
 /// Split a flat list of UserRows into (staff, subscribers).
 /// Staff = any role that is not "subscriber".
@@ -167,7 +171,21 @@ pub async fn list(
 
     let can_manage_access = admin.caps.can_manage_users;
     let active_tab = if q.tab == "subscribers" { "subscribers" } else { "site-users" };
-    let (mut staff, mut subscribers) = split_by_role(rows);
+    let (staff, subscribers) = split_by_role(rows);
+    let staff_total = staff.len() as i64;
+    let sub_total = subscribers.len() as i64;
+
+    // Only the active tab is ever displayed, so slice that list down to one page
+    // (per-tab totals above are kept for the tab-bar badge counts).
+    let active_total = if active_tab == "subscribers" { sub_total } else { staff_total };
+    let total_pages = ((active_total + USERS_PER_PAGE - 1) / USERS_PER_PAGE).max(1);
+    let page = q.page.unwrap_or(1).max(1).min(total_pages);
+    let offset = ((page - 1) * USERS_PER_PAGE) as usize;
+    let (mut staff, mut subscribers) = if active_tab == "subscribers" {
+        (vec![], subscribers.into_iter().skip(offset).take(USERS_PER_PAGE as usize).collect())
+    } else {
+        (staff.into_iter().skip(offset).take(USERS_PER_PAGE as usize).collect(), vec![])
+    };
 
     // Populate site_hostnames and default_site_id for all users in one pass.
     let all_ids: Vec<Uuid> = staff.iter().chain(subscribers.iter())
@@ -216,13 +234,13 @@ pub async fn list(
     // rows HTML so the browser can swap tbody#users-tbody without a full reload.
     if !q.partial.is_empty() {
         return Html(admin::pages::users::users_list_fragment(
-            &staff, &subscribers, &current_user_id, can_manage_access, active_tab, &q.search,
+            &staff, &subscribers, &current_user_id, can_manage_access, active_tab, &q.search, page, total_pages,
         )).into_response();
     }
 
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
     Html(admin::pages::users::render_list(
-        &staff, &subscribers, None, &current_user_id,
+        &staff, &subscribers, staff_total, sub_total, page, total_pages, None, &current_user_id,
         can_manage_access, active_tab, &available_sites, &selected_site_id, &q.search, &ctx,
     )).into_response()
 }
@@ -789,10 +807,18 @@ pub async fn delete_user(
                 vec![]
             };
             let can_manage_access = admin.caps.can_manage_users;
-            let (staff, subscribers) = split_by_role(rows);
+            let (mut staff, subscribers) = split_by_role(rows);
+            let staff_total = staff.len() as i64;
+            let sub_total = subscribers.len() as i64;
+            let total_pages = ((staff_total + USERS_PER_PAGE - 1) / USERS_PER_PAGE).max(1);
+            staff.truncate(USERS_PER_PAGE as usize);
             return Html(admin::pages::users::render_list(
                 &staff,
                 &subscribers,
+                staff_total,
+                sub_total,
+                1,
+                total_pages,
                 Some($msg),
                 &current_user_id,
                 can_manage_access,
