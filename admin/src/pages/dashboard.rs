@@ -5,6 +5,7 @@ pub struct DashboardData {
     pub draft_posts: i64,
     pub total_pages: i64,
     pub total_users: i64,
+    pub total_subscribers: i64,
     /// Posts waiting for editor review (all roles see this on their dashboard).
     pub pending_posts: i64,
     /// Author-scoped counts (only meaningful when user_role == "author").
@@ -220,7 +221,7 @@ pub fn render(data: &DashboardData, flash: Option<&str>, ctx: &crate::PageContex
   </a>
   {pending_open}
     <div class="stat-cell-top">
-      <span class="stat-label">Pending Review</span>
+      <span class="stat-label">Pending</span>
     </div>
     <div class="stat-num">{pending}</div>
   {pending_close}
@@ -274,7 +275,7 @@ pub fn render(data: &DashboardData, flash: Option<&str>, ctx: &crate::PageContex
             pending_open = if data.author_pending_posts > 0 {
                 r#"<a href="/admin/posts?status=pending" class="stat-cell is-pending stat-cell-link">"#
             } else {
-                r#"<div class="stat-cell is-pending">"#
+                r#"<div class="stat-cell is-empty">"#
             },
             pending_close = if data.author_pending_posts > 0 { "</a>" } else { "</div>" },
             y  = y,  vy = vy,
@@ -297,34 +298,28 @@ pub fn render(data: &DashboardData, flash: Option<&str>, ctx: &crate::PageContex
     <div class="stat-cell-top"><span class="stat-label">Drafts</span></div>
     <div class="stat-num">{drafts}</div>
   </div>
-  <div class="stat-cell is-pending">
+  {pending_open}
     <div class="stat-cell-top">
-      <span class="stat-label">Pending Review</span>
-      {pending_chip}
+      <span class="stat-label">Pending</span>
     </div>
     <div class="stat-num">{pending}</div>
-    {pending_link}
-  </div>
+  {pending_close}
 </div>"#,
             published = data.published_posts,
             drafts    = data.draft_posts,
             pending   = data.pending_posts,
             published_empty = if data.published_posts == 0 { " is-empty" } else { "" },
             drafts_empty    = if data.draft_posts == 0 { " is-empty" } else { "" },
-            pending_chip = if data.pending_posts > 0 {
-                r#"<span class="stat-chip">Needs review</span>"#
+            pending_open = if data.pending_posts > 0 {
+                r#"<a href="/admin/posts?status=pending" class="stat-cell is-pending stat-cell-link">"#
             } else {
-                r#"<span class="stat-chip is-clear">Clear</span>"#
+                r#"<div class="stat-cell is-empty">"#
             },
-            pending_link = if data.pending_posts > 0 {
-                r#"<a href="/admin/posts?status=pending" class="stat-action">Review submissions &rarr;</a>"#
-            } else {
-                ""
-            },
+            pending_close = if data.pending_posts > 0 { "</a>" } else { "</div>" },
         )
     } else {
         format!(
-            r#"<div class="stat-panel stat-panel-5">
+            r#"<div class="stat-panel stat-panel-6">
   <a href="/admin/posts?status=published" class="stat-cell stat-cell-link{published_empty}">
     <div class="stat-cell-top"><span class="stat-label">Posts</span></div>
     <div class="stat-num">{published_posts}</div>
@@ -339,13 +334,17 @@ pub fn render(data: &DashboardData, flash: Option<&str>, ctx: &crate::PageContex
   </a>
   {pending_open}
     <div class="stat-cell-top">
-      <span class="stat-label">Pending Review</span>
+      <span class="stat-label">Pending</span>
     </div>
     <div class="stat-num">{pending}</div>
   {pending_close}
   <a href="/admin/users" class="stat-cell stat-cell-link{users_empty}">
     <div class="stat-cell-top"><span class="stat-label">Users</span></div>
     <div class="stat-num">{total_users}</div>
+  </a>
+  <a href="/admin/users?tab=subscribers" class="stat-cell stat-cell-link{subscribers_empty}">
+    <div class="stat-cell-top"><span class="stat-label">Subscribers</span></div>
+    <div class="stat-num">{total_subscribers}</div>
   </a>
 </div>"#,
             published_posts = data.published_posts,
@@ -355,14 +354,16 @@ pub fn render(data: &DashboardData, flash: Option<&str>, ctx: &crate::PageContex
             drafts_empty    = if data.draft_posts == 0 { " is-empty" } else { "" },
             pages_empty     = if data.total_pages == 0 { " is-empty" } else { "" },
             users_empty     = if data.total_users == 0 { " is-empty" } else { "" },
+            subscribers_empty = if data.total_subscribers == 0 { " is-empty" } else { "" },
             pending_open = if data.pending_posts > 0 {
                 r#"<a href="/admin/posts?status=pending" class="stat-cell is-pending stat-cell-link">"#
             } else {
-                r#"<div class="stat-cell is-pending">"#
+                r#"<div class="stat-cell is-empty">"#
             },
             pending_close = if data.pending_posts > 0 { "</a>" } else { "</div>" },
             total_pages = data.total_pages,
             total_users = data.total_users,
+            total_subscribers = data.total_subscribers,
         )
     };
 

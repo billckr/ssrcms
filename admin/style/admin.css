@@ -79,6 +79,7 @@ a:hover { text-decoration: underline; }
 .stat-panel-3 { grid-template-columns: repeat(3, 1fr); }
 .stat-panel-4 { grid-template-columns: repeat(4, 1fr); }
 .stat-panel-5 { grid-template-columns: repeat(5, 1fr); }
+.stat-panel-6 { grid-template-columns: repeat(6, 1fr); }
 .stat-cell { padding: 1.1rem 1.3rem; border-radius: 8px; transition: background .15s ease; }
 .stat-cell:hover { background: #f8f9fd; }
 .stat-cell-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: .55rem; }
@@ -99,7 +100,7 @@ a.stat-cell-link:hover { background: #f8f9fd; }
 .stat-spark { display: block; margin-top: .7rem; color: var(--primary); }
 
 @media (max-width: 860px) {
-  .stat-panel-3, .stat-panel-4, .stat-panel-5 { grid-template-columns: repeat(2, 1fr); }
+  .stat-panel-3, .stat-panel-4, .stat-panel-5, .stat-panel-6 { grid-template-columns: repeat(2, 1fr); }
 }
 
 /* Tables */
@@ -408,7 +409,7 @@ body.sidebar-open .sidebar-overlay {
 
 @media (max-width: 480px) {
   .plugin-details { grid-template-columns: 1fr; }
-  .stat-panel-3, .stat-panel-4, .stat-panel-5 { grid-template-columns: repeat(2, 1fr); }
+  .stat-panel-3, .stat-panel-4, .stat-panel-5, .stat-panel-6 { grid-template-columns: repeat(2, 1fr); }
 }
 
 /* ── Profile page ────────────────────────────────────────────────────────── */

@@ -349,6 +349,63 @@ pub async fn count_for_site(pool: &PgPool, site_id: Uuid) -> Result<i64> {
     Ok(count)
 }
 
+/// Count of active "staff" users system-wide — anyone whose role is not
+/// subscriber (admins, editors, authors). Used by the global admin dashboard's
+/// Users card, which excludes subscribers (they get their own Subscribers card).
+pub async fn count_staff(pool: &PgPool) -> Result<i64> {
+    let count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM users WHERE role != 'subscriber' AND is_active = TRUE AND deleted_at IS NULL",
+    )
+    .fetch_one(pool)
+    .await?;
+    Ok(count)
+}
+
+/// Count of active subscriber users system-wide.
+pub async fn count_subscribers(pool: &PgPool) -> Result<i64> {
+    let count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM users WHERE role = 'subscriber' AND is_active = TRUE AND deleted_at IS NULL",
+    )
+    .fetch_one(pool)
+    .await?;
+    Ok(count)
+}
+
+/// Returns the number of staff users (site_users.role != 'subscriber') assigned
+/// to a specific site, excluding super_admins. Mirrors the "site-users" tab on
+/// the Users admin page.
+pub async fn count_staff_for_site(pool: &PgPool, site_id: Uuid) -> Result<i64> {
+    let count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM site_users su
+         JOIN users u ON u.id = su.user_id
+         WHERE su.site_id = $1
+           AND su.role != 'subscriber'
+           AND u.role != 'super_admin'
+           AND u.deleted_at IS NULL",
+    )
+    .bind(site_id)
+    .fetch_one(pool)
+    .await?;
+    Ok(count)
+}
+
+/// Returns the number of subscriber users (site_users.role = 'subscriber')
+/// assigned to a specific site. Mirrors the "subscribers" tab on the Users
+/// admin page.
+pub async fn count_subscribers_for_site(pool: &PgPool, site_id: Uuid) -> Result<i64> {
+    let count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM site_users su
+         JOIN users u ON u.id = su.user_id
+         WHERE su.site_id = $1
+           AND su.role = 'subscriber'
+           AND u.deleted_at IS NULL",
+    )
+    .bind(site_id)
+    .fetch_one(pool)
+    .await?;
+    Ok(count)
+}
+
 pub async fn update(pool: &PgPool, id: Uuid, data: &UpdateUser) -> Result<User> {
     let current = get_by_id(pool, id).await?;
 

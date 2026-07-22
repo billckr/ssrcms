@@ -43,11 +43,21 @@ pub async fn dashboard(
     ).await.unwrap_or_else(|e| { tracing::warn!("dashboard pages count error: {:?}", e); 0 });
 
     let total_users = if admin.caps.is_global_admin {
-        crate::models::user::count(&state.db).await
+        crate::models::user::count_staff(&state.db).await
             .unwrap_or_else(|e| { tracing::warn!("dashboard users count error: {:?}", e); 0 })
     } else if let Some(sid) = admin.site_id {
-        crate::models::user::count_for_site(&state.db, sid).await
+        crate::models::user::count_staff_for_site(&state.db, sid).await
             .unwrap_or_else(|e| { tracing::warn!("dashboard site users count error: {:?}", e); 0 })
+    } else {
+        0
+    };
+
+    let total_subscribers = if admin.caps.is_global_admin {
+        crate::models::user::count_subscribers(&state.db).await
+            .unwrap_or_else(|e| { tracing::warn!("dashboard subscribers count error: {:?}", e); 0 })
+    } else if let Some(sid) = admin.site_id {
+        crate::models::user::count_subscribers_for_site(&state.db, sid).await
+            .unwrap_or_else(|e| { tracing::warn!("dashboard site subscribers count error: {:?}", e); 0 })
     } else {
         0
     };
@@ -268,6 +278,7 @@ pub async fn dashboard(
         pending_posts,
         total_pages,
         total_users,
+        total_subscribers,
         author_published_posts,
         author_draft_posts,
         author_pending_posts,
