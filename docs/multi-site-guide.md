@@ -1,6 +1,6 @@
 # Multi-Site Guide
 
-Synaptic Signals supports running multiple client sites from a single database and binary. This guide explains the architecture, how to set up additional sites, and how to migrate an existing single-site install.
+Synaptic Signals supports running multiple client sites from a single database and binary. This guide explains the architecture and how to set up additional sites.
 
 ---
 
@@ -23,23 +23,6 @@ Synaptic Signals supports running multiple client sites from a single database a
 | `taxonomies.site_id` | Scopes categories/tags to a site |
 | `media.site_id` | Scopes uploads to a site |
 | `site_settings.site_id` | Scopes key-value settings to a site |
-
----
-
-## Migrating an Existing Single-Site Install
-
-After upgrading to a version that includes migrations 0008–0011, run the backfill command **once**:
-
-```bash
-synap-cli site init --hostname your-domain.com
-```
-
-This command:
-1. Creates a `sites` row for your primary domain
-2. Backfills all existing posts, taxonomies, media, and settings with the new `site_id`
-3. Adds all existing users to the new site with their current roles
-
-Restart Synaptic Signals after running `site init`.
 
 ---
 
@@ -139,10 +122,6 @@ Themes and plugins are stored on the filesystem and are available to all sites. 
 ## Site Management CLI Reference
 
 ```
-synap-cli site init --hostname <domain>
-    Initialize multi-site on an existing single-site install.
-    Run once after applying migrations 0008-0011.
-
 synap-cli site create --hostname <domain>
     Create a new empty site.
 

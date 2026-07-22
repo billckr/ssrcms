@@ -413,7 +413,7 @@ async fn remove(
                 .unwrap_or_default();
             match rows.as_slice() {
                 [(id,)] => *id,
-                [] => anyhow::bail!("No sites found. Run 'synap-cli site init' first."),
+                [] => anyhow::bail!("No sites found. Run 'synap-cli install' to set up the first site."),
                 _ => anyhow::bail!(
                     "Multiple sites found — use --site <hostname> to specify which one."
                 ),

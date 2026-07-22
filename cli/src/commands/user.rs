@@ -69,9 +69,10 @@ async fn create() -> anyhow::Result<()> {
     let hash = hash_password(&password)?;
 
     let id = Uuid::new_v4();
+    let is_protected = role == "super_admin";
     sqlx::query(
-        "INSERT INTO users (id, username, email, display_name, password_hash, role, created_at)
-         VALUES ($1, $2, $3, $4, $5, $6, NOW())"
+        "INSERT INTO users (id, username, email, display_name, password_hash, role, is_protected, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())"
     )
     .bind(id)
     .bind(&username)
@@ -79,6 +80,7 @@ async fn create() -> anyhow::Result<()> {
     .bind(&display_name)
     .bind(&hash)
     .bind(role)
+    .bind(is_protected)
     .execute(&pool)
     .await
     .map_err(|e| anyhow::anyhow!("Failed to create user: {e}"))?;

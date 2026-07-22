@@ -183,17 +183,7 @@ curl -I https://example.com/admin
 
 ## Multi-Site Setup
 
-Synaptic Signals can serve multiple client sites from a single binary and database. See the full [Multi-Site Guide](multi-site-guide.md) for the complete walkthrough.
-
-### Migrating an existing single-site install
-
-After the server runs migrations (0008–0011) for the first time, initialize multi-site support:
-
-```bash
-./synap-cli site init --hostname your-domain.com
-```
-
-Then restart the server.
+Synaptic Signals can serve multiple client sites from a single binary and database. `synap-cli install` already creates the first site; see the full [Multi-Site Guide](multi-site-guide.md) for the complete walkthrough.
 
 ### Adding a second site
 
@@ -285,14 +275,6 @@ Lists installed themes by reading `theme.toml` manifests from `./themes/`.
 
 ```bash
 ./synap-cli theme list
-```
-
-### `synap-cli site init`
-
-Initialize multi-site support on an existing single-site install. Run **once** after applying migrations 0008–0011. Backfills all content with the primary site_id and upgrades the site_settings primary key.
-
-```bash
-./synap-cli site init --hostname example.com
 ```
 
 ### `synap-cli site create`
