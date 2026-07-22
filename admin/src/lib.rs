@@ -38,6 +38,8 @@ pub struct PageContext {
     /// Number of posts in "pending review" state on this site (shown as a sidebar badge).
     /// For editors/admins: all pending posts on the site. For authors: their own pending posts.
     pub pending_review_count: i64,
+    /// Number of pages in "pending review" state on this site (shown as a sidebar badge).
+    pub pending_pages_count: i64,
     /// Admin chrome brand label — from app_settings.app_name.
     pub app_name: String,
 }
@@ -201,7 +203,18 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
             let active = if current_path.starts_with("/admin/posts") { " class=\"active\"" } else { "" };
             format!(r#"<li><a href="/admin/posts"{}>{}</a></li>"#, active, format!("Posts{}", pending_badge))
         },
-        pages = if ctx.can_manage_pages { nav_link("/admin/pages", "Pages") } else { String::new() },
+        pages = if ctx.can_manage_pages {
+            let pending_badge = if ctx.pending_pages_count > 0 {
+                format!(
+                    r#" <span class="badge-unread" style="margin-left:.4rem;font-size:10px;padding:.1rem .45rem;box-shadow:none;background:#fef3c7;color:#92400e;border:1px solid #fcd34d;border-radius:3px;animation:none">{}</span>"#,
+                    ctx.pending_pages_count
+                )
+            } else {
+                String::new()
+            };
+            let active = if current_path.starts_with("/admin/pages") { " class=\"active\"" } else { "" };
+            format!(r#"<li><a href="/admin/pages"{}>{}</a></li>"#, active, format!("Pages{}", pending_badge))
+        } else { String::new() },
         media = media_nav,
         cats = if ctx.can_manage_taxonomies { nav_link("/admin/categories", "Categories") } else { String::new() },
         tags = if ctx.can_manage_taxonomies { nav_link("/admin/tags", "Tags") } else { String::new() },

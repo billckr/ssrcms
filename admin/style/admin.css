@@ -93,6 +93,8 @@ a:hover { text-decoration: underline; }
 .stat-chip.is-clear { background: #ecfdf3; color: #0a7a41; border-color: #b7ecc7; }
 .stat-action { display: inline-block; margin-top: .5rem; font-size: 12px; font-weight: 600; color: #b45309; text-decoration: none; }
 .stat-action:hover { text-decoration: underline; }
+a.stat-cell-link { display: block; text-decoration: none; cursor: pointer; }
+a.stat-cell-link:hover { background: #f8f9fd; }
 .stat-spark { display: block; margin-top: .7rem; color: var(--primary); }
 
 @media (max-width: 860px) {

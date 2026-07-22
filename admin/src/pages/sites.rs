@@ -98,9 +98,7 @@ pub fn render_list(
                     <img src="/admin/static/icons/log-in.svg" alt="Switch">
                   </button>
                 </form>
-                <a href="/admin/users?site={id}" class="icon-btn" title="View users for this site">
-                  <img src="/admin/static/icons/users.svg" alt="Users">
-                </a>
+                {users_link}
                 {manage}
               </td>
             </tr>"#,
@@ -115,6 +113,16 @@ pub fn render_list(
                 ""
             },
             ssl_badge        = ssl_badge,
+            users_link       = if ctx.can_manage_users {
+                format!(
+                    r#"<a href="/admin/users?site={id}" class="icon-btn" title="View users for this site">
+                  <img src="/admin/static/icons/users.svg" alt="Users">
+                </a>"#,
+                    id = crate::html_escape(&s.id),
+                )
+            } else {
+                String::new()
+            },
             admin_email      = s.admin_email.as_deref().map(|e| crate::html_escape(e)).unwrap_or_else(|| "<em>none</em>".to_string()),
             user_count       = s.user_count,
             subscriber_count = s.subscriber_count,

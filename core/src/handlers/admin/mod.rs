@@ -36,6 +36,7 @@ pub fn page_ctx(state: &AppState, admin: &AdminUser, current_site: &str) -> admi
         can_manage_pages: admin.caps.can_manage_pages,
         unread_forms_count: 0,
         pending_review_count: 0,
+        pending_pages_count: 0,
         app_name,
     }
 }
@@ -57,6 +58,7 @@ pub async fn page_ctx_full(state: &AppState, admin: &AdminUser, current_site: &s
         let count: i64 = sqlx::query_scalar(
             r#"SELECT COUNT(*) FROM posts
                WHERE status = 'pending'
+                 AND post_type = 'post'
                  AND ($1::uuid IS NULL OR site_id = $1)
                  AND ($2::uuid IS NULL OR author_id = $2)"#
         )
@@ -66,6 +68,20 @@ pub async fn page_ctx_full(state: &AppState, admin: &AdminUser, current_site: &s
         .await
         .unwrap_or(0);
         ctx.pending_review_count = count;
+    }
+    // Pending review badge for pages (site-wide, mirrors the posts badge above).
+    if admin.caps.can_manage_pages {
+        let count: i64 = sqlx::query_scalar(
+            r#"SELECT COUNT(*) FROM posts
+               WHERE status = 'pending'
+                 AND post_type = 'page'
+                 AND ($1::uuid IS NULL OR site_id = $1)"#
+        )
+        .bind(admin.site_id)
+        .fetch_one(&state.db)
+        .await
+        .unwrap_or(0);
+        ctx.pending_pages_count = count;
     }
     ctx
 }
