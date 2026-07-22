@@ -43,22 +43,37 @@ pub fn render(terms: &[TermItem], taxonomy: &str, flash: Option<&str>, ctx: &cra
     </table>
   </div>
   <div>
-    <h2>Add New {title}</h2>
-    <form method="POST" action="{path}/new">
-      <div class="form-group">
-        <label for="name">Name</label>
-        <input type="text" id="name" name="name" required>
-      </div>
-      <div class="form-group">
-        <label for="slug">Slug (optional)</label>
-        <input type="text" id="slug" name="slug"
-          onkeydown="if(event.key===' '){{ event.preventDefault(); var i=this.selectionStart; this.value=this.value.slice(0,i)+'-'+this.value.slice(this.selectionEnd); this.selectionStart=this.selectionEnd=i+1; }}"
-          onblur="this.value=this.value.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'');">
-        <small>Lowercase, hyphens only. Auto-generated from name if left blank.</small>
-      </div>
-      <input type="hidden" name="taxonomy" value="{taxonomy}">
-      <button type="submit" class="btn btn-primary">Add {title_s}</button>
-    </form>
+    <div class="profile-container">
+      <h2>Add {title_s}</h2>
+      <form method="POST" action="{path}/new" id="add-term-form">
+        <div class="form-group">
+          <label for="name">Name</label>
+          <input type="text" id="name" name="name" required oninput="onNameInput()">
+        </div>
+        <div class="form-group">
+          <label for="slug">Slug (optional)</label>
+          <input type="text" id="slug" name="slug" oninput="slugTouched = true"
+            onkeydown="if(event.key===' '){{ event.preventDefault(); var i=this.selectionStart; this.value=this.value.slice(0,i)+'-'+this.value.slice(this.selectionEnd); this.selectionStart=this.selectionEnd=i+1; }}"
+            onblur="this.value=this.value.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'');">
+          <small>Lowercase, hyphens only. Auto-filled from name as you type &mdash; edit it here to override.</small>
+        </div>
+        <input type="hidden" name="taxonomy" value="{taxonomy}">
+        <button type="submit" id="add-term-btn" class="btn btn-primary" disabled>Add {title_s}</button>
+      </form>
+      <script>
+        var slugTouched = false;
+        function toSlug(s) {{
+          return s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+        }}
+        function onNameInput() {{
+          var nameEl = document.getElementById('name');
+          document.getElementById('add-term-btn').disabled = !nameEl.value.trim();
+          if (!slugTouched) {{
+            document.getElementById('slug').value = toSlug(nameEl.value);
+          }}
+        }}
+      </script>
+    </div>
   </div>
 </div>"#,
         title = title,

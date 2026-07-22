@@ -627,25 +627,22 @@ pub fn render_editor(user: &UserEdit, flash: Option<&str>, ctx: &crate::PageCont
   <select id="role" name="role" required>{placeholder}{role_options}</select>
 </div>"#)
         } else {
-            // Edit: lock the dropdown behind a checkbox to prevent accidental role changes.
-            // A hidden input always submits the current role; the checkbox + select
-            // override it only when the admin explicitly opts in.
-            let current_role = crate::html_escape(&user.role);
+            // Edit: role is read-only here. Site-scoped roles can only be changed
+            // from /site-access, which shows exactly which site is affected and
+            // warns before demoting a site's current admin/owner — this page has
+            // no site picker, so an editable dropdown here was ambiguous about
+            // which site's role it was actually changing.
+            let current_label = roles.iter().find(|(v, _)| *v == user.role).map(|(_, l)| *l).unwrap_or(&user.role);
             format!(r#"<div class="form-group">
-  <label for="role-enable">Role</label>
-  <input type="hidden" id="role-hidden" name="role" value="{current_role}">
-  <div style="display:flex;align-items:center;gap:0.6rem;margin-bottom:0.4rem">
-    <input type="checkbox" id="role-enable" onchange="
-      var sel = document.getElementById('role-select');
-      var hid = document.getElementById('role-hidden');
-      sel.disabled = !this.checked;
-      hid.disabled = this.checked;
-    ">
-    <label for="role-enable" style="font-weight:400;margin:0;cursor:pointer">Change role</label>
-  </div>
-  <select id="role-select" name="role" disabled>{role_options}</select>
-  <small>Role is locked to prevent accidental changes. Check the box above to edit it.</small>
-</div>"#)
+  <label>Role</label>
+  <p style="margin:0 0 0.5rem">{current_label}</p>
+  <input type="hidden" name="role" value="{current_role}">
+  <a href="/admin/users/{user_id}/site-access" class="btn btn-secondary">Change Role</a>
+</div>"#,
+                current_label = crate::html_escape(current_label),
+                current_role = crate::html_escape(&user.role),
+                user_id = crate::html_escape(user.id.as_deref().unwrap_or("")),
+            )
         }
     };
 
@@ -758,15 +755,6 @@ function toggleSiteFields() {{
   var pwInput = form.querySelector('#password');
   var isNew   = {is_new_js};
   form.addEventListener('submit', function (e) {{
-    // Role-change confirmation — only fires when the checkbox is checked.
-    var roleCheckbox = form.querySelector('#role-enable');
-    if (roleCheckbox && roleCheckbox.checked) {{
-      var sel = form.querySelector('#role-select');
-      var newRole = sel ? sel.options[sel.selectedIndex].text : '';
-      if (!confirm('Role change: set to "' + newRole + '". Continue?')) {{
-        e.preventDefault(); window.location.reload(); return;
-      }}
-    }}
     var pw = pwInput ? pwInput.value : '';
     if (!pw && !isNew) return; // blank on edit = keep current, no validation needed
     if (!pw && isNew) {{ e.preventDefault(); alert('Password is required.'); return; }}
@@ -1095,12 +1083,25 @@ pub fn render_site_access(
   }});
   roleSelect.addEventListener('change', syncAssignBtn);
 
+  var targetUserId = '{user_id}';
+
   form.addEventListener('submit', function(e) {{
     if (!siteSelect.value || !roleSelect.value) {{ e.preventDefault(); return; }}
-    if (roleSelect.value !== 'site_admin') return; // no modal needed
     var opt = siteSelect.options[siteSelect.selectedIndex];
     var existingId   = opt.dataset.existingAdminId   || '';
     var existingName = opt.dataset.existingAdminName || '';
+
+    if (roleSelect.value !== 'site_admin') {{
+      // Demoting this same person away from Site Admin on a site they
+      // currently own — warn, since it also clears their site ownership.
+      if (existingId && existingId === targetUserId) {{
+        var ok = confirm(escHtml(existingName) + ' is currently the Site Admin and owner of ' + opt.text +
+          '. Changing their role will remove that access and site ownership. Continue?');
+        if (!ok) {{ e.preventDefault(); }}
+      }}
+      return;
+    }}
+
     if (!existingId) return; // no existing site admin — proceed normally
     e.preventDefault();
     var siteName = opt.text;

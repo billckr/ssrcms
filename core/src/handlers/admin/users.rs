@@ -710,18 +710,12 @@ pub async fn save_edit(
         None
     };
 
-    // Determine users.role to write:
-    // - super_admin targets keep their role (never downgraded via form)
-    // - "admin" is a site_users role concept; map to "site_admin" in users table
-    // - "super_admin" cannot be set via form (CLI-only)
-    let new_users_role = if is_super_admin_target {
-        parse_role("super_admin")
-    } else {
-        match form.role.as_str() {
-            "admin" | "super_admin" => parse_role("site_admin"),
-            other => parse_role(other),
-        }
-    };
+    // Role is read-only on this form — /admin/users/:id/edit no longer changes
+    // either users.role or site_users.role. All role changes go through
+    // /site-access, which is explicit about which site is affected and warns
+    // before demoting a site's current admin/owner. Keep the target's existing
+    // global role unchanged here.
+    let new_users_role = parse_role(&target_role);
 
     let update = UpdateUser {
         username: Some(form.username.clone()),
@@ -731,14 +725,6 @@ pub async fn save_edit(
         role: Some(new_users_role),
         bio: form.bio.clone(),
     };
-
-    // Also sync the site_users.role for non-super-admin users.
-    if !is_super_admin_target {
-        if let Some(site_id) = admin.site_id {
-            let site_role = if form.role == "super_admin" { "editor" } else { &form.role };
-            let _ = crate::models::site_user::update_role(&state.db, site_id, id, site_role).await;
-        }
-    }
 
     match crate::models::user::update(&state.db, id, &update).await {
         Ok(_) => Redirect::to("/admin/users").into_response(),
@@ -1245,7 +1231,22 @@ pub async fn add_site_access(
             }
             "admin" // site_users role for a site_admin is 'admin'
         }
-        "editor" | "author" | "subscriber" => form.role.as_str(),
+        "editor" | "author" | "subscriber" => {
+            // If this user currently owns the site, demoting them away from
+            // 'admin' must clear ownership too. Otherwise sites.owner_user_id
+            // keeps pointing at them while site_users.role no longer says
+            // 'admin' — /admin/sites reads owner_user_id for its admin badge
+            // independently of site_users.role, so the two views silently
+            // disagree about who the site's admin is.
+            let _ = sqlx::query(
+                "UPDATE sites SET owner_user_id = NULL, updated_at = NOW() WHERE id = $1 AND owner_user_id = $2"
+            )
+            .bind(site_uuid)
+            .bind(user_id)
+            .execute(&state.db)
+            .await;
+            form.role.as_str()
+        }
         _ => {
             // Empty/missing/unrecognized role — refuse rather than silently
             // defaulting, since a wrong default here can grant excess access.
