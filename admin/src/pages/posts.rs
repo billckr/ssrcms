@@ -118,10 +118,18 @@ pub fn posts_list_fragment(
     };
 
     if posts.is_empty() {
+        let noun = match status_filter {
+            Some("draft")     => format!("draft {}s", post_type),
+            Some("pending")   => format!("{}s pending review", post_type),
+            Some("scheduled") => format!("scheduled {}s", post_type),
+            Some("published") => format!("published {}s", post_type),
+            Some("trashed")   => format!("trashed {}s", post_type),
+            _                 => format!("{}s", post_type),
+        };
         let msg = if search.is_empty() {
-            format!("No {}s found.", post_type)
+            format!("No {} found.", noun)
         } else {
-            format!("No {}s matched &ldquo;{}&rdquo;.", post_type, crate::html_escape(search))
+            format!("No {} matched &ldquo;{}&rdquo;.", noun, crate::html_escape(search))
         };
         return format!(r#"<p class="muted">{msg}</p>"#);
     }

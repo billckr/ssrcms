@@ -207,41 +207,26 @@ pub fn render(data: &DashboardData, flash: Option<&str>, ctx: &crate::PageContex
             true, vr,
         );
 
-        // Pending stat gets amber treatment when there are posts awaiting review.
-        let pending_num_style = if data.author_pending_posts > 0 {
-            "color:#d97706"
-        } else {
-            ""
-        };
-        let pending_link_html = if data.author_pending_posts > 0 {
-            r#" &nbsp;<a href="/admin/posts?status=pending" style="font-size:.75rem;color:#d97706;text-decoration:none;white-space:nowrap">Review &rarr;</a>"#
-        } else { "" };
-
         format!(
             r#"
-<style>
-.author-stat-bar {{ display:grid;grid-template-columns:repeat(4,1fr);gap:.75rem;margin-bottom:1.25rem }}
-.author-stat-bar .sb-item {{ background:var(--card-bg);border:1px solid var(--border);border-radius:8px;padding:.6rem .75rem;text-align:center }}
-.author-stat-bar .sb-num {{ font-size:1.5rem;font-weight:700;line-height:1.2 }}
-.author-stat-bar .sb-label {{ font-size:.78rem;color:var(--muted);margin-top:.1rem }}
-@media(max-width:640px){{ .author-stat-bar {{ grid-template-columns:repeat(2,1fr) }} }}
-</style>
-<div class="author-stat-bar">
-  <div class="sb-item">
-    <div class="sb-num" style="color:var(--accent)">{published}</div>
-    <div class="sb-label">Published</div>
-  </div>
-  <div class="sb-item">
-    <div class="sb-num">{drafts}</div>
-    <div class="sb-label">Drafts</div>
-  </div>
-  <div class="sb-item">
-    <div class="sb-num" style="{pending_num_style}">{pending}</div>
-    <div class="sb-label">Awaiting Review{pending_link_html}</div>
-  </div>
-  <div class="sb-item">
-    <div class="sb-num">{total_views}</div>
-    <div class="sb-label">Total Views</div>
+<div class="stat-panel stat-panel-4">
+  <a href="/admin/posts?status=published" class="stat-cell stat-cell-link{published_empty}">
+    <div class="stat-cell-top"><span class="stat-label">Published Posts</span></div>
+    <div class="stat-num">{published}</div>
+  </a>
+  <a href="/admin/posts?status=draft" class="stat-cell stat-cell-link{drafts_empty}">
+    <div class="stat-cell-top"><span class="stat-label">Drafts</span></div>
+    <div class="stat-num">{drafts}</div>
+  </a>
+  {pending_open}
+    <div class="stat-cell-top">
+      <span class="stat-label">Pending Review</span>
+    </div>
+    <div class="stat-num">{pending}</div>
+  {pending_close}
+  <div class="stat-cell{views_empty}">
+    <div class="stat-cell-top"><span class="stat-label">Total Views</span></div>
+    <div class="stat-num">{total_views}</div>
   </div>
 </div>
 <div class="two-col">
@@ -283,8 +268,15 @@ pub fn render(data: &DashboardData, flash: Option<&str>, ctx: &crate::PageContex
             drafts            = data.author_draft_posts,
             pending           = data.author_pending_posts,
             total_views       = data.author_total_views,
-            pending_num_style = pending_num_style,
-            pending_link_html = pending_link_html,
+            published_empty   = if data.author_published_posts == 0 { " is-empty" } else { "" },
+            drafts_empty      = if data.author_draft_posts == 0 { " is-empty" } else { "" },
+            views_empty       = if data.author_total_views == 0 { " is-empty" } else { "" },
+            pending_open = if data.author_pending_posts > 0 {
+                r#"<a href="/admin/posts?status=pending" class="stat-cell is-pending stat-cell-link">"#
+            } else {
+                r#"<div class="stat-cell is-pending">"#
+            },
+            pending_close = if data.author_pending_posts > 0 { "</a>" } else { "</div>" },
             y  = y,  vy = vy,
             pr = pr, vr = vr,
             paw = paw, pam = pam, pay = pay,
