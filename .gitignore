@@ -46,6 +46,9 @@ uploads/
 # Per-site uploaded themes (runtime data, not source)
 themes/sites/*/
 
+# Per-site theme copies (runtime data, seeded/synced per install — never source)
+/sites/
+
 # Tantivy search index (regenerated on startup)
 search-index/
 
