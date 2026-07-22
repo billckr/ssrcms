@@ -520,12 +520,15 @@ fn render_card(t: &ThemeInfo, ctx: &crate::PageContext, filter: &str) -> String 
     let activate_html = if t.active {
         String::new()
     } else {
+        let confirm_msg = format!("Activate theme '{}'? This will replace the current active theme for this site.", t.display_name.replace('\'', "\\'"));
         format!(
-            r#"<form method="post" action="/admin/appearance/activate" style="display:inline;">
+            r#"<form method="post" action="/admin/appearance/activate" style="display:inline;"
+                  data-confirm="{confirm_msg}" onsubmit="return confirm(this.dataset.confirm)">
     <input type="hidden" name="theme" value="{name}">
     <button type="submit" class="btn btn-primary">Activate</button>
 </form>"#,
             name = name_esc,
+            confirm_msg = crate::html_escape(&confirm_msg),
         )
     };
 

@@ -98,6 +98,9 @@ pub fn render_list(
                     <img src="/admin/static/icons/log-in.svg" alt="Switch">
                   </button>
                 </form>
+                <a href="/admin/users?site={id}" class="icon-btn" title="View users for this site">
+                  <img src="/admin/static/icons/users.svg" alt="Users">
+                </a>
                 {manage}
               </td>
             </tr>"#,

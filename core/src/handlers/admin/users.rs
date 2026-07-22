@@ -1060,11 +1060,13 @@ pub async fn site_access_page(
         email: target_user.email.clone(),
         assignments,
         available_sites,
+        default_role: target_user.role.clone(),
     };
 
     let flash = match query.error.as_deref() {
         Some("site_admin_exists") => Some("This site already has a Site Admin. Remove the existing Site Admin first."),
         Some("db_error") => Some("Failed to update site access. Please try again."),
+        Some("invalid_role") => Some("Please select a role before assigning this user to a site."),
         _ => match query.success.as_deref() {
             Some("assigned") => Some("User added to site successfully."),
             _ => None,
@@ -1180,7 +1182,13 @@ pub async fn add_site_access(
             "admin" // site_users role for a site_admin is 'admin'
         }
         "editor" | "author" | "subscriber" => form.role.as_str(),
-        _ => "editor",
+        _ => {
+            // Empty/missing/unrecognized role — refuse rather than silently
+            // defaulting, since a wrong default here can grant excess access.
+            return Redirect::to(&format!(
+                "/admin/users/{}/site-access?error=invalid_role", user_id
+            )).into_response();
+        }
     };
 
     if let Err(e) = crate::models::site_user::add(&state.db, site_uuid, user_id, role, Some(admin.user.id)).await {

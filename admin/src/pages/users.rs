@@ -864,6 +864,9 @@ pub struct SiteAccessData {
     pub assignments: Vec<SiteAssignmentRow>,
     /// Sites the acting admin can assign this user to (their owned/managed sites).
     pub available_sites: Vec<SiteOption>,
+    /// The user's global role at the time this page was created — used to
+    /// pre-select a matching, non-privileged role in the assignment form.
+    pub default_role: String,
 }
 
 pub fn render_site_access(
@@ -912,6 +915,15 @@ pub fn render_site_access(
     let add_form = if data.available_sites.is_empty() {
         "<p><em>No sites available to assign.</em></p>".to_string()
     } else {
+        // Pre-select the role matching the user's existing global role when it maps
+        // cleanly onto a site role. Never pre-select Site Admin — that must always
+        // be a deliberate choice, since it grants ownership of the site.
+        let sel = |role: &str| if data.default_role == role { " selected" } else { "" };
+        let placeholder_selected = if matches!(data.default_role.as_str(), "editor" | "author" | "subscriber") {
+            ""
+        } else {
+            " selected"
+        };
         format!(
             r#"<form id="site-access-form" method="post" action="/admin/users/{user_id}/site-access/add">
   <input type="hidden" name="displaced_action" id="displaced-action-field" value="">
@@ -924,10 +936,12 @@ pub fn render_site_access(
   </div>
   <div class="form-group">
     <label for="role-select">Role</label>
-    <select name="role" id="role-select" style="width:100%" disabled>
+    <select name="role" id="role-select" style="width:100%" disabled required>
+      <option value="" disabled{placeholder_selected}>Select role&hellip;</option>
       {site_admin_opt}
-      <option value="editor">Editor</option>
-      <option value="author">Author</option>
+      <option value="editor"{editor_selected}>Editor</option>
+      <option value="author"{author_selected}>Author</option>
+      <option value="subscriber"{subscriber_selected}>Subscriber</option>
     </select>
   </div>
   <button type="submit" class="btn btn-primary" id="assign-btn" disabled>Assign</button>
@@ -968,15 +982,19 @@ pub fn render_site_access(
   var siteSelect = document.getElementById('site-select');
   var assignBtn  = document.getElementById('assign-btn');
 
-  // Enable role and assign button only once a real site is chosen.
+  function syncAssignBtn() {{
+    assignBtn.disabled = !siteSelect.value || !roleSelect.value;
+  }}
+
+  // Enable role only once a real site is chosen.
   siteSelect.addEventListener('change', function() {{
-    var hasSite = !!siteSelect.value;
-    roleSelect.disabled = !hasSite;
-    assignBtn.disabled  = !hasSite;
+    roleSelect.disabled = !siteSelect.value;
+    syncAssignBtn();
   }});
+  roleSelect.addEventListener('change', syncAssignBtn);
 
   form.addEventListener('submit', function(e) {{
-    if (!siteSelect.value) {{ e.preventDefault(); return; }}
+    if (!siteSelect.value || !roleSelect.value) {{ e.preventDefault(); return; }}
     if (roleSelect.value !== 'site_admin') return; // no modal needed
     var opt = siteSelect.options[siteSelect.selectedIndex];
     var existingId   = opt.dataset.existingAdminId   || '';
@@ -1012,9 +1030,13 @@ pub fn render_site_access(
   }}
 }})();
 </script>"#,
-            user_id        = crate::html_escape(&data.user_id),
-            site_opts      = site_options,
-            assignee       = crate::html_escape(&data.display_name),
+            user_id              = crate::html_escape(&data.user_id),
+            site_opts            = site_options,
+            assignee             = crate::html_escape(&data.display_name),
+            placeholder_selected = placeholder_selected,
+            editor_selected      = sel("editor"),
+            author_selected      = sel("author"),
+            subscriber_selected  = sel("subscriber"),
             site_admin_opt = if ctx.is_global_admin {
                 r#"<option value="site_admin">Site Admin (owner)</option>"#
             } else {

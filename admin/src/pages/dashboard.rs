@@ -296,62 +296,84 @@ pub fn render(data: &DashboardData, flash: Option<&str>, ctx: &crate::PageContex
         )
     } else if ctx.user_role.eq_ignore_ascii_case("editor") {
         format!(
-            r#"<div class="stats-grid">
-  <div class="stat-card">
+            r#"<div class="stat-panel stat-panel-3">
+  <div class="stat-cell{published_empty}">
+    <div class="stat-cell-top"><span class="stat-label">Published Posts</span></div>
     <div class="stat-num">{published}</div>
-    <div class="stat-label">Published Posts</div>
   </div>
-  <div class="stat-card">
+  <div class="stat-cell{drafts_empty}">
+    <div class="stat-cell-top"><span class="stat-label">Drafts</span></div>
     <div class="stat-num">{drafts}</div>
-    <div class="stat-label">Drafts</div>
   </div>
-  <div class="stat-card stat-card-pending">
+  <div class="stat-cell is-pending">
+    <div class="stat-cell-top">
+      <span class="stat-label">Pending Review</span>
+      {pending_chip}
+    </div>
     <div class="stat-num">{pending}</div>
-    <div class="stat-label">Pending Review</div>
     {pending_link}
   </div>
 </div>"#,
             published = data.published_posts,
             drafts    = data.draft_posts,
             pending   = data.pending_posts,
+            published_empty = if data.published_posts == 0 { " is-empty" } else { "" },
+            drafts_empty    = if data.draft_posts == 0 { " is-empty" } else { "" },
+            pending_chip = if data.pending_posts > 0 {
+                r#"<span class="stat-chip">Needs review</span>"#
+            } else {
+                r#"<span class="stat-chip is-clear">Clear</span>"#
+            },
             pending_link = if data.pending_posts > 0 {
                 r#"<a href="/admin/posts?status=pending" class="stat-action">Review submissions &rarr;</a>"#
             } else {
-                r#"<p class="stat-hint">No posts pending review.</p>"#
+                ""
             },
         )
     } else {
         format!(
-            r#"<div class="stats-grid">
-  <div class="stat-card">
+            r#"<div class="stat-panel stat-panel-5">
+  <div class="stat-cell{published_empty}">
+    <div class="stat-cell-top"><span class="stat-label">Published Posts</span></div>
     <div class="stat-num">{published_posts}</div>
-    <div class="stat-label">Published Posts</div>
   </div>
-  <div class="stat-card">
+  <div class="stat-cell{drafts_empty}">
+    <div class="stat-cell-top"><span class="stat-label">Draft Posts</span></div>
     <div class="stat-num">{draft_posts}</div>
-    <div class="stat-label">Draft Posts</div>
   </div>
-  <div class="stat-card stat-card-pending">
+  <div class="stat-cell is-pending">
+    <div class="stat-cell-top">
+      <span class="stat-label">Pending Review</span>
+      {pending_chip}
+    </div>
     <div class="stat-num">{pending}</div>
-    <div class="stat-label">Pending Review</div>
     {pending_link}
   </div>
-  <div class="stat-card">
+  <div class="stat-cell{pages_empty}">
+    <div class="stat-cell-top"><span class="stat-label">Pages</span></div>
     <div class="stat-num">{total_pages}</div>
-    <div class="stat-label">Pages</div>
   </div>
-  <div class="stat-card">
+  <div class="stat-cell{users_empty}">
+    <div class="stat-cell-top"><span class="stat-label">Users</span></div>
     <div class="stat-num">{total_users}</div>
-    <div class="stat-label">Users</div>
   </div>
 </div>"#,
             published_posts = data.published_posts,
             draft_posts = data.draft_posts,
             pending = data.pending_posts,
+            published_empty = if data.published_posts == 0 { " is-empty" } else { "" },
+            drafts_empty    = if data.draft_posts == 0 { " is-empty" } else { "" },
+            pages_empty     = if data.total_pages == 0 { " is-empty" } else { "" },
+            users_empty     = if data.total_users == 0 { " is-empty" } else { "" },
+            pending_chip = if data.pending_posts > 0 {
+                r#"<span class="stat-chip">Needs review</span>"#
+            } else {
+                r#"<span class="stat-chip is-clear">Clear</span>"#
+            },
             pending_link = if data.pending_posts > 0 {
                 r#"<a href="/admin/posts?status=pending" class="stat-action">Review submissions &rarr;</a>"#
             } else {
-                r#"<p class="stat-hint">No posts pending review.</p>"#
+                ""
             },
             total_pages = data.total_pages,
             total_users = data.total_users,
