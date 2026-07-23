@@ -973,6 +973,8 @@ async fn fetch_sites_for_admin(state: &AppState, admin: &AdminUser) -> Vec<SiteO
                 hostname: s.hostname,
                 existing_admin_id:   None,
                 existing_admin_name: None,
+                sole_admin_id:       None,
+                sole_admin_name:     None,
             }).collect()
         } else {
             vec![]
@@ -1007,6 +1009,8 @@ async fn fetch_site_options(state: &AppState) -> Vec<SiteOption> {
             hostname,
             existing_admin_id:   owner_id.map(|uid| uid.to_string()),
             existing_admin_name: owner_name,
+            sole_admin_id:       None,
+            sole_admin_name:     None,
         })
         .collect()
 }
@@ -1035,6 +1039,8 @@ async fn fetch_site_options_for_site_owner(state: &AppState, site_id: Uuid) -> V
                     hostname: s.hostname,
                     existing_admin_id: None,
                     existing_admin_name: None,
+                    sole_admin_id: None,
+                    sole_admin_name: None,
                 })
                 .collect()
         }
@@ -1046,6 +1052,8 @@ async fn fetch_site_options_for_site_owner(state: &AppState, site_id: Uuid) -> V
                     hostname: s.hostname,
                     existing_admin_id: None,
                     existing_admin_name: None,
+                    sole_admin_id: None,
+                    sole_admin_name: None,
                 }],
                 Err(_) => vec![],
             }
@@ -1102,7 +1110,7 @@ pub async fn site_access_page(
     }
 
     // Available sites for this admin to assign to: all for super_admin, owned for site_admin.
-    let available_sites: Vec<SiteOption> = if admin.caps.is_global_admin {
+    let mut available_sites: Vec<SiteOption> = if admin.caps.is_global_admin {
         fetch_site_options(&state).await
     } else {
         crate::models::site::list_by_owner(&state.db, admin.user.id)
@@ -1115,9 +1123,26 @@ pub async fn site_access_page(
                 // site_admin can't assign the site_admin role so the modal never fires.
                 existing_admin_id:   None,
                 existing_admin_name: None,
+                sole_admin_id:       None,
+                sole_admin_name:     None,
             })
             .collect()
     };
+
+    // Fill in each site's sole admin (if it has exactly one) so the Add-form
+    // can warn before demoting them, even when they aren't `sites.owner_user_id`
+    // (e.g. an "additional" Site Admin, or one left over after the owner was
+    // removed from the site without a new owner being assigned).
+    for opt in available_sites.iter_mut() {
+        if let Ok(site_uuid) = opt.id.parse::<Uuid>() {
+            if let Ok(Some(admin_id)) = crate::models::site_user::sole_admin(&state.db, site_uuid).await {
+                if let Ok(admin_user) = crate::models::user::get_by_id(&state.db, admin_id).await {
+                    opt.sole_admin_id = Some(admin_id.to_string());
+                    opt.sole_admin_name = Some(admin_user.display_name);
+                }
+            }
+        }
+    }
 
     let data = admin::pages::users::SiteAccessData {
         user_id: user_id.to_string(),

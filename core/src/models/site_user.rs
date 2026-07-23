@@ -68,6 +68,21 @@ pub async fn count_admins(pool: &PgPool, site_id: Uuid) -> Result<i64> {
     Ok(count)
 }
 
+/// If exactly one user holds the 'admin' role on this site, return their id —
+/// regardless of whether they are also `sites.owner_user_id`. Used to warn
+/// before demoting/removing the last admin, since an additional admin (added
+/// via "add as additional Site Admin", or left over after the owner was
+/// removed) is not reflected by `sites.owner_user_id` at all.
+pub async fn sole_admin(pool: &PgPool, site_id: Uuid) -> Result<Option<Uuid>> {
+    let ids: Vec<Uuid> = sqlx::query_scalar(
+        "SELECT user_id FROM site_users WHERE site_id = $1 AND role = 'admin'",
+    )
+    .bind(site_id)
+    .fetch_all(pool)
+    .await?;
+    Ok(if ids.len() == 1 { Some(ids[0]) } else { None })
+}
+
 pub async fn get_role(pool: &PgPool, site_id: Uuid, user_id: Uuid) -> Result<Option<String>> {
     let role: Option<String> = sqlx::query_scalar(
         "SELECT role FROM site_users WHERE site_id = $1 AND user_id = $2",

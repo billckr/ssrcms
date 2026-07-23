@@ -31,6 +31,13 @@ pub struct SiteOption {
     pub existing_admin_id: Option<String>,
     /// Display name of the existing site admin (for the modal message).
     pub existing_admin_name: Option<String>,
+    /// If exactly one user currently holds the 'admin' site role on this site,
+    /// their UUID — independent of `existing_admin_id`/site ownership. Used to
+    /// warn before demoting them away from admin even when they aren't (or are
+    /// no longer) the recorded site owner.
+    pub sole_admin_id: Option<String>,
+    /// Display name of that sole admin (for the warning message).
+    pub sole_admin_name: Option<String>,
 }
 
 pub struct UserRow {
@@ -1030,12 +1037,16 @@ pub fn render_site_access(
     let site_options = data.available_sites.iter().map(|s| {
         let existing_id   = s.existing_admin_id.as_deref().unwrap_or("");
         let existing_name = s.existing_admin_name.as_deref().unwrap_or("");
+        let sole_admin_id   = s.sole_admin_id.as_deref().unwrap_or("");
+        let sole_admin_name = s.sole_admin_name.as_deref().unwrap_or("");
         format!(
-            r#"<option value="{id}" data-existing-admin-id="{eid}" data-existing-admin-name="{ename}">{hostname}</option>"#,
+            r#"<option value="{id}" data-existing-admin-id="{eid}" data-existing-admin-name="{ename}" data-sole-admin-id="{said}" data-sole-admin-name="{saname}">{hostname}</option>"#,
             id       = crate::html_escape(&s.id),
             hostname = crate::html_escape(&s.hostname),
             eid      = crate::html_escape(existing_id),
             ename    = crate::html_escape(existing_name),
+            said     = crate::html_escape(sole_admin_id),
+            saname   = crate::html_escape(sole_admin_name),
         )
     }).collect::<Vec<_>>().join("\n");
 
@@ -1129,8 +1140,10 @@ pub fn render_site_access(
   form.addEventListener('submit', function(e) {{
     if (!siteSelect.value || !roleSelect.value) {{ e.preventDefault(); return; }}
     var opt = siteSelect.options[siteSelect.selectedIndex];
-    var existingId   = opt.dataset.existingAdminId   || '';
-    var existingName = opt.dataset.existingAdminName || '';
+    var existingId    = opt.dataset.existingAdminId   || '';
+    var existingName  = opt.dataset.existingAdminName || '';
+    var soleAdminId   = opt.dataset.soleAdminId   || '';
+    var soleAdminName = opt.dataset.soleAdminName || '';
 
     if (roleSelect.value !== 'site_admin') {{
       // Demoting this same person away from Site Admin on a site they
@@ -1139,6 +1152,15 @@ pub fn render_site_access(
         var ok = confirm(escHtml(existingName) + ' is currently the Site Admin and owner of ' + opt.text +
           '. Changing their role will remove that access and site ownership. Continue?');
         if (!ok) {{ e.preventDefault(); }}
+        return;
+      }}
+      // They aren't the recorded owner, but are the only Site Admin this site
+      // has — demoting them leaves no one (other than a super admin) able to
+      // manage it.
+      if (soleAdminId && soleAdminId === targetUserId) {{
+        var ok2 = confirm(escHtml(soleAdminName) + ' is the only Site Admin for ' + opt.text +
+          '. Changing their role will leave the site with no Site Admin. Continue?');
+        if (!ok2) {{ e.preventDefault(); }}
       }}
       return;
     }}
