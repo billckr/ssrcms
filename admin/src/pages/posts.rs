@@ -266,12 +266,48 @@ pub fn posts_list_fragment(
     )
 }
 
-pub fn render_list(posts: &[PostRow], post_type: &str, page: i64, total_pages: i64, flash: Option<&str>, ctx: &crate::PageContext, status_filter: Option<&str>, pending_count: i64, author_scheduled_count: i64, search: &str) -> String {
+#[allow(clippy::too_many_arguments)]
+pub fn render_list(posts: &[PostRow], post_type: &str, page: i64, total_pages: i64, flash: Option<&str>, ctx: &crate::PageContext, status_filter: Option<&str>, pending_count: i64, author_scheduled_count: i64, search: &str, template_filter: Option<&str>, available_templates: &[Option<String>]) -> String {
     let title     = if post_type == "page" { "Pages" } else { "Posts" };
     let new_label = if post_type == "page" { "New Page" } else { "New Post" };
     let new_href  = if post_type == "page" { "/admin/pages/new" } else { "/admin/posts/new" };
     let base_path = if post_type == "page" { "/admin/pages" } else { "/admin/posts" };
     let bulk_action = if post_type == "page" { "/admin/pages/bulk-delete" } else { "/admin/posts/bulk-delete" };
+
+    // Template filter dropdown — pages only, and only when there's more than one
+    // template actually in use (otherwise there's nothing meaningful to filter).
+    // Sentinel values: "" = no filter (All Templates); "__default__" = pages using
+    // the default template (stored as template IS NULL); anything else = exact
+    // match against a named template file. These must stay in sync with the
+    // sentinel handling in core/src/handlers/admin/posts.rs and models/post.rs.
+    let template_filter_html = if post_type == "page" && available_templates.len() > 1 {
+        let opts = std::iter::once((String::new(), "All Templates".to_string()))
+            .chain(available_templates.iter().map(|t| match t {
+                Some(name) => (name.clone(), name.clone()),
+                None => ("__default__".to_string(), "Default (page.html)".to_string()),
+            }))
+            .map(|(val, label)| {
+                let is_selected = match template_filter {
+                    None => val.is_empty(),
+                    Some(tf) => tf == val,
+                };
+                format!(
+                    r#"<option value="{val}"{selected}>{label}</option>"#,
+                    val = crate::html_escape(&val),
+                    label = crate::html_escape(&label),
+                    selected = if is_selected { " selected" } else { "" },
+                )
+            })
+            .collect::<Vec<_>>().join("");
+        format!(
+            r#"<select id="template-filter" onchange="location.href='{base_path}' + (this.value ? '?template=' + encodeURIComponent(this.value) : '')"
+                style="padding:.4rem .6rem;border:1px solid var(--border);border-radius:4px;font-size:14px;background:var(--card-bg);color:inherit">{opts}</select>"#,
+            base_path = base_path,
+            opts = opts,
+        )
+    } else {
+        String::new()
+    };
 
     let status_qs = match status_filter {
         Some(s) if !s.is_empty() => format!("&status={}", s),
@@ -333,6 +369,7 @@ pub fn render_list(posts: &[PostRow], post_type: &str, page: i64, total_pages: i
         r#"{tabs_html}
 <div style="display:flex;align-items:center;gap:.75rem;margin-bottom:.75rem">
   <a href="{new_href}" class="btn btn-primary">{new_label}</a>
+  {template_filter_html}
   <button id="bulk-delete-btn" type="button" class="btn btn-danger" style="display:none"
           onclick="bulkDelete()">Delete Selected (<span id="bulk-count">0</span>)</button>
   <div style="flex:1;display:flex;align-items:center;justify-content:space-between;gap:.75rem">
@@ -395,6 +432,7 @@ pub fn render_list(posts: &[PostRow], post_type: &str, page: i64, total_pages: i
         tabs_html      = tabs_html,
         new_href       = new_href,
         new_label      = new_label,
+        template_filter_html = template_filter_html,
         top_pagination = top_pagination,
         post_type      = post_type,
         search_val     = crate::html_escape(search),
@@ -1043,22 +1081,22 @@ mod tests {
 
     #[test]
     fn post_view_link_uses_blog_prefix() {
-        let html = render_list(&[make_row("post", "my-post")], "post", 1, 1, None, &make_ctx(), None, 0, 0, "");
+        let html = render_list(&[make_row("post", "my-post")], "post", 1, 1, None, &make_ctx(), None, 0, 0, "", None, &[]);
         assert!(html.contains("href=\"/my-post\""), "post view href should be /{{slug}}");
         assert!(html.contains("target=\"_blank\""), "view link should open in new tab");
     }
 
     #[test]
     fn page_view_link_uses_root_prefix() {
-        let html = render_list(&[make_row("page", "about")], "page", 1, 1, None, &make_ctx(), None, 0, 0, "");
+        let html = render_list(&[make_row("page", "about")], "page", 1, 1, None, &make_ctx(), None, 0, 0, "", None, &[]);
         assert!(html.contains("href=\"/about\""), "page view href should be /{{slug}}");
         assert!(html.contains("target=\"_blank\""), "view link should open in new tab");
     }
 
     #[test]
     fn view_icon_present_in_both_post_and_page_lists() {
-        let post_html = render_list(&[make_row("post", "hello")], "post", 1, 1, None, &make_ctx(), None, 0, 0, "");
-        let page_html = render_list(&[make_row("page", "hello")], "page", 1, 1, None, &make_ctx(), None, 0, 0, "");
+        let post_html = render_list(&[make_row("post", "hello")], "post", 1, 1, None, &make_ctx(), None, 0, 0, "", None, &[]);
+        let page_html = render_list(&[make_row("page", "hello")], "page", 1, 1, None, &make_ctx(), None, 0, 0, "", None, &[]);
         assert!(post_html.contains("eye.svg"), "post list should include eye icon");
         assert!(page_html.contains("eye.svg"), "page list should include eye icon");
     }

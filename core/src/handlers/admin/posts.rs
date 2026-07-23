@@ -22,6 +22,10 @@ pub struct PostsQuery {
     /// When set (any value), return only the table fragment HTML for JS live-search.
     #[serde(default)]
     pub partial: Option<String>,
+    /// Pages list only: exact-match filter on `posts.template`. `"__default__"` means
+    /// "pages using the default template" (stored as `template IS NULL`).
+    #[serde(default)]
+    pub template: Option<String>,
 }
 
 pub async fn list(
@@ -32,7 +36,7 @@ pub async fn list(
     let cs = state.site_hostname(admin.site_id);
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
     let author_filter = if admin.site_role == "author" { Some(admin.user.id) } else { None };
-    list_type(state, "post", q.page, q.status.as_deref(), q.search.as_deref(), q.partial.as_deref(), admin.site_id, author_filter, ctx).await
+    list_type(state, "post", q.page, q.status.as_deref(), q.search.as_deref(), q.partial.as_deref(), None, admin.site_id, author_filter, ctx).await
 }
 
 pub async fn list_pages(
@@ -45,10 +49,11 @@ pub async fn list_pages(
     }
     let cs = state.site_hostname(admin.site_id);
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
-    list_type(state, "page", q.page, q.status.as_deref(), q.search.as_deref(), q.partial.as_deref(), admin.site_id, None, ctx).await.into_response()
+    list_type(state, "page", q.page, q.status.as_deref(), q.search.as_deref(), q.partial.as_deref(), q.template.as_deref(), admin.site_id, None, ctx).await.into_response()
 }
 
-async fn list_type(state: AppState, post_type: &str, page: Option<i64>, status_filter: Option<&str>, search: Option<&str>, partial: Option<&str>, site_id: Option<Uuid>, author_id: Option<Uuid>, ctx: admin::PageContext) -> Html<String> {
+#[allow(clippy::too_many_arguments)]
+async fn list_type(state: AppState, post_type: &str, page: Option<i64>, status_filter: Option<&str>, search: Option<&str>, partial: Option<&str>, template_filter: Option<&str>, site_id: Option<Uuid>, author_id: Option<Uuid>, ctx: admin::PageContext) -> Html<String> {
     let per_page = 20i64;
     let page = page.unwrap_or(1).max(1);
     let offset = (page - 1) * per_page;
@@ -71,16 +76,18 @@ async fn list_type(state: AppState, post_type: &str, page: Option<i64>, status_f
     let terms = search_opt.map(crate::models::post::search_terms).unwrap_or_default();
 
     // COUNT — same filters as SELECT. Dynamic ILIKE clauses mirror the SELECT query.
-    // Fixed params: $1=site_id, $2=post_type, $3=author_id, $4=status; search terms start at $5.
+    // Fixed params: $1=site_id, $2=post_type, $3=author_id, $4=status, $5=exclude_trashed,
+    // $6=template (NULL=no filter, '__default__'=default/no-template pages); search terms start at $7.
     let mut count_sql = "SELECT COUNT(*) FROM posts \
                          WHERE ($1::uuid IS NULL OR site_id = $1) \
                            AND post_type = $2 \
                            AND ($3::uuid IS NULL OR author_id = $3) \
                            AND ($4::text IS NULL OR status = $4) \
-                           AND (NOT $5::bool OR status != 'trashed')"
+                           AND (NOT $5::bool OR status != 'trashed') \
+                           AND ($6::text IS NULL OR ($6 = '__default__' AND template IS NULL) OR template = $6)"
         .to_string();
     for i in 0..terms.len() {
-        let n = i + 5;
+        let n = i + 7;
         count_sql.push_str(&format!(" AND LOWER(title) LIKE ${n}"));
     }
     let mut count_q = sqlx::query_scalar::<_, i64>(&count_sql)
@@ -88,7 +95,8 @@ async fn list_type(state: AppState, post_type: &str, page: Option<i64>, status_f
         .bind(post_type)
         .bind(author_id)
         .bind(status_sql)
-        .bind(exclude_trashed);
+        .bind(exclude_trashed)
+        .bind(template_filter);
     for term in &terms {
         count_q = count_q.bind(format!("%{term}%"));
     }
@@ -138,6 +146,7 @@ async fn list_type(state: AppState, post_type: &str, page: Option<i64>, status_f
         limit: per_page,
         offset,
         search: search_opt.map(|s| s.to_string()),
+        template: template_filter.map(|s| s.to_string()),
         exclude_trashed,
         ..Default::default()
     };
@@ -146,6 +155,27 @@ async fn list_type(state: AppState, post_type: &str, page: Option<i64>, status_f
         tracing::warn!("failed to list {} items: {:?}", post_type, e);
         vec![]
     });
+
+    // Distinct templates actually in use, for the pages-list filter dropdown.
+    // NULL (default template) sorts first via NULLS FIRST, then alphabetically.
+    // (SELECT DISTINCT requires ORDER BY expressions to appear in the select
+    // list, so this can't sort on a derived `template IS NULL` boolean.)
+    let available_templates: Vec<Option<String>> = if post_type == "page" {
+        sqlx::query_scalar::<_, Option<String>>(
+            r#"SELECT DISTINCT template FROM posts
+               WHERE post_type = 'page' AND ($1::uuid IS NULL OR site_id = $1)
+               ORDER BY template ASC NULLS FIRST"#,
+        )
+        .bind(site_id)
+        .fetch_all(&state.db)
+        .await
+        .unwrap_or_else(|e| {
+            tracing::warn!("failed to list distinct page templates: {:?}", e);
+            vec![]
+        })
+    } else {
+        vec![]
+    };
 
     // Snapshot site hostname map once so we don't hold the lock per-row.
     let site_hostnames: std::collections::HashMap<Uuid, String> = state.site_cache.read()
@@ -185,7 +215,7 @@ async fn list_type(state: AppState, post_type: &str, page: Option<i64>, status_f
     if partial.is_some() {
         Html(admin::pages::posts::posts_list_fragment(&rows, post_type, page, total_pages, &ctx, status_filter, search_str))
     } else {
-        Html(admin::pages::posts::render_list(&rows, post_type, page, total_pages, None, &ctx, status_filter, pending_count, author_scheduled_count, search_str))
+        Html(admin::pages::posts::render_list(&rows, post_type, page, total_pages, None, &ctx, status_filter, pending_count, author_scheduled_count, search_str, template_filter, &available_templates))
     }
 }
 

@@ -545,6 +545,8 @@ pub struct ListFilter {
     /// Optional free-text filter applied to post titles (admin list only).
     /// Stop words are stripped before building ILIKE clauses.
     pub search: Option<String>,
+    /// Optional exact-match filter on `posts.template` (admin pages list only).
+    pub template: Option<String>,
     pub limit: i64,
     pub offset: i64,
     /// When true, exclude trashed posts from results (used for admin "All" view).
@@ -561,6 +563,7 @@ impl Default for ListFilter {
             category_slug: None,
             tag_slug: None,
             search: None,
+            template: None,
             limit: 10,
             offset: 0,
             exclude_trashed: false,
@@ -646,21 +649,25 @@ pub async fn list(pool: &PgPool, filter: &ListFilter) -> Result<Vec<Post>> {
         // start at $5; LIMIT/OFFSET come last.
         let terms = filter.search.as_deref().map(search_terms).unwrap_or_default();
 
+        // $6 = NULL means "no template filter"; $6 = '__default__' means "filter to
+        // pages using the default template" (stored as template IS NULL); anything
+        // else is an exact match against a named template file.
         let mut sql = "SELECT * FROM posts \
                        WHERE ($1::text IS NULL OR status = $1) \
                          AND ($2::text IS NULL OR post_type = $2) \
                          AND ($3::uuid IS NULL OR author_id = $3) \
                          AND ($4::uuid IS NULL OR site_id = $4) \
-                         AND (NOT $5::bool OR status != 'trashed')"
+                         AND (NOT $5::bool OR status != 'trashed') \
+                         AND ($6::text IS NULL OR ($6 = '__default__' AND template IS NULL) OR template = $6)"
             .to_string();
 
         for i in 0..terms.len() {
-            let n = i + 6;
+            let n = i + 7;
             sql.push_str(&format!(" AND LOWER(title) LIKE ${n}"));
         }
 
-        let limit_n  = terms.len() + 6;
-        let offset_n = terms.len() + 7;
+        let limit_n  = terms.len() + 7;
+        let offset_n = terms.len() + 8;
         sql.push_str(&format!(
             " ORDER BY published_at DESC NULLS LAST LIMIT ${limit_n} OFFSET ${offset_n}"
         ));
@@ -670,7 +677,8 @@ pub async fn list(pool: &PgPool, filter: &ListFilter) -> Result<Vec<Post>> {
             .bind(filter.post_type.as_ref().map(|t| t.as_str()))
             .bind(filter.author_id)
             .bind(filter.site_id)
-            .bind(filter.exclude_trashed);
+            .bind(filter.exclude_trashed)
+            .bind(filter.template.as_deref());
         for term in &terms {
             q = q.bind(format!("%{term}%"));
         }
