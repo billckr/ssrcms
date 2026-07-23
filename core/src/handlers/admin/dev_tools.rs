@@ -143,7 +143,7 @@ pub async fn seed_users(
         let last = LAST_NAMES.choose(&mut rng).unwrap();
         let display_name = format!("{first} {last}");
         let suffix = rand_suffix(5);
-        let username = format!("{}.{}-{}", first.to_lowercase(), last.to_lowercase(), suffix);
+        let username = format!("{}-{}-{}", first.to_lowercase(), last.to_lowercase(), suffix);
         let email = format!("{username}@{}", site.hostname);
 
         let (used_password, echoed_password) = match &body.password {
