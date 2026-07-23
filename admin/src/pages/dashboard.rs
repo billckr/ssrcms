@@ -1,5 +1,7 @@
 //! Admin dashboard page.
 
+use std::collections::HashMap;
+
 pub struct DashboardData {
     pub published_posts: i64,
     pub draft_posts: i64,
@@ -132,7 +134,10 @@ fn year_select(
 }
 
 pub fn render(data: &DashboardData, flash: Option<&str>, ctx: &crate::PageContext) -> String {
-    let content = if ctx.user_role.eq_ignore_ascii_case("author") {
+    let is_author = ctx.user_role.eq_ignore_ascii_case("author");
+    let mut widget_bodies: HashMap<&'static str, String> = HashMap::new();
+
+    let content = if is_author {
         let y  = data.selected_year;
         let vy = data.selected_views_year;
         let pr = &data.chart_range;
@@ -212,9 +217,46 @@ pub fn render(data: &DashboardData, flash: Option<&str>, ctx: &crate::PageContex
             true, vr,
         );
 
-        format!(
-            r#"
-<div class="stat-panel stat-panel-4">
+        widget_bodies.insert("posts_chart", format!(
+            r#"<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
+  <h3 style="margin:0;font-size:.95rem;font-weight:600">Published Posts</h3>
+  <div style="display:flex;align-items:center;gap:.5rem">
+    {posts_year_sel}
+    <div style="display:flex;gap:.35rem">
+      <a href="/admin?range=week&amp;views_range={vr}&amp;year={y}&amp;views_year={vy}"  class="{paw}" style="font-size:12px;padding:.25rem .65rem">Week</a>
+      <a href="/admin?range=month&amp;views_range={vr}&amp;year={y}&amp;views_year={vy}" class="{pam}" style="font-size:12px;padding:.25rem .65rem">Month</a>
+      <a href="/admin?range=year&amp;views_range={vr}&amp;year={y}&amp;views_year={vy}"  class="{pay}" style="font-size:12px;padding:.25rem .65rem">Year</a>
+    </div>
+  </div>
+</div>
+{chart_html}"#,
+            posts_year_sel = posts_year_sel,
+            vr = vr, y = y, vy = vy,
+            paw = paw, pam = pam, pay = pay,
+            chart_html = chart_html,
+        ));
+
+        widget_bodies.insert("post_views", format!(
+            r#"<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
+  <h3 style="margin:0;font-size:.95rem;font-weight:600">Post Views</h3>
+  <div style="display:flex;align-items:center;gap:.5rem">
+    {views_year_sel}
+    <div style="display:flex;gap:.35rem">
+      <a href="/admin?range={pr}&amp;views_range=week&amp;year={y}&amp;views_year={vy}"  class="{vaw}" style="font-size:12px;padding:.25rem .65rem">Week</a>
+      <a href="/admin?range={pr}&amp;views_range=month&amp;year={y}&amp;views_year={vy}" class="{vam}" style="font-size:12px;padding:.25rem .65rem">Month</a>
+      <a href="/admin?range={pr}&amp;views_range=year&amp;year={y}&amp;views_year={vy}"  class="{vay}" style="font-size:12px;padding:.25rem .65rem">Year</a>
+    </div>
+  </div>
+</div>
+{views_chart_html}"#,
+            views_year_sel = views_year_sel,
+            pr = pr, y = y, vy = vy,
+            vaw = vaw, vam = vam, vay = vay,
+            views_chart_html = views_chart_html,
+        ));
+
+        widget_bodies.insert("stats", format!(
+            r#"<div class="stat-panel stat-panel-4 widget-stats" style="box-shadow:none;border:none">
   <a href="/admin/posts?status=published" class="stat-cell stat-cell-link{published_empty}">
     <div class="stat-cell-top"><span class="stat-label">Posts</span></div>
     <div class="stat-num">{published}</div>
@@ -230,43 +272,8 @@ pub fn render(data: &DashboardData, flash: Option<&str>, ctx: &crate::PageContex
     <div class="stat-num">{pending}</div>
   {pending_close}
   <div class="stat-cell{views_empty}">
-    <div class="stat-cell-top"><span class="stat-label">Total Views</span></div>
+    <div class="stat-cell-top"><span class="stat-label">Views</span></div>
     <div class="stat-num">{total_views}</div>
-  </div>
-</div>
-<div class="two-col">
-  <div>
-    <div class="card" style="padding:1.25rem;margin-bottom:1rem">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
-        <h3 style="margin:0;font-size:.95rem;font-weight:600">Published Posts</h3>
-        <div style="display:flex;align-items:center;gap:.5rem">
-          {posts_year_sel}
-          <div style="display:flex;gap:.35rem">
-            <a href="/admin?range=week&amp;views_range={vr}&amp;year={y}&amp;views_year={vy}"  class="{paw}" style="font-size:12px;padding:.25rem .65rem">Week</a>
-            <a href="/admin?range=month&amp;views_range={vr}&amp;year={y}&amp;views_year={vy}" class="{pam}" style="font-size:12px;padding:.25rem .65rem">Month</a>
-            <a href="/admin?range=year&amp;views_range={vr}&amp;year={y}&amp;views_year={vy}"  class="{pay}" style="font-size:12px;padding:.25rem .65rem">Year</a>
-          </div>
-        </div>
-      </div>
-      {chart_html}
-    </div>
-    <div class="card" style="padding:1.25rem">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
-        <h3 style="margin:0;font-size:.95rem;font-weight:600">Post Views</h3>
-        <div style="display:flex;align-items:center;gap:.5rem">
-          {views_year_sel}
-          <div style="display:flex;gap:.35rem">
-            <a href="/admin?range={pr}&amp;views_range=week&amp;year={y}&amp;views_year={vy}"  class="{vaw}" style="font-size:12px;padding:.25rem .65rem">Week</a>
-            <a href="/admin?range={pr}&amp;views_range=month&amp;year={y}&amp;views_year={vy}" class="{vam}" style="font-size:12px;padding:.25rem .65rem">Month</a>
-            <a href="/admin?range={pr}&amp;views_range=year&amp;year={y}&amp;views_year={vy}"  class="{vay}" style="font-size:12px;padding:.25rem .65rem">Year</a>
-          </div>
-        </div>
-      </div>
-      {views_chart_html}
-    </div>
-  </div>
-  <div>
-    <!-- right column: reserved for future widgets -->
   </div>
 </div>"#,
             published         = data.author_published_posts,
@@ -282,15 +289,9 @@ pub fn render(data: &DashboardData, flash: Option<&str>, ctx: &crate::PageContex
                 r#"<div class="stat-cell is-empty">"#
             },
             pending_close = if data.author_pending_posts > 0 { "</a>" } else { "</div>" },
-            y  = y,  vy = vy,
-            pr = pr, vr = vr,
-            paw = paw, pam = pam, pay = pay,
-            vaw = vaw, vam = vam, vay = vay,
-            posts_year_sel   = posts_year_sel,
-            views_year_sel   = views_year_sel,
-            chart_html       = chart_html,
-            views_chart_html = views_chart_html,
-        )
+        ));
+
+        String::new()
     } else if ctx.user_role.eq_ignore_ascii_case("editor") {
         format!(
             r#"<div class="stat-panel stat-panel-3">
@@ -377,27 +378,56 @@ pub fn render(data: &DashboardData, flash: Option<&str>, ctx: &crate::PageContex
         )
     };
 
-    let content = format!("{content}{}", widget_test_section(&data.widget_layout));
+    let default_layout = if is_author {
+        serde_json::json!({
+            "left": ["stats", "posts_chart", "post_views"], "middle": ["one"], "right": ["two", "three"]
+        })
+    } else {
+        serde_json::json!({
+            "left": ["one"], "middle": ["two"], "right": ["three"]
+        })
+    };
+
+    let content = format!("{content}{}", widgets_section(&data.widget_layout, &default_layout, &widget_bodies));
 
     crate::admin_page("Dashboard", "/admin", flash, &content, ctx)
 }
 
-/// Temporary drag-and-drop test widgets (Widget One/Two/Three, no functionality).
-/// Purely to test HTML5 drag-and-drop reordering before building real widgets.
-fn widget_test_section(layout: &Option<serde_json::Value>) -> String {
-    fn widget_title(id: &str) -> &str {
+/// Renders the draggable widget board: real widgets (e.g. Published Posts / Post
+/// Views for authors) plus the Widget One/Two/Three test placeholders, arranged
+/// per the user's saved layout (or `default_layout` if none saved yet).
+fn widgets_section(
+    layout: &Option<serde_json::Value>,
+    default_layout: &serde_json::Value,
+    bodies: &HashMap<&'static str, String>,
+) -> String {
+    fn placeholder_body(id: &str) -> Option<String> {
         match id {
-            "one" => "Widget One",
-            "two" => "Widget Two",
-            "three" => "Widget Three",
-            _ => id,
+            "one" => Some("<h3>Widget One</h3>".to_string()),
+            "two" => Some("<h3>Widget Two</h3>".to_string()),
+            "three" => Some("<h3>Widget Three</h3>".to_string()),
+            _ => None,
         }
     }
 
-    let default_layout = serde_json::json!({
-        "left": ["one"], "middle": ["two"], "right": ["three"]
-    });
-    let layout = layout.as_ref().unwrap_or(&default_layout);
+    // Start from the saved layout, or the default if the user has none yet.
+    let mut layout = layout.as_ref().cloned().unwrap_or_else(|| default_layout.clone());
+
+    // Any real widget (e.g. a newly-added one) that isn't referenced anywhere in
+    // the saved layout gets prepended to the left column, so it doesn't just
+    // vanish for users who saved a layout before it existed.
+    let already_placed: std::collections::HashSet<String> = ["left", "middle", "right"]
+        .iter()
+        .flat_map(|col| layout.get(col).and_then(|v| v.as_array()).into_iter().flatten())
+        .filter_map(|v| v.as_str().map(|s| s.to_string()))
+        .collect();
+    for id in bodies.keys() {
+        if !already_placed.contains(*id) {
+            if let Some(left) = layout.get_mut("left").and_then(|v| v.as_array_mut()) {
+                left.insert(0, serde_json::Value::String(id.to_string()));
+            }
+        }
+    }
 
     let col_html = |col: &str| -> String {
         layout.get(col)
@@ -405,13 +435,16 @@ fn widget_test_section(layout: &Option<serde_json::Value>) -> String {
             .map(|ids| {
                 ids.iter()
                     .filter_map(|v| v.as_str())
-                    .map(|id| format!(
-                        r#"<div class="widget-card" draggable="true" data-widget="{id}">
+                    .filter_map(|id| {
+                        let body = bodies.get(id).cloned().or_else(|| placeholder_body(id))?;
+                        Some(format!(
+                            r#"<div class="widget-card" draggable="true" data-widget="{id}">
       <div class="widget-drag-handle">&#x2630;</div>
-      <h3>{title}</h3>
+      <div class="widget-body">{body}</div>
     </div>"#,
-                        id = id, title = widget_title(id),
-                    ))
+                            id = id, body = body,
+                        ))
+                    })
                     .collect::<Vec<_>>()
                     .join("\n    ")
             })
@@ -436,13 +469,16 @@ fn widget_test_section(layout: &Option<serde_json::Value>) -> String {
   .widget-col.col-drag-over {{ outline: 2px dashed var(--primary); outline-offset: 4px; border-radius: var(--radius); }}
   .widget-card {{
     background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
-    box-shadow: var(--shadow); padding: 1.25rem; cursor: grab; user-select: none;
-    display: flex; align-items: center; gap: .75rem;
+    box-shadow: var(--shadow); padding: 0 1.25rem 1.25rem; cursor: grab; user-select: none;
   }}
   .widget-card h3 {{ margin: 0; font-size: .95rem; font-weight: 600; }}
-  .widget-drag-handle {{ color: var(--muted); font-size: 1.1rem; line-height: 1; }}
+  .widget-drag-handle {{ display: block; padding: .6rem 0 .3rem; color: var(--muted); font-size: 1rem; line-height: 1; }}
   .widget-card.dragging {{ opacity: .4; }}
   .widget-card.drag-over {{ border-top: 2px solid var(--primary); }}
+  .widget-stats.stat-panel-4 {{ grid-template-columns: repeat(4, 1fr); }}
+  .widget-stats .stat-cell {{ padding: .7rem .4rem; }}
+  .widget-stats .stat-label {{ font-size: .74rem; white-space: nowrap; }}
+  .widget-stats .stat-num {{ font-size: 1.6rem; }}
 </style>
 <script>
 (function() {{
