@@ -184,6 +184,7 @@ pub fn render(
 <!-- General -->
 <div id="tab-general" class="settings-panel active" role="tabpanel" style="max-width:720px">
   <div class="profile-container">
+    <h2>General</h2>
     <form method="post" action="/admin/settings" class="edit-form">
       <input type="hidden" name="tab" value="general">
 
