@@ -24,7 +24,13 @@ pub async fn settings(
     };
     let admin_email = state.config.admin_email.clone().unwrap_or_default();
     let max_upload_mb = state.config.max_upload_mb;
-    Html(admin::pages::settings::render(None, &app_name, &timezone, &admin_email, max_upload_mb, &ctx)).into_response()
+    let sites: Vec<(uuid::Uuid, String)> = crate::models::site::list(&state.db)
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .map(|s| (s.id, s.hostname))
+        .collect();
+    Html(admin::pages::settings::render(None, &app_name, &timezone, &admin_email, max_upload_mb, &sites, &ctx)).into_response()
 }
 
 pub async fn save_settings(
@@ -41,6 +47,12 @@ pub async fn save_settings(
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
     let admin_email = state.config.admin_email.clone().unwrap_or_default();
     let max_upload_mb = state.config.max_upload_mb;
+    let sites: Vec<(uuid::Uuid, String)> = crate::models::site::list(&state.db)
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .map(|s| (s.id, s.hostname))
+        .collect();
 
     if tab == "general" {
         let app_name = form.get("app_name").map(|s| s.trim()).unwrap_or("Synaptic");
@@ -69,7 +81,7 @@ pub async fn save_settings(
             (s.app_name.clone(), s.timezone.clone())
         };
         let flash = error.as_deref().unwrap_or("General settings saved.");
-        return Html(admin::pages::settings::render(Some(flash), &a_name, &tz, &admin_email, max_upload_mb, &ctx)).into_response();
+        return Html(admin::pages::settings::render(Some(flash), &a_name, &tz, &admin_email, max_upload_mb, &sites, &ctx)).into_response();
     }
 
     // Non-general tabs — just re-render with no change.
@@ -77,5 +89,5 @@ pub async fn save_settings(
         let s = state.app_settings.read().unwrap();
         (s.app_name.clone(), s.timezone.clone())
     };
-    Html(admin::pages::settings::render(None, &app_name, &timezone, &admin_email, max_upload_mb, &ctx)).into_response()
+    Html(admin::pages::settings::render(None, &app_name, &timezone, &admin_email, max_upload_mb, &sites, &ctx)).into_response()
 }

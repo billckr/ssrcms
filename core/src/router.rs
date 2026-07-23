@@ -13,7 +13,7 @@ use tower_sessions_sqlx_store::PostgresStore;
 
 use crate::app_state::AppState;
 use crate::handlers::{account, archive, auth, comment as comment_handler, form as form_handler, home, metrics as metrics_handler, page, plugin_route, post as post_handler, post_unlock, search, subscribe, theme_static, uploads};
-use crate::handlers::admin::{appearance, builder as admin_builder, comments as admin_comments, dashboard, documentation as admin_documentation, forms as admin_forms, media, menus as admin_menus, posts, profile, settings, sites as admin_sites, taxonomy, upload, users};
+use crate::handlers::admin::{appearance, appearance_editor, appearance_publish, appearance_upload, builder as admin_builder, comments as admin_comments, dashboard, dev_tools, documentation as admin_documentation, forms as admin_forms, media, menus as admin_menus, posts, profile, settings, sites as admin_sites, taxonomy, upload, users};
 
 /// Prevent browsers from caching admin and account pages.
 ///
@@ -157,17 +157,17 @@ pub fn build(
         // ── Admin appearance ───────────────────────────────────────────────
         .route("/admin/appearance", get(appearance::list))
         .route("/admin/appearance/activate", post(appearance::activate))
-        .route("/admin/appearance/get-theme", post(appearance::get_theme))
-        .route("/admin/appearance/publish-theme", post(appearance::publish_theme))
+        .route("/admin/appearance/get-theme", post(appearance_publish::get_theme))
+        .route("/admin/appearance/publish-theme", post(appearance_publish::publish_theme))
         .route("/admin/appearance/delete", post(appearance::delete))
-        .route("/admin/appearance/upload", post(appearance::upload_theme).layer(upload_limit))
+        .route("/admin/appearance/upload", post(appearance_upload::upload_theme).layer(upload_limit))
         .route("/admin/theme-screenshot/{theme_name}", get(appearance::screenshot))
-        .route("/admin/appearance/create", get(appearance::create_form).post(appearance::create_theme))
-        .route("/admin/appearance/editor/{theme}", get(appearance::edit_file))
-        .route("/admin/appearance/editor/{theme}/save", post(appearance::save_file))
-        .route("/admin/appearance/editor/{theme}/restore", post(appearance::restore_file))
-        .route("/admin/appearance/editor/{theme}/new-file", post(appearance::new_file))
-        .route("/admin/appearance/editor/{theme}/delete-file", post(appearance::delete_file))
+        .route("/admin/appearance/create", get(appearance_upload::create_form).post(appearance_upload::create_theme))
+        .route("/admin/appearance/editor/{theme}", get(appearance_editor::edit_file))
+        .route("/admin/appearance/editor/{theme}/save", post(appearance_editor::save_file))
+        .route("/admin/appearance/editor/{theme}/restore", post(appearance_editor::restore_file))
+        .route("/admin/appearance/editor/{theme}/new-file", post(appearance_editor::new_file))
+        .route("/admin/appearance/editor/{theme}/delete-file", post(appearance_editor::delete_file))
         // ── Page builder ───────────────────────────────────────────────────
         .route("/admin/builder",                                        get(admin_builder::list))
         .route("/admin/builder/create",                                 post(admin_builder::create_project))
@@ -193,6 +193,9 @@ pub fn build(
         .route("/admin/menus/{id}/items/{item_id}/delete",          post(admin_menus::delete_item))
         // ── Admin settings ─────────────────────────────────────────────────
         .route("/admin/settings", get(settings::settings).post(settings::save_settings))
+        .route("/admin/settings/dev-tools/seed-users", post(dev_tools::seed_users))
+        .route("/admin/settings/dev-tools/seed-posts", post(dev_tools::seed_posts))
+        .route("/admin/settings/dev-tools/clear", post(dev_tools::clear_test_data))
         // ── Admin sites ────────────────────────────────────────────────────
         .route("/admin/sites", get(admin_sites::list).post(admin_sites::create))
         .route("/admin/sites/go-home", get(admin_sites::go_home))

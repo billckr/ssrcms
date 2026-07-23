@@ -112,9 +112,13 @@ pub fn sanitize_media_text(input: &str) -> String {
 }
 
 pub mod appearance;
+pub mod appearance_editor;
+pub mod appearance_publish;
+pub mod appearance_upload;
 pub mod builder;
 pub mod comments;
 pub mod dashboard;
+pub mod dev_tools;
 pub mod documentation;
 pub mod forms;
 pub mod media;
