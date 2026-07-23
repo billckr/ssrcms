@@ -511,11 +511,14 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
                     selected = selected)
             })
             .collect::<Vec<_>>().join("");
-        format!(r#"<div class="form-group">
+        format!(r#"<div class="form-section">
+      <h3>Template</h3>
+      <div class="form-group">
           <label for="template">Template</label>
           <select id="template" name="template">{opts}</select>
           <small>Templates in the active theme's templates/ directory.</small>
-        </div>"#, opts = opts)
+        </div>
+    </div>"#, opts = opts)
     } else {
         String::new()
     };
@@ -742,6 +745,7 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
     </div>
     <div class="editor-sidebar">
       {author_card}
+      {template_section}
       <div class="form-section">
         <h3>Publish</h3>
         <div class="form-group">
@@ -759,7 +763,6 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
       </div>
       {featured_image_section}
       {inline_media_section}
-      {template_section}
       {parent_section}
       {categories_section}
     </div>
