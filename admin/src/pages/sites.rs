@@ -162,41 +162,60 @@ pub struct SiteSettingsData {
 
 pub fn render_settings(data: &SiteSettingsData, flash: Option<&str>, ctx: &crate::PageContext) -> String {
     let content = format!(
-        r#"<p class="site-context-banner">Settings for: <strong>{hostname}</strong></p>
-<p style="margin:0 0 1.5rem;padding:.65rem .85rem;background:#f8fafc;border:1px solid #e2e8f0;
-          border-radius:6px;font-size:.875rem;color:#475569;line-height:1.6;">
-  To rename the domain, use the CLI from the server:<br>
-  <code style="font-size:.8rem;background:#f1f5f9;padding:.15rem .4rem;border-radius:4px;">synap-cli site rename --id {id} --hostname &lt;new-domain&gt;</code>
-</p>
+        r#"<div class="profile-container">
+  <p style="margin:0;padding:.65rem .85rem;background:#f8fafc;border:1px solid #e2e8f0;
+            border-radius:6px;font-size:.875rem;color:#475569;line-height:1.6;">
+    To rename the domain, use the CLI from the server:<br>
+    <code style="font-size:.8rem;background:#f1f5f9;padding:.15rem .4rem;border-radius:4px;">synap-cli site rename --id {id} --hostname &lt;new-domain&gt;</code>
+  </p>
+</div>
 
-<p class="site-context-banner" style="margin-top:2rem">Site Settings</p>
-<form method="post" action="/admin/sites/{id}/site-config" class="edit-form">
-  <div class="form-group">
-    <label for="site_name">Site Name</label>
-    <input type="text" id="site_name" name="site_name" value="{site_name}" required>
-    <small>The display name shown in the browser tab, header, and footer.</small>
-  </div>
-  <div class="form-group">
-    <label for="site_description">Site Description</label>
-    <textarea id="site_description" name="site_description" rows="3">{site_description}</textarea>
-  </div>
-  <div class="form-group">
-    <label for="language">Language</label>
-    <input type="text" id="language" name="language" value="{language}">
-  </div>
-  <div class="form-group">
-    <label for="posts_per_page">Posts Per Page</label>
-    <input type="number" id="posts_per_page" name="posts_per_page" value="{posts_per_page}" min="1" max="100">
-  </div>
-  <div class="form-group">
-    <label for="date_format">Date Format</label>
-    <input type="text" id="date_format" name="date_format" value="{date_format}">
-    <small>Uses chrono format strings, e.g. "%B %-d, %Y" &rarr; January 1, 2026</small>
-  </div>
-  <button type="submit" class="btn btn-primary">Save Settings</button>
-</form>"#,
+<div class="profile-container">
+  <h2>Settings</h2>
+  <form method="post" action="/admin/sites/{id}/site-config" class="edit-form" id="site-settings-form">
+    <div class="form-group">
+      <label for="site_name">Site Name</label>
+      <input type="text" id="site_name" name="site_name" value="{site_name}" required>
+      <small>The display name shown in the browser tab, header, and footer.</small>
+    </div>
+    <div class="form-group">
+      <label for="site_description">Site Description</label>
+      <textarea id="site_description" name="site_description" rows="3">{site_description}</textarea>
+    </div>
+    <div class="form-group">
+      <label for="language">Language</label>
+      <input type="text" id="language" name="language" value="{language}">
+    </div>
+    <div class="form-group">
+      <label for="posts_per_page">Posts Per Page</label>
+      <input type="number" id="posts_per_page" name="posts_per_page" value="{posts_per_page}" min="1" max="100">
+    </div>
+    <div class="form-group">
+      <label for="date_format">Date Format</label>
+      <input type="text" id="date_format" name="date_format" value="{date_format}">
+      <small>Uses chrono format strings, e.g. "%B %-d, %Y" &rarr; January 1, 2026</small>
+    </div>
+    <button type="submit" id="save-settings-btn" class="btn btn-primary" disabled>Save Settings</button>
+  </form>
+</div>
+<script>
+(function() {{
+  var form   = document.getElementById('site-settings-form');
+  var saveBtn = document.getElementById('save-settings-btn');
+  var fields = Array.prototype.slice.call(form.querySelectorAll('input, textarea'));
+  var initial = fields.map(function(f) {{ return f.value; }});
+
+  function syncSaveBtn() {{
+    var changed = fields.some(function(f, i) {{ return f.value !== initial[i]; }});
+    saveBtn.disabled = !changed;
+  }}
+
+  fields.forEach(function(f) {{
+    f.addEventListener('input', syncSaveBtn);
+  }});
+}})();
+</script>"#,
         id = crate::html_escape(&data.id),
-        hostname = crate::html_escape(&data.hostname),
         site_name = crate::html_escape(&data.site_name),
         site_description = crate::html_escape(&data.site_description),
         language = crate::html_escape(&data.language),
@@ -204,7 +223,7 @@ pub fn render_settings(data: &SiteSettingsData, flash: Option<&str>, ctx: &crate
         date_format = crate::html_escape(&data.date_format),
     );
 
-    crate::admin_page("Site Settings", "/admin/sites", flash, &content, ctx)
+    crate::admin_page(&format!("Site Settings - {}", data.hostname), "/admin/sites", flash, &content, ctx)
 }
 
 /// An existing user selectable as the new site's admin.

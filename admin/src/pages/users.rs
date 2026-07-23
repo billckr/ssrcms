@@ -966,7 +966,8 @@ function toggleSiteFields() {{
         role_section      = role_section,
     );
 
-    crate::admin_page(title, "/admin/users", flash, &content, ctx)
+    let page_title: &str = if is_new { title } else { &user.display_name };
+    crate::admin_page(page_title, "/admin/users", flash, &content, ctx)
 }
 
 // ── Site access management ──────────────────────────────────────────────────
