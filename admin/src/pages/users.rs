@@ -1229,7 +1229,7 @@ pub fn render_site_access(
     );
 
     crate::admin_page(
-        &format!("Site Access — {}", data.display_name),
+        &data.display_name,
         "/admin/users",
         flash,
         &content,
