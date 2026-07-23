@@ -388,43 +388,7 @@ pub async fn edit_page(
     ).unwrap_or_else(|_| "[]".to_string());
 
     Html(admin::pages::builder::render_editor(
-        Some(page_id), &page.name, project_id, site_id, &project.name, &site_label, false, &menus_json, &ctx,
-    )).into_response()
-}
-
-pub async fn edit_page2(
-    State(state): State<AppState>,
-    admin: AdminUser,
-    Path((project_id, page_id)): Path<(Uuid, Uuid)>,
-) -> Response {
-    let Some(site_id) = admin.site_id else {
-        return Redirect::to("/admin").into_response();
-    };
-    if !admin.caps.can_manage_appearance {
-        return Redirect::to("/admin").into_response();
-    }
-    if builder_project::get_by_id(&state.db, project_id, site_id).await.ok().flatten().is_none() {
-        return Redirect::to("/admin/builder").into_response();
-    }
-    let page = match page_composition::get_by_id(&state.db, page_id).await {
-        Ok(Some(p)) if p.project_id == Some(project_id) => p,
-        _ => return Redirect::to(&format!("/admin/builder/{project_id}")).into_response(),
-    };
-    let project = match builder_project::get_by_id(&state.db, project_id, site_id).await {
-        Ok(Some(p)) => p,
-        _ => return Redirect::to("/admin/builder").into_response(),
-    };
-    let cs = state.site_hostname(admin.site_id);
-    let ctx = super::page_ctx_full(&state, &admin, &cs).await;
-    let site_label = ctx.current_site.clone();
-
-    let menus = nav_menu::list_by_site(&state.db, site_id).await.unwrap_or_default();
-    let menus_json = serde_json::to_string(
-        &menus.iter().map(|m| serde_json::json!({ "id": m.id, "name": m.name })).collect::<Vec<_>>()
-    ).unwrap_or_else(|_| "[]".to_string());
-
-    Html(admin::pages::builder::render_editor(
-        Some(page_id), &page.name, project_id, site_id, &project.name, &site_label, true, &menus_json, &ctx,
+        Some(page_id), &page.name, project_id, site_id, &project.name, &site_label, &menus_json, &ctx,
     )).into_response()
 }
 

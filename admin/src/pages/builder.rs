@@ -316,7 +316,6 @@ pub fn render_editor(
     site_id: Uuid,
     project_name: &str,
     site_label: &str,
-    pure_mode: bool,
     menus_json: &str,
     _ctx: &crate::PageContext,
 ) -> String {
@@ -327,7 +326,6 @@ pub fn render_editor(
     let name_escaped    = crate::html_escape(page_name);
     let project_escaped = crate::html_escape(project_name);
     let site_escaped    = crate::html_escape(site_label);
-    let pure_mode_js    = if pure_mode { "true" } else { "false" };
 
     format!(
         r#"<!DOCTYPE html>
@@ -354,7 +352,7 @@ pub fn render_editor(
       siteId:      "{site_id}",
       projectName: "{project_escaped}",
       siteLabel:   "{site_escaped}",
-      pureMode:    {pure_mode_js},
+      pureMode:    false,
       menus:       {menus_json},
     }};
   </script>
@@ -367,7 +365,6 @@ pub fn render_editor(
         site_escaped    = site_escaped,
         project_id      = project_id,
         site_id         = site_id,
-        pure_mode_js    = pure_mode_js,
         menus_json      = menus_json,
     )
 }
