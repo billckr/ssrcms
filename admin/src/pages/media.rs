@@ -914,9 +914,41 @@ body.sidebar-open .admin-sidebar {{
           <option value="">— No folder (All media) —</option>
         </select>
       </div>
+      <p id="mmMoveError" style="display:none;font-size:13px;color:#dc2626;margin:-.5rem 0 1rem">Move failed. Please try again.</p>
       <div style="display:flex;gap:.5rem;justify-content:flex-end">
         <button class="btn btn-secondary" onclick="document.getElementById('mmMoveModal').style.display='none'">Cancel</button>
         <button class="btn btn-primary" onclick="bulkMoveConfirm()">Move</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Delete media modal -->
+  <div id="mmDeleteMediaModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;align-items:center;justify-content:center">
+    <div style="background:var(--surface);border-radius:var(--radius);padding:1.5rem;max-width:400px;width:90%;box-shadow:0 4px 24px rgba(0,0,0,.25)">
+      <h3 style="margin:0 0 .75rem;font-size:1rem;font-weight:600">Delete files</h3>
+      <p id="mmDeleteMediaMsg" style="font-size:14px;color:var(--muted);margin-bottom:1rem;white-space:pre-line"></p>
+      <div style="display:flex;gap:.5rem;justify-content:flex-end">
+        <button class="btn btn-secondary" onclick="document.getElementById('mmDeleteMediaModal').style.display='none'">Cancel</button>
+        <button class="btn btn-danger" onclick="confirmBulkDelete()">Delete</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- New folder modal -->
+  <div id="mmNewFolderModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;align-items:center;justify-content:center">
+    <div style="background:var(--surface);border-radius:var(--radius);padding:1.5rem;max-width:360px;width:90%;box-shadow:0 4px 24px rgba(0,0,0,.25)">
+      <h3 style="margin:0 0 .75rem;font-size:1rem;font-weight:600">New folder</h3>
+      <div class="form-group" style="margin-bottom:.35rem">
+        <input type="text" id="mmNewFolderInput" placeholder="Folder name" maxlength="25"
+               style="width:100%;padding:.45rem .75rem;border:1px solid var(--border);border-radius:var(--radius);font-size:14px;background:var(--surface);color:var(--text);box-sizing:border-box"
+               oninput="validateNewFolderName()" onkeydown="if(event.key==='Enter'){{event.preventDefault();submitNewFolder();}}">
+      </div>
+      <p id="mmNewFolderHint" style="font-size:12px;color:var(--muted);margin:0 0 1rem">
+        4–25 characters: letters, numbers, and hyphens only.
+      </p>
+      <div style="display:flex;gap:.5rem;justify-content:flex-end">
+        <button class="btn btn-secondary" onclick="document.getElementById('mmNewFolderModal').style.display='none'">Cancel</button>
+        <button class="btn btn-primary" id="mmNewFolderBtn" onclick="submitNewFolder()" disabled>Create</button>
       </div>
     </div>
   </div>
@@ -1149,7 +1181,14 @@ body.sidebar-open .admin-sidebar {{
   window.bulkDelete = function() {{
     if (selected.size === 0) return;
     var names = Array.from(selected).map(function(i) {{ return ITEMS[parseInt(i,10)].filename; }});
-    if (!confirm('Delete ' + selected.size + ' file(s)?\n\n' + names.slice(0,5).join('\n') + (names.length > 5 ? '\n…and ' + (names.length-5) + ' more' : ''))) return;
+    var msg = 'Delete ' + selected.size + ' file(s)?\n\n' + names.slice(0,5).join('\n') +
+      (names.length > 5 ? '\n…and ' + (names.length-5) + ' more' : '');
+    document.getElementById('mmDeleteMediaMsg').textContent = msg;
+    document.getElementById('mmDeleteMediaModal').style.display = 'flex';
+  }};
+
+  window.confirmBulkDelete = function() {{
+    document.getElementById('mmDeleteMediaModal').style.display = 'none';
     var ids = Array.from(selected).map(function(i) {{ return ITEMS[parseInt(i,10)].id; }});
     var chain = Promise.resolve();
     ids.forEach(function(id) {{
@@ -1180,6 +1219,7 @@ body.sidebar-open .admin-sidebar {{
   }};
 
   window.bulkMoveConfirm = function() {{
+    document.getElementById('mmMoveError').style.display = 'none';
     var folderId = document.getElementById('mmMoveSelect').value;
     var ids = Array.from(selected).map(function(i) {{ return ITEMS[parseInt(i,10)].id; }});
     var chain = Promise.resolve(true);
@@ -1196,17 +1236,40 @@ body.sidebar-open .admin-sidebar {{
       document.getElementById('mmMoveModal').style.display = 'none';
       window.location.reload();
     }}).catch(function() {{
-      document.getElementById('mmMoveModal').style.display = 'none';
-      alert('Move failed. Please try again.');
+      document.getElementById('mmMoveError').style.display = '';
     }});
   }};
 
-  /* ── New folder (placeholder) ────────────────────────────────────── */
+  /* ── New folder ───────────────────────────────────────────────────── */
+  // Mirrors the server's sanitization/length rule in create_folder() —
+  // letters, numbers, and hyphens only, 4-25 chars after trimming leading/
+  // trailing hyphens — so the Create button only enables when the name the
+  // server will actually accept and store matches what's typed.
+  function sanitizeNewFolderName(raw) {{
+    var clean = raw.replace(/[^a-zA-Z0-9\-]/g, '').slice(0, 25);
+    clean = clean.replace(/^-+|-+$/g, '');
+    return clean;
+  }}
+
+  window.validateNewFolderName = function() {{
+    var input = document.getElementById('mmNewFolderInput');
+    var btn = document.getElementById('mmNewFolderBtn');
+    var clean = sanitizeNewFolderName(input.value);
+    btn.disabled = clean.length < 4;
+  }};
+
   window.promptNewFolder = function() {{
-    var name = prompt('Folder name (letters, numbers, hyphens):');
-    if (!name) return;
-    name = name.trim().replace(/[^a-zA-Z0-9\-]/g, '');
-    if (!name || name.length < 2) {{ alert('Name too short.'); return; }}
+    var input = document.getElementById('mmNewFolderInput');
+    input.value = '';
+    document.getElementById('mmNewFolderBtn').disabled = true;
+    document.getElementById('mmNewFolderModal').style.display = 'flex';
+    input.focus();
+  }};
+
+  window.submitNewFolder = function() {{
+    var input = document.getElementById('mmNewFolderInput');
+    var name = sanitizeNewFolderName(input.value);
+    if (name.length < 4) return;
     var form = document.createElement('form');
     form.method = 'POST';
     form.action = '/admin/media/folders/new';
@@ -1262,7 +1325,7 @@ body.sidebar-open .admin-sidebar {{
     /* ignore clicks on mm-items (they handle their own open/close) */
     if (e.target.closest('.mm-item, #mmListBody tr')) return;
     /* ignore clicks on the bulk action bar and any open modals */
-    if (e.target.closest('#mmBulkBar, #mmMoveModal, #mmDeleteFolderModal')) return;
+    if (e.target.closest('#mmBulkBar, #mmMoveModal, #mmDeleteFolderModal, #mmNewFolderModal, #mmDeleteMediaModal')) return;
     closeDetail();
   }}, true);
 {picker_js}

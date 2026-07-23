@@ -304,7 +304,7 @@ pub fn render_list(posts: &[PostRow], post_type: &str, page: i64, total_pages: i
             .collect::<Vec<_>>().join("");
         format!(
             r#"<select id="template-filter" onchange="location.href='{base_path}' + (this.value ? '?template=' + encodeURIComponent(this.value) : '')"
-                style="padding:.4rem .6rem;border:1px solid var(--border);border-radius:4px;font-size:14px;background:var(--card-bg);color:inherit">{opts}</select>"#,
+                style="padding:.4rem .6rem;border:1px solid var(--border);border-radius:4px;font-size:14px;background:#fff;color:inherit">{opts}</select>"#,
             base_path = base_path,
             opts = opts,
         )

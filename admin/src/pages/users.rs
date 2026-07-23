@@ -362,8 +362,7 @@ pub fn render_list(
         format!(
             r#"<form method="GET" action="/admin/users" style="display:inline-flex;align-items:center;gap:.5rem;margin:0">
   <input type="hidden" name="tab" value="site-users">
-  <label for="site-filter-staff" style="font-size:.875rem;font-weight:500;margin:0">Display users for:</label>
-  <select id="site-filter-staff" name="site" onchange="this.form.submit()" style="height:2.25rem;padding:0 .5rem;border:1px solid var(--border,#e5e7eb);border-radius:6px;font-size:.875rem;background:#fff;cursor:pointer">
+  <select id="site-filter-staff" name="site" onchange="this.form.submit()" aria-label="Filter users by site" style="height:2.25rem;padding:0 .5rem;border:1px solid var(--border,#e5e7eb);border-radius:6px;font-size:.875rem;background:#fff;cursor:pointer">
     <option value="">All Sites</option>
     {opts}
   </select>
@@ -387,8 +386,7 @@ pub fn render_list(
         format!(
             r#"<form method="GET" action="/admin/users" style="display:inline-flex;align-items:center;gap:.5rem;margin:0">
   <input type="hidden" name="tab" value="subscribers">
-  <label for="site-filter-subs" style="font-size:.875rem;font-weight:500;margin:0">Display users for:</label>
-  <select id="site-filter-subs" name="site" onchange="this.form.submit()" style="height:2.25rem;padding:0 .5rem;border:1px solid var(--border,#e5e7eb);border-radius:6px;font-size:.875rem;background:#fff;cursor:pointer">
+  <select id="site-filter-subs" name="site" onchange="this.form.submit()" aria-label="Filter users by site" style="height:2.25rem;padding:0 .5rem;border:1px solid var(--border,#e5e7eb);border-radius:6px;font-size:.875rem;background:#fff;cursor:pointer">
     <option value="">All Sites</option>
     {opts}
   </select>
