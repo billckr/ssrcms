@@ -62,6 +62,9 @@ pub struct UserEdit {
     pub sites: Vec<SiteOption>,
     /// True when editing an existing super_admin — role field becomes read-only.
     pub is_super_admin_target: bool,
+    /// Current (hostname, role) site assignments for this user — display-only,
+    /// shown in the Role section of the edit form. Empty on the new-user form.
+    pub site_roles: Vec<(String, String)>,
 }
 
 /// Render the `<tr>` rows for the Site Users (staff) table.
@@ -582,16 +585,41 @@ pub fn render_editor(user: &UserEdit, flash: Option<&str>, ctx: &crate::PageCont
         None => "/admin/users/new".to_string(),
     };
 
+    // List of the user's current (hostname, role) site assignments — display-only,
+    // rendered as a small table in the separate Role card on the edit form.
+    let site_roles_list = if user.site_roles.is_empty() {
+        String::new()
+    } else {
+        let rows = user.site_roles.iter().map(|(hostname, role)| {
+            format!(
+                r#"<tr><td>{hostname}</td><td><span class="badge {badge_class}">{role_label}</span></td></tr>"#,
+                hostname = crate::html_escape(hostname),
+                badge_class = role_badge_class(role),
+                role_label = crate::html_escape(role_display(role)),
+            )
+        }).collect::<Vec<_>>().join("");
+        format!(
+            r#"<table class="data-table" style="margin-top:1rem;max-width:480px">
+  <thead><tr><th>Site</th><th>Role</th></tr></thead>
+  <tbody>{rows}</tbody>
+</table>"#
+        )
+    };
+
     // Role field: read-only display for super_admin targets; dropdown for everyone else.
     // Global admin creates/edits site-scoped users using site role values (admin/editor/author/subscriber).
     // "admin" here means site_users.role = 'admin' (site admin), NOT users.role = 'super_admin'.
     let is_new = user.id.is_none();
     let role_field = if user.is_super_admin_target {
-        r#"<div class="form-group">
+        if is_new {
+            r#"<div class="form-group">
   <label>Role</label>
   <p style="margin:0;padding:0.4rem 0">Super Admin</p>
   <input type="hidden" name="role" value="super_admin">
 </div>"#.to_string()
+        } else {
+            r#"<input type="hidden" name="role" value="super_admin">"#.to_string()
+        }
     } else {
         let roles: &[(&str, &str)] = if ctx.is_global_admin {
             &[
@@ -630,18 +658,31 @@ pub fn render_editor(user: &UserEdit, flash: Option<&str>, ctx: &crate::PageCont
             // warns before demoting a site's current admin/owner — this page has
             // no site picker, so an editable dropdown here was ambiguous about
             // which site's role it was actually changing.
-            let current_label = roles.iter().find(|(v, _)| *v == user.role).map(|(_, l)| *l).unwrap_or(&user.role);
-            format!(r#"<div class="form-group">
-  <label>Role</label>
-  <p style="margin:0 0 0.5rem">{current_label}</p>
-  <input type="hidden" name="role" value="{current_role}">
-  <a href="/admin/users/{user_id}/site-access" class="btn btn-secondary">Change Role</a>
-</div>"#,
-                current_label = crate::html_escape(current_label),
+            format!(r#"<input type="hidden" name="role" value="{current_role}">"#,
                 current_role = crate::html_escape(&user.role),
-                user_id = crate::html_escape(user.id.as_deref().unwrap_or("")),
             )
         }
+    };
+
+    // Separate "Role" card shown only on the edit form — current role (read-only
+    // here; changed via /site-access) plus the user's existing site assignments.
+    let role_section = if is_new {
+        String::new()
+    } else {
+        format!(
+            r#"<div class="profile-container">
+  <h2>Role</h2>
+  <div class="form-group">
+    <label>Current Role</label>
+    <p style="margin:0 0 0.5rem">{current_label}</p>
+    <a href="/admin/users/{user_id}/site-access" class="btn btn-secondary">Change Role</a>
+  </div>
+  {site_roles_list}
+</div>"#,
+            current_label = crate::html_escape(role_display(&user.role)),
+            user_id = crate::html_escape(user.id.as_deref().unwrap_or("")),
+            site_roles_list = site_roles_list,
+        )
     };
 
     let password_hint = if user.id.is_some() {
@@ -902,7 +943,8 @@ function toggleSiteFields() {{
   }}
 }}());
 </script>
-</div>"#,
+</div>
+{role_section}"#,
         form_title        = title,
         action            = action,
         username          = crate::html_escape(&user.username),
@@ -914,6 +956,7 @@ function toggleSiteFields() {{
         is_new_js         = if is_new { "true" } else { "false" },
         autofocus         = if is_new { " autofocus" } else { "" },
         save_disabled     = if is_new { " disabled" } else { "" },
+        role_section      = role_section,
     );
 
     crate::admin_page(title, "/admin/users", flash, &content, ctx)

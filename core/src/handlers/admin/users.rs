@@ -264,6 +264,7 @@ pub async fn new_user(
         bio: String::new(),
         sites,
         is_super_admin_target: false,
+        site_roles: vec![],
     };
     Html(admin::pages::users::render_editor(&edit, None, &ctx)).into_response()
 }
@@ -313,6 +314,17 @@ pub async fn edit_user(
         user.role.clone()
     };
 
+    // Current site assignments — display-only, shown in the Role section.
+    let site_roles: Vec<(String, String)> = crate::models::site_user::list_for_user(&state.db, id)
+        .await
+        .unwrap_or_else(|e| {
+            tracing::warn!("failed to list site assignments for user {}: {:?}", id, e);
+            vec![]
+        })
+        .into_iter()
+        .map(|(site, role)| (site.hostname, role))
+        .collect();
+
     let edit = UserEdit {
         id: Some(user.id.to_string()),
         username: user.username.clone(),
@@ -322,6 +334,7 @@ pub async fn edit_user(
         bio: user.bio.clone(),
         sites: vec![],
         is_super_admin_target,
+        site_roles,
     };
     Html(admin::pages::users::render_editor(&edit, None, &ctx)).into_response()
 }
@@ -363,6 +376,7 @@ pub async fn save_new(
                 bio: form.bio.unwrap_or_default(),
                 sites,
                 is_super_admin_target: false,
+                site_roles: vec![],
             };
             return Html(admin::pages::users::render_editor(
                 &edit,
@@ -389,6 +403,7 @@ pub async fn save_new(
             bio: form.bio.clone().unwrap_or_default(),
             sites,
             is_super_admin_target: false,
+            site_roles: vec![],
         };
         return Html(admin::pages::users::render_editor(
             &edit,
@@ -411,6 +426,7 @@ pub async fn save_new(
                 bio: form.bio.clone().unwrap_or_default(),
                 sites,
                 is_super_admin_target: false,
+                site_roles: vec![],
             };
             return Html(admin::pages::users::render_editor(
                 &edit,
@@ -432,6 +448,7 @@ pub async fn save_new(
             bio: form.bio.clone().unwrap_or_default(),
             sites,
             is_super_admin_target: false,
+            site_roles: vec![],
         };
         return Html(admin::pages::users::render_editor(&edit, Some(msg), &ctx)).into_response();
     }
@@ -626,6 +643,7 @@ pub async fn save_new(
                 bio: form.bio.unwrap_or_default(),
                 sites,
                 is_super_admin_target: false,
+                site_roles: vec![],
             };
             let msg = friendly_user_error(&e);
             Html(admin::pages::users::render_editor(&edit, Some(&msg), &ctx)).into_response()
@@ -679,6 +697,7 @@ pub async fn save_edit(
                 bio: form.bio.clone().unwrap_or_default(),
                 sites: vec![],
                 is_super_admin_target,
+                site_roles: vec![],
             };
             return Html(admin::pages::users::render_editor(&edit, Some(msg), &ctx)).into_response();
         }
@@ -698,6 +717,7 @@ pub async fn save_edit(
                     bio: form.bio.unwrap_or_default(),
                     sites: vec![],
                     is_super_admin_target,
+                    site_roles: vec![],
                 };
                 return Html(admin::pages::users::render_editor(
                     &edit,
@@ -739,6 +759,7 @@ pub async fn save_edit(
                 bio: form.bio.unwrap_or_default(),
                 sites: vec![],
                 is_super_admin_target,
+                site_roles: vec![],
             };
             let msg = friendly_user_error(&e);
             Html(admin::pages::users::render_editor(&edit, Some(&msg), &ctx)).into_response()
