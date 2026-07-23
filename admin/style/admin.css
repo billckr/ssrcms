@@ -254,7 +254,8 @@ details.form-section[open] summary .section-chevron { transform: rotate(180deg);
 details.form-section .form-section-body { padding: .75rem 1rem; }
 .inline-media-count { display: inline-block; background: #f3f4f6; color: #374151; border-radius: 4px; padding: .15rem .5rem; font-size: .78rem; font-weight: 500; }
 .author-card { border-color: var(--border); }
-.author-card-name { font-weight: 600; font-size: 14px; color: var(--text); }
+.author-card-name { display: block; font-weight: 600; font-size: 14px; color: var(--text); text-decoration: none; }
+a.author-card-name:hover { text-decoration: underline; }
 .author-card-site { font-size: 12px; color: var(--muted); margin-top: .2rem; }
 .checkbox-group { display: flex; flex-direction: column; gap: .35rem; font-size: 13px; max-height: 200px; overflow-y: auto; }
 .radio-group { display: flex; flex-direction: column; gap: .6rem; margin-top: .25rem; }

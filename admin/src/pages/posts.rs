@@ -41,6 +41,9 @@ pub struct PostEdit {
     pub comment_count: u64,
     /// Display name of the post author (empty string for new posts).
     pub author_name: String,
+    /// UUID of the post author (empty string for new posts), used to link the
+    /// Author card to their user edit page.
+    pub author_id: String,
     /// Hostname of the site this post belongs to (empty for new posts / global admin context).
     pub site_name: String,
     /// UUID of the parent page (pages only). None = top-level.
@@ -728,13 +731,22 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
         } else {
             String::new()
         };
+        let name_html = if post.author_id.is_empty() {
+            format!(r#"<div class="author-card-name">{}</div>"#, crate::html_escape(&post.author_name))
+        } else {
+            format!(
+                r#"<a class="author-card-name" href="/admin/users/{id}/edit">{name}</a>"#,
+                id = crate::html_escape(&post.author_id),
+                name = crate::html_escape(&post.author_name),
+            )
+        };
         format!(
             r#"<div class="form-section author-card">
       <h3>Author</h3>
-      <div class="author-card-name">{name}</div>
+      {name_html}
       {site_line}
     </div>"#,
-            name = crate::html_escape(&post.author_name),
+            name_html = name_html,
             site_line = site_line,
         )
     } else {
