@@ -467,6 +467,22 @@ pub async fn set_default_site(pool: &PgPool, user_id: Uuid, site_id: Option<Uuid
     Ok(())
 }
 
+pub async fn get_dashboard_widget_layout(pool: &PgPool, user_id: Uuid) -> Result<Option<serde_json::Value>> {
+    let layout: Option<serde_json::Value> = sqlx::query_scalar(
+        "SELECT dashboard_widget_layout FROM users WHERE id = $1"
+    ).bind(user_id).fetch_one(pool).await?;
+    Ok(layout)
+}
+
+pub async fn set_dashboard_widget_layout(pool: &PgPool, user_id: Uuid, layout: &serde_json::Value) -> Result<()> {
+    sqlx::query("UPDATE users SET dashboard_widget_layout = $1, updated_at = NOW() WHERE id = $2")
+        .bind(layout)
+        .bind(user_id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
 /// Verify a plaintext password against a stored Argon2 hash.
 #[allow(dead_code)]
 pub fn verify_password(password: &str, hash: &str) -> bool {

@@ -1,8 +1,13 @@
-use axum::{extract::{Query, State}, response::Html};
+use axum::{
+    extract::{Query, State},
+    http::StatusCode,
+    response::{Html, IntoResponse, Json, Response},
+};
 use chrono::{Datelike, Local};
 
 use crate::app_state::AppState;
 use crate::middleware::admin_auth::AdminUser;
+use crate::models::user;
 use admin::pages::dashboard::DashboardData;
 
 #[derive(serde::Deserialize, Default)]
@@ -298,7 +303,12 @@ pub async fn dashboard(
     let cs = state.site_hostname(site_id);
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
 
+    let widget_layout = user::get_dashboard_widget_layout(&state.db, admin.user.id)
+        .await
+        .unwrap_or_else(|e| { tracing::warn!("dashboard widget layout load error: {:?}", e); None });
+
     let data = DashboardData {
+        widget_layout,
         published_posts,
         draft_posts,
         pending_posts,
@@ -323,4 +333,18 @@ pub async fn dashboard(
     };
 
     Html(admin::pages::dashboard::render(&data, None, &ctx))
+}
+
+pub async fn save_widget_layout(
+    State(state): State<AppState>,
+    admin: AdminUser,
+    Json(layout): Json<serde_json::Value>,
+) -> Response {
+    match user::set_dashboard_widget_layout(&state.db, admin.user.id, &layout).await {
+        Ok(()) => StatusCode::NO_CONTENT.into_response(),
+        Err(e) => {
+            tracing::error!("dashboard widget layout save error: {e}");
+            (StatusCode::INTERNAL_SERVER_ERROR, "Save failed").into_response()
+        }
+    }
 }

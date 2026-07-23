@@ -35,6 +35,9 @@ pub struct DashboardData {
     pub selected_views_year: i32,
     /// All-time total unique views across the author's posts
     pub author_total_views: i64,
+    /// Saved widget column/order preference, e.g. {"left": ["one"], "middle": ["two"], "right": ["three"]}.
+    /// `None` uses the default layout.
+    pub widget_layout: Option<serde_json::Value>,
 }
 
 /// Compute integer Y-axis bounds for a set of count values.
@@ -374,5 +377,143 @@ pub fn render(data: &DashboardData, flash: Option<&str>, ctx: &crate::PageContex
         )
     };
 
+    let content = format!("{content}{}", widget_test_section(&data.widget_layout));
+
     crate::admin_page("Dashboard", "/admin", flash, &content, ctx)
+}
+
+/// Temporary drag-and-drop test widgets (Widget One/Two/Three, no functionality).
+/// Purely to test HTML5 drag-and-drop reordering before building real widgets.
+fn widget_test_section(layout: &Option<serde_json::Value>) -> String {
+    fn widget_title(id: &str) -> &str {
+        match id {
+            "one" => "Widget One",
+            "two" => "Widget Two",
+            "three" => "Widget Three",
+            _ => id,
+        }
+    }
+
+    let default_layout = serde_json::json!({
+        "left": ["one"], "middle": ["two"], "right": ["three"]
+    });
+    let layout = layout.as_ref().unwrap_or(&default_layout);
+
+    let col_html = |col: &str| -> String {
+        layout.get(col)
+            .and_then(|v| v.as_array())
+            .map(|ids| {
+                ids.iter()
+                    .filter_map(|v| v.as_str())
+                    .map(|id| format!(
+                        r#"<div class="widget-card" draggable="true" data-widget="{id}">
+      <div class="widget-drag-handle">&#x2630;</div>
+      <h3>{title}</h3>
+    </div>"#,
+                        id = id, title = widget_title(id),
+                    ))
+                    .collect::<Vec<_>>()
+                    .join("\n    ")
+            })
+            .unwrap_or_default()
+    };
+
+    format!(
+        r#"<div class="widget-board" id="widget-board" style="margin-top:1rem">
+  <div class="widget-col" data-col="left">
+    {left}
+  </div>
+  <div class="widget-col" data-col="middle">
+    {middle}
+  </div>
+  <div class="widget-col" data-col="right">
+    {right}
+  </div>
+</div>
+<style>
+  .widget-board {{ display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem; align-items: start; }}
+  .widget-col {{ display: flex; flex-direction: column; gap: 1rem; min-height: 4rem; }}
+  .widget-col.col-drag-over {{ outline: 2px dashed var(--primary); outline-offset: 4px; border-radius: var(--radius); }}
+  .widget-card {{
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    box-shadow: var(--shadow); padding: 1.25rem; cursor: grab; user-select: none;
+    display: flex; align-items: center; gap: .75rem;
+  }}
+  .widget-card h3 {{ margin: 0; font-size: .95rem; font-weight: 600; }}
+  .widget-drag-handle {{ color: var(--muted); font-size: 1.1rem; line-height: 1; }}
+  .widget-card.dragging {{ opacity: .4; }}
+  .widget-card.drag-over {{ border-top: 2px solid var(--primary); }}
+</style>
+<script>
+(function() {{
+  const board = document.getElementById('widget-board');
+  if (!board) return;
+  let dragged = null;
+
+  function persistLayout() {{
+    const layout = {{}};
+    board.querySelectorAll('.widget-col').forEach((col) => {{
+      layout[col.dataset.col] = Array.from(col.querySelectorAll('.widget-card'))
+        .map((card) => card.dataset.widget);
+    }});
+    fetch('/admin/dashboard/widget-layout', {{
+      method: 'POST',
+      headers: {{ 'Content-Type': 'application/json' }},
+      body: JSON.stringify(layout),
+    }}).catch((err) => console.error('widget layout save failed', err));
+  }}
+
+  board.addEventListener('dragstart', (e) => {{
+    const card = e.target.closest('.widget-card');
+    if (!card) return;
+    dragged = card;
+    card.classList.add('dragging');
+    e.dataTransfer.effectAllowed = 'move';
+  }});
+
+  board.addEventListener('dragend', () => {{
+    if (dragged) dragged.classList.remove('dragging');
+    board.querySelectorAll('.widget-card').forEach(c => c.classList.remove('drag-over'));
+    board.querySelectorAll('.widget-col').forEach(c => c.classList.remove('col-drag-over'));
+    dragged = null;
+  }});
+
+  board.addEventListener('dragover', (e) => {{
+    e.preventDefault();
+    if (!dragged) return;
+    board.querySelectorAll('.widget-card').forEach(c => c.classList.remove('drag-over'));
+    board.querySelectorAll('.widget-col').forEach(c => c.classList.remove('col-drag-over'));
+
+    const card = e.target.closest('.widget-card');
+    if (card && card !== dragged) {{
+      card.classList.add('drag-over');
+      return;
+    }}
+    const colEl = e.target.closest('.widget-col');
+    if (colEl) colEl.classList.add('col-drag-over');
+  }});
+
+  board.addEventListener('drop', (e) => {{
+    e.preventDefault();
+    if (!dragged) return;
+
+    const card = e.target.closest('.widget-card');
+    if (card && card !== dragged) {{
+      const rect = card.getBoundingClientRect();
+      const before = (e.clientY - rect.top) < rect.height / 2;
+      card.parentElement.insertBefore(dragged, before ? card : card.nextSibling);
+    }} else {{
+      const colEl = e.target.closest('.widget-col');
+      if (colEl) colEl.appendChild(dragged);
+    }}
+    board.querySelectorAll('.widget-card').forEach(c => c.classList.remove('drag-over'));
+    board.querySelectorAll('.widget-col').forEach(c => c.classList.remove('col-drag-over'));
+    persistLayout();
+  }});
+}})();
+</script>"#,
+        left = col_html("left"),
+        middle = col_html("middle"),
+        right = col_html("right"),
+    )
 }
