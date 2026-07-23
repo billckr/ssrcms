@@ -182,36 +182,38 @@ pub fn render(
 </div>
 
 <!-- General -->
-<div id="tab-general" class="settings-panel active" role="tabpanel">
-  <form method="post" action="/admin/settings" class="edit-form">
-    <input type="hidden" name="tab" value="general">
+<div id="tab-general" class="settings-panel active" role="tabpanel" style="max-width:720px">
+  <div class="profile-container">
+    <form method="post" action="/admin/settings" class="edit-form">
+      <input type="hidden" name="tab" value="general">
 
-    <p class="settings-section-title">Identity</p>
-    <div class="form-group">
-      <label for="sg-app-name">App Name</label>
-      <input type="text" id="sg-app-name" name="app_name" value="{app_name}">
-      <small>Shown in the admin sidebar top-left. Set to your agency or CMS brand name.</small>
-    </div>
-    <div class="form-group">
-      <label for="sg-admin-email">Admin Email</label>
-      <input type="email" id="sg-admin-email" value="{admin_email}" readonly
-             style="opacity:.7;cursor:not-allowed" title="Set via ADMIN_EMAIL in .env or synaptic.toml">
-      <small>Set via <code>ADMIN_EMAIL</code> in <code>.env</code> or <code>synaptic.toml</code>. Requires a restart to change.</small>
-    </div>
+      <p class="settings-section-title">Identity</p>
+      <div class="form-group">
+        <label for="sg-app-name">App Name</label>
+        <input type="text" id="sg-app-name" name="app_name" value="{app_name}">
+        <small>Shown in the admin sidebar top-left. Set to your agency or CMS brand name.</small>
+      </div>
+      <div class="form-group">
+        <label for="sg-admin-email">Admin Email</label>
+        <input type="email" id="sg-admin-email" value="{admin_email}" readonly
+               style="opacity:.7;cursor:not-allowed" title="Set via ADMIN_EMAIL in .env or synaptic.toml">
+        <small>Set via <code>ADMIN_EMAIL</code> in <code>.env</code> or <code>synaptic.toml</code>. Requires a restart to change.</small>
+      </div>
 
-    <p class="settings-section-title">Localisation</p>
-    <div class="form-group">
-      <label for="sg-timezone">Timezone</label>
-      <select id="sg-timezone" name="timezone">
-        {tz_options}
-      </select>
-      <small>App-wide timezone — used for admin timestamps and scheduled publishing.</small>
-    </div>
+      <p class="settings-section-title">Localisation</p>
+      <div class="form-group">
+        <label for="sg-timezone">Timezone</label>
+        <select id="sg-timezone" name="timezone">
+          {tz_options}
+        </select>
+        <small>App-wide timezone — used for admin timestamps and scheduled publishing.</small>
+      </div>
 
-    <div class="form-actions" style="margin-top:1.5rem">
-      <button type="submit" class="btn btn-primary">Save General</button>
-    </div>
-  </form>
+      <div class="form-actions" style="margin-top:1.5rem">
+        <button type="submit" class="btn btn-primary">Save General</button>
+      </div>
+    </form>
+  </div>
 </div>
 
 <!-- Security -->
