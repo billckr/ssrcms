@@ -179,7 +179,50 @@ struct SiteWithRole {
     site_role: String,
 }
 
+/// List the sites a user should see in their own admin session: the site
+/// they're currently logged into (regardless of role there), plus any other
+/// sites where they hold the site-owner-level 'admin' role. Editor/author
+/// roles on other sites stay confined to logging into that site directly.
+pub async fn list_for_user_scoped(
+    pool: &PgPool,
+    user_id: Uuid,
+    current_site_id: Option<Uuid>,
+) -> Result<Vec<(Site, String)>> {
+    let rows = sqlx::query_as::<_, SiteWithRole>(
+        r#"
+        SELECT s.id, s.hostname, s.owner_user_id, s.created_at, s.updated_at,
+               su.role as site_role
+        FROM sites s
+        JOIN site_users su ON su.site_id = s.id
+        WHERE su.user_id = $1
+          AND (su.role = 'admin' OR s.id = $2)
+        ORDER BY s.created_at ASC
+        "#,
+    )
+    .bind(user_id)
+    .bind(current_site_id)
+    .fetch_all(pool)
+    .await?;
+
+    Ok(rows
+        .into_iter()
+        .map(|r| {
+            let site = Site {
+                id: r.id,
+                hostname: r.hostname,
+                owner_user_id: r.owner_user_id,
+                created_at: r.created_at,
+                updated_at: r.updated_at,
+            };
+            (site, r.site_role)
+        })
+        .collect())
+}
+
 /// List all sites a user has access to, with their role on each site.
+/// Used for management views that need the full membership picture (e.g.
+/// viewing another user's site-role assignments), not for scoping the
+/// current viewer's own admin session — see `list_for_user_scoped` for that.
 pub async fn list_for_user(pool: &PgPool, user_id: Uuid) -> Result<Vec<(Site, String)>> {
     let rows = sqlx::query_as::<_, SiteWithRole>(
         r#"

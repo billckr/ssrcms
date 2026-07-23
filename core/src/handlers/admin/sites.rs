@@ -153,8 +153,10 @@ pub async fn list(
             });
         }
     } else {
-        // Non-global-admin: fetch all sites the user has any role on.
-        let site_roles = crate::models::site_user::list_for_user(&state.db, admin.user.id)
+        // Non-global-admin: the current site plus any other sites where they
+        // hold the 'admin' role. Editor/author roles on other sites stay
+        // confined to that site's own login.
+        let site_roles = crate::models::site_user::list_for_user_scoped(&state.db, admin.user.id, admin.site_id)
             .await
             .unwrap_or_else(|e| {
                 tracing::warn!("failed to list sites for user {}: {:?}", admin.user.id, e);

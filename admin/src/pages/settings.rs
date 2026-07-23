@@ -363,11 +363,7 @@ window.seedUsers = function () {{
       resultEl.textContent = 'Error: ' + (res.data.error || 'unknown error');
       return;
     }}
-    var lines = ['Created ' + res.data.created + ', skipped ' + res.data.skipped + '.'];
-    (res.data.users || []).forEach(function (u) {{
-      lines.push(u.email + (u.password ? ' / ' + u.password : ''));
-    }});
-    resultEl.textContent = lines.join('\\n');
+    resultEl.textContent = 'Created ' + res.data.created + ', skipped ' + res.data.skipped + '.';
   }});
 }};
 

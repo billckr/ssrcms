@@ -63,8 +63,9 @@ pub async fn dashboard(
     };
 
     // Sites card: total sites system-wide for a true super_admin; sites owned by
-    // the current site's owner when impersonating; otherwise sites the user has
-    // any role on (owner or site admin) — same scoping as /admin/sites.
+    // the current site's owner when impersonating; otherwise the current site
+    // plus any other sites where the user holds the 'admin' role — same
+    // scoping as /admin/sites.
     let total_sites = if admin.caps.is_global_admin && !admin.caps.is_impersonating {
         crate::models::site::count(&state.db).await
             .unwrap_or_else(|e| { tracing::warn!("dashboard sites count error: {:?}", e); 0 })
@@ -82,7 +83,7 @@ pub async fn dashboard(
             None => 0,
         }
     } else {
-        crate::models::site_user::list_for_user(&state.db, admin.user.id).await
+        crate::models::site_user::list_for_user_scoped(&state.db, admin.user.id, admin.site_id).await
             .map(|rows| rows.len() as i64)
             .unwrap_or_else(|e| { tracing::warn!("dashboard user sites count error: {:?}", e); 0 })
     };
