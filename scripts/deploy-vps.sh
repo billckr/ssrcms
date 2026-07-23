@@ -6,19 +6,8 @@
 # migrations (sqlx::migrate!) exactly match the current migrations/ dir —
 # migrations are compiled in, not read from disk at runtime.
 #
-# Usage:
-#   ./scripts/deploy-vps.sh              # deploy + auto-configure (site/admin seeded
-#                                         #   non-interactively) — fast path for dev testing
-#   ./scripts/deploy-vps.sh --no-install # deploy infra only: build, ship, migrate,
-#                                         #   start the service — no site/admin created.
-#                                         #   Run `synap-cli install` by hand afterwards.
-#   ./scripts/deploy-vps.sh --clean      # also drop+recreate the DB and remove
-#                                         #   orphaned installs from prior attempts
-#
-# Config (env var overrides, defaults match the current test VPS):
-#   VPS_HOST, VPS_USER, VPS_PORT, VPS_PASSWORD (or rely on SSH key/agent)
-#   VPS_DOMAIN, INSTALL_DIR, SYNAPTIC_USER, APP_PORT
-#   ADMIN_EMAIL, ADMIN_USERNAME, APP_NAME
+# Run './scripts/deploy-vps.sh --help' for full usage, flags, env var
+# overrides, auth notes, and requirements/limits.
 
 set -euo pipefail
 
@@ -38,13 +27,99 @@ APP_NAME="${APP_NAME:-Synaptic Signals}"
 DB_NAME="${DB_NAME:-synaptic_signals}"
 DB_USER="${DB_USER:-synaptic}"
 
+print_help() {
+  cat <<EOF
+deploy-vps.sh — Build locally and deploy Synaptic Signals to a test VPS.
+
+Always rebuilds fresh before shipping so the deployed binary's embedded
+migrations (sqlx::migrate!) exactly match the current migrations/ dir —
+migrations are compiled in, not read from disk at runtime.
+
+USAGE
+  ./scripts/deploy-vps.sh [--no-install] [--clean]
+  ./scripts/deploy-vps.sh --help
+
+FLAGS
+  --no-install   Deploy infra only: build, ship, migrate, start the service.
+                 No site/admin is created — run 'synap-cli install' by hand
+                 on the VPS afterwards (see the printed next-step command
+                 at the end of the run). Use this when you want to answer
+                 the install prompts yourself (domain, admin email, etc.)
+                 instead of the auto-seeded non-interactive defaults below.
+  --clean        Also drop+recreate the database and role, and remove
+                 orphaned installs from prior attempts, before deploying.
+                 DESTRUCTIVE to whatever is currently on the VPS at
+                 INSTALL_DIR/DB_NAME — only the values below, not other
+                 sites sharing the box. Requires Postgres 13+ (uses
+                 DROP DATABASE ... WITH (FORCE)).
+  -h, --help     Show this help and exit. No build or network calls happen.
+  (default, no flags)
+                 Deploy + auto-configure: site and admin user are seeded
+                 non-interactively using the ADMIN_EMAIL/ADMIN_USERNAME/
+                 APP_NAME values below. Fast path for dev testing.
+
+CONFIG (environment variable overrides — current test-VPS defaults shown)
+  VPS_HOST        ${VPS_HOST}
+  VPS_USER        ${VPS_USER}
+  VPS_PORT        ${VPS_PORT}
+  VPS_PASSWORD    (unset — falls back to SSH key/agent auth)
+  VPS_DOMAIN      ${VPS_DOMAIN}
+  INSTALL_DIR     ${INSTALL_DIR}
+  SYNAPTIC_USER   ${SYNAPTIC_USER}
+  APP_PORT        ${APP_PORT}
+  ADMIN_EMAIL     ${ADMIN_EMAIL}
+  ADMIN_USERNAME  ${ADMIN_USERNAME}
+  APP_NAME        ${APP_NAME}
+  DB_NAME         ${DB_NAME}
+  DB_USER         ${DB_USER}
+
+  These defaults are all hardcoded to match the current shared test VPS
+  (bckr.dev) — they are NOT auto-detected or read from any config file.
+  Every run, including --clean, targets exactly these values unless you
+  override them. In particular VPS_DOMAIN and INSTALL_DIR are what --clean
+  scopes its destructive cleanup to (that install dir + DB_NAME/DB_USER
+  only) — other sites sharing this VPS live at different INSTALL_DIRs and
+  are never touched. To deploy a different site, override the relevant
+  vars together, e.g.:
+    VPS_PASSWORD='...' VPS_DOMAIN=example.com \\
+      INSTALL_DIR=/var/www/example.com ./scripts/deploy-vps.sh --no-install
+
+AUTH
+  If VPS_PASSWORD is set, the script authenticates every ssh/scp call via
+  'sshpass' automatically — no repeated password prompts. Requires the
+  'sshpass' binary to be installed locally; the script exits early with a
+  clear error if it's missing. Without VPS_PASSWORD, plain ssh/scp is used
+  and relies on an existing SSH key/agent for ${VPS_USER}@${VPS_HOST} — with
+  neither a key nor VPS_PASSWORD, ssh will hang on an askpass prompt in a
+  non-interactive shell.
+    Example:  VPS_PASSWORD='...' ./scripts/deploy-vps.sh --no-install
+
+REQUIREMENTS / LIMITS
+  - Local: cargo/rustc (release build of the 'synaptic' and 'synap-cli'
+    bins), ssh + scp, openssl (used to generate DB password/secret key),
+    and sshpass if using VPS_PASSWORD.
+  - The script refuses to deploy if the local machine's glibc is newer
+    than the VPS's glibc (a binary built against a newer glibc won't run
+    on an older one). If that happens, build on the VPS itself instead,
+    or use an older/matching build environment.
+  - Remote: expects a systemd + Caddy host (AlmaLinux/RHEL-style SELinux
+    chcon calls are attempted but tolerated if chcon is absent), and
+    passwordless 'sudo -u postgres'/'sudo -u \${SYNAPTIC_USER}' for the
+    connecting user (normally root).
+  - This VPS may be shared with other, unrelated sites — --clean and the
+    DB-drop steps only ever touch INSTALL_DIR and DB_NAME/DB_USER above,
+    never touch other install directories or databases.
+EOF
+}
+
 CLEAN=0
 NO_INSTALL=0
 for arg in "$@"; do
   case "$arg" in
     --clean) CLEAN=1 ;;
     --no-install) NO_INSTALL=1 ;;
-    *) echo "Unknown argument: $arg" >&2; exit 1 ;;
+    -h|--help) print_help; exit 0 ;;
+    *) echo "Unknown argument: $arg" >&2; echo "Run with --help for usage." >&2; exit 1 ;;
   esac
 done
 
