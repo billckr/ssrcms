@@ -213,7 +213,7 @@ pub fn render(data: &DashboardData, flash: Option<&str>, ctx: &crate::PageContex
             r#"
 <div class="stat-panel stat-panel-4">
   <a href="/admin/posts?status=published" class="stat-cell stat-cell-link{published_empty}">
-    <div class="stat-cell-top"><span class="stat-label">Published Posts</span></div>
+    <div class="stat-cell-top"><span class="stat-label">Posts</span></div>
     <div class="stat-num">{published}</div>
   </a>
   <a href="/admin/posts?status=draft" class="stat-cell stat-cell-link{drafts_empty}">
@@ -291,14 +291,14 @@ pub fn render(data: &DashboardData, flash: Option<&str>, ctx: &crate::PageContex
     } else if ctx.user_role.eq_ignore_ascii_case("editor") {
         format!(
             r#"<div class="stat-panel stat-panel-3">
-  <div class="stat-cell{published_empty}">
-    <div class="stat-cell-top"><span class="stat-label">Published Posts</span></div>
+  <a href="/admin/posts?status=published" class="stat-cell stat-cell-link{published_empty}">
+    <div class="stat-cell-top"><span class="stat-label">Posts</span></div>
     <div class="stat-num">{published}</div>
-  </div>
-  <div class="stat-cell{drafts_empty}">
+  </a>
+  <a href="/admin/posts?status=draft" class="stat-cell stat-cell-link{drafts_empty}">
     <div class="stat-cell-top"><span class="stat-label">Drafts</span></div>
     <div class="stat-num">{drafts}</div>
-  </div>
+  </a>
   {pending_open}
     <div class="stat-cell-top">
       <span class="stat-label">Pending</span>
