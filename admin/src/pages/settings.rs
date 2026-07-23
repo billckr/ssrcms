@@ -188,7 +188,6 @@ pub fn render(
     <form method="post" action="/admin/settings" class="edit-form">
       <input type="hidden" name="tab" value="general">
 
-      <p class="settings-section-title">Identity</p>
       <div class="form-group">
         <label for="sg-app-name">App Name</label>
         <input type="text" id="sg-app-name" name="app_name" value="{app_name}">
