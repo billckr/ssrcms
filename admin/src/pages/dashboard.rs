@@ -218,7 +218,7 @@ pub fn render(data: &DashboardData, flash: Option<&str>, ctx: &crate::PageContex
         );
 
         widget_bodies.insert("posts_chart", format!(
-            r#"<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
+            r#"<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;row-gap:.4rem;margin-bottom:1rem">
   <h3 style="margin:0;font-size:.95rem;font-weight:600">Published Posts</h3>
   <div style="display:flex;align-items:center;gap:.5rem">
     {posts_year_sel}
@@ -237,7 +237,7 @@ pub fn render(data: &DashboardData, flash: Option<&str>, ctx: &crate::PageContex
         ));
 
         widget_bodies.insert("post_views", format!(
-            r#"<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
+            r#"<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;row-gap:.4rem;margin-bottom:1rem">
   <h3 style="margin:0;font-size:.95rem;font-weight:600">Post Views</h3>
   <div style="display:flex;align-items:center;gap:.5rem">
     {views_year_sel}
@@ -465,11 +465,13 @@ fn widgets_section(
 </div>
 <style>
   .widget-board {{ display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem; align-items: start; }}
-  .widget-col {{ display: flex; flex-direction: column; gap: 1rem; min-height: 4rem; }}
+  .widget-col {{ display: flex; flex-direction: column; gap: 1rem; min-height: 4rem; min-width: 0; }}
+  .widget-body svg {{ max-width: 100%; height: auto; display: block; }}
   .widget-col.col-drag-over {{ outline: 2px dashed var(--primary); outline-offset: 4px; border-radius: var(--radius); }}
   .widget-card {{
     background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
     box-shadow: var(--shadow); padding: 0 1.25rem 1.25rem; cursor: grab; user-select: none;
+    min-width: 0;
   }}
   .widget-card h3 {{ margin: 0; font-size: .95rem; font-weight: 600; }}
   .widget-drag-handle {{ display: block; padding: .6rem 0 .3rem; color: var(--muted); font-size: 1rem; line-height: 1; }}
@@ -479,6 +481,9 @@ fn widgets_section(
   .widget-stats .stat-cell {{ padding: .7rem .4rem; }}
   .widget-stats .stat-label {{ font-size: .74rem; white-space: nowrap; }}
   .widget-stats .stat-num {{ font-size: 1.6rem; }}
+  @media (max-width: 1200px) {{
+    .widget-board {{ grid-template-columns: 1fr; }}
+  }}
 </style>
 <script>
 (function() {{
