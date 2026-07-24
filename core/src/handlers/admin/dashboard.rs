@@ -22,6 +22,48 @@ pub struct DashboardQuery {
     pub views_year: Option<i32>,
 }
 
+/// Fetch the 5 most recent posts of a given status, for the dashboard's Recent
+/// Drafts / Recently Published / Pending Review widgets. `order_by` must be one
+/// of the fixed column names below (never user input).
+async fn fetch_recent_posts(
+    state: &AppState,
+    site_id: Option<uuid::Uuid>,
+    author_id: Option<uuid::Uuid>,
+    status: &str,
+    order_by: &str,
+) -> Vec<admin::pages::dashboard::RecentPostSummary> {
+    let order_sql = match order_by {
+        "published_at" => "p.published_at DESC NULLS LAST",
+        "submitted_at" => "p.submitted_at DESC NULLS LAST",
+        _ => "p.updated_at DESC",
+    };
+    let sql = format!(
+        r#"SELECT p.id, p.title, s.hostname
+           FROM posts p
+           LEFT JOIN sites s ON s.id = p.site_id
+           WHERE p.status = $1
+             AND p.post_type = 'post'
+             AND ($2::uuid IS NULL OR p.site_id = $2)
+             AND ($3::uuid IS NULL OR p.author_id = $3)
+           ORDER BY {order_sql}
+           LIMIT 5"#
+    );
+    sqlx::query_as::<_, (uuid::Uuid, String, Option<String>)>(&sql)
+        .bind(status)
+        .bind(site_id)
+        .bind(author_id)
+        .fetch_all(&state.db)
+        .await
+        .unwrap_or_else(|e| { tracing::warn!("dashboard recent {} posts error: {:?}", status, e); vec![] })
+        .into_iter()
+        .map(|(id, title, hostname)| admin::pages::dashboard::RecentPostSummary {
+            id: id.to_string(),
+            title,
+            site_hostname: hostname.unwrap_or_default(),
+        })
+        .collect()
+}
+
 pub async fn dashboard(
     State(state): State<AppState>,
     admin: AdminUser,
@@ -307,8 +349,19 @@ pub async fn dashboard(
         .await
         .unwrap_or_else(|e| { tracing::warn!("dashboard widget layout load error: {:?}", e); None });
 
+    // Recent Drafts / Recently Published widgets: same author scoping as
+    // /admin/posts?status=... (authors see only their own posts; other roles see
+    // all posts on the site).
+    let recent_posts_author = if is_author { Some(admin.user.id) } else { None };
+    let recent_drafts = fetch_recent_posts(&state, site_id, recent_posts_author, "draft", "updated_at").await;
+    let recent_published = fetch_recent_posts(&state, site_id, recent_posts_author, "published", "published_at").await;
+    let recent_pending = fetch_recent_posts(&state, site_id, recent_posts_author, "pending", "submitted_at").await;
+
     let data = DashboardData {
         widget_layout,
+        recent_drafts,
+        recent_published,
+        recent_pending,
         published_posts,
         draft_posts,
         pending_posts,

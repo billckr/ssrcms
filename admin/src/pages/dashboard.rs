@@ -40,6 +40,32 @@ pub struct DashboardData {
     /// Saved widget column/order preference, e.g. {"left": ["one"], "middle": ["two"], "right": ["three"]}.
     /// `None` uses the default layout.
     pub widget_layout: Option<serde_json::Value>,
+    /// Up to 5 most recently updated drafts (scoped to the current user/site), for the
+    /// "Recent Drafts" widget.
+    pub recent_drafts: Vec<RecentPostSummary>,
+    /// Up to 5 most recently published posts (scoped to the current user/site), for the
+    /// "Recently Published" widget.
+    pub recent_published: Vec<RecentPostSummary>,
+    /// Up to 5 most recently submitted posts pending review (scoped to the current
+    /// user/site), for the "Pending Review" widget.
+    pub recent_pending: Vec<RecentPostSummary>,
+}
+
+pub struct RecentPostSummary {
+    pub id: String,
+    pub title: String,
+    pub site_hostname: String,
+}
+
+/// Truncate a title to `max_chars` characters (by Unicode scalar, not byte), appending
+/// "…" when it was cut short, so long titles don't blow out the widget card width.
+fn truncate_title(title: &str, max_chars: usize) -> String {
+    if title.chars().count() <= max_chars {
+        title.to_string()
+    } else {
+        let truncated: String = title.chars().take(max_chars).collect();
+        format!("{truncated}\u{2026}")
+    }
 }
 
 /// Compute integer Y-axis bounds for a set of count values.
@@ -130,6 +156,66 @@ fn year_select(
         year_hidden = year_hidden,
         views_year_hidden = views_year_hidden,
         options = options,
+    )
+}
+
+/// Max characters shown for a post title inside a dashboard widget row, so long
+/// titles don't blow out the card width. Longer titles are truncated with "…".
+const WIDGET_TITLE_MAX_CHARS: usize = 35;
+
+/// Renders a "recent posts" widget body (title, status, domain) for either the
+/// Recent Drafts or Recently Published widget, mirroring the columns shown on
+/// `/admin/posts?status=...`. The title links to the post editor.
+fn recent_posts_widget(
+    posts: &[RecentPostSummary],
+    heading: &str,
+    empty_message: &str,
+    badge_class: &str,
+    badge_label: &str,
+) -> String {
+    let rows: String = if posts.is_empty() {
+        format!(
+            r#"<tr><td colspan="3" style="padding:.6rem 0;color:var(--muted);font-size:.85rem">{empty_message}</td></tr>"#
+        )
+    } else {
+        posts.iter().map(|p| {
+            let domain_cell = if p.site_hostname.is_empty() {
+                r#"<span style="color:var(--muted);font-size:0.8rem">&mdash;</span>"#.to_string()
+            } else {
+                format!(
+                    r#"<span style="display:inline-block;background:#e2e8f0;color:#64748b;border-radius:4px;padding:.15rem .5rem;font-size:.78rem;font-weight:500;white-space:nowrap">{}</span>"#,
+                    crate::html_escape(&p.site_hostname),
+                )
+            };
+            format!(
+                r#"<tr style="border-top:1px solid var(--border)">
+      <td style="padding:.45rem .4rem .45rem 0"><a href="/admin/posts/{id}/edit" title="{full_title}">{title}</a></td>
+      <td style="padding:.45rem .4rem"><span class="badge badge-{badge_class}">{badge_label}</span></td>
+      <td style="padding:.45rem 0">{domain_cell}</td>
+    </tr>"#,
+                id = crate::html_escape(&p.id),
+                full_title = crate::html_escape(&p.title),
+                title = crate::html_escape(&truncate_title(&p.title, WIDGET_TITLE_MAX_CHARS)),
+                domain_cell = domain_cell,
+            )
+        }).collect()
+    };
+
+    format!(
+        r#"<h3 style="margin:0 0 .75rem;font-size:.95rem;font-weight:600">{heading}</h3>
+<table style="width:100%;border-collapse:collapse;font-size:.85rem">
+  <thead>
+    <tr style="text-align:left;color:var(--muted);font-size:.72rem;text-transform:uppercase">
+      <th style="padding:.3rem .4rem .3rem 0;font-weight:500">Title</th>
+      <th style="padding:.3rem .4rem;font-weight:500">Status</th>
+      <th style="padding:.3rem 0;font-weight:500">Domain</th>
+    </tr>
+  </thead>
+  <tbody>
+    {rows}
+  </tbody>
+</table>"#,
+        rows = rows,
     )
 }
 
@@ -378,6 +464,16 @@ pub fn render(data: &DashboardData, flash: Option<&str>, ctx: &crate::PageContex
         )
     };
 
+    widget_bodies.insert("one", recent_posts_widget(
+        &data.recent_drafts, "Recent Drafts", "No drafts.", "draft", "Draft",
+    ));
+    widget_bodies.insert("two", recent_posts_widget(
+        &data.recent_published, "Recently Published", "No published posts.", "published", "Published",
+    ));
+    widget_bodies.insert("three", recent_posts_widget(
+        &data.recent_pending, "Pending Review", "No posts pending review.", "pending", "Pending Review",
+    ));
+
     let default_layout = if is_author {
         serde_json::json!({
             "left": ["stats", "posts_chart", "post_views"], "middle": ["one"], "right": ["two", "three"]
@@ -393,23 +489,14 @@ pub fn render(data: &DashboardData, flash: Option<&str>, ctx: &crate::PageContex
     crate::admin_page("Dashboard", "/admin", flash, &content, ctx)
 }
 
-/// Renders the draggable widget board: real widgets (e.g. Published Posts / Post
-/// Views for authors) plus the Widget One/Two/Three test placeholders, arranged
-/// per the user's saved layout (or `default_layout` if none saved yet).
+/// Renders the draggable widget board: Published Posts / Post Views (authors) plus
+/// the Recent Drafts / Recently Published / Pending Review widgets, arranged per
+/// the user's saved layout (or `default_layout` if none saved yet).
 fn widgets_section(
     layout: &Option<serde_json::Value>,
     default_layout: &serde_json::Value,
     bodies: &HashMap<&'static str, String>,
 ) -> String {
-    fn placeholder_body(id: &str) -> Option<String> {
-        match id {
-            "one" => Some("<h3>Widget One</h3>".to_string()),
-            "two" => Some("<h3>Widget Two</h3>".to_string()),
-            "three" => Some("<h3>Widget Three</h3>".to_string()),
-            _ => None,
-        }
-    }
-
     // Start from the saved layout, or the default if the user has none yet.
     let mut layout = layout.as_ref().cloned().unwrap_or_else(|| default_layout.clone());
 
@@ -436,7 +523,7 @@ fn widgets_section(
                 ids.iter()
                     .filter_map(|v| v.as_str())
                     .filter_map(|id| {
-                        let body = bodies.get(id).cloned().or_else(|| placeholder_body(id))?;
+                        let body = bodies.get(id).cloned()?;
                         Some(format!(
                             r#"<div class="widget-card" draggable="true" data-widget="{id}">
       <div class="widget-drag-handle">&#x2630;</div>
@@ -469,12 +556,15 @@ fn widgets_section(
   .widget-body svg {{ max-width: 100%; height: auto; display: block; }}
   .widget-col.col-drag-over {{ outline: 2px dashed var(--primary); outline-offset: 4px; border-radius: var(--radius); }}
   .widget-card {{
+    display: flex; align-items: flex-start; gap: .6rem;
     background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
-    box-shadow: var(--shadow); padding: 0 1.25rem 1.25rem; cursor: grab; user-select: none;
+    box-shadow: var(--shadow); padding: .9rem 1.25rem 1.25rem; user-select: none;
     min-width: 0;
   }}
   .widget-card h3 {{ margin: 0; font-size: .95rem; font-weight: 600; }}
-  .widget-drag-handle {{ display: block; padding: .6rem 0 .3rem; color: var(--muted); font-size: 1rem; line-height: 1; }}
+  .widget-body {{ flex: 1; min-width: 0; }}
+  .widget-drag-handle {{ display: block; flex-shrink: 0; padding: 0; margin-top: .05rem; color: var(--muted); font-size: 1rem; line-height: 1; cursor: grab; }}
+  .widget-card.dragging .widget-drag-handle {{ cursor: grabbing; }}
   .widget-card.dragging {{ opacity: .4; }}
   .widget-card.drag-over {{ border-top: 2px solid var(--primary); }}
   .widget-stats.stat-panel-4 {{ grid-template-columns: repeat(4, 1fr); }}
