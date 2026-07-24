@@ -60,7 +60,12 @@ pub fn render_list(
             String::new()
         };
 
-        let ssl_badge = if s.ssl_active {
+        // SSL status/provisioning is only shown to roles that can manage sites
+        // (super_admin, site_admin) — editors and authors have no use for it and
+        // the provision-ssl route itself is already restricted to those roles.
+        let ssl_badge = if !ctx.can_manage_sites {
+            String::new()
+        } else if s.ssl_active {
             r#"<span class="ssl-badge ssl-active" title="SSL active — Caddy block provisioned">
                  <img src="/admin/static/icons/lock.svg" alt="SSL active" style="width:14px;height:14px;vertical-align:middle;filter:invert(35%) sepia(80%) saturate(500%) hue-rotate(95deg)">
                </span>"#.to_string()
