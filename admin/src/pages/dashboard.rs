@@ -186,11 +186,14 @@ fn recent_posts_widget(
         SecondColumn::ScheduledTime => "Scheduled For",
     };
 
-    let rows: String = if posts.is_empty() {
-        format!(
-            r#"<tr><td colspan="3" style="padding:.6rem 0;color:var(--muted);font-size:.85rem">{empty_message}</td></tr>"#
-        )
-    } else {
+    if posts.is_empty() {
+        return format!(
+            r#"<h3 style="margin:0 0 .75rem;font-size:.95rem;font-weight:600">{heading}</h3>
+<p style="margin:0;color:var(--muted);font-size:.85rem">{empty_message}</p>"#
+        );
+    }
+
+    let rows: String = {
         posts.iter().map(|p| {
             let domain_cell = if p.site_hostname.is_empty() {
                 r#"<span style="color:var(--muted);font-size:0.8rem">&mdash;</span>"#.to_string()
@@ -242,6 +245,34 @@ fn recent_posts_widget(
   </tbody>
 </table>"#,
         rows = rows,
+    )
+}
+
+/// Renders the "Quick Tools" widget: a short list of shortcuts to create new
+/// content, scoped to what the current role is allowed to create.
+fn quick_tools_widget(ctx: &crate::PageContext) -> String {
+    let mut items = vec![
+        r#"<a href="/admin/posts/new"><img src="/admin/static/icons/plus.svg" alt="" style="width:14px;height:14px;vertical-align:middle;margin-right:.4rem">New Post</a>"#.to_string(),
+    ];
+    if ctx.can_manage_pages {
+        items.push(r#"<a href="/admin/pages/new"><img src="/admin/static/icons/plus.svg" alt="" style="width:14px;height:14px;vertical-align:middle;margin-right:.4rem">New Page</a>"#.to_string());
+    }
+    if ctx.can_manage_sites {
+        items.push(r#"<a href="/admin/sites/new"><img src="/admin/static/icons/plus.svg" alt="" style="width:14px;height:14px;vertical-align:middle;margin-right:.4rem">New Site</a>"#.to_string());
+    }
+    if ctx.can_manage_users {
+        items.push(r#"<a href="/admin/users/new"><img src="/admin/static/icons/plus.svg" alt="" style="width:14px;height:14px;vertical-align:middle;margin-right:.4rem">New User</a>"#.to_string());
+    }
+
+    let list_items: String = items.iter()
+        .map(|item| format!(r#"<li style="padding:.5rem 0">{item}</li>"#))
+        .collect();
+
+    format!(
+        r#"<h3 style="margin:0 0 .75rem;font-size:.95rem;font-weight:600">Quick Tools</h3>
+<ul style="list-style:none;margin:0;padding:0;font-size:.85rem">
+  {list_items}
+</ul>"#,
     )
 }
 
@@ -449,17 +480,19 @@ pub fn render(data: &DashboardData, flash: Option<&str>, ctx: &crate::PageContex
         ));
     }
 
+    widget_bodies.insert("six", quick_tools_widget(ctx));
+
     let default_layout = if is_author {
         serde_json::json!({
-            "left": ["stats", "posts_chart", "post_views"], "middle": ["one"], "right": ["two", "three", "four"]
+            "left": ["stats", "posts_chart", "post_views"], "middle": ["one", "six"], "right": ["two", "three", "four"]
         })
     } else if ctx.can_manage_sites {
         serde_json::json!({
-            "left": ["one"], "middle": ["two"], "right": ["three", "four", "five"]
+            "left": ["one", "six"], "middle": ["two"], "right": ["three", "four", "five"]
         })
     } else {
         serde_json::json!({
-            "left": ["one"], "middle": ["two"], "right": ["three", "four"]
+            "left": ["one", "six"], "middle": ["two"], "right": ["three", "four"]
         })
     };
 
@@ -487,11 +520,14 @@ fn widgets_section(
         .flat_map(|col| layout.get(col).and_then(|v| v.as_array()).into_iter().flatten())
         .filter_map(|v| v.as_str().map(|s| s.to_string()))
         .collect();
-    for id in bodies.keys() {
-        if !already_placed.contains(*id) {
-            if let Some(left) = layout.get_mut("left").and_then(|v| v.as_array_mut()) {
-                left.insert(0, serde_json::Value::String(id.to_string()));
-            }
+    // Sorted for a deterministic order — `bodies` is a HashMap, whose iteration
+    // order is randomized per-instance, which would otherwise reshuffle these
+    // unplaced widgets on every page load.
+    let mut unplaced_ids: Vec<&&str> = bodies.keys().filter(|id| !already_placed.contains(**id)).collect();
+    unplaced_ids.sort();
+    for id in unplaced_ids {
+        if let Some(left) = layout.get_mut("left").and_then(|v| v.as_array_mut()) {
+            left.insert(0, serde_json::Value::String(id.to_string()));
         }
     }
 
