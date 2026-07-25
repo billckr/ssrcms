@@ -414,7 +414,7 @@ pub fn render(data: &DashboardData, flash: Option<&str>, ctx: &crate::PageContex
     ));
     widget_bodies.insert("three", recent_posts_widget(
         &data.recent_pending, "Pending Review", "No posts pending review.",
-        SecondColumn::Badge { class: "pending", label: "Pending Review" },
+        SecondColumn::Badge { class: "pending", label: "Pending" },
     ));
     widget_bodies.insert("four", recent_posts_widget(
         &data.upcoming_scheduled, "Scheduled", "No posts scheduled.",

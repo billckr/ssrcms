@@ -1085,8 +1085,6 @@ mod tests {
             can_manage_forms: false,
             can_manage_pages: true,
             unread_forms_count: 0,
-            pending_review_count: 0,
-            pending_pages_count: 0,
             app_name: "Synaptic".to_string(),
         }
     }
