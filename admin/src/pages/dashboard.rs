@@ -484,15 +484,15 @@ pub fn render(data: &DashboardData, flash: Option<&str>, ctx: &crate::PageContex
 
     let default_layout = if is_author {
         serde_json::json!({
-            "left": ["stats", "posts_chart", "post_views"], "middle": ["one", "six"], "right": ["two", "three", "four"]
+            "left": ["stats", "six", "posts_chart", "post_views"], "middle": ["two", "one"], "right": ["three", "four"]
         })
     } else if ctx.can_manage_sites {
         serde_json::json!({
-            "left": ["one", "six"], "middle": ["two"], "right": ["three", "four", "five"]
+            "left": ["five", "six"], "middle": ["two", "three"], "right": ["one", "four"]
         })
     } else {
         serde_json::json!({
-            "left": ["one", "six"], "middle": ["two"], "right": ["three", "four"]
+            "left": ["six"], "middle": ["two", "three"], "right": ["one", "four"]
         })
     };
 
