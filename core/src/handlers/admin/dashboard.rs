@@ -22,9 +22,9 @@ pub struct DashboardQuery {
     pub views_year: Option<i32>,
 }
 
-/// Fetch the 5 most recent posts of a given status, for the dashboard's Recent
-/// Drafts / Recently Published / Pending Review widgets. `order_by` must be one
-/// of the fixed column names below (never user input).
+/// Fetch 5 posts of a given status, for the dashboard's Drafts / Published /
+/// Pending Review / Scheduled widgets. `order_by` must be one of the fixed
+/// column names below (never user input).
 async fn fetch_recent_posts(
     state: &AppState,
     site_id: Option<uuid::Uuid>,
@@ -35,10 +35,13 @@ async fn fetch_recent_posts(
     let order_sql = match order_by {
         "published_at" => "p.published_at DESC NULLS LAST",
         "submitted_at" => "p.submitted_at DESC NULLS LAST",
+        // Scheduled posts store their future publish time in `published_at`
+        // (not the unused `scheduled_at` column) — soonest first.
+        "published_at_asc" => "p.published_at ASC NULLS LAST",
         _ => "p.updated_at DESC",
     };
     let sql = format!(
-        r#"SELECT p.id, p.title, s.hostname
+        r#"SELECT p.id, p.title, s.hostname, p.published_at
            FROM posts p
            LEFT JOIN sites s ON s.id = p.site_id
            WHERE p.status = $1
@@ -48,7 +51,7 @@ async fn fetch_recent_posts(
            ORDER BY {order_sql}
            LIMIT 5"#
     );
-    sqlx::query_as::<_, (uuid::Uuid, String, Option<String>)>(&sql)
+    sqlx::query_as::<_, (uuid::Uuid, String, Option<String>, Option<chrono::DateTime<chrono::Utc>>)>(&sql)
         .bind(status)
         .bind(site_id)
         .bind(author_id)
@@ -56,10 +59,11 @@ async fn fetch_recent_posts(
         .await
         .unwrap_or_else(|e| { tracing::warn!("dashboard recent {} posts error: {:?}", status, e); vec![] })
         .into_iter()
-        .map(|(id, title, hostname)| admin::pages::dashboard::RecentPostSummary {
+        .map(|(id, title, hostname, published_at)| admin::pages::dashboard::RecentPostSummary {
             id: id.to_string(),
             title,
             site_hostname: hostname.unwrap_or_default(),
+            scheduled_at: published_at.map(|d| format!("{} UTC", d.format("%Y-%m-%d %H:%M"))),
         })
         .collect()
 }
@@ -71,23 +75,6 @@ pub async fn dashboard(
 ) -> Html<String> {
     let site_id = admin.site_id;
     let is_author = admin.site_role == "author";
-
-    // Fetch site-wide counts (used by admin/editor/super_admin views).
-    let published_posts = crate::models::post::count(
-        &state.db, site_id, Some(crate::models::post::PostStatus::Published), Some(crate::models::post::PostType::Post)
-    ).await.unwrap_or_else(|e| { tracing::warn!("dashboard published count error: {:?}", e); 0 });
-
-    let draft_posts = crate::models::post::count(
-        &state.db, site_id, Some(crate::models::post::PostStatus::Draft), Some(crate::models::post::PostType::Post)
-    ).await.unwrap_or_else(|e| { tracing::warn!("dashboard draft count error: {:?}", e); 0 });
-
-    let pending_posts = crate::models::post::count(
-        &state.db, site_id, Some(crate::models::post::PostStatus::Pending), Some(crate::models::post::PostType::Post)
-    ).await.unwrap_or_else(|e| { tracing::warn!("dashboard pending count error: {:?}", e); 0 });
-
-    let total_pages = crate::models::post::count(
-        &state.db, site_id, None, Some(crate::models::post::PostType::Page)
-    ).await.unwrap_or_else(|e| { tracing::warn!("dashboard pages count error: {:?}", e); 0 });
 
     let total_users = if admin.caps.is_global_admin {
         crate::models::user::count_staff(&state.db, admin.user.id).await
@@ -356,16 +343,14 @@ pub async fn dashboard(
     let recent_drafts = fetch_recent_posts(&state, site_id, recent_posts_author, "draft", "updated_at").await;
     let recent_published = fetch_recent_posts(&state, site_id, recent_posts_author, "published", "published_at").await;
     let recent_pending = fetch_recent_posts(&state, site_id, recent_posts_author, "pending", "submitted_at").await;
+    let upcoming_scheduled = fetch_recent_posts(&state, site_id, recent_posts_author, "scheduled", "published_at_asc").await;
 
     let data = DashboardData {
         widget_layout,
         recent_drafts,
         recent_published,
         recent_pending,
-        published_posts,
-        draft_posts,
-        pending_posts,
-        total_pages,
+        upcoming_scheduled,
         total_sites,
         total_users,
         total_subscribers,

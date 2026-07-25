@@ -3,14 +3,9 @@
 use std::collections::HashMap;
 
 pub struct DashboardData {
-    pub published_posts: i64,
-    pub draft_posts: i64,
-    pub total_pages: i64,
     pub total_sites: i64,
     pub total_users: i64,
     pub total_subscribers: i64,
-    /// Posts waiting for editor review (all roles see this on their dashboard).
-    pub pending_posts: i64,
     /// Author-scoped counts (only meaningful when user_role == "author").
     pub author_draft_posts: i64,
     pub author_pending_posts: i64,
@@ -49,12 +44,18 @@ pub struct DashboardData {
     /// Up to 5 most recently submitted posts pending review (scoped to the current
     /// user/site), for the "Pending Review" widget.
     pub recent_pending: Vec<RecentPostSummary>,
+    /// Next 5 upcoming scheduled posts, soonest first (scoped to the current
+    /// user/site), for the "Scheduled" widget.
+    pub upcoming_scheduled: Vec<RecentPostSummary>,
 }
 
 pub struct RecentPostSummary {
     pub id: String,
     pub title: String,
     pub site_hostname: String,
+    /// Formatted scheduled publish time (e.g. "2026-08-01 09:00 UTC"), only
+    /// populated for the Scheduled widget.
+    pub scheduled_at: Option<String>,
 }
 
 /// Truncate a title to `max_chars` characters (by Unicode scalar, not byte), appending
@@ -161,18 +162,30 @@ fn year_select(
 
 /// Max characters shown for a post title inside a dashboard widget row, so long
 /// titles don't blow out the card width. Longer titles are truncated with "…".
-const WIDGET_TITLE_MAX_CHARS: usize = 35;
+const WIDGET_TITLE_MAX_CHARS: usize = 25;
 
-/// Renders a "recent posts" widget body (title, status, domain) for either the
-/// Recent Drafts or Recently Published widget, mirroring the columns shown on
-/// `/admin/posts?status=...`. The title links to the post editor.
+/// What the second column of a `recent_posts_widget` table shows: either a status
+/// badge (Drafts / Published / Pending Review) or the scheduled publish time
+/// (Scheduled).
+enum SecondColumn<'a> {
+    Badge { class: &'a str, label: &'a str },
+    ScheduledTime,
+}
+
+/// Renders a "recent posts" widget body (title, second column, domain) for the
+/// Drafts, Published, Pending Review, or Scheduled widgets, mirroring the columns
+/// shown on `/admin/posts?status=...`. The title links to the post editor.
 fn recent_posts_widget(
     posts: &[RecentPostSummary],
     heading: &str,
     empty_message: &str,
-    badge_class: &str,
-    badge_label: &str,
+    second_column: SecondColumn,
 ) -> String {
+    let second_col_header = match second_column {
+        SecondColumn::Badge { .. } => "Status",
+        SecondColumn::ScheduledTime => "Scheduled For",
+    };
+
     let rows: String = if posts.is_empty() {
         format!(
             r#"<tr><td colspan="3" style="padding:.6rem 0;color:var(--muted);font-size:.85rem">{empty_message}</td></tr>"#
@@ -187,15 +200,28 @@ fn recent_posts_widget(
                     crate::html_escape(&p.site_hostname),
                 )
             };
+            let second_cell = match second_column {
+                SecondColumn::Badge { class, label } => {
+                    format!(r#"<span class="badge badge-{class}">{label}</span>"#)
+                }
+                SecondColumn::ScheduledTime => match &p.scheduled_at {
+                    Some(when) => format!(
+                        r#"<span style="font-size:.8rem;white-space:nowrap">{}</span>"#,
+                        crate::html_escape(when),
+                    ),
+                    None => r#"<span style="color:var(--muted);font-size:0.8rem">&mdash;</span>"#.to_string(),
+                },
+            };
             format!(
                 r#"<tr style="border-top:1px solid var(--border)">
       <td style="padding:.45rem .4rem .45rem 0"><a href="/admin/posts/{id}/edit" title="{full_title}">{title}</a></td>
-      <td style="padding:.45rem .4rem"><span class="badge badge-{badge_class}">{badge_label}</span></td>
+      <td style="padding:.45rem .4rem">{second_cell}</td>
       <td style="padding:.45rem 0">{domain_cell}</td>
     </tr>"#,
                 id = crate::html_escape(&p.id),
                 full_title = crate::html_escape(&p.title),
                 title = crate::html_escape(&truncate_title(&p.title, WIDGET_TITLE_MAX_CHARS)),
+                second_cell = second_cell,
                 domain_cell = domain_cell,
             )
         }).collect()
@@ -207,7 +233,7 @@ fn recent_posts_widget(
   <thead>
     <tr style="text-align:left;color:var(--muted);font-size:.72rem;text-transform:uppercase">
       <th style="padding:.3rem .4rem .3rem 0;font-weight:500">Title</th>
-      <th style="padding:.3rem .4rem;font-weight:500">Status</th>
+      <th style="padding:.3rem .4rem;font-weight:500">{second_col_header}</th>
       <th style="padding:.3rem 0;font-weight:500">Domain</th>
     </tr>
   </thead>
@@ -223,7 +249,7 @@ pub fn render(data: &DashboardData, flash: Option<&str>, ctx: &crate::PageContex
     let is_author = ctx.user_role.eq_ignore_ascii_case("author");
     let mut widget_bodies: HashMap<&'static str, String> = HashMap::new();
 
-    let content = if is_author {
+    if is_author {
         let y  = data.selected_year;
         let vy = data.selected_views_year;
         let pr = &data.chart_range;
@@ -376,59 +402,31 @@ pub fn render(data: &DashboardData, flash: Option<&str>, ctx: &crate::PageContex
             },
             pending_close = if data.author_pending_posts > 0 { "</a>" } else { "</div>" },
         ));
+    }
 
-        String::new()
-    } else if ctx.user_role.eq_ignore_ascii_case("editor") {
-        format!(
-            r#"<div class="stat-panel stat-panel-3">
-  <a href="/admin/posts?status=published" class="stat-cell stat-cell-link{published_empty}">
-    <div class="stat-cell-top"><span class="stat-label">Posts</span></div>
-    <div class="stat-num">{published}</div>
-  </a>
-  <a href="/admin/posts?status=draft" class="stat-cell stat-cell-link{drafts_empty}">
-    <div class="stat-cell-top"><span class="stat-label">Drafts</span></div>
-    <div class="stat-num">{drafts}</div>
-  </a>
-  {pending_open}
-    <div class="stat-cell-top">
-      <span class="stat-label">Pending</span>
-    </div>
-    <div class="stat-num">{pending}</div>
-  {pending_close}
-</div>"#,
-            published = data.published_posts,
-            drafts    = data.draft_posts,
-            pending   = data.pending_posts,
-            published_empty = if data.published_posts == 0 { " is-empty" } else { "" },
-            drafts_empty    = if data.draft_posts == 0 { " is-empty" } else { "" },
-            pending_open = if data.pending_posts > 0 {
-                r#"<a href="/admin/posts?status=pending" class="stat-cell is-pending stat-cell-link">"#
-            } else {
-                r#"<div class="stat-cell is-empty">"#
-            },
-            pending_close = if data.pending_posts > 0 { "</a>" } else { "</div>" },
-        )
-    } else {
-        format!(
-            r#"<div class="stat-panel stat-panel-7">
-  <a href="/admin/posts?status=published" class="stat-cell stat-cell-link{published_empty}">
-    <div class="stat-cell-top"><span class="stat-label">Posts</span></div>
-    <div class="stat-num">{published_posts}</div>
-  </a>
-  <a href="/admin/pages" class="stat-cell stat-cell-link{pages_empty}">
-    <div class="stat-cell-top"><span class="stat-label">Pages</span></div>
-    <div class="stat-num">{total_pages}</div>
-  </a>
-  <a href="/admin/posts?status=draft" class="stat-cell stat-cell-link{drafts_empty}">
-    <div class="stat-cell-top"><span class="stat-label">Drafts</span></div>
-    <div class="stat-num">{draft_posts}</div>
-  </a>
-  {pending_open}
-    <div class="stat-cell-top">
-      <span class="stat-label">Pending</span>
-    </div>
-    <div class="stat-num">{pending}</div>
-  {pending_close}
+    widget_bodies.insert("one", recent_posts_widget(
+        &data.recent_drafts, "Drafts", "No drafts.",
+        SecondColumn::Badge { class: "draft", label: "Draft" },
+    ));
+    widget_bodies.insert("two", recent_posts_widget(
+        &data.recent_published, "Published", "No published posts.",
+        SecondColumn::Badge { class: "published", label: "Published" },
+    ));
+    widget_bodies.insert("three", recent_posts_widget(
+        &data.recent_pending, "Pending Review", "No posts pending review.",
+        SecondColumn::Badge { class: "pending", label: "Pending Review" },
+    ));
+    widget_bodies.insert("four", recent_posts_widget(
+        &data.upcoming_scheduled, "Scheduled", "No posts scheduled.",
+        SecondColumn::ScheduledTime,
+    ));
+
+    // Sites/Users/Subscribers widget — same data and links as the top stat panel's
+    // last three cells, only shown to roles that can manage sites (super_admin,
+    // site_admin); editors and authors have no use for site-wide counts.
+    if ctx.can_manage_sites {
+        widget_bodies.insert("five", format!(
+            r#"<div class="stat-panel stat-panel-3 widget-stats" style="box-shadow:none;border:none;margin-bottom:0">
   <a href="/admin/sites" class="stat-cell stat-cell-link{sites_empty}">
     <div class="stat-cell-top"><span class="stat-label">Sites</span></div>
     <div class="stat-num">{total_sites}</div>
@@ -442,55 +440,36 @@ pub fn render(data: &DashboardData, flash: Option<&str>, ctx: &crate::PageContex
     <div class="stat-num">{total_subscribers}</div>
   </a>
 </div>"#,
-            published_posts = data.published_posts,
-            draft_posts = data.draft_posts,
-            pending = data.pending_posts,
-            total_sites = data.total_sites,
-            published_empty = if data.published_posts == 0 { " is-empty" } else { "" },
-            drafts_empty    = if data.draft_posts == 0 { " is-empty" } else { "" },
-            pages_empty     = if data.total_pages == 0 { " is-empty" } else { "" },
-            sites_empty     = if data.total_sites == 0 { " is-empty" } else { "" },
-            users_empty     = if data.total_users == 0 { " is-empty" } else { "" },
-            subscribers_empty = if data.total_subscribers == 0 { " is-empty" } else { "" },
-            pending_open = if data.pending_posts > 0 {
-                r#"<a href="/admin/posts?status=pending" class="stat-cell is-pending stat-cell-link">"#
-            } else {
-                r#"<div class="stat-cell is-empty">"#
-            },
-            pending_close = if data.pending_posts > 0 { "</a>" } else { "</div>" },
-            total_pages = data.total_pages,
-            total_users = data.total_users,
-            total_subscribers = data.total_subscribers,
-        )
-    };
-
-    widget_bodies.insert("one", recent_posts_widget(
-        &data.recent_drafts, "Recent Drafts", "No drafts.", "draft", "Draft",
-    ));
-    widget_bodies.insert("two", recent_posts_widget(
-        &data.recent_published, "Recently Published", "No published posts.", "published", "Published",
-    ));
-    widget_bodies.insert("three", recent_posts_widget(
-        &data.recent_pending, "Pending Review", "No posts pending review.", "pending", "Pending Review",
-    ));
+            total_sites        = data.total_sites,
+            total_users        = data.total_users,
+            total_subscribers  = data.total_subscribers,
+            sites_empty        = if data.total_sites == 0 { " is-empty" } else { "" },
+            users_empty        = if data.total_users == 0 { " is-empty" } else { "" },
+            subscribers_empty  = if data.total_subscribers == 0 { " is-empty" } else { "" },
+        ));
+    }
 
     let default_layout = if is_author {
         serde_json::json!({
-            "left": ["stats", "posts_chart", "post_views"], "middle": ["one"], "right": ["two", "three"]
+            "left": ["stats", "posts_chart", "post_views"], "middle": ["one"], "right": ["two", "three", "four"]
+        })
+    } else if ctx.can_manage_sites {
+        serde_json::json!({
+            "left": ["one"], "middle": ["two"], "right": ["three", "four", "five"]
         })
     } else {
         serde_json::json!({
-            "left": ["one"], "middle": ["two"], "right": ["three"]
+            "left": ["one"], "middle": ["two"], "right": ["three", "four"]
         })
     };
 
-    let content = format!("{content}{}", widgets_section(&data.widget_layout, &default_layout, &widget_bodies));
+    let content = widgets_section(&data.widget_layout, &default_layout, &widget_bodies);
 
     crate::admin_page("Dashboard", "/admin", flash, &content, ctx)
 }
 
 /// Renders the draggable widget board: Published Posts / Post Views (authors) plus
-/// the Recent Drafts / Recently Published / Pending Review widgets, arranged per
+/// the Drafts / Published / Pending Review / Scheduled widgets, arranged per
 /// the user's saved layout (or `default_layout` if none saved yet).
 fn widgets_section(
     layout: &Option<serde_json::Value>,
@@ -539,7 +518,7 @@ fn widgets_section(
     };
 
     format!(
-        r#"<div class="widget-board" id="widget-board" style="margin-top:1rem">
+        r#"<div class="widget-board" id="widget-board">
   <div class="widget-col" data-col="left">
     {left}
   </div>
