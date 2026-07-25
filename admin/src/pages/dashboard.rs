@@ -252,27 +252,25 @@ fn recent_posts_widget(
 /// content, scoped to what the current role is allowed to create.
 fn quick_tools_widget(ctx: &crate::PageContext) -> String {
     let mut items = vec![
-        r#"<a href="/admin/posts/new"><img src="/admin/static/icons/plus.svg" alt="" style="width:14px;height:14px;vertical-align:middle;margin-right:.4rem">New Post</a>"#.to_string(),
+        r#"<a href="/admin/posts/new" class="btn btn-primary">New Post</a>"#.to_string(),
     ];
     if ctx.can_manage_pages {
-        items.push(r#"<a href="/admin/pages/new"><img src="/admin/static/icons/plus.svg" alt="" style="width:14px;height:14px;vertical-align:middle;margin-right:.4rem">New Page</a>"#.to_string());
+        items.push(r#"<a href="/admin/pages/new" class="btn btn-primary">New Page</a>"#.to_string());
     }
     if ctx.can_manage_sites {
-        items.push(r#"<a href="/admin/sites/new"><img src="/admin/static/icons/plus.svg" alt="" style="width:14px;height:14px;vertical-align:middle;margin-right:.4rem">New Site</a>"#.to_string());
+        items.push(r#"<a href="/admin/sites/new" class="btn btn-primary">New Site</a>"#.to_string());
     }
     if ctx.can_manage_users {
-        items.push(r#"<a href="/admin/users/new"><img src="/admin/static/icons/plus.svg" alt="" style="width:14px;height:14px;vertical-align:middle;margin-right:.4rem">New User</a>"#.to_string());
+        items.push(r#"<a href="/admin/users/new" class="btn btn-primary">New User</a>"#.to_string());
     }
 
-    let list_items: String = items.iter()
-        .map(|item| format!(r#"<li style="padding:.5rem 0">{item}</li>"#))
-        .collect();
+    let buttons: String = items.join("\n  ");
 
     format!(
         r#"<h3 style="margin:0 0 .75rem;font-size:.95rem;font-weight:600">Quick Tools</h3>
-<ul style="list-style:none;margin:0;padding:0;font-size:.85rem">
-  {list_items}
-</ul>"#,
+<div style="display:flex;flex-wrap:wrap;gap:.5rem">
+  {buttons}
+</div>"#,
     )
 }
 

@@ -551,6 +551,11 @@ pub struct ListFilter {
     pub offset: i64,
     /// When true, exclude trashed posts from results (used for admin "All" view).
     pub exclude_trashed: bool,
+    /// Admin list column to sort by (admin list only): "title" | "status" | "author" |
+    /// "domain" | "date". Anything else falls back to the default (date, newest first).
+    pub sort: Option<String>,
+    /// Sort direction: "asc" or "desc" (default when unset depends on the sort column).
+    pub sort_dir: Option<String>,
 }
 
 impl Default for ListFilter {
@@ -567,6 +572,8 @@ impl Default for ListFilter {
             limit: 10,
             offset: 0,
             exclude_trashed: false,
+            sort: None,
+            sort_dir: None,
         }
     }
 }
@@ -652,24 +659,39 @@ pub async fn list(pool: &PgPool, filter: &ListFilter) -> Result<Vec<Post>> {
         // $6 = NULL means "no template filter"; $6 = '__default__' means "filter to
         // pages using the default template" (stored as template IS NULL); anything
         // else is an exact match against a named template file.
-        let mut sql = "SELECT * FROM posts \
-                       WHERE ($1::text IS NULL OR status = $1) \
-                         AND ($2::text IS NULL OR post_type = $2) \
-                         AND ($3::uuid IS NULL OR author_id = $3) \
-                         AND ($4::uuid IS NULL OR site_id = $4) \
-                         AND (NOT $5::bool OR status != 'trashed') \
-                         AND ($6::text IS NULL OR ($6 = '__default__' AND template IS NULL) OR template = $6)"
+        // Joins are LEFT so posts always appear even if the author/site lookup is
+        // stale; they're only needed to sort by author name / site hostname.
+        let mut sql = "SELECT p.* FROM posts p \
+                       LEFT JOIN users u ON u.id = p.author_id \
+                       LEFT JOIN sites s ON s.id = p.site_id \
+                       WHERE ($1::text IS NULL OR p.status = $1) \
+                         AND ($2::text IS NULL OR p.post_type = $2) \
+                         AND ($3::uuid IS NULL OR p.author_id = $3) \
+                         AND ($4::uuid IS NULL OR p.site_id = $4) \
+                         AND (NOT $5::bool OR p.status != 'trashed') \
+                         AND ($6::text IS NULL OR ($6 = '__default__' AND p.template IS NULL) OR p.template = $6)"
             .to_string();
 
         for i in 0..terms.len() {
             let n = i + 7;
-            sql.push_str(&format!(" AND LOWER(title) LIKE ${n}"));
+            sql.push_str(&format!(" AND LOWER(p.title) LIKE ${n}"));
         }
+
+        // Whitelisted sort column/direction — never interpolate the raw query string.
+        let dir_asc = filter.sort_dir.as_deref() == Some("asc");
+        let order_expr = match filter.sort.as_deref() {
+            Some("title")  => if dir_asc { "p.title ASC" } else { "p.title DESC" },
+            Some("status") => if dir_asc { "p.status ASC" } else { "p.status DESC" },
+            Some("author") => if dir_asc { "u.display_name ASC NULLS LAST" } else { "u.display_name DESC NULLS LAST" },
+            Some("domain") => if dir_asc { "s.hostname ASC NULLS LAST" } else { "s.hostname DESC NULLS LAST" },
+            Some("date")   => if dir_asc { "p.published_at ASC NULLS LAST" } else { "p.published_at DESC NULLS LAST" },
+            _              => "p.published_at DESC NULLS LAST",
+        };
 
         let limit_n  = terms.len() + 7;
         let offset_n = terms.len() + 8;
         sql.push_str(&format!(
-            " ORDER BY published_at DESC NULLS LAST LIMIT ${limit_n} OFFSET ${offset_n}"
+            " ORDER BY {order_expr} LIMIT ${limit_n} OFFSET ${offset_n}"
         ));
 
         let mut q = sqlx::query_as::<_, Post>(&sql)

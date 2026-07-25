@@ -58,12 +58,12 @@ pub struct TermOption {
 }
 
 /// Build pagination controls for the posts/pages list.
-/// Preserves `status_qs` (e.g. `"&status=published"`) and `search_qs` across page nav.
-fn posts_pagination(base_path: &str, page: i64, total_pages: i64, status_qs: &str, search_qs: &str) -> String {
+/// Preserves `status_qs` (e.g. `"&status=published"`), `search_qs`, and `sort_qs` across page nav.
+fn posts_pagination(base_path: &str, page: i64, total_pages: i64, status_qs: &str, search_qs: &str, sort_qs: &str) -> String {
     if total_pages <= 1 {
         return String::new();
     }
-    let qs = format!("{status_qs}{search_qs}");
+    let qs = format!("{status_qs}{search_qs}{sort_qs}");
     let prev = if page > 1 {
         format!(r#"<a href="{base_path}?page={}{qs}" class="page-btn">&laquo; Prev</a>"#, page - 1)
     } else {
@@ -98,6 +98,8 @@ pub fn posts_list_fragment(
     ctx: &crate::PageContext,
     status_filter: Option<&str>,
     search: &str,
+    sort: Option<&str>,
+    dir: Option<&str>,
 ) -> String {
     let edit_prefix = if post_type == "page" { "/admin/pages" } else { "/admin/posts" };
     let base_path   = if post_type == "page" { "/admin/pages" } else { "/admin/posts" };
@@ -118,6 +120,10 @@ pub fn posts_list_fragment(
         String::new()
     } else {
         format!("&search={}", crate::html_escape(search))
+    };
+    let sort_qs = match sort {
+        Some(s) if !s.is_empty() => format!("&sort={}&dir={}", s, dir.unwrap_or("desc")),
+        _ => String::new(),
     };
 
     if posts.is_empty() {
@@ -243,26 +249,43 @@ pub fn posts_list_fragment(
         )
     }).collect::<Vec<_>>().join("\n");
 
+    // Sortable column header: link toggles asc/desc for that column, preserving the
+    // current status/search filters and resetting to page 1 (a new sort is a new view).
+    let sort_th = |label: &str, key: &str| -> String {
+        let is_active = sort == Some(key);
+        let next_dir = if is_active && dir == Some("asc") { "desc" } else { "asc" };
+        let arrow = if is_active {
+            if dir == Some("asc") { " \u{25B2}" } else { " \u{25BC}" }
+        } else {
+            ""
+        };
+        format!(
+            r#"<th><a href="{base_path}?sort={key}&dir={next_dir}{status_qs}{search_qs}" style="color:inherit;text-decoration:none;white-space:nowrap">{label}{arrow}</a></th>"#
+        )
+    };
+
     // Thead middle columns mirror the tbody column ordering.
     let middle_ths = match status_filter {
-        Some("draft") | Some("pending") => "<th>Author</th><th>Domain</th>".to_string(),
+        Some("draft") | Some("pending") => format!("{}{}", sort_th("Author", "author"), sort_th("Domain", "domain")),
         _ => {
-            let date_th = if show_date_col { format!("<th>{}</th>", date_col_label) } else { String::new() };
-            format!("<th>Author</th><th>Domain</th>{date_th}")
+            let date_th = if show_date_col { sort_th(date_col_label, "date") } else { String::new() };
+            format!("{}{}{}", sort_th("Author", "author"), sort_th("Domain", "domain"), date_th)
         },
     };
 
-    let pagination = posts_pagination(base_path, page, total_pages, &status_qs, &search_qs);
+    let pagination = posts_pagination(base_path, page, total_pages, &status_qs, &search_qs, &sort_qs);
 
     format!(
         r#"<table class="data-table">
   <thead><tr>
     <th style="width:2rem"><input type="checkbox" id="select-all" title="Select all" aria-label="Select all"></th>
-    <th>Title</th><th>Status</th>{middle_ths}<th>Actions</th>
+    {title_th}{status_th}{middle_ths}<th>Actions</th>
   </tr></thead>
   <tbody>{rows}</tbody>
 </table>
 {pagination}"#,
+        title_th   = sort_th("Title", "title"),
+        status_th  = sort_th("Status", "status"),
         middle_ths = middle_ths,
         rows       = rows,
         pagination = pagination,
@@ -270,7 +293,7 @@ pub fn posts_list_fragment(
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn render_list(posts: &[PostRow], post_type: &str, page: i64, total_pages: i64, flash: Option<&str>, ctx: &crate::PageContext, status_filter: Option<&str>, pending_count: i64, author_scheduled_count: i64, search: &str, template_filter: Option<&str>, available_templates: &[Option<String>]) -> String {
+pub fn render_list(posts: &[PostRow], post_type: &str, page: i64, total_pages: i64, flash: Option<&str>, ctx: &crate::PageContext, status_filter: Option<&str>, pending_count: i64, author_scheduled_count: i64, search: &str, template_filter: Option<&str>, available_templates: &[Option<String>], sort: Option<&str>, dir: Option<&str>) -> String {
     let title     = if post_type == "page" { "Pages" } else { "Posts" };
     let new_label = if post_type == "page" { "New Page" } else { "New Post" };
     let new_href  = if post_type == "page" { "/admin/pages/new" } else { "/admin/posts/new" };
@@ -321,10 +344,14 @@ pub fn render_list(posts: &[PostRow], post_type: &str, page: i64, total_pages: i
     } else {
         format!("&search={}", crate::html_escape(search))
     };
+    let sort_qs = match sort {
+        Some(s) if !s.is_empty() => format!("&sort={}&dir={}", s, dir.unwrap_or("desc")),
+        _ => String::new(),
+    };
 
     // Top pagination lives outside div#posts-list so the search input (also outside)
     // is never wiped by the JS live-search innerHTML swap.
-    let top_pagination = posts_pagination(base_path, page, total_pages, &status_qs, &search_qs);
+    let top_pagination = posts_pagination(base_path, page, total_pages, &status_qs, &search_qs, &sort_qs);
 
     // Filter tabs — pages have fewer statuses; authors don't see Trash and only see
     // Scheduled when they actually have scheduled posts.
@@ -363,10 +390,11 @@ pub fn render_list(posts: &[PostRow], post_type: &str, page: i64, total_pages: i
     let tabs_html = format!(r#"<div class="page-tabs" style="margin-bottom:1.25rem">{}</div>"#, tabs);
 
     // Fragment: table + bottom pagination — swapped by the live-search JS.
-    let fragment = posts_list_fragment(posts, post_type, page, total_pages, ctx, status_filter, search);
+    let fragment = posts_list_fragment(posts, post_type, page, total_pages, ctx, status_filter, search, sort, dir);
 
-    // The live-search fetch URL includes status= so results stay scoped to the current tab.
-    let fetch_prefix = format!("{}?partial=1{}", base_path, status_qs);
+    // The live-search fetch URL includes status=/sort= so results stay scoped to the
+    // current tab and column sort.
+    let fetch_prefix = format!("{}?partial=1{}{}", base_path, status_qs, sort_qs);
 
     let content = format!(
         r#"{tabs_html}
@@ -1091,22 +1119,22 @@ mod tests {
 
     #[test]
     fn post_view_link_uses_blog_prefix() {
-        let html = render_list(&[make_row("post", "my-post")], "post", 1, 1, None, &make_ctx(), None, 0, 0, "", None, &[]);
+        let html = render_list(&[make_row("post", "my-post")], "post", 1, 1, None, &make_ctx(), None, 0, 0, "", None, &[], None, None);
         assert!(html.contains("href=\"/my-post\""), "post view href should be /{{slug}}");
         assert!(html.contains("target=\"_blank\""), "view link should open in new tab");
     }
 
     #[test]
     fn page_view_link_uses_root_prefix() {
-        let html = render_list(&[make_row("page", "about")], "page", 1, 1, None, &make_ctx(), None, 0, 0, "", None, &[]);
+        let html = render_list(&[make_row("page", "about")], "page", 1, 1, None, &make_ctx(), None, 0, 0, "", None, &[], None, None);
         assert!(html.contains("href=\"/about\""), "page view href should be /{{slug}}");
         assert!(html.contains("target=\"_blank\""), "view link should open in new tab");
     }
 
     #[test]
     fn view_icon_present_in_both_post_and_page_lists() {
-        let post_html = render_list(&[make_row("post", "hello")], "post", 1, 1, None, &make_ctx(), None, 0, 0, "", None, &[]);
-        let page_html = render_list(&[make_row("page", "hello")], "page", 1, 1, None, &make_ctx(), None, 0, 0, "", None, &[]);
+        let post_html = render_list(&[make_row("post", "hello")], "post", 1, 1, None, &make_ctx(), None, 0, 0, "", None, &[], None, None);
+        let page_html = render_list(&[make_row("page", "hello")], "page", 1, 1, None, &make_ctx(), None, 0, 0, "", None, &[], None, None);
         assert!(post_html.contains("eye.svg"), "post list should include eye icon");
         assert!(page_html.contains("eye.svg"), "page list should include eye icon");
     }

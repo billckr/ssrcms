@@ -26,6 +26,12 @@ pub struct PostsQuery {
     /// "pages using the default template" (stored as `template IS NULL`).
     #[serde(default)]
     pub template: Option<String>,
+    /// Column to sort by: "title" | "status" | "author" | "domain" | "date".
+    #[serde(default)]
+    pub sort: Option<String>,
+    /// Sort direction: "asc" or "desc".
+    #[serde(default)]
+    pub dir: Option<String>,
 }
 
 pub async fn list(
@@ -36,7 +42,7 @@ pub async fn list(
     let cs = state.site_hostname(admin.site_id);
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
     let author_filter = if admin.site_role == "author" { Some(admin.user.id) } else { None };
-    list_type(state, "post", q.page, q.status.as_deref(), q.search.as_deref(), q.partial.as_deref(), None, admin.site_id, author_filter, ctx).await
+    list_type(state, "post", q.page, q.status.as_deref(), q.search.as_deref(), q.partial.as_deref(), None, admin.site_id, author_filter, q.sort.as_deref(), q.dir.as_deref(), ctx).await
 }
 
 pub async fn list_pages(
@@ -49,11 +55,11 @@ pub async fn list_pages(
     }
     let cs = state.site_hostname(admin.site_id);
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
-    list_type(state, "page", q.page, q.status.as_deref(), q.search.as_deref(), q.partial.as_deref(), q.template.as_deref(), admin.site_id, None, ctx).await.into_response()
+    list_type(state, "page", q.page, q.status.as_deref(), q.search.as_deref(), q.partial.as_deref(), q.template.as_deref(), admin.site_id, None, q.sort.as_deref(), q.dir.as_deref(), ctx).await.into_response()
 }
 
 #[allow(clippy::too_many_arguments)]
-async fn list_type(state: AppState, post_type: &str, page: Option<i64>, status_filter: Option<&str>, search: Option<&str>, partial: Option<&str>, template_filter: Option<&str>, site_id: Option<Uuid>, author_id: Option<Uuid>, ctx: admin::PageContext) -> Html<String> {
+async fn list_type(state: AppState, post_type: &str, page: Option<i64>, status_filter: Option<&str>, search: Option<&str>, partial: Option<&str>, template_filter: Option<&str>, site_id: Option<Uuid>, author_id: Option<Uuid>, sort: Option<&str>, dir: Option<&str>, ctx: admin::PageContext) -> Html<String> {
     let per_page = 20i64;
     let page = page.unwrap_or(1).max(1);
     let offset = (page - 1) * per_page;
@@ -148,6 +154,8 @@ async fn list_type(state: AppState, post_type: &str, page: Option<i64>, status_f
         search: search_opt.map(|s| s.to_string()),
         template: template_filter.map(|s| s.to_string()),
         exclude_trashed,
+        sort: sort.map(|s| s.to_string()),
+        sort_dir: dir.map(|s| s.to_string()),
         ..Default::default()
     };
 
@@ -213,9 +221,9 @@ async fn list_type(state: AppState, post_type: &str, page: Option<i64>, status_f
     // `partial=<anything>` means the JS live-search is requesting only the table
     // fragment so it can swap div#posts-list without a full page reload.
     if partial.is_some() {
-        Html(admin::pages::posts::posts_list_fragment(&rows, post_type, page, total_pages, &ctx, status_filter, search_str))
+        Html(admin::pages::posts::posts_list_fragment(&rows, post_type, page, total_pages, &ctx, status_filter, search_str, sort, dir))
     } else {
-        Html(admin::pages::posts::render_list(&rows, post_type, page, total_pages, None, &ctx, status_filter, pending_count, author_scheduled_count, search_str, template_filter, &available_templates))
+        Html(admin::pages::posts::render_list(&rows, post_type, page, total_pages, None, &ctx, status_filter, pending_count, author_scheduled_count, search_str, template_filter, &available_templates, sort, dir))
     }
 }
 
