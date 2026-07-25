@@ -195,14 +195,15 @@ pub async fn list(
 }
 
 /// Assignable users for the "existing user" dropdown on the new-site form —
-/// everyone except super_admins, who have global access and can't be scoped
-/// to a single site.
+/// staff roles only (site_admin, editor, author). Excludes super_admins, who
+/// have global access and can't be scoped to a single site, and subscribers,
+/// who aren't staff and can't be assigned as a site admin.
 async fn fetch_assignable_users(state: &AppState) -> Vec<admin::pages::sites::UserOption> {
     crate::models::user::list(&state.db)
         .await
         .unwrap_or_default()
         .into_iter()
-        .filter(|u| u.role != "super_admin")
+        .filter(|u| u.role != "super_admin" && u.role != "subscriber")
         .map(|u| admin::pages::sites::UserOption {
             id: u.id.to_string(),
             label: format!("{} ({})", u.display_name, u.email),
