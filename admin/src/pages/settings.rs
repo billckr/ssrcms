@@ -388,10 +388,8 @@ window.seedPosts = function () {{
       resultEl.textContent = 'Error: ' + (res.data.error || 'unknown error');
       return;
     }}
-    var lines = ['Created ' + res.data.created + ', skipped ' + res.data.skipped +
-      ', ' + res.data.assigned + ' category/tag assignments.'];
-    (res.data.urls || []).forEach(function (u) {{ lines.push(u); }});
-    resultEl.textContent = lines.join('\\n');
+    resultEl.textContent = 'Created ' + res.data.created + ', skipped ' + res.data.skipped +
+      ', ' + res.data.assigned + ' category/tag assignments.';
   }});
 }};
 

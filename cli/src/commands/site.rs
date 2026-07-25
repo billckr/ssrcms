@@ -850,6 +850,7 @@ async fn rename(
     println!("  This will update:");
     println!("    • sites.hostname");
     println!("    • site_settings site_url");
+    println!("    • site_settings site_name (only if still set to the default hostname value)");
     println!("    • posts.content — /uploads/{} → /uploads/{}", old_hostname, new_hostname);
     println!("    • Caddyfile block header: {}", caddyfile);
     if let Some(ref dir) = install_dir {
@@ -890,6 +891,25 @@ async fn rename(
     .await
     .map_err(|e| anyhow::anyhow!("Failed to update site_url: {e}"))?;
     println!("  ✓ Updated site_settings site_url to {}", new_url);
+
+    // 2b. Update site_settings site_name, but only if it still matches the old
+    // hostname (i.e. it was never customized away from the auto-seeded default).
+    let updated_name = sqlx::query(
+        "UPDATE site_settings SET value = $1 \
+         WHERE site_id = $2 AND key = 'site_name' AND value = $3"
+    )
+    .bind(&new_hostname)
+    .bind(id)
+    .bind(&old_hostname)
+    .execute(&pool)
+    .await
+    .map_err(|e| anyhow::anyhow!("Failed to update site_name: {e}"))?
+    .rows_affected();
+    if updated_name > 0 {
+        println!("  ✓ Updated site_settings site_name to {}", new_hostname);
+    } else {
+        println!("  ℹ  site_settings site_name was customized — left unchanged");
+    }
 
     // 3. Update embedded media upload URLs in posts.content.
     let old_prefix = format!("/uploads/{}/", old_hostname);
