@@ -460,16 +460,16 @@ pub fn render(data: &DashboardData, flash: Option<&str>, ctx: &crate::PageContex
     // site_admin); editors and authors have no use for site-wide counts.
     if ctx.can_manage_sites {
         widget_bodies.insert("five", format!(
-            r#"<div class="stat-panel stat-panel-3 widget-stats" style="box-shadow:none;border:none;margin-bottom:0">
-  <a href="/admin/sites" class="stat-cell stat-cell-link{sites_empty}">
+            r#"<div class="stat-panel stat-panel-3 widget-stats" style="box-shadow:none;border:none;margin:-.4rem 0 -.7rem">
+  <a href="/admin/sites" class="stat-cell stat-cell-link{sites_empty}" style="padding:.5rem 1.3rem">
     <div class="stat-cell-top"><span class="stat-label">Sites</span></div>
     <div class="stat-num">{total_sites}</div>
   </a>
-  <a href="/admin/users" class="stat-cell stat-cell-link{users_empty}">
+  <a href="/admin/users" class="stat-cell stat-cell-link{users_empty}" style="padding:.5rem 1.3rem">
     <div class="stat-cell-top"><span class="stat-label">Users</span></div>
     <div class="stat-num">{total_users}</div>
   </a>
-  <a href="/admin/users?tab=subscribers" class="stat-cell stat-cell-link{subscribers_empty}">
+  <a href="/admin/users?tab=subscribers" class="stat-cell stat-cell-link{subscribers_empty}" style="padding:.5rem 1.3rem">
     <div class="stat-cell-top"><span class="stat-label">Subscribers</span></div>
     <div class="stat-num">{total_subscribers}</div>
   </a>
