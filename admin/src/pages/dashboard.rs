@@ -364,8 +364,7 @@ pub fn render(data: &DashboardData, flash: Option<&str>, ctx: &crate::PageContex
         );
 
         widget_bodies.insert("posts_chart", format!(
-            r#"<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;row-gap:.4rem;margin-bottom:1rem">
-  <h3 style="margin:0;font-size:.95rem;font-weight:600">Published Posts</h3>
+            r#"<div style="display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;row-gap:.4rem;margin-bottom:1rem">
   <div style="display:flex;align-items:center;gap:.5rem">
     {posts_year_sel}
     <div style="display:flex;gap:.35rem">
@@ -383,8 +382,7 @@ pub fn render(data: &DashboardData, flash: Option<&str>, ctx: &crate::PageContex
         ));
 
         widget_bodies.insert("post_views", format!(
-            r#"<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;row-gap:.4rem;margin-bottom:1rem">
-  <h3 style="margin:0;font-size:.95rem;font-weight:600">Post Views</h3>
+            r#"<div style="display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;row-gap:.4rem;margin-bottom:1rem">
   <div style="display:flex;align-items:center;gap:.5rem">
     {views_year_sel}
     <div style="display:flex;gap:.35rem">
@@ -402,12 +400,12 @@ pub fn render(data: &DashboardData, flash: Option<&str>, ctx: &crate::PageContex
         ));
 
         widget_bodies.insert("stats", format!(
-            r#"<div class="stat-panel stat-panel-4 widget-stats" style="box-shadow:none;border:none">
-  <a href="/admin/posts?status=published" class="stat-cell stat-cell-link{published_empty}">
+            r#"<div class="stat-panel stat-panel-4 widget-stats" style="box-shadow:none;border:none;margin:-.4rem 0 -.7rem">
+  <a href="/admin/posts?status=published" class="stat-cell stat-cell-link{published_empty}" style="padding:.5rem 1.3rem">
     <div class="stat-cell-top"><span class="stat-label">Posts</span></div>
     <div class="stat-num">{published}</div>
   </a>
-  <a href="/admin/posts?status=draft" class="stat-cell stat-cell-link{drafts_empty}">
+  <a href="/admin/posts?status=draft" class="stat-cell stat-cell-link{drafts_empty}" style="padding:.5rem 1.3rem">
     <div class="stat-cell-top"><span class="stat-label">Drafts</span></div>
     <div class="stat-num">{drafts}</div>
   </a>
@@ -417,7 +415,7 @@ pub fn render(data: &DashboardData, flash: Option<&str>, ctx: &crate::PageContex
     </div>
     <div class="stat-num">{pending}</div>
   {pending_close}
-  <div class="stat-cell{views_empty}">
+  <div class="stat-cell{views_empty}" style="padding:.5rem 1.3rem">
     <div class="stat-cell-top"><span class="stat-label">Views</span></div>
     <div class="stat-num">{total_views}</div>
   </div>
@@ -430,9 +428,9 @@ pub fn render(data: &DashboardData, flash: Option<&str>, ctx: &crate::PageContex
             drafts_empty      = if data.author_draft_posts == 0 { " is-empty" } else { "" },
             views_empty       = if data.author_total_views == 0 { " is-empty" } else { "" },
             pending_open = if data.author_pending_posts > 0 {
-                r#"<a href="/admin/posts?status=pending" class="stat-cell is-pending stat-cell-link">"#
+                r#"<a href="/admin/posts?status=pending" class="stat-cell is-pending stat-cell-link" style="padding:.5rem 1.3rem">"#
             } else {
-                r#"<div class="stat-cell is-empty">"#
+                r#"<div class="stat-cell is-empty" style="padding:.5rem 1.3rem">"#
             },
             pending_close = if data.author_pending_posts > 0 { "</a>" } else { "</div>" },
         ));
@@ -545,6 +543,9 @@ fn widgets_section(
         ("four", "Scheduled"),
         ("five", "Overview"),
         ("six", "Quick Tools"),
+        ("stats", "Overview"),
+        ("posts_chart", "Published Posts"),
+        ("post_views", "Post Views"),
     ].into_iter().collect();
 
     let col_html = |col: &str| -> String {
