@@ -206,14 +206,9 @@ async fn main() -> anyhow::Result<()> {
     {
         let cache = site_cache.read().expect("site_cache poisoned");
         for (hostname, (site, _)) in cache.iter() {
-            let sym = std::path::Path::new(&cfg.uploads_dir).join(hostname);
             let tgt = std::path::Path::new(&cfg.uploads_dir).join(site.id.to_string());
-            if tgt.is_dir() && !sym.exists() {
-                if let Err(e) = std::os::unix::fs::symlink(&tgt, &sym) {
-                    tracing::warn!("startup: failed to create upload symlink for '{}': {}", hostname, e);
-                } else {
-                    info!("startup: created upload symlink: {} -> {}/", hostname, site.id);
-                }
+            if tgt.is_dir() {
+                synaptic_core::handlers::uploads::ensure_hostname_symlink(&cfg.uploads_dir, hostname, site.id);
             }
         }
     }

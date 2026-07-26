@@ -76,6 +76,39 @@ pub async fn serve(
     }
 }
 
+/// Create (or repair) the `uploads/{hostname} → {site_uuid}` symlink used to
+/// serve media under a hostname-aliased URL instead of the raw UUID.
+///
+/// The target is written as a bare UUID string — relative to the symlink's
+/// own directory (`uploads/`) — rather than joined onto `uploads_dir`. A
+/// target like `uploads/{uuid}` is only valid if resolved from outside
+/// `uploads/`, but the OS resolves a symlink's relative target from the
+/// symlink's own parent directory, so joining `uploads_dir` again produced a
+/// dangling `uploads/uploads/{uuid}` path. Caddy (production) has no
+/// fallback for a broken symlink, so this must never regress.
+pub fn ensure_hostname_symlink(uploads_dir: &str, hostname: &str, site_id: uuid::Uuid) {
+    let sym = std::path::Path::new(uploads_dir).join(hostname);
+    let target = site_id.to_string();
+
+    // A broken symlink still occupies the directory entry (symlink() fails
+    // with EEXIST over it) but `Path::exists()` reports false for it, since
+    // that call follows the link. Detect and remove stale/broken links so
+    // they get recreated below instead of silently failing forever.
+    if let Ok(meta) = sym.symlink_metadata() {
+        if meta.file_type().is_symlink() && !sym.exists() {
+            let _ = std::fs::remove_file(&sym);
+        }
+    }
+
+    if !sym.exists() {
+        if let Err(e) = std::os::unix::fs::symlink(&target, &sym) {
+            tracing::warn!("failed to create upload symlink for '{}': {}", hostname, e);
+        } else {
+            tracing::info!("created upload symlink: {} -> {}/", hostname, target);
+        }
+    }
+}
+
 /// Resolve the full filesystem path for a file, trying the direct path first
 /// (which works for UUIDs and symlinked hostnames) then falling back to the
 /// site cache when a hostname has no symlink yet.

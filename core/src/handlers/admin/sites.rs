@@ -400,15 +400,10 @@ pub async fn create(
                 if let Err(e) = std::fs::create_dir_all(&site_uploads_dir) {
                     tracing::warn!(site_id = %site_id, "failed to create site uploads dir: {}", e);
                 }
-                // Create hostname symlink: uploads/{hostname} → uploads/{uuid}/
-                // so Caddy's file_server and the Axum uploads handler can serve
-                // files without exposing the UUID in public URLs.
-                let sym_path = FsPath::new(&uploads_dir).join(&site_hostname);
-                if !sym_path.exists() {
-                    if let Err(e) = std::os::unix::fs::symlink(&site_uploads_dir, &sym_path) {
-                        tracing::warn!(site_id = %site_id, "failed to create upload symlink for '{}': {}", site_hostname, e);
-                    }
-                }
+                // Create hostname symlink: uploads/{hostname} → {uuid} so Caddy's
+                // file_server and the Axum uploads handler can serve files
+                // without exposing the UUID in public URLs.
+                crate::handlers::uploads::ensure_hostname_symlink(&uploads_dir, &site_hostname, site_id);
                 // Copy the global default theme into sites/{uuid}/themes/default/.
                 let src = FsPath::new(&themes_dir).join("global").join("default");
                 let dst = site_themes_dir.join("default");

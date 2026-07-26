@@ -505,10 +505,7 @@ pub async fn save_new(
                                         let _ = std::fs::create_dir_all(&site_themes);
                                         let _ = std::fs::create_dir_all(&site_uploads);
                                         // Create hostname symlink for public URL aliasing.
-                                        let sym = std::path::Path::new(&upl_dir).join(&site_hostname);
-                                        if !sym.exists() {
-                                            let _ = std::os::unix::fs::symlink(&site_uploads, &sym);
-                                        }
+                                        crate::handlers::uploads::ensure_hostname_symlink(&upl_dir, &site_hostname, sid);
                                         let src = std::path::Path::new(&thm_dir).join("global").join("default");
                                         let dst = site_themes.join("default");
                                         if src.is_dir() && !dst.exists() {
@@ -589,10 +586,7 @@ pub async fn save_new(
                                         let _ = std::fs::create_dir_all(&site_themes);
                                         let _ = std::fs::create_dir_all(&site_uploads);
                                         // Create hostname symlink for public URL aliasing.
-                                        let sym = std::path::Path::new(&upl_dir).join(&site_hostname);
-                                        if !sym.exists() {
-                                            let _ = std::os::unix::fs::symlink(&site_uploads, &sym);
-                                        }
+                                        crate::handlers::uploads::ensure_hostname_symlink(&upl_dir, &site_hostname, sid);
                                         let src = std::path::Path::new(&thm_dir).join("global").join("default");
                                         let dst = site_themes.join("default");
                                         if src.is_dir() && !dst.exists() {

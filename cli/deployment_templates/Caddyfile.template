@@ -11,7 +11,7 @@
     # falling back to the global active theme). A flat Caddy file_server has
     # no way to do that resolution, so bypassing Axum here 404s for any theme
     # whose assets aren't coincidentally reachable at the literal request path.
-    handle /uploads/* {
+    handle_path /uploads/* {
         root * {UPLOADS_DIR}
         file_server
     }
