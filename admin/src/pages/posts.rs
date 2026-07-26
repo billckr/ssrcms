@@ -819,6 +819,7 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
             <input type="checkbox" id="sources-public-cb" name="sources_public" value="on"{sources_public_checked}>
             Show sources on the live page
           </label>
+          <span id="sources-public-saved" style="display:none;color:var(--muted);font-size:12px;margin-left:1.6rem">Saved</span>
         </div>
         <div id="sources-list">{source_rows}</div>
         <button type="button" class="btn" style="width:100%;font-size:12px" onclick="addSourceRow()">+ Add Source URL</button>
@@ -947,6 +948,29 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
     list.appendChild(row);
     row.querySelector('input').focus();
   }};
+
+  // Auto-save the "Show sources on the live page" toggle immediately on
+  // change, rather than waiting for the full post form to be saved — the
+  // rest of the form may be mid-edit and not ready to submit yet.
+  (function() {{
+    var cb = document.getElementById('sources-public-cb');
+    var postId = {post_id_js};
+    if (!cb || !postId) return; // new post — nothing to save until first Save
+    cb.addEventListener('change', function() {{
+      var saved = document.getElementById('sources-public-saved');
+      fetch('/admin/api/posts/' + postId + '/sources-public', {{
+        method: 'POST',
+        headers: {{ 'Content-Type': 'application/json' }},
+        body: JSON.stringify({{ public: cb.checked }}),
+      }}).then(function(r) {{
+        if (r.ok && saved) {{
+          saved.style.display = '';
+          clearTimeout(saved._hideTimer);
+          saved._hideTimer = setTimeout(function() {{ saved.style.display = 'none'; }}, 2000);
+        }}
+      }});
+    }});
+  }})();
 
   // On submit, copy Quill HTML into the hidden input and validate excerpt
   document.querySelector('form').addEventListener('submit', function(e) {{
@@ -1111,6 +1135,7 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
         title_val = crate::html_escape(&post.title),
         slug = crate::html_escape(&post.slug),
         content_js = serde_json::to_string(&post.content).unwrap_or_else(|_| "\"\"".into()),
+        post_id_js = serde_json::to_string(&post.id).unwrap_or_else(|_| "null".into()),
         excerpt = crate::html_escape(&post.excerpt),
         status_options = status_options,
         status_hint = status_hint,

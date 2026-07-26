@@ -344,6 +344,7 @@ p { margin: 0 0 1rem; }
 /* ── Single post ── */
 .single-post .post-header { margin-bottom: 2rem; }
 .single-post .post-title { font-size: 2rem; line-height: 1.2; margin-bottom: 0.75rem; }
+.post-subtitle { font-size: 1.15rem; line-height: 1.5; color: var(--color-muted); margin-bottom: 1rem; }
 
 .post-content { line-height: 1.8; }
 .post-content p { margin-bottom: 1.25rem; }

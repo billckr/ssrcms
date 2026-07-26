@@ -37,6 +37,7 @@
       </figure>
     {% endif %}
     <h1 class="post-title">{{ post.title }}</h1>
+    {% if post.excerpt %}<p class="post-subtitle">{{ post.excerpt }}</p>{% endif %}
     <div class="post-meta">
       <time datetime="{{ post.published_at }}">
         {% if post.published_at %}{{ post.published_at | date_format }}{% endif %}
@@ -80,10 +81,19 @@
       <h2>Sources</h2>
       <ul>
         {% for src in post.sources %}
-          <li><a href="{{ src }}" target="_blank" rel="nofollow noopener">{{ src }}</a></li>
+          <li><a href="{{ src }}" target="_blank" rel="nofollow noopener" class="external-source-link">{{ src }}</a></li>
         {% endfor %}
       </ul>
     </footer>
+    <script>
+      document.querySelectorAll('.external-source-link').forEach(function (a) {
+        a.addEventListener('click', function (e) {
+          if (!confirm('This link leaves ' + window.location.hostname + ' and goes to an external site:\n\n' + a.href + '\n\nContinue?')) {
+            e.preventDefault();
+          }
+        });
+      });
+    </script>
   {% endif %}
 </article>
 

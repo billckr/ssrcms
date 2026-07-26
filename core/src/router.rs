@@ -117,6 +117,7 @@ pub fn build(
         .route("/admin/posts/new", get(posts::new_post).post(posts::save_new))
         .route("/admin/posts/{id}/edit", get(posts::edit_post).post(posts::save_edit))
         .route("/admin/posts/{id}/delete", post(posts::delete_post))
+        .route("/admin/api/posts/{id}/sources-public", post(posts::api_set_sources_public))
         .route("/admin/comments/{id}/delete", post(admin_comments::delete))
         .route("/admin/posts/bulk-delete", post(posts::bulk_delete_posts))
         // ── Admin pages ────────────────────────────────────────────────────
