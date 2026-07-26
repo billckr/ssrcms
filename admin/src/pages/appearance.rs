@@ -125,7 +125,10 @@ pub fn render_create_theme_form(flash: Option<&str>, ctx: &crate::PageContext) -
     };
 
     let content = format!(
-        r#"<form method="POST" action="/admin/appearance/create" class="form-section" style="max-width:520px;">
+        r#"<div class="card-boxed">
+  <h2 class="card-boxed-header">Create Theme</h2>
+  <div class="card-boxed-body">
+  <form method="POST" action="/admin/appearance/create" class="form-section" style="max-width:520px;">
   <div class="form-group">
     <label for="name">Theme name <span class="required">*</span></label>
     <input type="text" id="name" name="name" required maxlength="64"
@@ -146,7 +149,9 @@ pub fn render_create_theme_form(flash: Option<&str>, ctx: &crate::PageContext) -
     <button type="submit" class="btn btn-primary">Create Theme</button>
     <a href="/admin/appearance" class="btn btn-secondary">Cancel</a>
   </div>
-</form>"#,
+  </form>
+  </div>
+</div>"#,
         visibility = visibility_section,
     );
 

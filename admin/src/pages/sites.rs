@@ -277,8 +277,9 @@ pub fn render_new(data: &NewSiteData, flash: Option<&str>, ctx: &crate::PageCont
     }).collect::<Vec<_>>().join("\n");
 
     let content = format!(
-        r#"<div class="profile-container">
-  <h2>New Site</h2>
+        r#"<div class="card-boxed">
+  <h2 class="card-boxed-header">New Site</h2>
+  <div class="card-boxed-body">
   <form method="post" action="/admin/sites" class="edit-form" id="new-site-form" style="max-width:580px">
   <div class="form-group">
     <label for="hostname">Domain Name</label>
@@ -359,6 +360,7 @@ pub fn render_new(data: &NewSiteData, flash: Option<&str>, ctx: &crate::PageCont
     <a href="/admin/sites" class="btn btn-secondary">Cancel</a>
   </div>
   </form>
+  </div>
 </div>
 <script>
 (function() {{

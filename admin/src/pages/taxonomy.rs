@@ -36,15 +36,15 @@ pub fn render(terms: &[TermItem], taxonomy: &str, flash: Option<&str>, ctx: &cra
     let content = format!(
         r#"<div class="two-col">
   <div>
-    <h2>All {title}</h2>
     <table class="data-table">
       <thead><tr><th>Name</th><th>Slug</th><th>Posts</th><th>Actions</th></tr></thead>
       <tbody>{rows}</tbody>
     </table>
   </div>
   <div>
-    <div class="profile-container">
-      <h2>Add {title_s}</h2>
+    <div class="card-boxed">
+      <h2 class="card-boxed-header">Add {title_s}</h2>
+      <div class="card-boxed-body">
       <form method="POST" action="{path}/new" id="add-term-form">
         <div class="form-group">
           <label for="name">Name</label>
@@ -60,6 +60,7 @@ pub fn render(terms: &[TermItem], taxonomy: &str, flash: Option<&str>, ctx: &cra
         <input type="hidden" name="taxonomy" value="{taxonomy}">
         <button type="submit" id="add-term-btn" class="btn btn-primary" disabled>Add {title_s}</button>
       </form>
+      </div>
       <script>
         var slugTouched = false;
         function toSlug(s) {{
@@ -76,7 +77,6 @@ pub fn render(terms: &[TermItem], taxonomy: &str, flash: Option<&str>, ctx: &cra
     </div>
   </div>
 </div>"#,
-        title = title,
         rows = rows,
         path = path,
         taxonomy = taxonomy,

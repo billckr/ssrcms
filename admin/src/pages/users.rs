@@ -750,8 +750,9 @@ function toggleSiteFields() {{
     };
 
     let content = format!(
-        r#"<div class="profile-container">
-  <h2>{form_title}</h2>
+        r#"<div class="card-boxed">
+  <h2 class="card-boxed-header">{form_title}</h2>
+  <div class="card-boxed-body">
   <form method="POST" action="{action}" style="max-width:580px">
     <div class="user-form-grid">
       <div class="form-group">
@@ -794,6 +795,7 @@ function toggleSiteFields() {{
       <a href="/admin/users" class="btn btn-secondary">Cancel</a>
     </div>
   </form>
+  </div>
 <script>
 (function () {{
   var form = document.querySelector('form[action="{action}"]');

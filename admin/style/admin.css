@@ -443,6 +443,28 @@ body.sidebar-open .sidebar-overlay {
   border-bottom: 1px solid var(--border);
 }
 
+/* ── Boxed card: grey header bar flush to the edges, white body ───────────── */
+/* Matches the .data-table grey-header/white-body look for non-table content
+   (e.g. the "Add Category/Tag" panel), so both halves of a page read as one
+   consistent visual system. */
+.card-boxed {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  margin-bottom: 2rem;
+}
+.card-boxed-header {
+  margin: 0;
+  background: #f8fafc;
+  padding: .6rem 1rem;
+  font-size: .95rem;
+  font-weight: 600;
+  border-bottom: 1px solid var(--border);
+}
+.card-boxed-body { padding: 1.25rem; }
+
 .profile-form,
 .password-form {
   max-width: 500px;
