@@ -56,6 +56,7 @@ pub struct RecentPostSummary {
     /// Formatted scheduled publish time (e.g. "2026-08-01 09:00 UTC"), only
     /// populated for the Scheduled widget.
     pub scheduled_at: Option<String>,
+    pub author_name: String,
 }
 
 /// Truncate a title to `max_chars` characters (by Unicode scalar, not byte), appending
@@ -164,11 +165,11 @@ fn year_select(
 /// titles don't blow out the card width. Longer titles are truncated with "…".
 const WIDGET_TITLE_MAX_CHARS: usize = 25;
 
-/// What the second column of a `recent_posts_widget` table shows: either a status
-/// badge (Drafts / Published / Pending Review) or the scheduled publish time
-/// (Scheduled).
-enum SecondColumn<'a> {
-    Badge { class: &'a str, label: &'a str },
+/// What the second column of a `recent_posts_widget` table shows: the post's
+/// author (Drafts / Published / Pending Review — a status badge here would just
+/// repeat the widget's own filter) or the scheduled publish time (Scheduled).
+enum SecondColumn {
+    Author,
     ScheduledTime,
 }
 
@@ -180,16 +181,24 @@ fn recent_posts_widget(
     heading: &str,
     empty_message: &str,
     second_column: SecondColumn,
+    boxed: bool,
 ) -> String {
     let second_col_header = match second_column {
-        SecondColumn::Badge { .. } => "Status",
+        SecondColumn::Author => "Author",
         SecondColumn::ScheduledTime => "Scheduled For",
+    };
+
+    // "Boxed" widgets show their heading in the card's own grey header bar
+    // (see `widgets_section`), so the body here omits it.
+    let heading_html = if boxed {
+        String::new()
+    } else {
+        format!(r#"<h3 style="margin:0 0 .75rem;font-size:.95rem;font-weight:600">{heading}</h3>"#)
     };
 
     if posts.is_empty() {
         return format!(
-            r#"<h3 style="margin:0 0 .75rem;font-size:.95rem;font-weight:600">{heading}</h3>
-<p style="margin:0;color:var(--muted);font-size:.85rem">{empty_message}</p>"#
+            r#"{heading_html}<p style="margin:0;color:var(--muted);font-size:.85rem">{empty_message}</p>"#
         );
     }
 
@@ -204,9 +213,7 @@ fn recent_posts_widget(
                 )
             };
             let second_cell = match second_column {
-                SecondColumn::Badge { class, label } => {
-                    format!(r#"<span class="badge badge-{class}">{label}</span>"#)
-                }
+                SecondColumn::Author => crate::html_escape(&p.author_name),
                 SecondColumn::ScheduledTime => match &p.scheduled_at {
                     Some(when) => format!(
                         r#"<span style="font-size:.8rem;white-space:nowrap">{}</span>"#,
@@ -231,8 +238,7 @@ fn recent_posts_widget(
     };
 
     format!(
-        r#"<h3 style="margin:0 0 .75rem;font-size:.95rem;font-weight:600">{heading}</h3>
-<table style="width:100%;border-collapse:collapse;font-size:.85rem">
+        r#"{heading_html}<table style="width:100%;border-collapse:collapse;font-size:.85rem">
   <thead>
     <tr style="text-align:left;color:var(--muted);font-size:.72rem;text-transform:uppercase">
       <th style="padding:.3rem .4rem .3rem 0;font-weight:500">Title</th>
@@ -267,8 +273,7 @@ fn quick_tools_widget(ctx: &crate::PageContext) -> String {
     let buttons: String = items.join("\n  ");
 
     format!(
-        r#"<h3 style="margin:0 0 .75rem;font-size:.95rem;font-weight:600">Quick Tools</h3>
-<div style="display:flex;flex-wrap:wrap;gap:.5rem">
+        r#"<div style="display:flex;flex-wrap:wrap;gap:.5rem">
   {buttons}
 </div>"#,
     )
@@ -435,19 +440,19 @@ pub fn render(data: &DashboardData, flash: Option<&str>, ctx: &crate::PageContex
 
     widget_bodies.insert("one", recent_posts_widget(
         &data.recent_drafts, "Drafts", "No drafts.",
-        SecondColumn::Badge { class: "draft", label: "Draft" },
+        SecondColumn::Author, true,
     ));
     widget_bodies.insert("two", recent_posts_widget(
         &data.recent_published, "Published", "No published posts.",
-        SecondColumn::Badge { class: "published", label: "Published" },
+        SecondColumn::Author, true,
     ));
     widget_bodies.insert("three", recent_posts_widget(
         &data.recent_pending, "Pending Review", "No posts pending review.",
-        SecondColumn::Badge { class: "pending", label: "Pending" },
+        SecondColumn::Author, true,
     ));
     widget_bodies.insert("four", recent_posts_widget(
         &data.upcoming_scheduled, "Scheduled", "No posts scheduled.",
-        SecondColumn::ScheduledTime,
+        SecondColumn::ScheduledTime, true,
     ));
 
     // Sites/Users/Subscribers widget — same data and links as the top stat panel's
@@ -529,6 +534,19 @@ fn widgets_section(
         }
     }
 
+    // Widgets in this list get "boxed" card chrome: a grey header bar (drag handle
+    // + title) spanning the full card width, matching the Menus list table's
+    // grey-header/white-body look, instead of the plain white title + padded body
+    // every other widget uses.
+    let boxed_titles: HashMap<&'static str, &'static str> = [
+        ("one", "Drafts"),
+        ("two", "Published"),
+        ("three", "Pending Review"),
+        ("four", "Scheduled"),
+        ("five", "Overview"),
+        ("six", "Quick Tools"),
+    ].into_iter().collect();
+
     let col_html = |col: &str| -> String {
         layout.get(col)
             .and_then(|v| v.as_array())
@@ -537,13 +555,26 @@ fn widgets_section(
                     .filter_map(|v| v.as_str())
                     .filter_map(|id| {
                         let body = bodies.get(id).cloned()?;
-                        Some(format!(
-                            r#"<div class="widget-card" draggable="true" data-widget="{id}">
+                        Some(if let Some(title) = boxed_titles.get(id) {
+                            format!(
+                                r#"<div class="widget-card widget-card-boxed" draggable="true" data-widget="{id}">
+      <div class="widget-card-header">
+        <span class="widget-drag-handle">&#x2630;</span>
+        <h3>{title}</h3>
+      </div>
+      <div class="widget-body">{body}</div>
+    </div>"#,
+                                id = id, title = title, body = body,
+                            )
+                        } else {
+                            format!(
+                                r#"<div class="widget-card" draggable="true" data-widget="{id}">
       <div class="widget-drag-handle">&#x2630;</div>
       <div class="widget-body">{body}</div>
     </div>"#,
-                            id = id, body = body,
-                        ))
+                                id = id, body = body,
+                            )
+                        })
                     })
                     .collect::<Vec<_>>()
                     .join("\n    ")
@@ -577,6 +608,14 @@ fn widgets_section(
   .widget-card h3 {{ margin: 0; font-size: .95rem; font-weight: 600; }}
   .widget-body {{ flex: 1; min-width: 0; }}
   .widget-drag-handle {{ display: block; flex-shrink: 0; padding: 0; margin-top: .05rem; color: var(--muted); font-size: 1rem; line-height: 1; cursor: grab; }}
+  /* Boxed widgets: grey header bar (drag handle + title) flush to the card edges,
+     matching the Menus list table's grey-header/white-body look. */
+  .widget-card-boxed {{ flex-direction: column; align-items: stretch; padding: 0; overflow: hidden; }}
+  .widget-card-header {{
+    display: flex; align-items: center; gap: .5rem;
+    background: #f8fafc; padding: .6rem 1rem; border-bottom: 1px solid var(--border);
+  }}
+  .widget-card-boxed .widget-body {{ padding: .9rem 1.25rem 1.25rem; }}
   .widget-card.dragging .widget-drag-handle {{ cursor: grabbing; }}
   .widget-card.dragging {{ opacity: .4; }}
   .widget-card.drag-over {{ border-top: 2px solid var(--primary); }}

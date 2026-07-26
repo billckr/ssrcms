@@ -41,9 +41,10 @@ async fn fetch_recent_posts(
         _ => "p.updated_at DESC",
     };
     let sql = format!(
-        r#"SELECT p.id, p.title, s.hostname, p.published_at
+        r#"SELECT p.id, p.title, s.hostname, p.published_at, u.display_name
            FROM posts p
            LEFT JOIN sites s ON s.id = p.site_id
+           LEFT JOIN users u ON u.id = p.author_id
            WHERE p.status = $1
              AND p.post_type = 'post'
              AND ($2::uuid IS NULL OR p.site_id = $2)
@@ -51,7 +52,7 @@ async fn fetch_recent_posts(
            ORDER BY {order_sql}
            LIMIT 5"#
     );
-    sqlx::query_as::<_, (uuid::Uuid, String, Option<String>, Option<chrono::DateTime<chrono::Utc>>)>(&sql)
+    sqlx::query_as::<_, (uuid::Uuid, String, Option<String>, Option<chrono::DateTime<chrono::Utc>>, Option<String>)>(&sql)
         .bind(status)
         .bind(site_id)
         .bind(author_id)
@@ -59,11 +60,12 @@ async fn fetch_recent_posts(
         .await
         .unwrap_or_else(|e| { tracing::warn!("dashboard recent {} posts error: {:?}", status, e); vec![] })
         .into_iter()
-        .map(|(id, title, hostname, published_at)| admin::pages::dashboard::RecentPostSummary {
+        .map(|(id, title, hostname, published_at, author_name)| admin::pages::dashboard::RecentPostSummary {
             id: id.to_string(),
             title,
             site_hostname: hostname.unwrap_or_default(),
             scheduled_at: published_at.map(|d| format!("{} UTC", d.format("%Y-%m-%d %H:%M"))),
+            author_name: author_name.unwrap_or_else(|| "Unknown".to_string()),
         })
         .collect()
 }
