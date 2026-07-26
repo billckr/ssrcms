@@ -82,21 +82,32 @@ pub fn render_list(menus: &[MenuRow], ctx: &crate::PageContext) -> String {
     };
 
     let content = format!(
-        r#"<form method="POST" action="/admin/menus" style="display:flex;gap:.75rem;align-items:flex-end;margin-bottom:1.5rem;flex-wrap:wrap">
-  <div class="form-group" style="margin:0">
-    <label for="new-menu-name">Menu Name</label>
-    <input id="new-menu-name" type="text" name="name" required placeholder="e.g. Main Menu" maxlength="25" style="width:200px">
+        r#"<div class="two-col">
+  <div>
+    <table class="data-table">
+      <thead><tr><th>Name</th><th>Location</th><th>Items</th><th>Actions</th></tr></thead>
+      <tbody>{rows}</tbody>
+    </table>
   </div>
-  <div class="form-group" style="margin:0">
-    <label for="new-menu-location">Location</label>
-    <select id="new-menu-location" name="location">{location_opts}</select>
+  <div>
+    <div class="card-boxed">
+      <h2 class="card-boxed-header">Add Menu</h2>
+      <div class="card-boxed-body">
+        <form method="POST" action="/admin/menus">
+          <div class="form-group">
+            <label for="new-menu-name">Menu Name</label>
+            <input id="new-menu-name" type="text" name="name" required placeholder="e.g. Main Menu" maxlength="25">
+          </div>
+          <div class="form-group">
+            <label for="new-menu-location">Location</label>
+            <select id="new-menu-location" name="location">{location_opts}</select>
+          </div>
+          <button type="submit" class="btn btn-primary">Create Menu</button>
+        </form>
+      </div>
+    </div>
   </div>
-  <button type="submit" class="btn btn-primary">Create Menu</button>
-</form>
-<table class="data-table">
-  <thead><tr><th>Name</th><th>Location</th><th>Items</th><th>Actions</th></tr></thead>
-  <tbody>{rows}</tbody>
-</table>"#,
+</div>"#,
         location_opts = location_opts,
         rows          = rows,
     );
@@ -276,13 +287,6 @@ pub fn render_edit(
 
     let content = format!(
         r#"<style>
-.menu-settings-card {{
-  background: var(--card-bg, #fff);
-  border: 1px solid var(--border);
-  border-radius: var(--radius, 6px);
-  padding: 1.25rem 1.5rem;
-  margin-bottom: 1.75rem;
-}}
 .form-row {{
   display: grid;
   grid-template-columns: repeat(2, minmax(120px, 260px));
@@ -348,88 +352,85 @@ pub fn render_edit(
   background: var(--sidebar-bg, #f8f8f8);
   border-top: 1px solid var(--border);
 }}
-.add-item-section {{
-  background: var(--card-bg, #fff);
-  border: 1px solid var(--border);
-  border-radius: var(--radius, 6px);
-  padding: 1.25rem 1.5rem;
-  margin-bottom: 1.5rem;
-}}
-.add-item-section h4 {{
-  margin: 0 0 1rem;
-  font-size: .95rem;
-}}
 @media (max-width: 600px) {{
   .form-row {{ grid-template-columns: 1fr; }}
 }}
 </style>
 
-<h3 style="margin-bottom:.75rem">Menu Settings</h3>
-<div class="menu-settings-card">
-  <div class="form-row">
-    <div class="form-group" style="margin:0">
-      <label for="menu-name">Menu Name</label>
-      <input id="menu-name" type="text" name="name" value="{menu_name}" required maxlength="25" style="width:200px" form="menu-settings-form">
-    </div>
-    <div class="form-group" style="margin:0">
-      <label for="menu-location">Assign to Location</label>
-      <select id="menu-location" name="location" form="menu-settings-form">{location_opts}</select>
-    </div>
-  </div>
-  <div class="form-actions">
-    <form id="menu-settings-form" method="POST" action="/admin/menus/{menu_id}" style="margin:0;display:inline">
-      <button type="submit" class="btn btn-primary">Save Menu</button>
-    </form>
-    <form method="POST" action="/admin/menus/{menu_id}/delete"
-          onsubmit="return confirm('Delete this menu and all its items?')" style="margin:0;display:inline">
-      <button type="submit" class="btn btn-danger">Delete Menu</button>
-    </form>
-  </div>
-</div>
-
-<h3 style="margin-bottom:.75rem">Menu Items</h3>
-{items_section}
-
-<h3 style="margin-bottom:.75rem">Add Item</h3>
-<div class="add-item-section">
-  <form method="POST" action="/admin/menus/{menu_id}/items/new">
+<div class="card-boxed">
+  <h2 class="card-boxed-header">Menu Settings</h2>
+  <div class="card-boxed-body">
     <div class="form-row">
       <div class="form-group" style="margin:0">
-        <label>Label</label>
-        <input type="text" name="label" required placeholder="e.g. Home">
+        <label for="menu-name">Menu Name</label>
+        <input id="menu-name" type="text" name="name" value="{menu_name}" required maxlength="25" style="width:200px" form="menu-settings-form">
       </div>
       <div class="form-group" style="margin:0">
-        <label>Target</label>
-        <select name="target">
-          <option value="_self">Same tab</option>
-          <option value="_blank">New tab</option>
-        </select>
-      </div>
-    </div>
-    <div class="form-row">
-      <div class="form-group" style="margin:0">
-        <label>Page <span class="form-hint">overrides URL when selected</span></label>
-        <select name="page_id">{page_opts_add}</select>
-      </div>
-      <div class="form-group" style="margin:0">
-        <label>Custom URL <span class="form-hint">used when no page selected</span></label>
-        <input type="text" name="url" placeholder="/about or https://…">
-      </div>
-    </div>
-    <div class="form-row">
-      <div class="form-group" style="margin:0">
-        <label>Parent item</label>
-        <select name="parent_id">{parent_opts_add}</select>
-      </div>
-      <div class="form-group" style="margin:0">
-        <label>Sort order</label>
-        <input type="number" name="sort_order" value="0" style="width:100px">
+        <label for="menu-location">Assign to Location</label>
+        <select id="menu-location" name="location" form="menu-settings-form">{location_opts}</select>
       </div>
     </div>
     <div class="form-actions">
-      <button type="submit" class="btn btn-primary">Save Item</button>
+      <form id="menu-settings-form" method="POST" action="/admin/menus/{menu_id}" style="margin:0;display:inline">
+        <button type="submit" class="btn btn-primary">Save Menu</button>
+      </form>
+      <form method="POST" action="/admin/menus/{menu_id}/delete"
+            onsubmit="return confirm('Delete this menu and all its items?')" style="margin:0;display:inline">
+        <button type="submit" class="btn btn-danger">Delete Menu</button>
+      </form>
     </div>
-  </form>
+  </div>
+</div>
+
+<div class="card-boxed">
+  <h2 class="card-boxed-header">Menu Items</h2>
+  <div class="card-boxed-body">
+    {items_section}
+  </div>
+</div>
+
+<div class="card-boxed">
+  <h2 class="card-boxed-header">Add Item</h2>
+  <div class="card-boxed-body">
+    <form method="POST" action="/admin/menus/{menu_id}/items/new">
+      <div class="form-row">
+        <div class="form-group" style="margin:0">
+          <label>Label</label>
+          <input type="text" name="label" required placeholder="e.g. Home">
+        </div>
+        <div class="form-group" style="margin:0">
+          <label>Target</label>
+          <select name="target">
+            <option value="_self">Same tab</option>
+            <option value="_blank">New tab</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group" style="margin:0">
+          <label>Page <span class="form-hint">overrides URL when selected</span></label>
+          <select name="page_id">{page_opts_add}</select>
+        </div>
+        <div class="form-group" style="margin:0">
+          <label>Custom URL <span class="form-hint">used when no page selected</span></label>
+          <input type="text" name="url" placeholder="/about or https://…">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group" style="margin:0">
+          <label>Parent item</label>
+          <select name="parent_id">{parent_opts_add}</select>
+        </div>
+        <div class="form-group" style="margin:0">
+          <label>Sort order</label>
+          <input type="number" name="sort_order" value="0" style="width:100px">
+        </div>
+      </div>
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary">Save Item</button>
+      </div>
+    </form>
+  </div>
 </div>"#,
 
         menu_id         = crate::html_escape(&menu.id),

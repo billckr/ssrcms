@@ -183,8 +183,9 @@ pub fn render(
 
 <!-- General -->
 <div id="tab-general" class="settings-panel active" role="tabpanel" style="max-width:720px">
-  <div class="profile-container">
-    <h2>General</h2>
+  <div class="card-boxed">
+    <h2 class="card-boxed-header">General</h2>
+    <div class="card-boxed-body">
     <form method="post" action="/admin/settings" class="edit-form">
       <input type="hidden" name="tab" value="general">
 
@@ -213,6 +214,7 @@ pub fn render(
         <button type="submit" class="btn btn-primary">Save General</button>
       </div>
     </form>
+    </div>
   </div>
 </div>
 
@@ -226,18 +228,21 @@ pub fn render(
 
 <!-- Advanced -->
 <div id="tab-advanced" class="settings-panel" role="tabpanel" style="max-width:720px">
-  <div class="profile-container">
-    <h2>Uploads</h2>
+  <div class="card-boxed">
+    <h2 class="card-boxed-header">Uploads</h2>
+    <div class="card-boxed-body">
     <div class="form-group">
       <label for="sa-max-upload">Max Upload Size (MB)</label>
       <input type="number" id="sa-max-upload" value="{max_upload_mb}" readonly
              style="width:100px;opacity:.7;cursor:not-allowed" title="Set via MAX_UPLOAD_MB in .env or synaptic.toml">
       <small>Set via <code>MAX_UPLOAD_MB</code> in <code>.env</code> or <code>synaptic.toml</code>. Requires a restart to change. Applies to media and theme zip uploads.</small>
     </div>
+    </div>
   </div>
 
-  <div class="profile-container">
-    <h2>Deploy Test Data</h2>
+  <div class="card-boxed">
+    <h2 class="card-boxed-header">Deploy Test Data</h2>
+    <div class="card-boxed-body">
     <div class="form-group">
       <label for="dt-site">Target site</label>
       <select id="dt-site">
@@ -319,6 +324,7 @@ pub fn render(
     <button type="button" class="btn-danger" onclick="clearTestData()" id="dtClearBtn">Clear Test Data</button>
     <span class="dt-spinner" id="dtClearSpinner" hidden></span>
     <pre id="dtClearResult"></pre>
+  </div>
   </div>
   </div>
 </div>
