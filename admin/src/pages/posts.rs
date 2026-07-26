@@ -811,17 +811,19 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
     }).collect();
     let sources_json = serde_json::to_string(&post.sources).unwrap_or_else(|_| "[]".to_string());
     let sources_section = format!(
-        r#"<div class="form-section">
-      <h3>Sources</h3>
-      <div class="form-group" style="margin-bottom:.75rem">
-        <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;font-weight:400">
-          <input type="checkbox" id="sources-public-cb" name="sources_public" value="on"{sources_public_checked}>
-          Show sources on the live page
-        </label>
+        r#"<div class="card-boxed">
+      <h2 class="card-boxed-header">Sources</h2>
+      <div class="card-boxed-body">
+        <div class="form-group" style="margin-bottom:.75rem">
+          <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;font-weight:400">
+            <input type="checkbox" id="sources-public-cb" name="sources_public" value="on"{sources_public_checked}>
+            Show sources on the live page
+          </label>
+        </div>
+        <div id="sources-list">{source_rows}</div>
+        <button type="button" class="btn" style="width:100%;font-size:12px" onclick="addSourceRow()">+ Add Source URL</button>
+        <input type="hidden" id="sources_json" name="sources_json" value='{sources_json_attr}'>
       </div>
-      <div id="sources-list">{source_rows}</div>
-      <button type="button" class="btn" style="width:100%;font-size:12px" onclick="addSourceRow()">+ Add Source URL</button>
-      <input type="hidden" id="sources_json" name="sources_json" value='{sources_json_attr}'>
     </div>"#,
         sources_public_checked = sources_public_checked,
         source_rows = source_rows,
@@ -833,28 +835,33 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
 <form method="POST" action="{action}">
   <div class="editor-layout">
     <div class="editor-main">
-      <div style="display:grid;grid-template-columns:1fr auto;gap:.75rem;align-items:start;margin-bottom:1.25rem">
-        <div class="form-group" style="margin:0">
-          <label for="title">Title <span style="color:var(--danger);font-weight:700">*</span></label>
-          <input type="text" id="title" name="title" value="{title_val}" required class="title-input" maxlength="255"{autofocus}>
-          <small id="title-count" style="color:var(--muted)">255 remaining</small>
+      <div class="card-boxed">
+        <h2 class="card-boxed-header">Content</h2>
+        <div class="card-boxed-body">
+          <div style="display:grid;grid-template-columns:1fr auto;gap:.75rem;align-items:start;margin-bottom:1.25rem">
+            <div class="form-group" style="margin:0">
+              <label for="title">Title <span style="color:var(--danger);font-weight:700">*</span></label>
+              <input type="text" id="title" name="title" value="{title_val}" required class="title-input" maxlength="255"{autofocus}>
+              <small id="title-count" style="color:var(--muted)">255 remaining</small>
+            </div>
+            <div class="form-group" style="margin:0;min-width:200px;max-width:280px">
+              <label for="slug">Slug</label>
+              <input type="text" id="slug" name="slug" value="{slug}" maxlength="200"
+                onkeydown="if(event.key===' '){{ event.preventDefault(); var i=this.selectionStart; this.value=this.value.slice(0,i)+'-'+this.value.slice(this.selectionEnd); this.selectionStart=this.selectionEnd=i+1; }}"
+                onblur="this.value=this.value.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'');">
+            </div>
+          </div>
+          <div class="form-group" style="margin-bottom:1.25rem">
+            <label for="excerpt">Excerpt <span style="color:var(--danger);font-weight:700">*</span> <small style="font-weight:400;color:var(--muted)">Used as meta description — required for SEO</small></label>
+            <textarea id="excerpt" name="excerpt" rows="3" required maxlength="500" style="resize:none">{excerpt}</textarea>
+            <small id="excerpt-count" style="color:var(--muted)">500 remaining</small>
+          </div>
+          <div class="form-group">
+            <label>Content <span style="color:var(--danger);font-weight:700">*</span></label>
+            <div id="quill-editor" style="height:620px;background:#fff;font-size:1rem"></div>
+            <input type="hidden" id="content" name="content">
+          </div>
         </div>
-        <div class="form-group" style="margin:0;min-width:200px;max-width:280px">
-          <label for="slug">Slug</label>
-          <input type="text" id="slug" name="slug" value="{slug}" maxlength="200"
-            onkeydown="if(event.key===' '){{ event.preventDefault(); var i=this.selectionStart; this.value=this.value.slice(0,i)+'-'+this.value.slice(this.selectionEnd); this.selectionStart=this.selectionEnd=i+1; }}"
-            onblur="this.value=this.value.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'');">
-        </div>
-      </div>
-      <div class="form-group" style="margin-bottom:1.25rem">
-        <label for="excerpt">Excerpt <span style="color:var(--danger);font-weight:700">*</span> <small style="font-weight:400;color:var(--muted)">Used as meta description — required for SEO</small></label>
-        <textarea id="excerpt" name="excerpt" rows="3" required maxlength="500" style="resize:none">{excerpt}</textarea>
-        <small id="excerpt-count" style="color:var(--muted)">500 remaining</small>
-      </div>
-      <div class="form-group">
-        <label>Content <span style="color:var(--danger);font-weight:700">*</span></label>
-        <div id="quill-editor" style="height:620px;background:#fff;font-size:1rem"></div>
-        <input type="hidden" id="content" name="content">
       </div>
       {sources_section}
     </div>
