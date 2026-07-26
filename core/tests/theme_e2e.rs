@@ -64,6 +64,8 @@ async fn test_single_post_renders_html() {
         post_password_hash: None,
         comments_enabled: false,
         parent_id: None,
+        sources: Vec::new(),
+        sources_public: false,
     })
     .await
     .expect("failed to create test post");

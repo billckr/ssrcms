@@ -314,6 +314,8 @@ pub async fn seed_posts(
             post_password_hash: None,
             comments_enabled: false,
             parent_id: None,
+            sources: Vec::new(),
+            sources_public: false,
         };
 
         match post::create(&state.db, &create).await {

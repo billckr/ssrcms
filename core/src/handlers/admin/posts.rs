@@ -281,34 +281,43 @@ async fn new_post_type(state: AppState, post_type: &str, site_id: Option<Uuid>, 
         site_name: String::new(),
         parent_id: None,
         available_parents,
+        sources: vec![],
+        sources_public: false,
     };
     Html(admin::pages::posts::render_editor(&edit, None, &ctx))
+}
+
+#[derive(Deserialize, Default)]
+pub struct EditPostQuery {
+    pub success: Option<String>,
 }
 
 pub async fn edit_post(
     State(state): State<AppState>,
     admin: AdminUser,
     Path(id): Path<Uuid>,
+    Query(q): Query<EditPostQuery>,
 ) -> impl IntoResponse {
     let cs = state.site_hostname(admin.site_id);
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
-    edit_post_type(state, id, admin.site_id, admin.site_role == "author", admin.user.id, ctx).await
+    edit_post_type(state, id, admin.site_id, admin.site_role == "author", admin.user.id, ctx, q.success.as_deref()).await
 }
 
 pub async fn edit_page(
     State(state): State<AppState>,
     admin: AdminUser,
     Path(id): Path<Uuid>,
+    Query(q): Query<EditPostQuery>,
 ) -> impl IntoResponse {
     if !admin.caps.can_manage_pages {
         return Redirect::to("/admin").into_response();
     }
     let cs = state.site_hostname(admin.site_id);
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
-    edit_post_type(state, id, admin.site_id, false, admin.user.id, ctx).await.into_response()
+    edit_post_type(state, id, admin.site_id, false, admin.user.id, ctx, q.success.as_deref()).await.into_response()
 }
 
-async fn edit_post_type(state: AppState, id: Uuid, site_id: Option<Uuid>, is_author: bool, user_id: Uuid, ctx: admin::PageContext) -> impl IntoResponse {
+async fn edit_post_type(state: AppState, id: Uuid, site_id: Option<Uuid>, is_author: bool, user_id: Uuid, ctx: admin::PageContext, success: Option<&str>) -> impl IntoResponse {
     let post = match crate::models::post::get_by_id(&state.db, id).await {
         Ok(p) => p,
         Err(e) => {
@@ -405,9 +414,15 @@ async fn edit_post_type(state: AppState, id: Uuid, site_id: Option<Uuid>, is_aut
         site_name,
         parent_id: post.parent_id.map(|id| id.to_string()),
         available_parents,
+        sources: serde_json::from_value(post.sources.clone()).unwrap_or_default(),
+        sources_public: post.sources_public,
     };
 
-    Html(admin::pages::posts::render_editor(&edit, None, &ctx)).into_response()
+    let flash = match success {
+        Some("saved") => Some("Saved."),
+        _ => None,
+    };
+    Html(admin::pages::posts::render_editor(&edit, flash, &ctx)).into_response()
 }
 
 #[derive(Deserialize)]
@@ -440,6 +455,19 @@ pub struct PostForm {
     pub comments_enabled: String,
     /// UUID of the parent page, empty string = no parent.
     pub parent_id: Option<String>,
+    /// JSON-encoded array of source URL strings, assembled by JS before submit.
+    pub sources_json: Option<String>,
+    /// "on" when the "Show sources on the live page" checkbox is ticked.
+    pub sources_public: Option<String>,
+}
+
+/// Parse the `sources_json` form field into a list of source URLs.
+/// Falls back to an empty list on missing/invalid JSON rather than failing
+/// the whole save — a malformed sources field should never block publishing.
+fn parse_sources(sources_json: Option<&str>) -> Vec<String> {
+    sources_json
+        .and_then(|s| serde_json::from_str::<Vec<String>>(s).ok())
+        .unwrap_or_default()
 }
 
 pub async fn save_new(
@@ -499,6 +527,8 @@ pub async fn save_new(
             site_name: String::new(),
             parent_id: form.parent_id.clone().filter(|s| !s.is_empty()),
             available_parents,
+            sources: parse_sources(form.sources_json.as_deref()),
+            sources_public: form.sources_public.as_deref() == Some("on"),
         };
         return Html(admin::pages::posts::render_editor(&edit, Some("Content is required before publishing."), &ctx)).into_response();
     }
@@ -527,6 +557,8 @@ pub async fn save_new(
         post_password_hash,
         comments_enabled: form_comments_enabled,
         parent_id: form_parent_id,
+        sources: parse_sources(form.sources_json.as_deref()),
+        sources_public: form.sources_public.as_deref() == Some("on"),
     };
 
     match crate::models::post::create(&state.db, &create).await {
@@ -569,6 +601,8 @@ pub async fn save_new(
                 site_name: String::new(),
                 parent_id: form_parent_id.map(|id| id.to_string()),
                 available_parents,
+                sources: parse_sources(form.sources_json.as_deref()),
+                sources_public: form.sources_public.as_deref() == Some("on"),
             };
             let msg = friendly_save_error(&e);
             Html(admin::pages::posts::render_editor(&edit, Some(&msg), &ctx)).into_response()
@@ -654,6 +688,8 @@ pub async fn save_edit(
             site_name: String::new(),
             parent_id: form.parent_id.clone().filter(|s| !s.is_empty()),
             available_parents,
+            sources: parse_sources(form.sources_json.as_deref()),
+            sources_public: form.sources_public.as_deref() == Some("on"),
         };
         return Html(admin::pages::posts::render_editor(&edit, Some("Content is required before publishing."), &ctx)).into_response();
     }
@@ -687,6 +723,8 @@ pub async fn save_edit(
         comments_enabled: Some(form_comments_enabled),
         // Some(None) clears parent; Some(Some(id)) sets it; None leaves unchanged
         parent_id: Some(form_parent_id),
+        sources: Some(parse_sources(form.sources_json.as_deref())),
+        sources_public: Some(form.sources_public.as_deref() == Some("on")),
     };
 
     match crate::models::post::update(&state.db, id, &update).await {
@@ -697,8 +735,12 @@ pub async fn save_edit(
             } else {
                 crate::search::indexer::delete_post(&state.search_index, &post.id.to_string());
             }
-            let redirect = if post.post_type == "page" { "/admin/pages" } else { "/admin/posts" };
-            Redirect::to(redirect).into_response()
+            let redirect = if post.post_type == "page" {
+                format!("/admin/pages/{}/edit?success=saved", post.id)
+            } else {
+                format!("/admin/posts/{}/edit?success=saved", post.id)
+            };
+            Redirect::to(&redirect).into_response()
         }
         Err(e) => {
             tracing::error!("update post {} error: {:?}", id, e);
@@ -740,6 +782,8 @@ pub async fn save_edit(
                 site_name: String::new(),
                 parent_id: form_parent_id.map(|id| id.to_string()),
                 available_parents,
+                sources: parse_sources(form.sources_json.as_deref()),
+                sources_public: form.sources_public.as_deref() == Some("on"),
             };
             let msg = friendly_save_error(&e);
             Html(admin::pages::posts::render_editor(&edit, Some(&msg), &ctx)).into_response()

@@ -74,6 +74,17 @@
       {% endfor %}
     </footer>
   {% endif %}
+
+  {% if post.sources_public and post.sources | length > 0 %}
+    <footer class="post-sources">
+      <h2>Sources</h2>
+      <ul>
+        {% for src in post.sources %}
+          <li><a href="{{ src }}" target="_blank" rel="nofollow noopener">{{ src }}</a></li>
+        {% endfor %}
+      </ul>
+    </footer>
+  {% endif %}
 </article>
 
 {% if prev_post or next_post %}

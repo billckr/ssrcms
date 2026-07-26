@@ -50,6 +50,10 @@ pub struct PostEdit {
     pub parent_id: Option<String>,
     /// (id, title) pairs of published pages on this site, excluding self. For parent dropdown.
     pub available_parents: Vec<(String, String)>,
+    /// Source URLs attached to this post.
+    pub sources: Vec<String>,
+    /// Whether the sources list is shown on the live page.
+    pub sources_public: bool,
 }
 
 pub struct TermOption {
@@ -793,6 +797,37 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
       </div>
     </details>"#;
 
+    let sources_public_checked = if post.sources_public { " checked" } else { "" };
+    let source_rows: String = post.sources.iter().map(|url| {
+        format!(
+            r#"<div class="source-row" style="display:flex;gap:.5rem;margin-bottom:.5rem;align-items:center">
+        <input type="url" class="source-url-input" value="{url}" placeholder="https://example.com/article" style="flex:1">
+        <button type="button" class="icon-btn icon-danger" title="Remove" onclick="this.closest('.source-row').remove()">
+          <img src="/admin/static/icons/trash-2.svg" alt="Remove">
+        </button>
+      </div>"#,
+            url = crate::html_escape(url),
+        )
+    }).collect();
+    let sources_json = serde_json::to_string(&post.sources).unwrap_or_else(|_| "[]".to_string());
+    let sources_section = format!(
+        r#"<div class="form-section">
+      <h3>Sources</h3>
+      <div class="form-group" style="margin-bottom:.75rem">
+        <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;font-weight:400">
+          <input type="checkbox" id="sources-public-cb" name="sources_public" value="on"{sources_public_checked}>
+          Show sources on the live page
+        </label>
+      </div>
+      <div id="sources-list">{source_rows}</div>
+      <button type="button" class="btn" style="width:100%;font-size:12px" onclick="addSourceRow()">+ Add Source URL</button>
+      <input type="hidden" id="sources_json" name="sources_json" value='{sources_json_attr}'>
+    </div>"#,
+        sources_public_checked = sources_public_checked,
+        source_rows = source_rows,
+        sources_json_attr = crate::html_escape(&sources_json),
+    );
+
     let mut content = format!(
         r#"<link rel="stylesheet" href="/admin/static/quill/quill.snow.css">
 <form method="POST" action="{action}">
@@ -821,6 +856,7 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
         <div id="quill-editor" style="height:620px;background:#fff;font-size:1rem"></div>
         <input type="hidden" id="content" name="content">
       </div>
+      {sources_section}
     </div>
     <div class="editor-sidebar">
       {author_card}
@@ -892,9 +928,26 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
     quill.setContents(quill.clipboard.convert(existing), 'silent');
   }}
 
+  // ── Sources ───────────────────────────────────────────────────────────
+  window.addSourceRow = function() {{
+    var list = document.getElementById('sources-list');
+    var row = document.createElement('div');
+    row.className = 'source-row';
+    row.style.cssText = 'display:flex;gap:.5rem;margin-bottom:.5rem;align-items:center';
+    row.innerHTML = '<input type="url" class="source-url-input" placeholder="https://example.com/article" style="flex:1">'
+      + '<button type="button" class="icon-btn icon-danger" title="Remove" onclick="this.closest(\'.source-row\').remove()">'
+      + '<img src="/admin/static/icons/trash-2.svg" alt="Remove"></button>';
+    list.appendChild(row);
+    row.querySelector('input').focus();
+  }};
+
   // On submit, copy Quill HTML into the hidden input and validate excerpt
   document.querySelector('form').addEventListener('submit', function(e) {{
     document.getElementById('content').value = quill.root.innerHTML;
+    var sourceUrls = Array.prototype.slice.call(document.querySelectorAll('.source-url-input'))
+      .map(function(el) {{ return el.value.trim(); }})
+      .filter(function(v) {{ return v.length > 0; }});
+    document.getElementById('sources_json').value = JSON.stringify(sourceUrls);
     var excerpt = document.getElementById('excerpt').value.trim();
     if (!excerpt) {{
       e.preventDefault();
@@ -1072,6 +1125,7 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
         password_section = password_section,
         comments_section = comments_section,
         author_card = author_card,
+        sources_section = sources_section,
     );
 
     let path = if post.post_type == "page" { "/admin/pages" } else { "/admin/posts" };

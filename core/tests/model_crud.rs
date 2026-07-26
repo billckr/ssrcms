@@ -58,6 +58,8 @@ async fn make_test_post(pool: &sqlx::PgPool, author_id: uuid::Uuid, status: Post
         post_password_hash: None,
         comments_enabled: false,
         parent_id: None,
+        sources: Vec::new(),
+        sources_public: false,
     })
     .await
     .expect("failed to create test post")
@@ -109,6 +111,8 @@ async fn test_post_update() {
         new_post_password_hash: None,
         comments_enabled: None,
         parent_id: None,
+        sources: None,
+        sources_public: None,
     })
     .await
     .expect("update should succeed");
@@ -299,6 +303,8 @@ async fn test_user_delete_cascades_posts() {
         post_password_hash: None,
         comments_enabled: false,
         parent_id: None,
+        sources: Vec::new(),
+        sources_public: false,
     })
     .await
     .expect("post create should succeed");
@@ -320,6 +326,8 @@ async fn test_user_delete_cascades_posts() {
         post_password_hash: None,
         comments_enabled: false,
         parent_id: None,
+        sources: Vec::new(),
+        sources_public: false,
     })
     .await
     .expect("page create should succeed");

@@ -69,6 +69,10 @@ pub struct Post {
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub parent_id: Option<Uuid>,
+    /// JSON array of source URL strings.
+    pub sources: serde_json::Value,
+    /// Whether the sources list is shown on the live page (false = admin-only).
+    pub sources_public: bool,
 }
 
 /// A single breadcrumb item for hierarchical page navigation.
@@ -105,6 +109,11 @@ pub struct PostContext {
     pub comment_count: i64,
     /// Whether readers can post comments on this post.
     pub comments_enabled: bool,
+    /// Source URLs, only populated when the post's sources are marked public.
+    /// Empty when sources_public is false — visibility is enforced here, not
+    /// left to individual theme templates.
+    pub sources: Vec<String>,
+    pub sources_public: bool,
     /// Plugin-registered custom fields, keyed by meta_key.
     pub meta: HashMap<String, String>,
 }
@@ -173,6 +182,12 @@ impl PostContext {
             reading_time,
             comment_count,
             comments_enabled: post.comments_enabled,
+            sources: if post.sources_public {
+                serde_json::from_value(post.sources.clone()).unwrap_or_default()
+            } else {
+                Vec::new()
+            },
+            sources_public: post.sources_public,
             meta,
         }
     }
@@ -206,6 +221,10 @@ pub struct CreatePost {
     pub comments_enabled: bool,
     /// UUID of the parent page. None for top-level pages/posts.
     pub parent_id: Option<Uuid>,
+    /// List of source URL strings.
+    pub sources: Vec<String>,
+    /// Whether the sources list is shown on the live page.
+    pub sources_public: bool,
 }
 
 /// Data for updating an existing post.
@@ -230,6 +249,11 @@ pub struct UpdatePost {
     pub comments_enabled: Option<bool>,
     /// None = leave unchanged; Some(id) = set parent; Some(None) = clear parent.
     pub parent_id: Option<Option<Uuid>>,
+    /// The editor always resubmits the full current list on every save, so
+    /// None here just means "no sources field at all" (shouldn't happen in
+    /// practice) rather than a partial-update sentinel.
+    pub sources: Option<Vec<String>>,
+    pub sources_public: Option<bool>,
 }
 
 /// Strip all HTML tags, returning plain text content.
@@ -308,6 +332,8 @@ mod tests {
             created_at: Utc::now(),
             updated_at: Utc::now(),
             parent_id: None,
+            sources: serde_json::json!([]),
+            sources_public: false,
         }
     }
 
@@ -476,9 +502,10 @@ pub async fn create(pool: &PgPool, data: &CreatePost) -> Result<Post> {
         r#"
         INSERT INTO posts (site_id, title, slug, content, content_format, excerpt, status,
                            post_type, author_id, featured_image_id, published_at, template,
-                           post_password, comments_enabled, submitted_at, parent_id)
+                           post_password, comments_enabled, submitted_at, parent_id,
+                           sources, sources_public)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
-                CASE WHEN $7 = 'pending' THEN NOW() ELSE NULL END, $15)
+                CASE WHEN $7 = 'pending' THEN NOW() ELSE NULL END, $15, $16, $17)
         RETURNING *
         "#,
     )
@@ -497,6 +524,8 @@ pub async fn create(pool: &PgPool, data: &CreatePost) -> Result<Post> {
     .bind(data.post_password_hash.as_deref())
     .bind(data.comments_enabled)
     .bind(data.parent_id)
+    .bind(sqlx::types::Json(&data.sources))
+    .bind(data.sources_public)
     .fetch_one(pool)
     .await?;
 
@@ -826,6 +855,11 @@ pub async fn update(pool: &PgPool, id: Uuid, data: &UpdatePost) -> Result<Post> 
         None => current.parent_id,
     };
 
+    let new_sources = data.sources.clone().unwrap_or_else(|| {
+        serde_json::from_value(current.sources.clone()).unwrap_or_default()
+    });
+    let new_sources_public = data.sources_public.unwrap_or(current.sources_public);
+
     let post = sqlx::query_as::<_, Post>(
         r#"
         UPDATE posts
@@ -836,6 +870,8 @@ pub async fn update(pool: &PgPool, id: Uuid, data: &UpdatePost) -> Result<Post> 
                                  ELSE post_password END,
             comments_enabled = $13,
             parent_id = $14,
+            sources = $15,
+            sources_public = $16,
             submitted_at = CASE WHEN $6 = 'pending' THEN COALESCE(submitted_at, NOW())
                                 ELSE submitted_at END,
             updated_at = NOW()
@@ -857,6 +893,8 @@ pub async fn update(pool: &PgPool, id: Uuid, data: &UpdatePost) -> Result<Post> 
     .bind(id)
     .bind(new_comments_enabled)
     .bind(new_parent_id)
+    .bind(sqlx::types::Json(&new_sources))
+    .bind(new_sources_public)
     .fetch_one(pool)
     .await?;
     let _ = new_password; // silence unused warning
