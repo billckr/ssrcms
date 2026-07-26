@@ -426,6 +426,11 @@ pub struct PostForm {
     pub tags: Vec<String>,
     pub featured_image_id: Option<String>,
     pub featured_image_url: Option<String>,
+    /// "1" when the user clicked "Remove featured image". A plain empty
+    /// `featured_image_id` is indistinguishable from "field not submitted"
+    /// once serde_html_form collapses it to `None`, so clearing needs its
+    /// own explicit signal.
+    pub featured_image_cleared: Option<String>,
     /// "on" when the Protected checkbox is ticked.
     pub post_protected: Option<String>,
     /// Plain-text password from the admin form (never stored; hashed before insert/update).
@@ -673,7 +678,7 @@ pub async fn save_edit(
         content_format: None,
         excerpt: form.excerpt.clone(),
         status: Some(status),
-        clear_featured_image: form.featured_image_id.as_deref() == Some(""),
+        clear_featured_image: form.featured_image_cleared.as_deref() == Some("1"),
         featured_image_id: form.featured_image_id.as_deref().and_then(|s| s.parse::<Uuid>().ok()),
         published_at,
         template: form.template.clone().filter(|s| !s.is_empty()),

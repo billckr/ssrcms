@@ -325,8 +325,10 @@ pub fn media_picker_modal_html() -> String {
     } else {
       var fidEl  = document.getElementById('featured_image_id');
       var furlEl = document.getElementById('featured_image_url_field');
+      var fclrEl = document.getElementById('featured_image_cleared');
       if (fidEl)  fidEl.value  = id;
       if (furlEl) furlEl.value = path;
+      if (fclrEl) fclrEl.value = '';
       var box = document.getElementById('featured-image-box');
       if (box) {
         box.innerHTML = '<img src="' + escHtml(path) + '" alt="Featured image" style="width:100%;height:100%;object-fit:cover;display:block">';
@@ -341,8 +343,10 @@ pub fn media_picker_modal_html() -> String {
   window.removeFeaturedImage = function() {
     var fidEl  = document.getElementById('featured_image_id');
     var furlEl = document.getElementById('featured_image_url_field');
+    var fclrEl = document.getElementById('featured_image_cleared');
     if (fidEl)  fidEl.value  = '';
     if (furlEl) furlEl.value = '';
+    if (fclrEl) fclrEl.value = '1';
     var box = document.getElementById('featured-image-box');
     if (box) {
       box.classList.remove('has-image');

@@ -679,6 +679,7 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
       <h3>Featured Image</h3>
       <input type="hidden" id="featured_image_id" name="featured_image_id" value="{id_val}">
       <input type="hidden" id="featured_image_url_field" name="featured_image_url" value="{url_val}">
+      <input type="hidden" id="featured_image_cleared" name="featured_image_cleared" value="">
       <div class="featured-image-box{has_image_class}" id="featured-image-box">{fi_box_inner}</div>
       <button type="button" id="fi-remove-btn" class="featured-image-remove" onclick="removeFeaturedImage()" style="{remove_display}">&#x2715; Remove featured image</button>
       <button type="button" class="btn btn-primary" style="width:100%;font-size:12px;margin-top:.5rem" onclick="openMediaPicker()">Set Featured Image</button>
