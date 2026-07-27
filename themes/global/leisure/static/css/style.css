@@ -473,6 +473,13 @@ img { max-width: 100%; height: auto; display: block; }
   margin-bottom: 1.5rem;
 }
 
+.post-subtitle {
+  font-size: 1.25rem;
+  line-height: 1.5;
+  color: var(--muted);
+  margin: -0.75rem 0 1.5rem;
+}
+
 .featured-image-wrap {
   margin: 0 0 3rem;
   border-radius: var(--radius);

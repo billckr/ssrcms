@@ -55,6 +55,7 @@
         {% endif %}
       </div>
       <h1 class="post-title">{{ post.title }}</h1>
+      {% if post.excerpt %}<p class="post-subtitle">{{ post.excerpt }}</p>{% endif %}
     </div>
 
     {% if post.featured_image %}

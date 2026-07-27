@@ -37,6 +37,7 @@
       </figure>
     {% endif %}
     <h1 class="post-title">{{ post.title }}</h1>
+    {% if post.excerpt %}<p class="post-subtitle">{{ post.excerpt }}</p>{% endif %}
     <div class="post-meta">
       <time datetime="{{ post.published_at }}">
         {% if post.published_at %}{{ post.published_at | date_format }}{% endif %}

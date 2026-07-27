@@ -186,6 +186,13 @@ a:hover {
   border-bottom-color: var(--orange-primary);
 }
 
+.post-subtitle {
+  font-size: 1.1rem;
+  line-height: 1.5;
+  color: var(--text-light);
+  margin: 0 0 1rem;
+}
+
 .post-meta {
   display: flex;
   flex-wrap: wrap;
