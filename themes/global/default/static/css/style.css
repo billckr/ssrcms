@@ -312,6 +312,7 @@ p { margin: 0 0 1rem; }
 .single-page .featured-image {
   aspect-ratio: 16 / 9;
   object-fit: cover;
+  max-height: 520px;
   border-radius: var(--radius);
   margin-bottom: 1.75rem;
   background: var(--color-surface);

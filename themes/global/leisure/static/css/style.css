@@ -365,8 +365,10 @@ img { max-width: 100%; height: auto; display: block; }
 
 .post-card-image img {
   width: 100%;
-  height: 200px;
+  aspect-ratio: 16 / 9;
   object-fit: cover;
+  max-height: 280px;
+  background: var(--lavender);
 }
 
 .post-card-body {
@@ -488,8 +490,10 @@ img { max-width: 100%; height: auto; display: block; }
 
 .featured-image {
   width: 100%;
-  height: 420px;
+  aspect-ratio: 16 / 9;
   object-fit: cover;
+  max-height: 520px;
+  background: var(--lavender);
 }
 
 .featured-image-caption {
