@@ -102,7 +102,9 @@ pub async fn single_post(
         }
     }
 
-    match render_post(state.clone(), slug, uri, site_id, &base_url, session_ctx, cpage).await {
+    let preview_allowed = super::can_preview_site(&state, &session, site_id).await;
+
+    match render_post(state.clone(), slug, uri, site_id, &base_url, session_ctx, cpage, preview_allowed).await {
         Ok(html) => Html(html).into_response(),
         Err(e) => render_error_page(e, &state, &path, Some(current_site.site.id)).await,
     }
@@ -164,12 +166,22 @@ async fn render_post(
     base_url: &str,
     session_ctx: SessionContext,
     cpage: usize,
+    preview_allowed: bool,
 ) -> crate::errors::Result<String> {
-    let post_record = post::get_published_by_slug(&state.db, Some(site_id), &slug).await?;
+    let post_record = match post::get_published_by_slug(&state.db, Some(site_id), &slug).await {
+        Ok(p) => p,
+        Err(e) => {
+            if preview_allowed {
+                post::get_by_slug(&state.db, Some(site_id), &slug).await?
+            } else {
+                return Err(e);
+            }
+        }
+    };
 
     // If this slug belongs to a page, delegate to the page renderer.
     if post_record.post_type == "page" {
-        return super::page::render_page(state, vec![slug.as_str()], uri, site_id, base_url, session_ctx).await;
+        return super::page::render_page(state, vec![slug.as_str()], uri, site_id, base_url, session_ctx, preview_allowed).await;
     }
 
     let post_ctx = build_post_context(&state, &post_record, base_url).await?;

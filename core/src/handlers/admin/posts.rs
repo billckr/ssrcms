@@ -283,6 +283,8 @@ async fn new_post_type(state: AppState, post_type: &str, site_id: Option<Uuid>, 
         available_parents,
         sources: vec![],
         sources_public: false,
+        live_url: None,
+        preview_url: None,
     };
     Html(admin::pages::posts::render_editor(&edit, None, &ctx))
 }
@@ -389,6 +391,17 @@ async fn edit_post_type(state: AppState, id: Uuid, site_id: Option<Uuid>, is_aut
         vec![]
     };
 
+    let post_path = if post.post_type == "page" {
+        crate::models::post::get_full_page_path(&state.db, &post).await
+    } else {
+        format!("/{}", post.slug)
+    };
+    let live_url = if post.status == "published" { Some(post_path.clone()) } else { None };
+    let preview_url = match post.status.as_str() {
+        "draft" | "pending" | "scheduled" => Some(post_path),
+        _ => None,
+    };
+
     let edit = PostEdit {
         id: Some(post.id.to_string()),
         title: post.title.clone(),
@@ -416,6 +429,8 @@ async fn edit_post_type(state: AppState, id: Uuid, site_id: Option<Uuid>, is_aut
         available_parents,
         sources: serde_json::from_value(post.sources.clone()).unwrap_or_default(),
         sources_public: post.sources_public,
+        live_url,
+        preview_url,
     };
 
     let flash = match success {
@@ -529,6 +544,8 @@ pub async fn save_new(
             available_parents,
             sources: parse_sources(form.sources_json.as_deref()),
             sources_public: form.sources_public.as_deref() == Some("on"),
+            live_url: None,
+            preview_url: None,
         };
         return Html(admin::pages::posts::render_editor(&edit, Some("Content is required before publishing."), &ctx)).into_response();
     }
@@ -603,6 +620,8 @@ pub async fn save_new(
                 available_parents,
                 sources: parse_sources(form.sources_json.as_deref()),
                 sources_public: form.sources_public.as_deref() == Some("on"),
+                live_url: None,
+                preview_url: None,
             };
             let msg = friendly_save_error(&e);
             Html(admin::pages::posts::render_editor(&edit, Some(&msg), &ctx)).into_response()
@@ -690,6 +709,8 @@ pub async fn save_edit(
             available_parents,
             sources: parse_sources(form.sources_json.as_deref()),
             sources_public: form.sources_public.as_deref() == Some("on"),
+            live_url: None,
+            preview_url: None,
         };
         return Html(admin::pages::posts::render_editor(&edit, Some("Content is required before publishing."), &ctx)).into_response();
     }
@@ -784,6 +805,8 @@ pub async fn save_edit(
                 available_parents,
                 sources: parse_sources(form.sources_json.as_deref()),
                 sources_public: form.sources_public.as_deref() == Some("on"),
+                live_url: None,
+                preview_url: None,
             };
             let msg = friendly_save_error(&e);
             Html(admin::pages::posts::render_editor(&edit, Some(&msg), &ctx)).into_response()

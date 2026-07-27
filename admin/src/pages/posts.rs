@@ -54,6 +54,14 @@ pub struct PostEdit {
     pub sources: Vec<String>,
     /// Whether the sources list is shown on the live page.
     pub sources_public: bool,
+    /// Relative path to the live post/page (e.g. "/my-post"), only set when
+    /// currently published. None for drafts/new posts — there's nothing
+    /// public to view yet.
+    pub live_url: Option<String>,
+    /// Relative path to preview a draft/pending/scheduled post/page, only
+    /// viewable by a logged-in staff session (see can_preview_site). None
+    /// when published (use live_url instead) or trashed.
+    pub preview_url: Option<String>,
 }
 
 pub struct TermOption {
@@ -553,6 +561,20 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
         ""
     };
 
+    let live_url_link = match &post.live_url {
+        Some(url) => format!(
+            r#"<a href="{url}" target="_blank" rel="noopener" style="display:inline-block;margin-top:.4rem;font-size:12px">View live &#x2197;</a>"#,
+            url = crate::html_escape(url),
+        ),
+        None => match &post.preview_url {
+            Some(url) => format!(
+                r#"<a href="{url}" target="_blank" rel="noopener" style="display:inline-block;margin-top:.4rem;font-size:12px">Preview &#x2197;</a>"#,
+                url = crate::html_escape(url),
+            ),
+            None => String::new(),
+        },
+    };
+
     // Default published_at:
     // - Authors: always empty (field is hidden, value not user-controlled)
     // - Editors/admins opening a pending post: default to now so they can publish immediately
@@ -664,6 +686,28 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
         )
     } else {
         String::new()
+    };
+
+    let delete_section = match &post.id {
+        Some(id) => {
+            let (label, path) = if post.post_type == "page" {
+                ("Page", format!("/admin/pages/{}/delete", id))
+            } else {
+                ("Post", format!("/admin/posts/{}/delete", id))
+            };
+            format!(
+                r#"<div class="card-boxed">
+      <h2 class="card-boxed-header">Delete {label}</h2>
+      <div class="card-boxed-body">
+        <button type="button" class="btn btn-danger" style="width:100%" onclick="deletePostConfirm('{path}', '{label_lower}')">Delete {label}</button>
+      </div>
+    </div>"#,
+                label = label,
+                label_lower = label.to_lowercase(),
+                path = crate::html_escape(&path),
+            )
+        }
+        None => String::new(),
     };
 
     let featured_image_id_val = post.featured_image_id.as_deref().unwrap_or("");
@@ -802,7 +846,7 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
         format!(
             r#"<div class="source-row" style="display:flex;gap:.5rem;margin-bottom:.5rem;align-items:center">
         <input type="url" class="source-url-input" value="{url}" placeholder="https://example.com/article" style="flex:1">
-        <button type="button" class="icon-btn icon-danger" title="Remove" onclick="this.closest('.source-row').remove()">
+        <button type="button" class="icon-btn icon-danger" title="Remove" onclick="this.closest('.source-row').remove(); markDirty();">
           <img src="/admin/static/icons/trash-2.svg" alt="Remove">
         </button>
       </div>"#,
@@ -822,7 +866,7 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
           <span id="sources-public-saved" style="display:none;color:var(--muted);font-size:12px;margin-left:1.6rem">Saved</span>
         </div>
         <div id="sources-list">{source_rows}</div>
-        <button type="button" class="btn" style="width:100%;font-size:12px" onclick="addSourceRow()">+ Add Source URL</button>
+        <button type="button" class="btn btn-primary" style="font-size:12px" onclick="addSourceRow()">+ Add Source URL</button>
         <input type="hidden" id="sources_json" name="sources_json" value='{sources_json_attr}'>
       </div>
     </div>"#,
@@ -875,6 +919,7 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
           <label for="status">Status</label>
           <select id="status" name="status">{status_options}</select>
           {status_hint}
+          {live_url_link}
         </div>
         <div class="form-group">
           {datetime_field}
@@ -882,12 +927,16 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
         {password_section}
         {comments_section}
         <input type="hidden" name="post_type" value="{post_type}">
-        <button type="submit" class="btn btn-primary">Save</button>
+        <div style="display:flex;align-items:center;gap:.6rem">
+          <button type="submit" class="btn btn-primary">Save</button>
+          <span id="unsaved-indicator" style="display:none;color:var(--danger);font-size:12px;font-weight:600">Unsaved changes</span>
+        </div>
       </div>
       {featured_image_section}
       {inline_media_section}
       {parent_section}
       {categories_section}
+      {delete_section}
     </div>
   </div>
 </form>
@@ -924,6 +973,39 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
     }}
   }});
 
+  // ── Unsaved changes indicator ────────────────────────────────────────
+  var formDirty = false;
+  function markDirty() {{
+    formDirty = true;
+    var el = document.getElementById('unsaved-indicator');
+    if (el) el.style.display = '';
+  }}
+  window.markDirty = markDirty;
+  var postForm = document.querySelector('form');
+  ['input', 'change'].forEach(function(evt) {{
+    postForm.addEventListener(evt, function(e) {{
+      // The sources-public checkbox auto-saves itself and shows its own
+      // "Saved" indicator — it shouldn't also flag the whole form dirty.
+      if (e.target && e.target.id === 'sources-public-cb') return;
+      markDirty();
+    }});
+  }});
+  window.addEventListener('beforeunload', function(e) {{
+    if (!formDirty) return;
+    e.preventDefault();
+    e.returnValue = '';
+  }});
+
+  // Delete button uses fetch instead of a nested <form> — the whole editor
+  // is already one big <form>, and nested forms are invalid HTML.
+  window.deletePostConfirm = function(path, label) {{
+    if (!confirm('Delete this ' + label + '? This cannot be undone.')) return;
+    formDirty = false; // intentional navigation away — don't warn
+    fetch(path, {{ method: 'POST' }}).then(function(r) {{
+      window.location.href = r.url || path;
+    }});
+  }};
+
   // Load existing content.
   // Use clipboard.convert → setContents so that registered blots (e.g. AudioBlot)
   // are reconstructed from their tag names rather than stripped by the HTML sanitiser
@@ -935,6 +1017,9 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
   if (existing) {{
     quill.setContents(quill.clipboard.convert(existing), 'silent');
   }}
+  quill.on('text-change', function(delta, oldDelta, source) {{
+    if (source === 'user') markDirty();
+  }});
 
   // ── Sources ───────────────────────────────────────────────────────────
   window.addSourceRow = function() {{
@@ -943,10 +1028,11 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
     row.className = 'source-row';
     row.style.cssText = 'display:flex;gap:.5rem;margin-bottom:.5rem;align-items:center';
     row.innerHTML = '<input type="url" class="source-url-input" placeholder="https://example.com/article" style="flex:1">'
-      + '<button type="button" class="icon-btn icon-danger" title="Remove" onclick="this.closest(\'.source-row\').remove()">'
+      + '<button type="button" class="icon-btn icon-danger" title="Remove" onclick="this.closest(\'.source-row\').remove(); markDirty();">'
       + '<img src="/admin/static/icons/trash-2.svg" alt="Remove"></button>';
     list.appendChild(row);
     row.querySelector('input').focus();
+    markDirty();
   }};
 
   // Auto-save the "Show sources on the live page" toggle immediately on
@@ -987,7 +1073,9 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
       el.style.borderColor = 'var(--danger)';
       el.setAttribute('placeholder', 'Excerpt is required — describe this post in 1–2 sentences.');
       el.addEventListener('input', function() {{ el.style.borderColor = ''; }}, {{ once: true }});
+      return;
     }}
+    formDirty = false; // actually saving now — don't warn on the navigation this submit triggers
   }});
 
   // ── Inline Media panel ───────────────────────────────────────────────
@@ -1158,6 +1246,8 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
         comments_section = comments_section,
         author_card = author_card,
         sources_section = sources_section,
+        live_url_link = live_url_link,
+        delete_section = delete_section,
     );
 
     let path = if post.post_type == "page" { "/admin/pages" } else { "/admin/posts" };

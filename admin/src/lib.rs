@@ -179,6 +179,16 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
       frame.src = 'about:blank';
       frame.removeAttribute('data-loaded');
     }}
+    (function() {{
+      var flash = document.querySelector('.flash');
+      if (flash) {{
+        setTimeout(function() {{
+          flash.style.transition = 'opacity .4s ease';
+          flash.style.opacity = '0';
+          setTimeout(function() {{ flash.remove(); }}, 400);
+        }}, 5000);
+      }}
+    }})();
   </script>
 </body>
 </html>"#,
@@ -336,6 +346,7 @@ pub fn media_picker_modal_html() -> String {
       }
       var rb = document.getElementById('fi-remove-btn');
       if (rb) rb.style.display = '';
+      if (window.markDirty) window.markDirty();
     }
     closeMediaPicker();
   });
@@ -354,6 +365,7 @@ pub fn media_picker_modal_html() -> String {
     }
     var rb = document.getElementById('fi-remove-btn');
     if (rb) rb.style.display = 'none';
+    if (window.markDirty) window.markDirty();
   };
 })();
 </script>"#)

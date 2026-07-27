@@ -63,7 +63,8 @@ pub async fn single_page(
     };
 
     let session_ctx = super::resolve_session(&state, &session).await;
-    match render_page(state.clone(), segments, uri, site_id, &base_url, session_ctx).await {
+    let preview_allowed = super::can_preview_site(&state, &session, site_id).await;
+    match render_page(state.clone(), segments, uri, site_id, &base_url, session_ctx, preview_allowed).await {
         Ok(xml) if is_feed => (
             [(header::CONTENT_TYPE, "application/rss+xml; charset=utf-8")],
             xml,
@@ -80,12 +81,33 @@ pub(super) async fn render_page(
     site_id: Uuid,
     base_url: &str,
     session_ctx: SessionContext,
+    preview_allowed: bool,
 ) -> crate::errors::Result<String> {
-    // Look up the page: single segment = slug lookup, multiple = hierarchical path
+    // Look up the page: single segment = slug lookup, multiple = hierarchical path.
+    // Preview-allowed staff sessions fall back to an any-status lookup when the
+    // published-only lookup finds nothing, so draft/pending pages resolve too.
     let post_record = if segments.len() == 1 {
-        post::get_published_by_slug(&state.db, Some(site_id), segments[0]).await?
+        match post::get_published_by_slug(&state.db, Some(site_id), segments[0]).await {
+            Ok(p) => p,
+            Err(e) => {
+                if preview_allowed {
+                    post::get_by_slug(&state.db, Some(site_id), segments[0]).await?
+                } else {
+                    return Err(e);
+                }
+            }
+        }
     } else {
-        post::get_page_by_path(&state.db, Some(site_id), &segments).await?
+        match post::get_page_by_path(&state.db, Some(site_id), &segments).await {
+            Ok(p) => p,
+            Err(e) => {
+                if preview_allowed {
+                    post::get_page_by_path_any_status(&state.db, Some(site_id), &segments).await?
+                } else {
+                    return Err(e);
+                }
+            }
+        }
     };
 
     // Verify it is actually a page

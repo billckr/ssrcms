@@ -540,7 +540,6 @@ pub async fn get_by_id(pool: &PgPool, id: Uuid) -> Result<Post> {
         .ok_or_else(|| AppError::NotFound(format!("post {id}")))
 }
 
-#[allow(dead_code)]
 pub async fn get_by_slug(pool: &PgPool, site_id: Option<Uuid>, slug: &str) -> Result<Post> {
     sqlx::query_as::<_, Post>(
         "SELECT * FROM posts WHERE slug = $1 AND ($2::uuid IS NULL OR site_id = $2)",
@@ -1002,6 +1001,48 @@ pub async fn get_page_by_path(
             "SELECT * FROM posts \
              WHERE slug = $1 AND parent_id = $2 \
                AND status = 'published' AND post_type = 'page' \
+               AND ($3::uuid IS NULL OR site_id = $3)",
+        )
+        .bind(seg)
+        .bind(current.id)
+        .bind(site_id)
+        .fetch_optional(pool)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("page '{}'", seg)))?;
+    }
+
+    Ok(current)
+}
+
+/// Same lookup as `get_page_by_path`, but without the `status = 'published'`
+/// filter — used only for the logged-in staff preview path so drafts and
+/// their draft ancestors resolve too.
+pub async fn get_page_by_path_any_status(
+    pool: &PgPool,
+    site_id: Option<Uuid>,
+    segments: &[&str],
+) -> Result<Post> {
+    if segments.is_empty() {
+        return Err(AppError::NotFound("page".to_string()));
+    }
+
+    let mut current = sqlx::query_as::<_, Post>(
+        "SELECT * FROM posts \
+         WHERE slug = $1 AND parent_id IS NULL \
+           AND post_type = 'page' \
+           AND ($2::uuid IS NULL OR site_id = $2)",
+    )
+    .bind(segments[0])
+    .bind(site_id)
+    .fetch_optional(pool)
+    .await?
+    .ok_or_else(|| AppError::NotFound(format!("page '{}'", segments[0])))?;
+
+    for &seg in &segments[1..] {
+        current = sqlx::query_as::<_, Post>(
+            "SELECT * FROM posts \
+             WHERE slug = $1 AND parent_id = $2 \
+               AND post_type = 'page' \
                AND ($3::uuid IS NULL OR site_id = $3)",
         )
         .bind(seg)
