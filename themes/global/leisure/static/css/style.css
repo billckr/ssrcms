@@ -15,7 +15,7 @@
   --white:       #ffffff;
   --muted:       #777899;
 
-  --font-head:   'Poppins', system-ui, sans-serif;
+  --font-head:   'Fraunces', Georgia, serif;
   --font-body:   'Open Sans', system-ui, sans-serif;
   --max-width:   1200px;
   --radius:      6px;
@@ -483,7 +483,8 @@ img { max-width: 100%; height: auto; display: block; }
 }
 
 .featured-image-wrap {
-  margin: 0 0 3rem;
+  max-width: 800px;
+  margin: 0 auto 3rem;
   border-radius: var(--radius);
   overflow: hidden;
 }

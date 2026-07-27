@@ -17,7 +17,7 @@ use crate::templates::{composer, context::{
     ArchiveContext, ContextBuilder, PaginationContext, RequestContext, SessionContext,
 }};
 
-use super::home::{build_post_context, build_site_context, render_error_page};
+use super::home::{build_post_context, build_site_context, build_taxonomy_clouds, render_error_page};
 
 #[derive(Deserialize)]
 pub struct PageQuery {
@@ -155,10 +155,14 @@ async fn render_taxonomy_archive(
     }
     .into_tera_context();
 
+    let (tag_cloud, category_cloud) = build_taxonomy_clouds(&state, site_id, base_url).await;
+
     ctx.insert("archive_type", &archive.archive_type);
     ctx.insert("archive_term", &archive.archive_term);
     ctx.insert("posts", &archive.posts);
     ctx.insert("pagination", &archive.pagination);
+    ctx.insert("tag_cloud", &tag_cloud);
+    ctx.insert("category_cloud", &category_cloud);
 
     // ── Archive template check ────────────────────────────────────────────────
     if let Ok(Some(comp)) = page_composition::get_archive_template(&state.db, site_id).await {
@@ -239,11 +243,15 @@ async fn render_author_archive(
     }
     .into_tera_context();
 
+    let (tag_cloud, category_cloud) = build_taxonomy_clouds(&state, site_id, base_url).await;
+
     ctx.insert("archive_type", &"author");
     ctx.insert("archive_term", &Option::<TermContext>::None);
     ctx.insert("archive_author", &author_ctx);
     ctx.insert("posts", &posts);
     ctx.insert("pagination", &pagination);
+    ctx.insert("tag_cloud", &tag_cloud);
+    ctx.insert("category_cloud", &category_cloud);
 
     let active_plugins = crate::models::site_plugin::active_plugin_names(&state.db, site_id)
         .await

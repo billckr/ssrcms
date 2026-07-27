@@ -125,25 +125,7 @@ async fn render_home(
     }
     .into_tera_context();
 
-    // Build tag cloud for sidebar
-    let raw_tags = taxonomy::list(&state.db, Some(site_id), TaxonomyType::Tag).await.unwrap_or_default();
-    let mut tag_cloud = Vec::with_capacity(raw_tags.len());
-    for t in &raw_tags {
-        let count = taxonomy::post_count(&state.db, t.id).await.unwrap_or(0);
-        if count > 0 {
-            tag_cloud.push(taxonomy::TermContext::from_taxonomy(t, base_url, count));
-        }
-    }
-
-    // Build category cloud for sidebar
-    let raw_cats = taxonomy::list(&state.db, Some(site_id), TaxonomyType::Category).await.unwrap_or_default();
-    let mut category_cloud = Vec::with_capacity(raw_cats.len());
-    for c in &raw_cats {
-        let count = taxonomy::post_count(&state.db, c.id).await.unwrap_or(0);
-        if count > 0 {
-            category_cloud.push(taxonomy::TermContext::from_taxonomy(c, base_url, count));
-        }
-    }
+    let (tag_cloud, category_cloud) = build_taxonomy_clouds(&state, site_id, base_url).await;
 
     ctx.insert("posts", &posts);
     ctx.insert("pagination", &pagination);
@@ -237,6 +219,34 @@ async fn render_404(state: &AppState, path: &str, site_id: Option<uuid::Uuid>) -
 }
 
 // ── Shared helpers ──────────────────────────────────────────────────────────
+
+/// Builds the tag and category clouds shown in the "Search / Categories / Tags"
+/// sidebar widget. Returns `(tag_cloud, category_cloud)`.
+pub(crate) async fn build_taxonomy_clouds(
+    state: &AppState,
+    site_id: Uuid,
+    base_url: &str,
+) -> (Vec<taxonomy::TermContext>, Vec<taxonomy::TermContext>) {
+    let raw_tags = taxonomy::list(&state.db, Some(site_id), TaxonomyType::Tag).await.unwrap_or_default();
+    let mut tag_cloud = Vec::with_capacity(raw_tags.len());
+    for t in &raw_tags {
+        let count = taxonomy::post_count(&state.db, t.id).await.unwrap_or(0);
+        if count > 0 {
+            tag_cloud.push(taxonomy::TermContext::from_taxonomy(t, base_url, count));
+        }
+    }
+
+    let raw_cats = taxonomy::list(&state.db, Some(site_id), TaxonomyType::Category).await.unwrap_or_default();
+    let mut category_cloud = Vec::with_capacity(raw_cats.len());
+    for c in &raw_cats {
+        let count = taxonomy::post_count(&state.db, c.id).await.unwrap_or(0);
+        if count > 0 {
+            category_cloud.push(taxonomy::TermContext::from_taxonomy(c, base_url, count));
+        }
+    }
+
+    (tag_cloud, category_cloud)
+}
 
 pub(crate) async fn build_post_context(
     state: &AppState,
