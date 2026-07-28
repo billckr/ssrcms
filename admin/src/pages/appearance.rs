@@ -328,25 +328,112 @@ pub fn render_theme_editor(
         } else {
             String::new()
         };
+        let is_css = rel.ends_with(".css");
+        let color_sidebar = if is_css && !is_readonly {
+            r#"<aside class="card-boxed editor-color-sidebar" id="editor-color-sidebar" style="display:none">
+  <h2 class="card-boxed-header">Colors</h2>
+  <div class="card-boxed-body">
+    <div id="editor-color-swatches"></div>
+    <p class="editor-color-hint">Pick a color to update its variable below. Click <strong>Save file</strong> to apply.</p>
+  </div>
+</aside>"#.to_string()
+        } else {
+            String::new()
+        };
+
+        let color_script = if is_css && !is_readonly {
+            r#"<script>
+(function() {
+  var textarea = document.querySelector('.editor-textarea');
+  var sidebar = document.getElementById('editor-color-sidebar');
+  var list = document.getElementById('editor-color-swatches');
+  if (!textarea || !sidebar || !list) return;
+
+  // Friendly labels for common variable names across the built-in themes.
+  // Anything not listed here falls back to a title-cased version of the name.
+  var LABELS = {
+    'orange-primary': 'Primary accent', 'orange-dark': 'Primary accent (dark)',
+    'orange-light': 'Primary accent (light)', 'orange-pale': 'Primary accent (pale)',
+    'text-dark': 'Body text', 'text-light': 'Muted text',
+    'bg-light': 'Background', 'border-color': 'Border', 'placeholder': 'Placeholder text',
+    'color-bg': 'Background', 'color-surface': 'Surface', 'color-text': 'Body text',
+    'color-muted': 'Muted text', 'color-accent': 'Primary accent',
+    'color-accent-dark': 'Primary accent (dark)', 'color-border': 'Border',
+    'blue': 'Primary accent', 'blue-dark': 'Primary accent (dark)', 'navy': 'Heading text',
+    'charcoal': 'Body text', 'lavender': 'Background tint', 'border': 'Border',
+    'white': 'Background', 'muted': 'Muted text'
+  };
+
+  function labelFor(name) {
+    if (LABELS[name]) return LABELS[name];
+    return name.replace(/-/g, ' ').replace(/\b\w/g, function(c) { return c.toUpperCase(); });
+  }
+
+  function buildSwatches() {
+    list.innerHTML = '';
+    var rootMatch = textarea.value.match(/:root\s*{([^}]*)}/);
+    if (!rootMatch) { sidebar.style.display = 'none'; return; }
+    var varRe = /--([\w-]+)\s*:\s*(#[0-9a-fA-F]{3,8})\s*;/g;
+    var match, count = 0;
+    while ((match = varRe.exec(rootMatch[1])) !== null) {
+      count++;
+      var varName = match[1];
+      var hex = match[2];
+      var row = document.createElement('label');
+      row.className = 'editor-color-row';
+      var swatch = document.createElement('input');
+      swatch.type = 'color';
+      swatch.value = hex.length === 4
+        ? '#' + hex[1] + hex[1] + hex[2] + hex[2] + hex[3] + hex[3]
+        : hex.slice(0, 7);
+      swatch.dataset.var = varName;
+      swatch.addEventListener('input', function() { applyColor(this.dataset.var, this.value); });
+      var text = document.createElement('span');
+      text.textContent = labelFor(varName);
+      row.appendChild(swatch);
+      row.appendChild(text);
+      list.appendChild(row);
+    }
+    sidebar.style.display = count > 0 ? 'block' : 'none';
+  }
+
+  function applyColor(varName, newHex) {
+    var re = new RegExp('(--' + varName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*:\\s*)#[0-9a-fA-F]{3,8}(\\s*;)');
+    textarea.value = textarea.value.replace(re, '$1' + newHex + '$2');
+    textarea.dispatchEvent(new Event('input'));
+  }
+
+  buildSwatches();
+})();
+</script>"#.to_string()
+        } else {
+            String::new()
+        };
+
         format!(
-            r#"<div class="editor-meta">
-  <span class="editor-filename">{file}</span>{edited_at}
-  {restore}
-</div>
-<form method="POST" action="/admin/appearance/editor/{theme}/save" class="editor-form" id="save-form">
-  <input type="hidden" name="file" value="{file}">
-  <input type="hidden" name="source" value="{source}">
-  <textarea name="content" class="editor-textarea" spellcheck="false" autocorrect="off" autocapitalize="off"{ro}>{content}</textarea>
-</form>
-<div class="editor-actions">
-  {save_btn}
-  {restore2}
-  {del_btn2}
-</div>
-<div class="editor-comment-hint">
-  <strong>Tera comments:</strong> <code>&#123;# comment #&#125;</code> — use inside <code>&#123;% block %&#125;</code> tags only.
-  <code>&#123;% extends %&#125;</code> must be the very first line of the file — nothing (not even a comment) may appear before it.
-  CSS/HTML comments (<code>&lt;!-- --&gt;</code>, <code>/* */</code>) outside of blocks will also break parsing.
+            r#"<div class="editor-body-row">
+  <div class="editor-main-col">
+    <div class="editor-meta">
+      <span class="editor-filename">{file}</span>{edited_at}
+      {restore}
+    </div>
+    <form method="POST" action="/admin/appearance/editor/{theme}/save" class="editor-form" id="save-form">
+      <input type="hidden" name="file" value="{file}">
+      <input type="hidden" name="source" value="{source}">
+      <textarea name="content" class="editor-textarea" spellcheck="false" autocorrect="off" autocapitalize="off"{ro}>{content}</textarea>
+    </form>
+    <div class="editor-actions">
+      {save_btn}
+      {restore2}
+      {del_btn2}
+    </div>
+    <div class="editor-comment-hint">
+      <strong>Tera comments:</strong> <code>&#123;# comment #&#125;</code> — use inside <code>&#123;% block %&#125;</code> tags only.
+      <code>&#123;% extends %&#125;</code> must be the very first line of the file — nothing (not even a comment) may appear before it.
+      CSS/HTML comments (<code>&lt;!-- --&gt;</code>, <code>/* */</code>) outside of blocks will also break parsing.
+    </div>
+  </div>
+  {color_sidebar}
 </div>
 <script>
 (function() {{
@@ -358,13 +445,16 @@ pub fn render_theme_editor(
     btn.disabled = textarea.value === original;
   }});
 }})();
-</script>"#,
+</script>
+{color_script}"#,
             file     = rel_esc,
             theme    = theme_esc,
             content  = content_esc,
             source   = source_esc,
             restore  = restore_btn.clone(),
             restore2 = restore_btn,
+            color_sidebar = color_sidebar,
+            color_script  = color_script,
         )
     } else {
         r#"<div class="editor-hint">Select a file above to start editing.</div>"#.to_string()
