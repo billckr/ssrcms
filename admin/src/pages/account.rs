@@ -50,10 +50,11 @@ pub fn account_page(
     let comments_link   = nav_link("/account/my-comments",  "My Comments");
     let profile_link    = nav_link("/account/profile",      "Profile");
 
-    let site_name   = crate::html_escape(&ctx.site_name);
-    let user_email  = crate::html_escape(&ctx.user_email);
-    let user_role   = crate::html_escape(&ctx.user_role);
-    let back_url    = crate::html_escape(&ctx.site_base_url);
+    let site_name         = crate::html_escape(&ctx.site_name);
+    let user_email        = crate::html_escape(&ctx.user_email);
+    let user_role         = crate::html_escape(&ctx.user_role);
+    let back_url          = crate::html_escape(&ctx.site_base_url);
+    let user_display_name = crate::html_escape(&ctx.user_display_name);
 
     format!(
         r#"<!DOCTYPE html>
@@ -65,6 +66,7 @@ pub fn account_page(
   <style>{css}</style>
 </head>
 <body>
+  <div class="sidebar-overlay" onclick="closeSidebar()"></div>
   <div class="admin-wrap">
     <nav class="admin-sidebar">
       <div class="brand">{site_name}</div>
@@ -82,12 +84,32 @@ pub fn account_page(
       </div>
     </nav>
     <main class="admin-main">
+      <header class="admin-header">
+        <button class="hamburger" onclick="toggleSidebar()" aria-label="Open navigation">
+          <span></span><span></span><span></span>
+        </button>
+        <h1>{title}</h1>
+        <span class="admin-header-user">{user_display_name}</span>
+      </header>
       <div class="admin-content">
         {flash_html}
         {content}
       </div>
     </main>
   </div>
+  <script>
+    function toggleSidebar() {{
+      document.body.classList.toggle('sidebar-open');
+    }}
+    function closeSidebar() {{
+      document.body.classList.remove('sidebar-open');
+    }}
+    document.querySelectorAll('.admin-sidebar a').forEach(function(a) {{
+      a.addEventListener('click', function(e) {{
+        if (a.getAttribute('href') !== '#') closeSidebar();
+      }});
+    }});
+  </script>
 </body>
 </html>"#,
         title       = crate::html_escape(title),
@@ -100,6 +122,7 @@ pub fn account_page(
         user_email  = user_email,
         user_role   = user_role,
         back_url    = back_url,
+        user_display_name = user_display_name,
         flash_html  = flash_html,
         content     = content,
     )
@@ -108,15 +131,7 @@ pub fn account_page(
 // ── Dashboard ──────────────────────────────────────────────────────────────
 
 pub fn render_dashboard(ctx: &AccountContext) -> String {
-    let display_name = crate::html_escape(&ctx.user_display_name);
-    let content = format!(
-        r#"<div class="profile-container">
-  <h2>Dashboard</h2>
-  <p>Welcome back, <strong>{display_name}</strong>!</p>
-</div>"#,
-        display_name = display_name,
-    );
-    account_page("Dashboard", "/account", None, &content, ctx)
+    account_page("Dashboard", "/account", None, "", ctx)
 }
 
 // ── Profile ─────────────────────────────────────────────────────────────────
@@ -134,61 +149,65 @@ pub struct ProfileData {
 
 pub fn render_profile(data: &ProfileData, flash: Option<&str>, ctx: &AccountContext) -> String {
     let content = format!(
-        r#"<div class="profile-container">
-  <h2>Profile Management</h2>
+        r#"<div style="max-width:720px">
+  <div class="card-boxed">
+    <h2 class="card-boxed-header">Profile Management</h2>
+    <div class="card-boxed-body">
+      <form method="POST" action="/account/profile/update" class="profile-form">
+        <fieldset>
 
-  <form method="POST" action="/account/profile/update" class="profile-form">
-    <fieldset>
+          <div class="form-group">
+            <label for="display_name">Display Name</label>
+            <input type="text" id="display_name" name="display_name" value="{display_name}">
+          </div>
 
-      <div class="form-group">
-        <label for="display_name">Display Name</label>
-        <input type="text" id="display_name" name="display_name" value="{display_name}">
-      </div>
+          <div class="form-group">
+            <label for="email">Email</label>
+            <input type="email" id="email" name="email" value="{email}" required>
+          </div>
+        </fieldset>
 
-      <div class="form-group">
-        <label for="email">Email</label>
-        <input type="email" id="email" name="email" value="{email}" required>
-      </div>
-    </fieldset>
+        <button type="submit" class="btn btn-primary">Save Changes</button>
+      </form>
+    </div>
+  </div>
 
-    <button type="submit" class="btn btn-primary">Save Changes</button>
-  </form>
-</div>
+  <div class="card-boxed">
+    <h2 class="card-boxed-header">Password Management</h2>
+    <div class="card-boxed-body">
+      <form method="POST" action="/account/profile/change-password" class="password-form">
+        <fieldset>
 
-<div class="profile-container">
-  <h2>Password Management</h2>
+          <div class="form-group">
+            <label for="current_password">Current Password</label>
+            <input type="password" id="current_password" name="current_password" required>
+          </div>
 
-  <form method="POST" action="/account/profile/change-password" class="password-form">
-    <fieldset>
+          <div class="form-group">
+            <label for="new_password">New Password</label>
+            <input type="password" id="new_password" name="new_password" required>
+          </div>
 
-      <div class="form-group">
-        <label for="current_password">Current Password</label>
-        <input type="password" id="current_password" name="current_password" required>
-      </div>
+          <div class="form-group">
+            <label for="confirm_password">Confirm New Password</label>
+            <input type="password" id="confirm_password" name="confirm_password" required>
+          </div>
 
-      <div class="form-group">
-        <label for="new_password">New Password</label>
-        <input type="password" id="new_password" name="new_password" required>
-      </div>
+          <div class="form-note">
+            <p><strong>Password requirements:</strong></p>
+            <ul>
+              <li>8&ndash;12 characters</li>
+              <li>At least one uppercase letter</li>
+              <li>At least one number</li>
+              <li>At least one symbol: ! @ # $ % &amp;</li>
+            </ul>
+          </div>
+        </fieldset>
 
-      <div class="form-group">
-        <label for="confirm_password">Confirm New Password</label>
-        <input type="password" id="confirm_password" name="confirm_password" required>
-      </div>
-
-      <div class="form-note">
-        <p><strong>Password requirements:</strong></p>
-        <ul>
-          <li>8&ndash;12 characters</li>
-          <li>At least one uppercase letter</li>
-          <li>At least one number</li>
-          <li>At least one symbol: ! @ # $ % &amp;</li>
-        </ul>
-      </div>
-    </fieldset>
-
-    <button type="submit" class="btn btn-primary">Change Password</button>
-  </form>
+        <button type="submit" class="btn btn-primary">Change Password</button>
+      </form>
+    </div>
+  </div>
 </div>"#,
         email        = crate::html_escape(&data.email),
         display_name = crate::html_escape(&data.display_name),
@@ -308,14 +327,13 @@ pub fn render_saved_posts(rows: &[SavedPostRow], page: i64, total_pages: i64, se
     let top_pagination = saved_posts_pagination(page, total_pages, search);
 
     let content = format!(
-        r#"<h2>Saved Posts</h2>
-<div style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;margin-bottom:.75rem">
-  <div>{top_pagination}</div>
+        r#"<div style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;margin-bottom:.75rem">
   <input id="saved-posts-search"
          type="search"
          placeholder="Search saved posts&hellip;"
          value="{search_val}"
          style="width:100%;max-width:320px;padding:.4rem .75rem;border:1px solid var(--border);border-radius:4px;font-size:14px;background:var(--card-bg);color:inherit">
+  <div>{top_pagination}</div>
 </div>
 <div id="saved-posts-list">{fragment}</div>
 {script}"#,
@@ -482,14 +500,13 @@ pub fn render_my_comments(rows: &[MyCommentRow], page: i64, total_pages: i64, se
     let top_pagination = comments_pagination(page, total_pages, search);
 
     let content = format!(
-        r#"<h2>My Comments</h2>
-<div style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;margin-bottom:.75rem">
-  <div>{top_pagination}</div>
+        r#"<div style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;margin-bottom:.75rem">
   <input id="comment-search"
          type="search"
          placeholder="Search comments&hellip;"
          value="{search_val}"
          style="width:100%;max-width:320px;padding:.4rem .75rem;border:1px solid var(--border);border-radius:4px;font-size:14px;background:var(--card-bg);color:inherit">
+  <div>{top_pagination}</div>
 </div>
 <div id="comments-list">{fragment}</div>
 {script}"#,

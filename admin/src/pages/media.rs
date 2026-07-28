@@ -1251,9 +1251,24 @@ body.sidebar-open .admin-sidebar {{
     return clean;
   }}
 
+  // Strips disallowed characters as the user types, without trimming
+  // leading/trailing hyphens (that only happens on submit) so typing
+  // isn't disrupted mid-word.
+  function stripDisallowedChars(raw) {{
+    return raw.replace(/[^a-zA-Z0-9\-]/g, '').slice(0, 25);
+  }}
+
   window.validateNewFolderName = function() {{
     var input = document.getElementById('mmNewFolderInput');
     var btn = document.getElementById('mmNewFolderBtn');
+    var pos = input.selectionStart;
+    var before = input.value;
+    var stripped = stripDisallowedChars(before);
+    if (stripped !== before) {{
+      var removedBeforeCursor = before.slice(0, pos).length - stripDisallowedChars(before.slice(0, pos)).length;
+      input.value = stripped;
+      input.setSelectionRange(pos - removedBeforeCursor, pos - removedBeforeCursor);
+    }}
     var clean = sanitizeNewFolderName(input.value);
     btn.disabled = clean.length < 4;
   }};

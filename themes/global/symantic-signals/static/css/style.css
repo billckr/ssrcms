@@ -476,19 +476,12 @@ a:hover {
 
 .user-bar-name {
   font-weight: 500;
+  font-size: 1.05rem;
   text-decoration: none;
   color: rgba(255,255,255,0.95);
 }
 
 .user-bar-name:hover { color: white; text-decoration: underline; }
-
-.user-bar-logout {
-  color: rgba(255,255,255,0.7);
-  text-decoration: none;
-  font-size: 0.8rem;
-}
-
-.user-bar-logout:hover { color: white; }
 
 .user-bar-login {
   display: inline-block;
@@ -741,11 +734,24 @@ a:hover {
 
 @media (max-width: 768px) {
   .site-nav {
-    flex-direction: column;
-    gap: 1rem;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem 1rem;
+  }
+
+  .site-title {
+    order: 1;
+  }
+
+  .user-bar {
+    order: 2;
+    margin-left: 0;
   }
 
   .nav-links {
+    order: 3;
     flex-direction: column;
     gap: 0.5rem;
     width: 100%;
@@ -765,6 +771,10 @@ a:hover {
 
   .post-nav {
     grid-template-columns: 1fr;
+  }
+
+  .post-nav-next {
+    margin-left: 0;
   }
 
   .post-meta {
