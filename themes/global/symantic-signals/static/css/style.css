@@ -3,7 +3,6 @@
 :root {
   --orange-primary: #FF6B35;
   --orange-dark: #D84315;
-  --orange-light: #FFB74D;
   --orange-pale: #FFF8F0;
   --text-dark: #1a1a1a;
   --text-light: #666666;
@@ -719,12 +718,12 @@ a:hover {
 }
 
 .site-footer a {
-  color: var(--orange-light);
-  border-bottom-color: var(--orange-light);
+  color: white;
+  transition: opacity 0.2s;
 }
 
 .site-footer a:hover {
-  color: white;
+  opacity: 0.9;
 }
 
 /* --- No Posts / Empty States --- */
