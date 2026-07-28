@@ -86,6 +86,20 @@
     </div>
 
     <div class="sidebar-widget">
+      <h3 class="sidebar-widget-title">Account</h3>
+      {% if session.is_logged_in %}
+      <div class="tag-cloud">
+        <a href="/account" class="tag">{{ session.user.display_name }}</a>
+        <a href="/account/logout" class="tag">Sign out</a>
+      </div>
+      {% else %}
+      <div class="tag-cloud">
+        <a href="/login" class="tag">Sign in</a>
+      </div>
+      {% endif %}
+    </div>
+
+    <div class="sidebar-widget">
       <h3 class="sidebar-widget-title">Categories</h3>
       {% if category_cloud | length > 0 %}
       <div class="tag-cloud">
