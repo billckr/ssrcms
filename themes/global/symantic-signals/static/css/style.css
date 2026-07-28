@@ -32,7 +32,7 @@ body {
 /* --- Header & Navigation --- */
 
 .site-header {
-  background: linear-gradient(135deg, var(--orange-primary), var(--orange-dark));
+  background: var(--orange-primary);
   border-bottom: 1px solid var(--orange-dark);
   padding: 0;
   position: sticky;
@@ -699,7 +699,7 @@ a:hover {
 /* --- Footer --- */
 
 .site-footer {
-  background: linear-gradient(135deg, var(--orange-primary), var(--orange-dark));
+  background: var(--orange-primary);
   color: white;
   text-align: center;
   padding: 2rem;
@@ -892,6 +892,7 @@ a:hover {
 .comment-textarea:focus { border-color: var(--orange-primary); }
 .comment-submit { margin-top: 0.5rem; padding: 0.4rem 1rem; background: var(--orange-primary); color: #fff; border: none; border-radius: 6px; cursor: pointer; font-size: 0.9rem; font-family: inherit; font-weight: 500; transition: background 0.15s; }
 .comment-submit:hover { background: var(--orange-dark); }
+.comment-submit:disabled { background: var(--placeholder); cursor: not-allowed; }
 .comment-login-prompt { color: var(--text-light); font-size: 0.9375rem; margin: 0; }
 .comment-submit { margin-top: 0; }
 .comment-form-footer { display: flex; align-items: center; justify-content: space-between; margin-top: 0.5rem; }

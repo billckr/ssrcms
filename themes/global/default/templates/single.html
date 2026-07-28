@@ -145,7 +145,7 @@
         </label>
         <div class="comment-form-footer">
           <small class="comment-char-count">400 remaining</small>
-          <button type="submit" class="comment-submit">Post comment</button>
+          <button type="submit" class="comment-submit" disabled>Post comment</button>
         </div>
       </form>
     {% else %}
@@ -181,7 +181,7 @@
                 </label>
                 <div class="comment-form-footer">
                   <small class="comment-char-count">400 remaining</small>
-                  <button type="submit" class="comment-submit">Post reply</button>
+                  <button type="submit" class="comment-submit" disabled>Post reply</button>
                 </div>
               </form>
             </div>
@@ -251,6 +251,18 @@
       counter.textContent = remaining + ' remaining';
       counter.style.color = remaining < 20 ? '#dc2626' : remaining < 50 ? '#d97706' : '';
     });
+  });
+
+  document.querySelectorAll('.comment-textarea').forEach(function(ta) {
+    var form = ta.closest('form');
+    var checkbox = form.querySelector('input[name="human_check"]');
+    var btn = form.querySelector('.comment-submit');
+    if (!checkbox || !btn) return;
+    function updateSubmitState() {
+      btn.disabled = !(ta.value.trim().length > 0 && checkbox.checked);
+    }
+    ta.addEventListener('input', updateSubmitState);
+    checkbox.addEventListener('change', updateSubmitState);
   });
 </script>
 {% endif %}

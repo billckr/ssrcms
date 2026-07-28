@@ -462,7 +462,7 @@ img { max-width: 100%; height: auto; display: block; }
   color: var(--muted);
   flex-wrap: wrap;
   justify-content: center;
-  margin-bottom: 1.5rem;
+  margin-top: 1.5rem;
 }
 
 .post-meta a { color: var(--muted); }
@@ -865,6 +865,7 @@ img { max-width: 100%; height: auto; display: block; }
 }
 
 .comment-submit:hover { background: var(--blue-dark); }
+.comment-submit:disabled { background: var(--muted); cursor: not-allowed; }
 
 .comment-error {
   color: #dc2626;

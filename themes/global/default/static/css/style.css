@@ -767,6 +767,7 @@ p { margin: 0 0 1rem; }
 }
 
 .comment-submit:hover { background: var(--color-accent-dark); }
+.comment-submit:disabled { background: var(--color-muted); cursor: not-allowed; }
 
 .comment-error {
   color: #dc2626;
@@ -865,36 +866,48 @@ p { margin: 0 0 1rem; }
   h2 { font-size: 1.3rem; }
 
   .site-header {
-    flex-direction: column;
-    align-items: flex-start;
-    padding: 0 var(--space);
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    padding: 0.75rem var(--space) 0;
+    gap: 0.5rem 1rem;
+  }
+
+  .site-nav {
+    display: contents;
+  }
+
+  .header-right {
+    display: contents;
+  }
+
+  .site-title {
+    order: 1;
+  }
+
+  .user-bar {
+    order: 2;
+    margin-left: auto;
+    padding-bottom: 0;
+  }
+
+  .nav-links {
+    order: 3;
+    width: 100%;
     gap: 0;
   }
 
-  .site-nav { gap: 1rem; width: 100%; }
-
-  .header-right {
-    width: 100%;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 0.5rem;
-    padding-bottom: 0.75rem;
-  }
-
   .header-search {
+    order: 4;
     width: 100%;
+    padding-bottom: 0.75rem;
   }
 
   .header-search input[type="search"] { flex: 1; width: auto; }
 
-  .user-bar {
-    padding-bottom: 0.25rem;
-  }
-
-  .nav-links { gap: 0; }
-
   .post-nav { flex-direction: column; }
   .post-nav-prev, .post-nav-next { max-width: 100%; }
+  .post-nav-next { margin-left: 0; }
 
   .search-form { flex-direction: column; }
 

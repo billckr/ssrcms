@@ -167,7 +167,7 @@ pub fn render_profile(data: &ProfileData, flash: Option<&str>, ctx: &AccountCont
           </div>
         </fieldset>
 
-        <button type="submit" class="btn btn-primary">Save Changes</button>
+        <button type="submit" class="btn btn-primary" id="profile-save-btn" disabled>Save Changes</button>
       </form>
     </div>
   </div>
@@ -204,11 +204,37 @@ pub fn render_profile(data: &ProfileData, flash: Option<&str>, ctx: &AccountCont
           </div>
         </fieldset>
 
-        <button type="submit" class="btn btn-primary">Change Password</button>
+        <button type="submit" class="btn btn-primary" id="password-save-btn" disabled>Change Password</button>
       </form>
     </div>
   </div>
-</div>"#,
+</div>
+<script>
+(function() {{
+  var form = document.querySelector('.profile-form');
+  var btn  = document.getElementById('profile-save-btn');
+  function checkChanged() {{
+    var changed = false;
+    form.querySelectorAll('input').forEach(function(inp) {{
+      if (inp.value !== inp.defaultValue) changed = true;
+    }});
+    btn.disabled = !changed;
+  }}
+  form.addEventListener('input', checkChanged);
+}})();
+(function() {{
+  var form = document.querySelector('.password-form');
+  var btn  = document.getElementById('password-save-btn');
+  function checkFilled() {{
+    var filled = true;
+    form.querySelectorAll('input[type=password]').forEach(function(inp) {{
+      if (!inp.value) filled = false;
+    }});
+    btn.disabled = !filled;
+  }}
+  form.addEventListener('input', checkFilled);
+}})();
+</script>"#,
         email        = crate::html_escape(&data.email),
         display_name = crate::html_escape(&data.display_name),
     );
