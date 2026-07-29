@@ -2,7 +2,7 @@
 //! reach the site *except* the configured IPs/CIDRs.
 //!
 //! Checked live (no cache) on every request, same pattern as `ip_allowlist`
-//! and `maintenance`, so `synap-cli site block-ip on/off` takes effect
+//! and `maintenance`, so `synap-cli security block-ip on/off` takes effect
 //! immediately with no restart. Nothing is exempt — a blocked IP is blocked
 //! from `/admin` too.
 

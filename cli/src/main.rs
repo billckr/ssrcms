@@ -44,6 +44,11 @@ enum Commands {
         #[command(subcommand)]
         action: commands::site::SiteAction,
     },
+    /// Security management (per-site IP allow/block lists)
+    Security {
+        #[command(subcommand)]
+        action: commands::security::SecurityAction,
+    },
     /// Caddy permission management (SSL provisioning from admin panel)
     Caddy {
         #[command(subcommand)]
@@ -66,6 +71,7 @@ async fn main() -> anyhow::Result<()> {
         Commands::Plugin { action } => commands::plugin::run(action).await?,
         Commands::Theme { action } => commands::theme::run(action).await?,
         Commands::Site { action } => commands::site::run(action).await?,
+        Commands::Security { action } => commands::security::run(action).await?,
         Commands::Caddy { action } => commands::caddy::run(action)?,
     }
 

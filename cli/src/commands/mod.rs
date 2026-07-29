@@ -3,6 +3,7 @@ pub mod dev;
 pub mod install;
 pub mod migrate;
 pub mod plugin;
+pub mod security;
 pub mod site;
 pub mod theme;
 pub mod user;
