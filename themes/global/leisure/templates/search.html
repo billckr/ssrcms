@@ -40,6 +40,7 @@
         <div class="post-grid">
           {% for post in results %}
             <article class="post-card">
+              <a class="post-card-link" href="{{ post.url | safe }}" aria-label="{{ post.title }}"></a>
               <div class="post-card-body">
                 <div class="post-card-meta">
                   <time datetime="{{ post.published_at }}">

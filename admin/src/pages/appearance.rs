@@ -82,17 +82,27 @@ pub fn render_with_flash(themes: &[ThemeInfo], flash: Option<&str>, ctx: &crate:
 
     let content = format!(
         r#"{toolbar}<div class="theme-list">{cards}</div>
-<div class="theme-upload-section">
-  <h2>Upload Theme</h2>
-  <p class="muted">Upload a <code>.zip</code> file containing a valid theme. The zip must include <code>theme.toml</code> and all required templates.</p>
+<div class="card-boxed" style="margin-top:2.5rem;">
+  <h2 class="card-boxed-header">Upload Theme</h2>
+  <div class="card-boxed-body">
+  <p class="muted" style="font-size:1.0625rem;margin-bottom:1.25rem;">Upload a <code>.zip</code> file containing a valid theme. The zip must include <code>theme.toml</code> and all required templates.</p>
   <form method="post" action="/admin/appearance/upload" enctype="multipart/form-data" class="upload-form">
     <div class="form-group">
-      <label for="theme_zip">Theme zip file</label>
       <input type="file" id="theme_zip" name="file" accept=".zip" required>
     </div>
-    <button type="submit" class="btn btn-primary">Upload &amp; Install</button>
+    <button type="submit" class="btn btn-primary" id="theme-upload-btn" disabled>Upload &amp; Install</button>
   </form>
-</div>"#
+  </div>
+</div>
+<script>
+(function() {{
+  var input = document.getElementById('theme_zip');
+  var btn   = document.getElementById('theme-upload-btn');
+  input.addEventListener('change', function() {{
+    btn.disabled = !input.files.length;
+  }});
+}})();
+</script>"#
     );
 
     admin_page("Appearance", "/admin/appearance", flash, &content, ctx)

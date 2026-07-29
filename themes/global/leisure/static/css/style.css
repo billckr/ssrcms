@@ -349,6 +349,7 @@ img { max-width: 100%; height: auto; display: block; }
 }
 
 .post-card {
+  position: relative;
   background: var(--white);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -356,6 +357,20 @@ img { max-width: 100%; height: auto; display: block; }
   transition: box-shadow var(--transition), transform var(--transition);
   display: flex;
   flex-direction: column;
+}
+
+.post-card-link {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+}
+
+.post-card-meta a,
+.post-card-image a,
+.post-card-title a,
+.read-more {
+  position: relative;
+  z-index: 2;
 }
 
 .post-card:hover {
@@ -633,10 +648,13 @@ img { max-width: 100%; height: auto; display: block; }
 
 .post-nav-prev,
 .post-nav-next {
+  display: block;
   max-width: 48%;
   background: var(--lavender);
   padding: 1.25rem 1.5rem;
   border-radius: var(--radius);
+  text-decoration: none;
+  color: inherit;
   transition: background var(--transition);
 }
 
@@ -655,14 +673,15 @@ img { max-width: 100%; height: auto; display: block; }
   margin-bottom: 0.4rem;
 }
 
-.post-nav a {
+.post-nav-title {
+  display: block;
   font-weight: 600;
   color: var(--navy);
   font-size: 0.9375rem;
-  text-decoration: none;
 }
 
-.post-nav a:hover { color: var(--blue); }
+.post-nav-prev:hover .post-nav-title,
+.post-nav-next:hover .post-nav-title { color: var(--blue); }
 
 /* ── Related posts ── */
 .related-posts {
@@ -1117,18 +1136,32 @@ img { max-width: 100%; height: auto; display: block; }
 
   .site-header .container {
     flex-wrap: wrap;
-    gap: 0.75rem;
+    gap: 0.5rem 0.75rem;
   }
 
   .header-right {
-    width: 100%;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 0.5rem;
-    padding-bottom: 0.5rem;
+    display: contents;
   }
 
-  .header-search { width: 100%; }
+  .site-title {
+    order: 1;
+  }
+
+  .user-bar {
+    order: 2;
+    margin-left: auto;
+  }
+
+  .site-nav {
+    order: 3;
+    width: 100%;
+  }
+
+  .header-search {
+    order: 4;
+    width: 100%;
+    padding-bottom: 0.5rem;
+  }
   .header-search input[type="search"] { flex: 1; width: auto; }
 
   .post-grid { grid-template-columns: 1fr; }

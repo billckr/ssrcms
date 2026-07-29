@@ -48,6 +48,7 @@
       <div class="post-grid">
         {% for post in posts %}
           <article class="post-card">
+            <a class="post-card-link" href="{{ post.url | safe }}" aria-label="{{ post.title }}"></a>
             {% if post.featured_image %}
               <div class="post-card-image">
                 <a href="{{ post.url | safe }}">
