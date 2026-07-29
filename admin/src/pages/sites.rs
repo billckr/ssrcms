@@ -241,7 +241,10 @@ pub fn render_settings(data: &SiteSettingsData, flash: Option<&str>, ctx: &crate
     Shows a maintenance page to visitors of this site. Takes effect immediately &mdash; no
     restart needed. <code>/admin/*</code> always stays reachable so you can turn it back off.
   </p>
-  <form method="post" action="/admin/sites/{id}/maintenance" class="edit-form" id="maintenance-form">
+  <form method="post" action="/admin/sites/{id}/maintenance" class="edit-form" id="maintenance-form"
+        onsubmit="return confirm(document.getElementById('maintenance_mode').checked
+          ? 'Enable maintenance mode? Visitors will see a maintenance page immediately.'
+          : 'Disable maintenance mode? The site will be reachable by visitors again.')">
     <div class="form-group">
       <label style="display:inline;font-weight:400">
         <input type="checkbox" id="maintenance_mode" name="maintenance_mode" style="display:inline;width:auto;height:auto"{maintenance_checked}>
