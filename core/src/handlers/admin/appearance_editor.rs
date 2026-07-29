@@ -9,6 +9,7 @@ use axum::{
     response::{Html, IntoResponse, Redirect, Response},
 };
 use serde::Deserialize;
+use std::collections::HashMap;
 use std::fs;
 use std::path::{Path as FsPath, PathBuf};
 use uuid::Uuid;
@@ -17,6 +18,47 @@ use crate::app_state::AppState;
 use crate::middleware::admin_auth::AdminUser;
 
 use super::appearance::{render_appearance_list, url_encode_param, REQUIRED_TEMPLATES};
+
+/// Build the theme customizer data for `theme_dir`, if that theme has opted
+/// in via `[customizer] enabled = true` in its theme.toml. Returns None for
+/// every other theme, which keeps the plain legacy editor landing page.
+fn build_customizer(theme_dir: &FsPath) -> Option<admin::pages::appearance::CustomizerData> {
+    let toml_content = fs::read_to_string(theme_dir.join("theme.toml")).ok()?;
+    let parsed: toml::Table = toml::from_str(&toml_content).ok()?;
+
+    let enabled = parsed
+        .get("customizer")
+        .and_then(|v| v.as_table())
+        .and_then(|t| t.get("enabled"))
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    if !enabled {
+        return None;
+    }
+
+    let theme_section = parsed.get("theme").and_then(|v| v.as_table());
+    let manifest = admin::pages::appearance::ThemeManifestInfo {
+        name: theme_section.and_then(|t| t.get("name")).and_then(|v| v.as_str()).unwrap_or("Unknown").to_string(),
+        version: theme_section.and_then(|t| t.get("version")).and_then(|v| v.as_str()).unwrap_or("unknown").to_string(),
+        description: theme_section.and_then(|t| t.get("description")).and_then(|v| v.as_str()).unwrap_or("").to_string(),
+        author: theme_section.and_then(|t| t.get("author")).and_then(|v| v.as_str()).unwrap_or("Unknown").to_string(),
+    };
+
+    let css = fs::read_to_string(theme_dir.join("static/css/style.css")).unwrap_or_default();
+    let root_re = regex_lite::Regex::new(r":root\s*\{([^}]*)\}").unwrap();
+    let root_block = root_re.captures(&css).map(|c| c[1].to_string()).unwrap_or_default();
+
+    let colors = admin::pages::appearance::CUSTOMIZER_COLORS
+        .iter()
+        .map(|(key, label)| {
+            let var_re = regex_lite::Regex::new(&format!(r"--{}\s*:\s*(#[0-9a-fA-F]{{3,8}})\s*;", key)).unwrap();
+            let value = var_re.captures(&root_block).map(|c| c[1].to_string());
+            (*key, *label, value)
+        })
+        .collect();
+
+    Some(admin::pages::appearance::CustomizerData { manifest, colors })
+}
 
 #[derive(Deserialize)]
 pub struct NewFileForm {
@@ -54,8 +96,9 @@ pub async fn new_file(
                 edited_at: None,
             }
         }).collect();
+        let customizer = build_customizer(&theme_dir);
         Html(admin::pages::appearance::render_theme_editor(
-            &theme, &editor_files, None, "", false, Some(msg), &ctx, false, source,
+            &theme, &editor_files, None, "", false, Some(msg), &ctx, false, source, customizer.as_ref(),
         )).into_response()
     };
 
@@ -374,6 +417,7 @@ pub async fn edit_file(
         }
     }).collect();
 
+    let customizer = build_customizer(&theme_dir);
     Html(admin::pages::appearance::render_theme_editor(
         &theme,
         &editor_files,
@@ -384,6 +428,7 @@ pub async fn edit_file(
         &ctx,
         is_readonly,
         source,
+        customizer.as_ref(),
     )).into_response()
 }
 
@@ -517,6 +562,67 @@ pub async fn restore_file(
     Redirect::to(&format!("{}&restored=1", redirect_base)).into_response()
 }
 
+// ── Customizer: save colors ────────────────────────────────────────────────────
+// Rewrites the required `--color-*` variables (admin::pages::appearance::
+// CUSTOMIZER_COLORS) directly inside the theme's `:root` block in
+// static/css/style.css. Only touches the exact variables it knows about —
+// any other content in the file is left untouched.
+
+pub async fn save_colors(
+    State(state): State<AppState>,
+    admin: AdminUser,
+    Path(theme): Path<String>,
+    Form(mut form): Form<HashMap<String, String>>,
+) -> Response {
+    if !admin.caps.can_manage_appearance {
+        return (StatusCode::FORBIDDEN, "Forbidden").into_response();
+    }
+    let cs = state.site_hostname(admin.site_id);
+    let ctx = super::page_ctx_full(&state, &admin, &cs).await;
+
+    let source = form.remove("source").unwrap_or_else(|| "site".to_string());
+    let Some(theme_dir) = resolve_theme_dir_by_source(&state.config.themes_dir, &state.config.sites_dir, &theme, Some(&source), admin.site_id) else {
+        return render_appearance_list(&state, Some("Theme not found."), &ctx, admin.site_id, "my")
+            .await.into_response();
+    };
+
+    if !admin.caps.is_global_admin && (is_in_global_dir(&theme_dir, &state.config.themes_dir) || is_in_private_dir(&theme_dir, &state.config.themes_dir)) {
+        return Redirect::to(&format!("/admin/appearance/editor/{}?source={}", url_encode_param(&theme), source)).into_response();
+    }
+
+    let css_path = theme_dir.join("static/css/style.css");
+    let Ok(mut css) = fs::read_to_string(&css_path) else {
+        return Redirect::to(&format!("/admin/appearance/editor/{}?source={}", url_encode_param(&theme), source)).into_response();
+    };
+
+    let hex_re = regex_lite::Regex::new(r"^#[0-9a-fA-F]{6}$").unwrap();
+    for (key, _label) in admin::pages::appearance::CUSTOMIZER_COLORS {
+        let Some(new_hex) = form.get(*key) else { continue };
+        if !hex_re.is_match(new_hex) {
+            continue; // ignore malformed values rather than risk corrupting the file
+        }
+        let var_re = regex_lite::Regex::new(&format!(r"(--{}\s*:\s*)#[0-9a-fA-F]{{3,8}}(\s*;)", key)).unwrap();
+        if let Some(caps) = var_re.captures(&css) {
+            let whole = caps.get(0).unwrap().as_str().to_string();
+            let replacement = format!("{}{}{}", &caps[1], new_hex, &caps[2]);
+            css = css.replacen(&whole, &replacement, 1);
+        }
+    }
+
+    let bak = bak_path_for(&css_path);
+    if !bak.exists() {
+        if let Err(e) = fs::copy(&css_path, &bak) {
+            tracing::warn!("save_colors: backup failed for {:?}: {e}", css_path);
+        }
+    }
+
+    if let Err(e) = fs::write(&css_path, css.as_bytes()) {
+        tracing::error!("save_colors: write failed for {:?}: {e}", css_path);
+    }
+
+    Redirect::to(&format!("/admin/appearance/editor/{}?source={}&saved=1", url_encode_param(&theme), source)).into_response()
+}
+
 // ── Delete file ───────────────────────────────────────────────────────────────
 
 #[derive(Deserialize)]
@@ -555,9 +661,10 @@ pub async fn delete_file(
                 edited_at: None,
             }
         }).collect();
+        let customizer = build_customizer(&theme_dir);
         return Html(admin::pages::appearance::render_theme_editor(
             &theme, &editor_files, Some(&rel), "", false,
-            Some("Required theme templates cannot be deleted."), &ctx, false, source,
+            Some("Required theme templates cannot be deleted."), &ctx, false, source, customizer.as_ref(),
         )).into_response();
     }
 
@@ -571,9 +678,10 @@ pub async fn delete_file(
                 edited_at: None,
             }
         }).collect();
+        let customizer = build_customizer(&theme_dir);
         return Html(admin::pages::appearance::render_theme_editor(
             &theme, &editor_files, None, "", false,
-            Some("File not found."), &ctx, false, source,
+            Some("File not found."), &ctx, false, source, customizer.as_ref(),
         )).into_response();
     };
 
@@ -596,9 +704,10 @@ pub async fn delete_file(
                 edited_at: None,
             }
         }).collect();
+        let customizer = build_customizer(&theme_dir);
         return Html(admin::pages::appearance::render_theme_editor(
             &theme, &editor_files, Some(&rel), "", false,
-            Some("Failed to delete file. Please try again."), &ctx, false, source,
+            Some("Failed to delete file. Please try again."), &ctx, false, source, customizer.as_ref(),
         )).into_response();
     }
 

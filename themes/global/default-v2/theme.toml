@@ -1,0 +1,13 @@
+[theme]
+name        = "Default v2"
+version     = "1.0.0"
+api_version = "1"
+description = "Plain, but not without style — with the new theme customizer."
+author      = "Synaptic Signals"
+
+[nav_locations]
+primary = "Primary Navigation"
+footer  = "Footer Links"
+
+[customizer]
+enabled = true

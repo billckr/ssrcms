@@ -82,7 +82,7 @@ pub fn render_with_flash(themes: &[ThemeInfo], flash: Option<&str>, ctx: &crate:
 
     let content = format!(
         r#"{toolbar}<div class="theme-list">{cards}</div>
-<div class="card-boxed" style="margin-top:2.5rem;">
+<div class="card-boxed" style="margin-top:2.5rem;max-width:520px;">
   <h2 class="card-boxed-header">Upload Theme</h2>
   <div class="card-boxed-body">
   <p class="muted" style="font-size:1.0625rem;margin-bottom:1.25rem;">Upload a <code>.zip</code> file containing a valid theme. The zip must include <code>theme.toml</code> and all required templates.</p>
@@ -182,6 +182,121 @@ pub struct EditorFile {
     pub edited_at: Option<String>,
 }
 
+// ── Theme customizer ──────────────────────────────────────────────────────────
+// Opt-in, per-theme "quick customization" landing page shown before any file is
+// selected in the editor. A theme only gets this UI when its theme.toml has
+// [customizer] enabled = true — every other theme (including hand-uploaded
+// ones) keeps today's plain "Select a file above" behavior untouched.
+
+/// Fixed, required CSS custom-property names for the Colors panel — (variable
+/// name without `--`, display label). Every customizer-enabled theme MUST
+/// define all of these under `:root` in `static/css/style.css`, using exactly
+/// these names, so the panel behaves predictably across every theme that
+/// adopts it. This list is the contract — do not add per-theme synonyms.
+pub const CUSTOMIZER_COLORS: &[(&str, &str)] = &[
+    ("color-page-background", "Page background"),
+    ("color-panel-background", "Panel background (cards, inputs)"),
+    ("color-text", "Body text"),
+    ("color-text-muted", "Muted text"),
+    ("color-accent", "Accent"),
+    ("color-accent-hover", "Accent (hover)"),
+    ("color-border", "Border"),
+];
+
+/// The subset of theme.toml `[theme]` fields shown in the customizer's
+/// right-side "Theme Details" panel.
+pub struct ThemeManifestInfo {
+    pub name: String,
+    pub version: String,
+    pub description: String,
+    pub author: String,
+}
+
+pub struct CustomizerData {
+    pub manifest: ThemeManifestInfo,
+    /// (key, label, current hex value — None if that variable wasn't found)
+    pub colors: Vec<(&'static str, &'static str, Option<String>)>,
+}
+
+fn render_customizer_landing(theme_name: &str, source: &str, data: &CustomizerData) -> String {
+    let theme_esc = crate::html_escape(theme_name);
+    let source_esc = crate::html_escape(source);
+
+    let color_rows: String = data.colors.iter().filter_map(|(key, label, value)| {
+        let hex = value.as_deref()?;
+        Some(format!(
+            r#"<div class="customizer-color-card">
+  <input type="color" name="{key}" value="{hex}" class="customizer-color-swatch" title="{label}">
+  <span class="customizer-color-label">{label}</span>
+</div>"#,
+            key = key,
+            hex = crate::html_escape(hex),
+            label = crate::html_escape(label),
+        ))
+    }).collect();
+
+    let colors_card = format!(
+        r#"<div class="card-boxed">
+  <h2 class="card-boxed-header">Colors</h2>
+  <div class="card-boxed-body">
+    <form method="POST" action="/admin/appearance/editor/{theme}/colors" id="customizer-colors-form">
+      <input type="hidden" name="source" value="{source}">
+      <div class="customizer-color-grid">
+      {rows}
+      </div>
+      <div class="form-actions" style="margin-top:1rem;">
+        <button type="submit" class="btn btn-primary" id="colors-save-btn" disabled>Save Colors</button>
+      </div>
+    </form>
+  </div>
+</div>
+<script>
+(function() {{
+  var form = document.getElementById('customizer-colors-form');
+  var btn  = document.getElementById('colors-save-btn');
+  if (!form || !btn) return;
+  function checkChanged() {{
+    var changed = false;
+    form.querySelectorAll('input[type=color]').forEach(function(inp) {{
+      if (inp.value !== inp.defaultValue) changed = true;
+    }});
+    btn.disabled = !changed;
+  }}
+  form.addEventListener('input', checkChanged);
+}})();
+</script>"#,
+        theme = theme_esc,
+        source = source_esc,
+        rows = color_rows,
+    );
+
+    let details_card = format!(
+        r#"<aside class="card-boxed customizer-details-panel">
+  <h2 class="card-boxed-header">Theme Details</h2>
+  <div class="card-boxed-body">
+    <p style="margin-bottom:.6rem;"><strong>Name:</strong> {name}</p>
+    <p style="margin-bottom:.6rem;"><strong>Version:</strong> {version}</p>
+    <p style="margin-bottom:.6rem;"><strong>Author:</strong> {author}</p>
+    <p style="margin-bottom:0;"><strong>Description:</strong> {description}</p>
+    <p class="muted" style="font-size:.8rem;margin-top:1.25rem;">News and update checks are coming soon.</p>
+  </div>
+</aside>"#,
+        name = crate::html_escape(&data.manifest.name),
+        version = crate::html_escape(&data.manifest.version),
+        author = crate::html_escape(&data.manifest.author),
+        description = crate::html_escape(&data.manifest.description),
+    );
+
+    format!(
+        r#"<div class="editor-body-row">
+  <div class="editor-main-col">{colors_card}</div>
+  {details_card}
+</div>"#,
+        colors_card = colors_card,
+        details_card = details_card,
+    )
+}
+
 pub fn render_theme_editor(
     theme_name: &str,
     files: &[EditorFile],
@@ -194,6 +309,11 @@ pub fn render_theme_editor(
     // Which directory this theme lives in: "site", "global", or "private".
     // Threaded through every form so saves always target the correct copy.
     source: &str,
+    // Some() only for themes with [customizer] enabled = true in theme.toml —
+    // renders the Colors + Theme Details landing page in place of the plain
+    // "Select a file above" hint when no file is selected. None preserves
+    // today's behavior exactly for every other theme.
+    customizer: Option<&CustomizerData>,
 ) -> String {
     let theme_esc = crate::html_escape(theme_name);
     let source_esc = crate::html_escape(source);
@@ -466,8 +586,10 @@ pub fn render_theme_editor(
             color_sidebar = color_sidebar,
             color_script  = color_script,
         )
+    } else if let Some(data) = customizer {
+        render_customizer_landing(theme_name, source, data)
     } else {
-        r#"<div class="editor-hint">Select a file above to start editing.</div>"#.to_string()
+        r#"<div class="card" style="padding:1.5rem;color:var(--muted)">Select a file above to start editing.</div>"#.to_string()
     };
 
     let content_html = format!(
