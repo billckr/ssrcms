@@ -275,6 +275,7 @@ async fn render_post(
         nav,
     }
     .into_tera_context();
+    super::insert_theme_options(&mut ctx, &state, site_id).await;
 
     ctx.insert("post", &post_ctx);
     ctx.insert("is_saved", &is_saved);
@@ -391,6 +392,7 @@ async fn render_builder_page(
     }
     .into_tera_context();
     let mut ctx = ctx;
+    super::insert_theme_options(&mut ctx, state, site_id).await;
     enrich_builder_context(&mut ctx, state, site_id, base_url).await;
     composer::render_composition(&comp.composition, &state.templates, &ctx)
         .map_err(|e| AppError::Internal(e.0))

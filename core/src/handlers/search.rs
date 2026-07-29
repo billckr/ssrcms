@@ -102,6 +102,7 @@ async fn render_search(
         nav,
     }
     .into_tera_context();
+    super::insert_theme_options(&mut ctx, &state, site_id).await;
 
     ctx.insert("query", &query);
     ctx.insert("results", &results);

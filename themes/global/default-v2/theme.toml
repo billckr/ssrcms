@@ -11,3 +11,8 @@ footer  = "Footer Links"
 
 [customizer]
 enabled = true
+
+[customizer.options.show_header_search]
+type    = "bool"
+default = true
+label   = "Show search field in header"

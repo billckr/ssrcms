@@ -48,6 +48,35 @@ pub(super) async fn resolve_session(state: &AppState, session: &Session) -> Sess
     SessionContext { is_logged_in: false, user: None }
 }
 
+/// Resolve this site's active theme's customizer layout options (see
+/// `models::theme_options`) and insert them into the Tera context as
+/// `theme_options` — a plain `{key: bool}` map templates branch on with
+/// `{% if theme_options.some_key %}` — and `theme_option_lists` — a
+/// `{key: [item_key, ...]}` map for reorderable option groups, looped over
+/// with `{% for item in theme_option_lists.some_key %}`. A theme that
+/// declares neither kind (or isn't customizer-enabled) just gets empty maps;
+/// never an error.
+pub(super) async fn insert_theme_options(ctx: &mut tera::Context, state: &AppState, site_id: Uuid) {
+    let theme_name = state.active_theme_for_site(Some(site_id));
+    let theme_dir = state.templates.resolve_theme_dir_for_site(&theme_name, Some(site_id));
+    let theme_options = crate::models::theme_options::build_theme_options_context(
+        &state.db,
+        theme_dir.as_deref(),
+        site_id,
+        &theme_name,
+    )
+    .await;
+    ctx.insert("theme_options", &theme_options);
+    let theme_option_lists = crate::models::theme_options::build_theme_option_lists_context(
+        &state.db,
+        theme_dir.as_deref(),
+        site_id,
+        &theme_name,
+    )
+    .await;
+    ctx.insert("theme_option_lists", &theme_option_lists);
+}
+
 /// Whether the current request is an authenticated admin/editor/author staff
 /// session with access to `site_id` — used to let logged-in system users
 /// preview draft/pending/scheduled posts that the public and subscribers

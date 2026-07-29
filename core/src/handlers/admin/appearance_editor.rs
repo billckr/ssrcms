@@ -22,7 +22,12 @@ use super::appearance::{render_appearance_list, url_encode_param, REQUIRED_TEMPL
 /// Build the theme customizer data for `theme_dir`, if that theme has opted
 /// in via `[customizer] enabled = true` in its theme.toml. Returns None for
 /// every other theme, which keeps the plain legacy editor landing page.
-fn build_customizer(theme_dir: &FsPath) -> Option<admin::pages::appearance::CustomizerData> {
+async fn build_customizer(
+    pool: &sqlx::PgPool,
+    theme_dir: &FsPath,
+    site_id: Option<Uuid>,
+    theme_name: &str,
+) -> Option<admin::pages::appearance::CustomizerData> {
     let toml_content = fs::read_to_string(theme_dir.join("theme.toml")).ok()?;
     let parsed: toml::Table = toml::from_str(&toml_content).ok()?;
 
@@ -57,7 +62,43 @@ fn build_customizer(theme_dir: &FsPath) -> Option<admin::pages::appearance::Cust
         })
         .collect();
 
-    Some(admin::pages::appearance::CustomizerData { manifest, colors })
+    // Layout options only make sense for a site's own copy of a theme — a
+    // global/private theme has no single site_id to store overrides against.
+    let options = if let Some(sid) = site_id {
+        crate::models::theme_options::resolve_options(pool, theme_dir, sid, theme_name)
+            .await
+            .into_iter()
+            .map(|(def, value)| (def.key, def.label, value))
+            .collect()
+    } else {
+        Vec::new()
+    };
+
+    let order_options = if let Some(sid) = site_id {
+        crate::models::theme_options::resolve_order(pool, theme_dir, sid, theme_name)
+            .await
+            .into_iter()
+            .map(|(def, order)| {
+                let items_in_order: Vec<(String, String)> = order
+                    .iter()
+                    .map(|k| {
+                        let label = def
+                            .items
+                            .iter()
+                            .find(|(ik, _)| ik == k)
+                            .map(|(_, l)| l.clone())
+                            .unwrap_or_else(|| k.clone());
+                        (k.clone(), label)
+                    })
+                    .collect();
+                (def.key, def.label, items_in_order)
+            })
+            .collect()
+    } else {
+        Vec::new()
+    };
+
+    Some(admin::pages::appearance::CustomizerData { manifest, colors, options, order_options })
 }
 
 #[derive(Deserialize)]
@@ -86,6 +127,7 @@ pub async fn new_file(
     };
 
     // Helper: re-render editor with a flash error.
+    let customizer = build_customizer(&state.db, &theme_dir, admin.site_id, &theme).await;
     let editor_err = |msg: &'static str| {
         let files = walk_theme_files(&theme_dir);
         let editor_files: Vec<admin::pages::appearance::EditorFile> = files.iter().map(|f| {
@@ -96,7 +138,6 @@ pub async fn new_file(
                 edited_at: None,
             }
         }).collect();
-        let customizer = build_customizer(&theme_dir);
         Html(admin::pages::appearance::render_theme_editor(
             &theme, &editor_files, None, "", false, Some(msg), &ctx, false, source, customizer.as_ref(),
         )).into_response()
@@ -417,7 +458,7 @@ pub async fn edit_file(
         }
     }).collect();
 
-    let customizer = build_customizer(&theme_dir);
+    let customizer = build_customizer(&state.db, &theme_dir, admin.site_id, &theme).await;
     Html(admin::pages::appearance::render_theme_editor(
         &theme,
         &editor_files,
@@ -623,6 +664,112 @@ pub async fn save_colors(
     Redirect::to(&format!("/admin/appearance/editor/{}?source={}&saved=1", url_encode_param(&theme), source)).into_response()
 }
 
+// ── Customizer: save layout options ────────────────────────────────────────────
+// Upserts each declared `[customizer.options.*]` key into the theme_options
+// table for this site. Checkboxes only appear in the submitted form when
+// checked, so any declared key missing from the form is stored as false.
+
+pub async fn save_options(
+    State(state): State<AppState>,
+    admin: AdminUser,
+    Path(theme): Path<String>,
+    Form(mut form): Form<HashMap<String, String>>,
+) -> Response {
+    if !admin.caps.can_manage_appearance {
+        return (StatusCode::FORBIDDEN, "Forbidden").into_response();
+    }
+    let cs = state.site_hostname(admin.site_id);
+    let ctx = super::page_ctx_full(&state, &admin, &cs).await;
+
+    let source = form.remove("source").unwrap_or_else(|| "site".to_string());
+    let Some(theme_dir) = resolve_theme_dir_by_source(&state.config.themes_dir, &state.config.sites_dir, &theme, Some(&source), admin.site_id) else {
+        return render_appearance_list(&state, Some("Theme not found."), &ctx, admin.site_id, "my")
+            .await.into_response();
+    };
+
+    if !admin.caps.is_global_admin && (is_in_global_dir(&theme_dir, &state.config.themes_dir) || is_in_private_dir(&theme_dir, &state.config.themes_dir)) {
+        return Redirect::to(&format!("/admin/appearance/editor/{}?source={}", url_encode_param(&theme), source)).into_response();
+    }
+
+    let redirect = format!("/admin/appearance/editor/{}?source={}&saved=1", url_encode_param(&theme), source);
+
+    let Some(site_id) = admin.site_id else {
+        // Layout options are only meaningful for a site's own copy of a theme.
+        return Redirect::to(&redirect).into_response();
+    };
+
+    let Ok(toml_content) = fs::read_to_string(theme_dir.join("theme.toml")) else {
+        return Redirect::to(&redirect).into_response();
+    };
+    let Ok(parsed) = toml::from_str::<toml::Table>(&toml_content) else {
+        return Redirect::to(&redirect).into_response();
+    };
+
+    for def in crate::models::theme_options::parse_option_defs(&parsed) {
+        let checked = form.get(&def.key).is_some();
+        if let Err(e) = crate::models::theme_options::save_option(&state.db, site_id, &theme, &def.key, checked).await {
+            tracing::error!("save_options: failed to save {} for theme {}: {e}", def.key, theme);
+        }
+    }
+
+    Redirect::to(&redirect).into_response()
+}
+
+// ── Customizer: save reorderable option groups ─────────────────────────────────
+// Each `type = "order"` option submits its own comma-joined item-key sequence
+// under its own form field name. Unknown item keys (typos, stale form state)
+// are dropped by resolve_order/save_order's caller-side validation below.
+
+pub async fn save_order(
+    State(state): State<AppState>,
+    admin: AdminUser,
+    Path(theme): Path<String>,
+    Form(mut form): Form<HashMap<String, String>>,
+) -> Response {
+    if !admin.caps.can_manage_appearance {
+        return (StatusCode::FORBIDDEN, "Forbidden").into_response();
+    }
+    let cs = state.site_hostname(admin.site_id);
+    let ctx = super::page_ctx_full(&state, &admin, &cs).await;
+
+    let source = form.remove("source").unwrap_or_else(|| "site".to_string());
+    let Some(theme_dir) = resolve_theme_dir_by_source(&state.config.themes_dir, &state.config.sites_dir, &theme, Some(&source), admin.site_id) else {
+        return render_appearance_list(&state, Some("Theme not found."), &ctx, admin.site_id, "my")
+            .await.into_response();
+    };
+
+    if !admin.caps.is_global_admin && (is_in_global_dir(&theme_dir, &state.config.themes_dir) || is_in_private_dir(&theme_dir, &state.config.themes_dir)) {
+        return Redirect::to(&format!("/admin/appearance/editor/{}?source={}", url_encode_param(&theme), source)).into_response();
+    }
+
+    let redirect = format!("/admin/appearance/editor/{}?source={}&saved=1", url_encode_param(&theme), source);
+
+    let Some(site_id) = admin.site_id else {
+        return Redirect::to(&redirect).into_response();
+    };
+
+    let Ok(toml_content) = fs::read_to_string(theme_dir.join("theme.toml")) else {
+        return Redirect::to(&redirect).into_response();
+    };
+    let Ok(parsed) = toml::from_str::<toml::Table>(&toml_content) else {
+        return Redirect::to(&redirect).into_response();
+    };
+
+    for def in crate::models::theme_options::parse_order_defs(&parsed) {
+        let Some(raw) = form.get(&def.key) else { continue };
+        let known: std::collections::HashSet<&str> = def.items.iter().map(|(k, _)| k.as_str()).collect();
+        let order: Vec<String> = raw.split(',').map(|s| s.trim().to_string()).filter(|s| known.contains(s.as_str())).collect();
+        if order.is_empty() {
+            continue; // ignore malformed submissions rather than store an empty order
+        }
+        if let Err(e) = crate::models::theme_options::save_order(&state.db, site_id, &theme, &def.key, &order).await {
+            tracing::error!("save_order: failed to save {} for theme {}: {e}", def.key, theme);
+        }
+    }
+
+    Redirect::to(&redirect).into_response()
+}
+
 // ── Delete file ───────────────────────────────────────────────────────────────
 
 #[derive(Deserialize)]
@@ -661,7 +808,7 @@ pub async fn delete_file(
                 edited_at: None,
             }
         }).collect();
-        let customizer = build_customizer(&theme_dir);
+        let customizer = build_customizer(&state.db, &theme_dir, admin.site_id, &theme).await;
         return Html(admin::pages::appearance::render_theme_editor(
             &theme, &editor_files, Some(&rel), "", false,
             Some("Required theme templates cannot be deleted."), &ctx, false, source, customizer.as_ref(),
@@ -678,7 +825,7 @@ pub async fn delete_file(
                 edited_at: None,
             }
         }).collect();
-        let customizer = build_customizer(&theme_dir);
+        let customizer = build_customizer(&state.db, &theme_dir, admin.site_id, &theme).await;
         return Html(admin::pages::appearance::render_theme_editor(
             &theme, &editor_files, None, "", false,
             Some("File not found."), &ctx, false, source, customizer.as_ref(),
@@ -704,7 +851,7 @@ pub async fn delete_file(
                 edited_at: None,
             }
         }).collect();
-        let customizer = build_customizer(&theme_dir);
+        let customizer = build_customizer(&state.db, &theme_dir, admin.site_id, &theme).await;
         return Html(admin::pages::appearance::render_theme_editor(
             &theme, &editor_files, Some(&rel), "", false,
             Some("Failed to delete file. Please try again."), &ctx, false, source, customizer.as_ref(),

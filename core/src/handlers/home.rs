@@ -76,6 +76,7 @@ async fn render_home(
             nav,
         }
         .into_tera_context();
+        super::insert_theme_options(&mut ctx, &state, site_id).await;
 
         enrich_builder_context(&mut ctx, &state, site_id, base_url).await;
         return composer::render_composition(&comp.composition, &state.templates, &ctx)
@@ -124,6 +125,7 @@ async fn render_home(
         nav,
     }
     .into_tera_context();
+    super::insert_theme_options(&mut ctx, &state, site_id).await;
 
     let (tag_cloud, category_cloud) = build_taxonomy_clouds(&state, site_id, base_url).await;
 
@@ -198,6 +200,9 @@ async fn render_404(state: &AppState, path: &str, site_id: Option<uuid::Uuid>) -
         nav,
     }
     .into_tera_context();
+    if let Some(sid) = site_id {
+        super::insert_theme_options(&mut ctx, state, sid).await;
+    }
 
     let active_plugins: Vec<String> = if let Some(sid) = site_id {
         crate::models::site_plugin::active_plugin_names(&state.db, sid)

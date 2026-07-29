@@ -154,6 +154,7 @@ async fn render_taxonomy_archive(
         nav,
     }
     .into_tera_context();
+    super::insert_theme_options(&mut ctx, &state, site_id).await;
 
     let (tag_cloud, category_cloud) = build_taxonomy_clouds(&state, site_id, base_url).await;
 
@@ -242,6 +243,7 @@ async fn render_author_archive(
         nav,
     }
     .into_tera_context();
+    super::insert_theme_options(&mut ctx, &state, site_id).await;
 
     let (tag_cloud, category_cloud) = build_taxonomy_clouds(&state, site_id, base_url).await;
 

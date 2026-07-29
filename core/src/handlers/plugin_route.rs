@@ -114,6 +114,7 @@ async fn render_plugin_route(
         nav,
     }
     .into_tera_context();
+    super::insert_theme_options(&mut ctx, &state, site_id).await;
 
     // For sitemap-style routes: inject all published posts and pages for this site.
     // This is the standard context for any route that needs the full content list.

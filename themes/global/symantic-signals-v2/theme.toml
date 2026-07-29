@@ -1,0 +1,29 @@
+[theme]
+name        = "Symantic Signals v2"
+version     = "1.0.0"
+api_version = "1"
+description = "Modern theme with style — with the new theme customizer."
+author      = "Synaptic Signals"
+
+[nav_locations]
+primary = "Primary Navigation"
+footer  = "Footer Links"
+
+[customizer]
+enabled = true
+
+[customizer.options.show_sidebar]
+type    = "bool"
+default = true
+label   = "Show right sidebar (search, account, categories, tags)"
+
+[customizer.options.sidebar_order]
+type    = "order"
+default = ["search", "account", "categories", "tags"]
+label   = "Sidebar widget order"
+
+[customizer.options.sidebar_order.items]
+search     = "Search"
+account    = "Account"
+categories = "Categories"
+tags       = "Tags"

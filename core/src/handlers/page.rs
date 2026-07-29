@@ -135,6 +135,7 @@ pub(super) async fn render_page(
         nav,
     }
     .into_tera_context();
+    super::insert_theme_options(&mut ctx, &state, site_id).await;
 
     ctx.insert("page", &page_ctx);
 
