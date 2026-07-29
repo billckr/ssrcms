@@ -98,7 +98,9 @@ async fn build_customizer(
         Vec::new()
     };
 
-    Some(admin::pages::appearance::CustomizerData { manifest, colors, options, order_options })
+    let has_color_backup = bak_path_for(&theme_dir.join("static/css/style.css")).exists();
+
+    Some(admin::pages::appearance::CustomizerData { manifest, colors, options, order_options, has_color_backup })
 }
 
 #[derive(Deserialize)]

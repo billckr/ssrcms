@@ -1,0 +1,9 @@
+[theme]
+name        = "Swatch Test"
+version     = "1.0.0"
+api_version = "1"
+description = "Minimal single-page theme for testing customizer color swatches in isolation."
+author      = "Synaptic Signals"
+
+[customizer]
+enabled = true

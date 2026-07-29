@@ -202,6 +202,11 @@ pub const CUSTOMIZER_COLORS: &[(&str, &str)] = &[
     ("color-primary", "Primary"),
     ("color-primary-hover", "Primary (hover)"),
     ("color-border", "Border"),
+    ("color-button-background", "Button background"),
+    ("color-button-border", "Button border"),
+    ("color-button-background-hover", "Button background (hover)"),
+    ("color-button-text", "Button text"),
+    ("color-button-text-hover", "Button text (hover)"),
 ];
 
 /// The subset of theme.toml `[theme]` fields shown in the customizer's
@@ -225,6 +230,9 @@ pub struct CustomizerData {
     /// (option_key, label, items in the current resolved order as
     /// (item_key, item_label)). Empty for themes that declare none.
     pub order_options: Vec<(String, String, Vec<(String, String)>)>,
+    /// Whether a `.bak` backup exists for this theme's `static/css/style.css` —
+    /// gates showing the "Restore original" button next to Save Colors.
+    pub has_color_backup: bool,
 }
 
 fn render_customizer_landing(theme_name: &str, source: &str, data: &CustomizerData) -> String {
@@ -244,6 +252,21 @@ fn render_customizer_landing(theme_name: &str, source: &str, data: &CustomizerDa
         ))
     }).collect();
 
+    let restore_colors_btn = if data.has_color_backup {
+        format!(
+            r#"<form method="POST" action="/admin/appearance/editor/{theme}/restore" style="margin-top:0.75rem;"
+     onsubmit="return confirm('Restore the original backup? Your current color edits will be overwritten.')">
+  <input type="hidden" name="file" value="static/css/style.css">
+  <input type="hidden" name="source" value="{source}">
+  <button type="submit" class="btn btn-sm btn-secondary">Restore original</button>
+</form>"#,
+            theme = theme_esc,
+            source = source_esc,
+        )
+    } else {
+        String::new()
+    };
+
     let colors_card = format!(
         r#"<div class="card-boxed">
   <h2 class="card-boxed-header">Colors</h2>
@@ -257,6 +280,7 @@ fn render_customizer_landing(theme_name: &str, source: &str, data: &CustomizerDa
         <button type="submit" class="btn btn-primary" id="colors-save-btn" disabled>Save Colors</button>
       </div>
     </form>
+    {restore}
   </div>
 </div>
 <script>
@@ -277,6 +301,7 @@ fn render_customizer_landing(theme_name: &str, source: &str, data: &CustomizerDa
         theme = theme_esc,
         source = source_esc,
         rows = color_rows,
+        restore = restore_colors_btn,
     );
 
     let options_card = if data.options.is_empty() {
