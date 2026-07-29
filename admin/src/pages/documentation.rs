@@ -50,12 +50,14 @@ fn render_doc_section(e: &DocEntry) -> String {
         .map(|b| format!(" &middot; {}", html_escape(b)))
         .unwrap_or_default();
     format!(
-        r##"<div class="card doc-section" id="doc-{slug}" style="margin-bottom:2rem;padding:1.25rem">
-  <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:1rem;padding-bottom:.75rem;border-bottom:1px solid var(--border)">
-    <h2 style="margin:0;font-size:1.1rem">{title}</h2>
-    <span style="font-size:11px;color:var(--muted);white-space:nowrap;margin-left:1rem">Updated {updated}{by}</span>
+        r##"<div class="card-boxed doc-section" id="doc-{slug}" style="margin-bottom:2rem">
+  <h2 class="card-boxed-header" style="display:flex;align-items:baseline;justify-content:space-between">
+    <span>{title}</span>
+    <span style="font-size:11px;font-weight:400;color:var(--muted);white-space:nowrap;margin-left:1rem">Updated {updated}{by}</span>
+  </h2>
+  <div class="card-boxed-body">
+    <div class="doc-content">{content}</div>
   </div>
-  <div class="doc-content">{content}</div>
 </div>"##,
         slug    = html_escape(&e.slug),
         title   = html_escape(&e.title),

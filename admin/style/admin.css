@@ -118,8 +118,8 @@ a.stat-cell-link:hover { background: #f8f9fd; }
 
 /* Tables */
 .data-table { width: 100%; border-collapse: collapse; background: var(--surface); border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow); }
-.data-table th { background: #f8fafc; text-align: left; padding: .6rem 1rem; font-size: 12px; text-transform: uppercase; color: var(--muted); border-bottom: 1px solid var(--border); }
-.data-table td { padding: .6rem 1rem; border-bottom: 1px solid var(--border); }
+.data-table th { background: #f8fafc; text-align: left; padding: .48rem .8rem; font-size: 12px; text-transform: uppercase; color: var(--muted); border-bottom: 1px solid var(--border); }
+.data-table td { padding: .48rem .8rem; border-bottom: 1px solid var(--border); }
 .data-table td.cell-truncate { max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: help; }
 .data-table tr:last-child td { border-bottom: none; }
 .data-table .actions { display: flex; gap: .5rem; align-items: center; }
@@ -467,12 +467,12 @@ body.sidebar-open .sidebar-overlay {
 .card-boxed-header {
   margin: 0;
   background: #f8fafc;
-  padding: .6rem 1rem;
+  padding: .5rem .875rem;
   font-size: .95rem;
   font-weight: 600;
   border-bottom: 1px solid var(--border);
 }
-.card-boxed-body { padding: 1.25rem; }
+.card-boxed-body { padding: 1rem; }
 
 fieldset {
   border: none;

@@ -603,20 +603,20 @@ fn widgets_section(
   .widget-card {{
     display: flex; align-items: flex-start; gap: .6rem;
     background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
-    box-shadow: var(--shadow); padding: .9rem 1.25rem 1.25rem; user-select: none;
+    box-shadow: var(--shadow); padding: .72rem 1rem 1rem; user-select: none;
     min-width: 0;
   }}
   .widget-card h3 {{ margin: 0; font-size: .95rem; font-weight: 600; }}
   .widget-body {{ flex: 1; min-width: 0; }}
-  .widget-drag-handle {{ display: block; flex-shrink: 0; padding: 0; margin-top: .05rem; color: var(--muted); font-size: 1rem; line-height: 1; cursor: grab; }}
+  .widget-drag-handle {{ display: block; flex-shrink: 0; padding: 0; margin-top: .04rem; color: var(--muted); font-size: .9rem; line-height: 1; cursor: grab; }}
   /* Boxed widgets: grey header bar (drag handle + title) flush to the card edges,
      matching the Menus list table's grey-header/white-body look. */
   .widget-card-boxed {{ flex-direction: column; align-items: stretch; padding: 0; overflow: hidden; }}
   .widget-card-header {{
     display: flex; align-items: center; gap: .5rem;
-    background: #f8fafc; padding: .6rem 1rem; border-bottom: 1px solid var(--border);
+    background: #f8fafc; padding: .48rem .8rem; border-bottom: 1px solid var(--border);
   }}
-  .widget-card-boxed .widget-body {{ padding: .9rem 1.25rem 1.25rem; }}
+  .widget-card-boxed .widget-body {{ padding: .72rem 1rem 1rem; }}
   .widget-card.dragging .widget-drag-handle {{ cursor: grabbing; }}
   .widget-card.dragging {{ opacity: .4; }}
   .widget-card.drag-over {{ border-top: 2px solid var(--primary); }}
