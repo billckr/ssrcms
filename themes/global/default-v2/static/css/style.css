@@ -8,8 +8,9 @@
   --color-panel-background:      #f8f9fa;
   --color-text:         #1c1c1e;
   --color-text-muted:        #6b7280;
-  --color-accent:       #2563eb;
-  --color-accent-hover:  #1d4ed8;
+  --color-primary:       #2563eb;
+  --color-primary-hover:  #1d4ed8;
+  --color-header-background: #ffffff;
   --color-border:       #e5e7eb;
   --font-sans:          system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --font-mono:          "SFMono-Regular", Consolas, "Liberation Mono", monospace;
@@ -29,12 +30,12 @@ body {
 }
 
 /* ── Links ── */
-a { color: var(--color-accent); text-decoration: underline; text-underline-offset: 2px; }
-a:hover { color: var(--color-accent-hover); text-decoration: none; }
+a { color: var(--color-primary); text-decoration: underline; text-underline-offset: 2px; }
+a:hover { color: var(--color-primary-hover); text-decoration: none; }
 
 /* ── Layout ── */
 .site-header {
-  background: var(--color-page-background);
+  background: var(--color-header-background);
   border-bottom: 1px solid var(--color-border);
   position: sticky;
   top: 0;
@@ -75,7 +76,7 @@ a:hover { color: var(--color-accent-hover); text-decoration: none; }
   flex-shrink: 0;
 }
 
-.site-title:hover { color: var(--color-accent); text-decoration: none; }
+.site-title:hover { color: var(--color-primary); text-decoration: none; }
 
 .nav-links {
   list-style: none;
@@ -97,7 +98,7 @@ a:hover { color: var(--color-accent-hover); text-decoration: none; }
 
 .nav-links a:hover,
 .nav-links a[aria-current="page"] {
-  color: var(--color-accent);
+  color: var(--color-primary);
   background: rgba(37, 99, 235, 0.07);
   text-decoration: none;
 }
@@ -132,7 +133,7 @@ a:hover { color: var(--color-accent-hover); text-decoration: none; }
   color: var(--color-text);
 }
 
-.user-bar-name:hover { color: var(--color-accent); }
+.user-bar-name:hover { color: var(--color-primary); }
 
 .user-bar-logout,
 .user-bar-login {
@@ -142,7 +143,7 @@ a:hover { color: var(--color-accent-hover); text-decoration: none; }
 }
 
 .user-bar-logout:hover,
-.user-bar-login:hover { color: var(--color-accent); }
+.user-bar-login:hover { color: var(--color-primary); }
 
 .header-search input[type="search"] {
   padding: 0.3rem 0.6rem;
@@ -158,7 +159,7 @@ a:hover { color: var(--color-accent-hover); text-decoration: none; }
 }
 
 .header-search input[type="search"]:focus {
-  border-color: var(--color-accent);
+  border-color: var(--color-primary);
 }
 
 .header-search button {
@@ -175,8 +176,8 @@ a:hover { color: var(--color-accent-hover); text-decoration: none; }
 }
 
 .header-search button:hover {
-  border-color: var(--color-accent);
-  color: var(--color-accent);
+  border-color: var(--color-primary);
+  color: var(--color-primary);
 }
 
 /* ── Main & Footer ── */
@@ -198,7 +199,7 @@ a:hover { color: var(--color-accent-hover); text-decoration: none; }
 
 .site-footer p { margin: 0; }
 .site-footer a { color: var(--color-text-muted); }
-.site-footer a:hover { color: var(--color-accent); }
+.site-footer a:hover { color: var(--color-primary); }
 
 /* ── Typography ── */
 h1, h2, h3, h4, h5, h6 {
@@ -264,7 +265,7 @@ p { margin: 0 0 1rem; }
 }
 
 .post-title a { color: var(--color-text); text-decoration: none; }
-.post-title a:hover { color: var(--color-accent); }
+.post-title a:hover { color: var(--color-primary); }
 
 .post-meta {
   font-size: 0.875rem;
@@ -276,7 +277,7 @@ p { margin: 0 0 1rem; }
 }
 
 .post-meta a { color: var(--color-text-muted); text-decoration: none; }
-.post-meta a:hover { color: var(--color-accent); }
+.post-meta a:hover { color: var(--color-primary); }
 
 .post-excerpt { margin: 0; color: var(--color-text-muted); }
 
@@ -292,7 +293,7 @@ p { margin: 0 0 1rem; }
   font-size: 0.9rem;
   font-weight: 500;
   text-decoration: none;
-  color: var(--color-accent);
+  color: var(--color-primary);
 }
 
 .read-more:hover { text-decoration: underline; }
@@ -351,10 +352,10 @@ p { margin: 0 0 1rem; }
 .post-content p { margin-bottom: 1.25rem; }
 .post-content h2, .post-content h3 { margin-top: 2rem; }
 
-.post-content a { color: var(--color-accent); }
+.post-content a { color: var(--color-primary); }
 
 .post-content blockquote {
-  border-left: 3px solid var(--color-accent);
+  border-left: 3px solid var(--color-primary);
   background: var(--color-panel-background);
   margin: 1.5rem 0;
   padding: 0.75rem 1.25rem;
@@ -367,7 +368,7 @@ p { margin: 0 0 1rem; }
 .post-content pre {
   background: var(--color-panel-background);
   border: 1px solid var(--color-border);
-  border-left: 3px solid var(--color-accent);
+  border-left: 3px solid var(--color-primary);
   padding: 1rem 1.25rem;
   overflow-x: auto;
   border-radius: 0 var(--radius) var(--radius) 0;
@@ -432,8 +433,8 @@ p { margin: 0 0 1rem; }
 .post-sources a { color: var(--color-primary, inherit); }
 
 .tag:hover {
-  border-color: var(--color-accent);
-  color: var(--color-accent);
+  border-color: var(--color-primary);
+  color: var(--color-primary);
   text-decoration: none;
 }
 
@@ -473,8 +474,8 @@ p { margin: 0 0 1rem; }
 
 .btn-save-post:hover,
 .btn-save-post.saved {
-  border-color: var(--color-accent);
-  color: var(--color-accent);
+  border-color: var(--color-primary);
+  color: var(--color-primary);
 }
 
 /* ── Saved posts list (account page) ── */
@@ -499,7 +500,7 @@ p { margin: 0 0 1rem; }
   color: var(--color-text);
 }
 
-.saved-post-title:hover { color: var(--color-accent); }
+.saved-post-title:hover { color: var(--color-primary); }
 
 .saved-post-meta {
   font-size: 0.8rem;
@@ -527,14 +528,14 @@ p { margin: 0 0 1rem; }
 }
 
 .post-nav a { text-decoration: none; font-weight: 500; color: var(--color-text); }
-.post-nav a:hover { color: var(--color-accent); }
+.post-nav a:hover { color: var(--color-primary); }
 
 /* ── Related posts ── */
 .related-posts { margin-top: 2.5rem; }
 .related-posts h2 { font-size: 1.1rem; margin-bottom: 0.75rem; }
 .related-posts ul { padding-left: 1.25rem; margin: 0; }
 .related-posts li { margin-bottom: 0.4rem; }
-.related-posts a { text-decoration: none; color: var(--color-accent); }
+.related-posts a { text-decoration: none; color: var(--color-primary); }
 .related-posts a:hover { text-decoration: underline; }
 
 /* ── Single page ── */
@@ -568,8 +569,8 @@ p { margin: 0 0 1rem; }
 
 .pagination-prev:hover,
 .pagination-next:hover {
-  border-color: var(--color-accent);
-  color: var(--color-accent);
+  border-color: var(--color-primary);
+  color: var(--color-primary);
   text-decoration: none;
 }
 
@@ -594,11 +595,11 @@ p { margin: 0 0 1rem; }
   transition: border-color 0.15s;
 }
 
-.search-form input[type="search"]:focus { border-color: var(--color-accent); }
+.search-form input[type="search"]:focus { border-color: var(--color-primary); }
 
 .search-form button {
   padding: 0.5rem 1.1rem;
-  background: var(--color-accent);
+  background: var(--color-primary);
   color: #fff;
   border: none;
   border-radius: var(--radius);
@@ -609,7 +610,7 @@ p { margin: 0 0 1rem; }
   transition: background 0.15s;
 }
 
-.search-form button:hover { background: var(--color-accent-hover); }
+.search-form button:hover { background: var(--color-primary-hover); }
 
 .search-result-count, .no-results, .search-prompt {
   color: var(--color-text-muted);
@@ -696,7 +697,7 @@ p { margin: 0 0 1rem; }
   display: inline-block;
 }
 
-.comment-reply-link:hover { color: var(--color-accent); }
+.comment-reply-link:hover { color: var(--color-primary); }
 
 .reply-form { display: none; margin-top: 0.75rem; }
 
@@ -744,7 +745,7 @@ p { margin: 0 0 1rem; }
   transition: border-color 0.15s;
 }
 
-.comment-textarea:focus { border-color: var(--color-accent); }
+.comment-textarea:focus { border-color: var(--color-primary); }
 
 .comment-form-footer {
   display: flex;
@@ -755,7 +756,7 @@ p { margin: 0 0 1rem; }
 
 .comment-submit {
   padding: 0.4rem 1rem;
-  background: var(--color-accent);
+  background: var(--color-primary);
   color: #fff;
   border: none;
   border-radius: var(--radius);
@@ -766,7 +767,7 @@ p { margin: 0 0 1rem; }
   transition: background 0.15s;
 }
 
-.comment-submit:hover { background: var(--color-accent-hover); }
+.comment-submit:hover { background: var(--color-primary-hover); }
 .comment-submit:disabled { background: var(--color-text-muted); cursor: not-allowed; }
 
 .comment-error {

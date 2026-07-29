@@ -196,10 +196,11 @@ pub struct EditorFile {
 pub const CUSTOMIZER_COLORS: &[(&str, &str)] = &[
     ("color-page-background", "Page background"),
     ("color-panel-background", "Panel background (cards, inputs)"),
+    ("color-header-background", "Header & footer background"),
     ("color-text", "Body text"),
     ("color-text-muted", "Muted text"),
-    ("color-accent", "Accent"),
-    ("color-accent-hover", "Accent (hover)"),
+    ("color-primary", "Primary"),
+    ("color-primary-hover", "Primary (hover)"),
     ("color-border", "Border"),
 ];
 
