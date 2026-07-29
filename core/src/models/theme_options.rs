@@ -46,6 +46,9 @@ pub fn parse_option_defs(parsed: &toml::Table) -> Vec<ThemeOptionDef> {
                 .and_then(|v| v.as_str())
                 .unwrap_or("bool")
                 .to_string();
+            if option_type != "bool" {
+                return None;
+            }
             let default = def.get("default").and_then(|v| v.as_bool()).unwrap_or(false);
             let label = def
                 .get("label")
