@@ -163,11 +163,14 @@ pub struct SiteSettingsData {
     pub language: String,
     pub posts_per_page: i64,
     pub date_format: String,
+    pub maintenance_mode: bool,
+    pub maintenance_message: String,
 }
 
 pub fn render_settings(data: &SiteSettingsData, flash: Option<&str>, ctx: &crate::PageContext) -> String {
     let content = format!(
-        r#"<div class="profile-container">
+        r#"<div style="max-width:720px">
+<div class="profile-container">
   <p style="margin:0;padding:.65rem .85rem;background:#f8fafc;border:1px solid #e2e8f0;
             border-radius:6px;font-size:.875rem;color:#475569;line-height:1.6;">
     To rename the domain, use the CLI from the server:<br>
@@ -219,13 +222,52 @@ pub fn render_settings(data: &SiteSettingsData, flash: Option<&str>, ctx: &crate
     f.addEventListener('input', syncSaveBtn);
   }});
 }})();
-</script>"#,
+</script>
+
+<div class="profile-container">
+  <h2>Maintenance Mode</h2>
+  <p style="margin:0 0 1rem;font-size:.875rem;color:var(--muted)">
+    Shows a maintenance page to visitors of this site. Takes effect immediately &mdash; no
+    restart needed. <code>/admin/*</code> always stays reachable so you can turn it back off.
+  </p>
+  <form method="post" action="/admin/sites/{id}/maintenance" class="edit-form" id="maintenance-form">
+    <div class="form-group">
+      <label style="display:inline;font-weight:400">
+        <input type="checkbox" id="maintenance_mode" name="maintenance_mode" style="display:inline;width:auto;height:auto"{maintenance_checked}>
+        Enable maintenance mode
+      </label>
+    </div>
+    <div class="form-group">
+      <label for="maintenance_message">Message</label>
+      <textarea id="maintenance_message" name="maintenance_message" rows="3">{maintenance_message}</textarea>
+    </div>
+    <button type="submit" id="save-maintenance-btn" class="btn btn-primary" disabled>Save Maintenance</button>
+  </form>
+</div>
+<script>
+(function() {{
+  var form = document.getElementById('maintenance-form');
+  var btn  = document.getElementById('save-maintenance-btn');
+  function snapshot() {{
+    return Array.from(new FormData(form).entries()).map(function (e) {{ return e[0] + '=' + e[1]; }}).join('&');
+  }}
+  var initialSnapshot = snapshot();
+  function checkChanged() {{
+    btn.disabled = snapshot() === initialSnapshot;
+  }}
+  form.addEventListener('input', checkChanged);
+  form.addEventListener('change', checkChanged);
+}})();
+</script>
+</div>"#,
         id = crate::html_escape(&data.id),
         site_name = crate::html_escape(&data.site_name),
         site_description = crate::html_escape(&data.site_description),
         language = crate::html_escape(&data.language),
         posts_per_page = data.posts_per_page,
         date_format = crate::html_escape(&data.date_format),
+        maintenance_checked = if data.maintenance_mode { " checked" } else { "" },
+        maintenance_message = crate::html_escape(&data.maintenance_message),
     );
 
     crate::admin_page(&format!("Site Settings - {}", data.hostname), "/admin/sites", flash, &content, ctx)

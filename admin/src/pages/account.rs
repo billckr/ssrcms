@@ -109,6 +109,21 @@ pub fn account_page(
         if (a.getAttribute('href') !== '#') closeSidebar();
       }});
     }});
+    (function() {{
+      var flash = document.querySelector('.flash');
+      if (flash) {{
+        setTimeout(function() {{
+          flash.style.transition = 'opacity .4s ease';
+          flash.style.opacity = '0';
+          setTimeout(function() {{ flash.remove(); }}, 400);
+        }}, 5000);
+      }}
+      if (window.location.search.indexOf('flash=') !== -1) {{
+        var url = new URL(window.location.href);
+        url.searchParams.delete('flash');
+        window.history.replaceState({{}}, '', url.pathname + url.search + url.hash);
+      }}
+    }})();
   </script>
 </body>
 </html>"#,

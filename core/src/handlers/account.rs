@@ -34,13 +34,17 @@ pub async fn dashboard(account: AccountUser) -> Html<String> {
 // ── Profile ────────────────────────────────────────────────────────
 
 /// GET /account/profile — profile view.
-pub async fn profile_view(account: AccountUser) -> Html<String> {
+pub async fn profile_view(
+    account: AccountUser,
+    Query(params): Query<std::collections::HashMap<String, String>>,
+) -> Html<String> {
     let ctx = build_ctx(&account);
     let data = ProfileData {
         email:        account.user.email.clone(),
         display_name: account.user.display_name.clone(),
     };
-    Html(admin::pages::account::render_profile(&data, None, &ctx))
+    let flash = params.get("flash").map(|s| s.as_str());
+    Html(admin::pages::account::render_profile(&data, flash, &ctx))
 }
 
 #[derive(Deserialize)]
@@ -54,13 +58,7 @@ pub async fn profile_update(
     State(state): State<AppState>,
     account: AccountUser,
     Form(form): Form<UpdateForm>,
-) -> Html<String> {
-    let ctx = build_ctx(&account);
-    let data = ProfileData {
-        email:        form.email.clone(),
-        display_name: form.display_name.clone().unwrap_or_default(),
-    };
-
+) -> Redirect {
     use crate::models::user::UpdateUser;
     let update = UpdateUser {
         username:      None,
@@ -76,7 +74,7 @@ pub async fn profile_update(
         Err(_) => "Error saving profile. Please try again.",
     };
 
-    Html(admin::pages::account::render_profile(&data, Some(flash), &ctx))
+    Redirect::to(&format!("/account/profile?flash={}", flash.replace(' ', "+")))
 }
 
 #[derive(Deserialize)]
@@ -91,32 +89,22 @@ pub async fn profile_change_password(
     State(state): State<AppState>,
     account: AccountUser,
     Form(form): Form<ChangePasswordForm>,
-) -> Html<String> {
-    let ctx = build_ctx(&account);
-    let data = ProfileData {
-        email:        account.user.email.clone(),
-        display_name: account.user.display_name.clone(),
-    };
+) -> Redirect {
+    let redirect = |flash: &str| Redirect::to(&format!("/account/profile?flash={}", flash.replace(' ', "+")));
 
     if form.new_password != form.confirm_password {
-        return Html(admin::pages::account::render_profile(
-            &data, Some("New passwords do not match."), &ctx,
-        ));
+        return redirect("New passwords do not match.");
     }
     if !account.user.verify_password(&form.current_password) {
-        return Html(admin::pages::account::render_profile(
-            &data, Some("Current password is incorrect."), &ctx,
-        ));
+        return redirect("Current password is incorrect.");
     }
     if let Err(msg) = crate::models::user::validate_password(&form.new_password) {
-        return Html(admin::pages::account::render_profile(&data, Some(msg), &ctx));
+        return redirect(msg);
     }
 
     let new_hash = match crate::models::user::hash_password(&form.new_password) {
         Ok(h) => h,
-        Err(_) => return Html(admin::pages::account::render_profile(
-            &data, Some("Password hashing error. Please try again."), &ctx,
-        )),
+        Err(_) => return redirect("Password hashing error. Please try again."),
     };
 
     use crate::models::user::UpdateUser;
@@ -130,7 +118,7 @@ pub async fn profile_change_password(
         Err(_) => "Error changing password. Please try again.",
     };
 
-    Html(admin::pages::account::render_profile(&data, Some(flash), &ctx))
+    redirect(flash)
 }
 
 // ── Saved Posts ───────────────────────────────────────────────────────────────

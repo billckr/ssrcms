@@ -205,6 +205,7 @@ pub fn build(
         .route("/admin/sites/switch", post(admin_sites::switch))
         .route("/admin/sites/{id}/settings", get(admin_sites::site_settings))
         .route("/admin/sites/{id}/site-config", post(admin_sites::save_site_config))
+        .route("/admin/sites/{id}/maintenance", post(admin_sites::save_maintenance))
         .route("/admin/sites/{id}/delete", post(admin_sites::delete))
         .route("/admin/sites/{id}/provision-ssl", post(admin_sites::provision_ssl))
         // ── Admin forms ────────────────────────────────────────────────────

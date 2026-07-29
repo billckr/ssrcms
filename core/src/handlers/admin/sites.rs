@@ -1,5 +1,8 @@
 //! Admin handlers for site management (list, create, switch, settings).
 
+const DEFAULT_MAINTENANCE_MESSAGE: &str =
+    "This site is currently undergoing scheduled maintenance. Please check back soon.";
+
 /// Returns true if `h` is a plausibly valid hostname with a real TLD.
 /// Labels must be alphanumeric + hyphens, not start/end with a hyphen.
 /// TLD must be at least 2 alphabetic characters.
@@ -491,7 +494,9 @@ pub async fn site_settings(
     State(state): State<AppState>,
     admin: AdminUser,
     Path(id): Path<Uuid>,
+    Query(params): Query<HashMap<String, String>>,
 ) -> impl IntoResponse {
+    let flash = params.get("flash").map(|s| s.as_str());
     let cs = state.site_hostname(admin.site_id);
     let site = match crate::models::site::get_by_id(&state.db, id).await {
         Ok(s) => s,
@@ -510,6 +515,12 @@ pub async fn site_settings(
     let cfg = state.get_site_by_id(id)
         .map(|(_, s)| s)
         .unwrap_or_else(|| (*state.settings).clone());
+    let maintenance_mode = crate::app_state::get_site_setting(&state.db, id, "maintenance_mode")
+        .await
+        .as_deref() == Some("true");
+    let maintenance_message = crate::app_state::get_site_setting(&state.db, id, "maintenance_message")
+        .await
+        .unwrap_or_else(|| DEFAULT_MAINTENANCE_MESSAGE.to_string());
     let data = SiteSettingsData {
         id: site.id.to_string(),
         hostname: site.hostname.clone(),
@@ -518,8 +529,10 @@ pub async fn site_settings(
         language: cfg.language.clone(),
         posts_per_page: cfg.posts_per_page,
         date_format: cfg.date_format.clone(),
+        maintenance_mode,
+        maintenance_message,
     };
-    Html(admin::pages::sites::render_settings(&data, None, &ctx)).into_response()
+    Html(admin::pages::sites::render_settings(&data, flash, &ctx)).into_response()
 }
 
 /// POST /admin/sites/{id}/delete — delete a site.
@@ -649,7 +662,44 @@ pub async fn save_site_config(
         tracing::warn!("site cache reload failed after site config save: {:?}", e);
     }
 
-    Redirect::to(&format!("/admin/sites/{}/settings", id)).into_response()
+    Redirect::to(&format!("/admin/sites/{}/settings?flash=Saved.", id)).into_response()
+}
+
+/// POST /admin/sites/{id}/maintenance — toggle maintenance mode for a site.
+/// Checked live by core/src/middleware/maintenance.rs on every public request
+/// to this site — takes effect immediately, no restart or cache reload needed.
+pub async fn save_maintenance(
+    State(state): State<AppState>,
+    admin: AdminUser,
+    Path(id): Path<Uuid>,
+    Form(form): Form<HashMap<String, String>>,
+) -> impl IntoResponse {
+    let site = match crate::models::site::get_by_id(&state.db, id).await {
+        Ok(s) => s,
+        Err(_) => return Redirect::to("/admin/sites").into_response(),
+    };
+    let is_owner = site.owner_user_id == Some(admin.user.id);
+    let has_role = matches!(
+        crate::models::site_user::get_role(&state.db, id, admin.user.id)
+            .await.ok().flatten().as_deref(),
+        Some("admin" | "site_admin")
+    );
+    if !admin.caps.is_global_admin && !is_owner && !has_role {
+        return (axum::http::StatusCode::FORBIDDEN, "Forbidden").into_response();
+    }
+
+    let enabled = form.contains_key("maintenance_mode");
+    let message = form.get("maintenance_message").map(|s| s.trim()).filter(|s| !s.is_empty())
+        .unwrap_or(DEFAULT_MAINTENANCE_MESSAGE);
+
+    if let Err(e) = crate::app_state::set_site_setting(&state.db, id, "maintenance_mode", if enabled { "true" } else { "false" }).await {
+        tracing::error!("failed to save maintenance_mode for site {}: {:?}", id, e);
+    }
+    if let Err(e) = crate::app_state::set_site_setting(&state.db, id, "maintenance_message", message).await {
+        tracing::error!("failed to save maintenance_message for site {}: {:?}", id, e);
+    }
+
+    Redirect::to(&format!("/admin/sites/{}/settings?flash=Saved.", id)).into_response()
 }
 
 /// POST /admin/sites/{id}/provision-ssl

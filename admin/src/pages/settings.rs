@@ -6,13 +6,11 @@ pub fn render(
     flash: Option<&str>,
     app_name: &str,
     timezone: &str,
-    admin_email: &str,
     max_upload_mb: u64,
     sites: &[(Uuid, String)],
     ctx: &crate::PageContext,
 ) -> String {
     let app_name_escaped = crate::html_escape(app_name);
-    let admin_email_escaped = crate::html_escape(admin_email);
 
     let site_options = sites
         .iter()
@@ -186,23 +184,28 @@ pub fn render(
   <div class="card-boxed">
     <h2 class="card-boxed-header">General</h2>
     <div class="card-boxed-body">
-    <form method="post" action="/admin/settings" class="edit-form">
+    <form method="post" action="/admin/settings" class="edit-form general-settings-form">
       <input type="hidden" name="tab" value="general">
 
-      <div class="form-group">
+      <div class="form-group" style="max-width:360px">
         <label for="sg-app-name">App Name</label>
         <input type="text" id="sg-app-name" name="app_name" value="{app_name}">
         <small>Shown in the admin sidebar top-left. Set to your agency or CMS brand name.</small>
       </div>
-      <div class="form-group">
-        <label for="sg-admin-email">Admin Email</label>
-        <input type="email" id="sg-admin-email" value="{admin_email}" readonly
-               style="opacity:.7;cursor:not-allowed" title="Set via ADMIN_EMAIL in .env or synaptic.toml">
-        <small>Set via <code>ADMIN_EMAIL</code> in <code>.env</code> or <code>synaptic.toml</code>. Requires a restart to change.</small>
+      <div class="form-actions" style="margin-top:1.5rem">
+        <button type="submit" class="btn btn-primary" id="general-save-btn" disabled>Save General</button>
       </div>
+    </form>
+    </div>
+  </div>
 
-      <p class="settings-section-title">Localisation</p>
-      <div class="form-group">
+  <div class="card-boxed">
+    <h2 class="card-boxed-header">Localisation</h2>
+    <div class="card-boxed-body">
+    <form method="post" action="/admin/settings" class="edit-form localisation-settings-form">
+      <input type="hidden" name="tab" value="localisation">
+
+      <div class="form-group" style="max-width:360px">
         <label for="sg-timezone">Timezone</label>
         <select id="sg-timezone" name="timezone">
           {tz_options}
@@ -211,7 +214,7 @@ pub fn render(
       </div>
 
       <div class="form-actions" style="margin-top:1.5rem">
-        <button type="submit" class="btn btn-primary">Save General</button>
+        <button type="submit" class="btn btn-primary" id="localisation-save-btn" disabled>Save Localisation</button>
       </div>
     </form>
     </div>
@@ -241,18 +244,16 @@ pub fn render(
   </div>
 
   <div class="card-boxed">
-    <h2 class="card-boxed-header">Deploy Test Data</h2>
+    <h2 class="card-boxed-header">Seed Users</h2>
     <div class="card-boxed-body">
+  <div class="dt-card">
     <div class="form-group">
-      <label for="dt-site">Target site</label>
-      <select id="dt-site">
+      <label for="dt-site-users">Target site</label>
+      <select id="dt-site-users">
+        <option value="" selected disabled>Select site&hellip;</option>
         {site_options}
       </select>
-      <small>All actions below apply to this site.</small>
     </div>
-
-  <div class="dt-card">
-    <h4>Seed users</h4>
     <div class="form-group" style="max-width:280px">
       <label for="dt-user-role">Role</label>
       <select id="dt-user-role">
@@ -270,13 +271,24 @@ pub fn render(
       <label for="dt-user-password">Password (optional)</label>
       <input type="text" id="dt-user-password" placeholder="random per user">
     </div>
-    <button type="button" class="btn" onclick="seedUsers()" id="dtUserBtn">Seed Users</button>
+    <button type="button" class="btn btn-primary" onclick="seedUsers()" id="dtUserBtn" disabled>Seed Users</button>
     <span class="dt-spinner" id="dtUserSpinner" hidden></span>
     <pre id="dtUserResult"></pre>
   </div>
+    </div>
+  </div>
 
+  <div class="card-boxed">
+    <h2 class="card-boxed-header">Seed Posts / Pages</h2>
+    <div class="card-boxed-body">
   <div class="dt-card">
-    <h4>Seed posts / pages</h4>
+    <div class="form-group">
+      <label for="dt-site-posts">Target site</label>
+      <select id="dt-site-posts">
+        <option value="" selected disabled>Select site&hellip;</option>
+        {site_options}
+      </select>
+    </div>
     <div class="form-group" style="max-width:280px">
       <label for="dt-post-author">Author email</label>
       <input type="email" id="dt-post-author" placeholder="author@example.com">
@@ -304,13 +316,23 @@ pub fn render(
     <div class="form-group">
       <label style="display:inline;font-weight:400"><input type="checkbox" id="dt-post-extras" style="display:inline;width:auto;height:auto"> Create + assign categories/tags</label>
     </div>
-    <button type="button" class="btn" onclick="seedPosts()" id="dtPostBtn">Seed Posts</button>
+    <button type="button" class="btn btn-primary" onclick="seedPosts()" id="dtPostBtn" disabled>Seed Posts</button>
     <span class="dt-spinner" id="dtPostSpinner" hidden></span>
     <pre id="dtPostResult"></pre>
   </div>
+    </div>
+  </div>
 
+  <div class="card-boxed">
+    <h2 class="card-boxed-header">Clear Test Data</h2>
+    <div class="card-boxed-body">
   <div class="dt-card dt-danger">
-    <h4>Clear test data</h4>
+    <div class="form-group">
+      <label for="dt-site-clear">Target site</label>
+      <select id="dt-site-clear">
+        {site_options}
+      </select>
+    </div>
     <p style="font-size:.8rem;color:var(--muted);margin:0 0 .75rem">
       Deletes all posts, pages, comments, taxonomies, form submissions, media rows, and nav
       menus for the selected site. Site settings are not affected. This cannot be undone.
@@ -325,17 +347,25 @@ pub fn render(
     <span class="dt-spinner" id="dtClearSpinner" hidden></span>
     <pre id="dtClearResult"></pre>
   </div>
-  </div>
+    </div>
   </div>
 </div>
 
 <script>
-function dtSiteId() {{ return document.getElementById('dt-site').value; }}
+function dtSiteId(selectId) {{ return document.getElementById(selectId).value; }}
 
 function dtSetBusy(btn, spinner, busy) {{
   btn.disabled = busy;
   spinner.hidden = !busy;
 }}
+
+function dtLinkSiteSelect(selectId, btnId) {{
+  var select = document.getElementById(selectId);
+  var btn = document.getElementById(btnId);
+  select.addEventListener('change', function () {{ btn.disabled = !select.value; }});
+}}
+dtLinkSiteSelect('dt-site-users', 'dtUserBtn');
+dtLinkSiteSelect('dt-site-posts', 'dtPostBtn');
 
 function dtPost(path, body, resultEl) {{
   return fetch(path, {{
@@ -355,7 +385,7 @@ window.seedUsers = function () {{
   var spinner = document.getElementById('dtUserSpinner');
   var resultEl = document.getElementById('dtUserResult');
   var body = {{
-    site_id: dtSiteId(),
+    site_id: dtSiteId('dt-site-users'),
     role: document.getElementById('dt-user-role').value,
     count: parseInt(document.getElementById('dt-user-count').value, 10) || 1,
     password: document.getElementById('dt-user-password').value || null,
@@ -378,7 +408,7 @@ window.seedPosts = function () {{
   var spinner = document.getElementById('dtPostSpinner');
   var resultEl = document.getElementById('dtPostResult');
   var body = {{
-    site_id: dtSiteId(),
+    site_id: dtSiteId('dt-site-posts'),
     author_email: document.getElementById('dt-post-author').value,
     post_type: document.getElementById('dt-post-type').value,
     count: parseInt(document.getElementById('dt-post-count').value, 10) || 1,
@@ -410,7 +440,7 @@ window.clearTestData = function () {{
   var btn = document.getElementById('dtClearBtn');
   var spinner = document.getElementById('dtClearSpinner');
   var resultEl = document.getElementById('dtClearResult');
-  var body = {{ site_id: dtSiteId(), delete_users: deleteUsers }};
+  var body = {{ site_id: dtSiteId('dt-site-clear'), delete_users: deleteUsers }};
   resultEl.textContent = '';
   dtSetBusy(btn, spinner, true);
   dtPost('/admin/settings/dev-tools/clear', body, resultEl).then(function (res) {{
@@ -451,10 +481,25 @@ window.clearTestData = function () {{
     if (saved) activate(saved);
   }} catch (e) {{}}
 }}());
+
+function dtEnableOnChange(formSelector, btnId) {{
+  var form = document.querySelector(formSelector);
+  var btn  = document.getElementById(btnId);
+  function snapshot() {{
+    return Array.from(new FormData(form).entries()).map(function (e) {{ return e[0] + '=' + e[1]; }}).join('&');
+  }}
+  var initialSnapshot = snapshot();
+  function checkChanged() {{
+    btn.disabled = snapshot() === initialSnapshot;
+  }}
+  form.addEventListener('input', checkChanged);
+  form.addEventListener('change', checkChanged);
+}}
+dtEnableOnChange('.general-settings-form', 'general-save-btn');
+dtEnableOnChange('.localisation-settings-form', 'localisation-save-btn');
 </script>
 "#,
         app_name = app_name_escaped,
-        admin_email = admin_email_escaped,
         tz_options = tz_options,
         max_upload_mb = max_upload_mb,
         site_options = site_options,

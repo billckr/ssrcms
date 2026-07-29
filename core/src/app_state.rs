@@ -184,6 +184,21 @@ pub async fn set_site_setting(
     Ok(())
 }
 
+/// Fetch a single key-value pair from the site_settings table for a specific site.
+pub async fn get_site_setting(
+    pool: &PgPool,
+    site_id: Uuid,
+    key: &str,
+) -> Option<String> {
+    sqlx::query_scalar("SELECT value FROM site_settings WHERE site_id = $1 AND key = $2")
+        .bind(site_id)
+        .bind(key)
+        .fetch_optional(pool)
+        .await
+        .ok()
+        .flatten()
+}
+
 /// Hostname-keyed site cache: hostname → (Site, SiteSettings).
 pub type SiteCache = Arc<RwLock<HashMap<String, (Site, SiteSettings)>>>;
 

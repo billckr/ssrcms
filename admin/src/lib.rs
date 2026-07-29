@@ -188,6 +188,14 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
           setTimeout(function() {{ flash.remove(); }}, 400);
         }}, 5000);
       }}
+      // Strip one-shot flash-message query params so a refresh doesn't
+      // re-show the message (params vary by page: flash, success, saved).
+      var oneShotParams = ['flash', 'success', 'saved', 'error'];
+      if (oneShotParams.some(function(p) {{ return window.location.search.indexOf(p + '=') !== -1; }})) {{
+        var url = new URL(window.location.href);
+        oneShotParams.forEach(function(p) {{ url.searchParams.delete(p); }});
+        window.history.replaceState({{}}, '', url.pathname + url.search + url.hash);
+      }}
     }})();
   </script>
 </body>
