@@ -20,6 +20,8 @@ pub struct SiteRow {
     /// True when this site is the default_site_id of its non-super_admin owner.
     /// Shown as a blue "primary domain" badge in the super-admin system view only.
     pub is_primary_domain: bool,
+    /// True when maintenance mode is currently on for this site.
+    pub maintenance_mode: bool,
 }
 
 pub fn render_list(
@@ -82,6 +84,14 @@ pub fn render_list(
             )
         };
 
+        let maintenance_badge = if s.maintenance_mode {
+            r#" <span class="ssl-badge" title="Maintenance mode is ON — visitors see a maintenance page">
+                 <img src="/admin/static/icons/tool.svg" alt="Maintenance mode active" style="width:14px;height:14px;vertical-align:middle;filter:invert(60%) sepia(90%) saturate(600%) hue-rotate(2deg)">
+               </span>"#
+        } else {
+            ""
+        };
+
         let site_url = format!(
             "{scheme}://{hostname}",
             scheme = if s.ssl_active { "https" } else { "http" },
@@ -90,7 +100,7 @@ pub fn render_list(
 
         format!(
             r#"<tr>
-              <td><a href="{site_url}" target="_blank" rel="noopener noreferrer">{hostname}</a>{default_badge} {ssl_badge}</td>
+              <td><a href="{site_url}" target="_blank" rel="noopener noreferrer">{hostname}</a>{default_badge} {ssl_badge}{maintenance_badge}</td>
               <td style="color:var(--muted);font-size:0.875rem">{admin_email}</td>
               <td><span style="display:inline-block;background:#f3f4f6;color:#374151;border-radius:4px;padding:.15rem .5rem;font-size:.78rem;font-weight:500">{user_count}</span></td>
               <td><span style="display:inline-block;background:#f3f4f6;color:#374151;border-radius:4px;padding:.15rem .5rem;font-size:.78rem;font-weight:500">{subscriber_count}</span></td>
@@ -118,6 +128,7 @@ pub fn render_list(
                 ""
             },
             ssl_badge        = ssl_badge,
+            maintenance_badge = maintenance_badge,
             users_link       = if ctx.can_manage_users {
                 format!(
                     r#"<a href="/admin/users?site={id}" class="icon-btn" title="View users for this site">

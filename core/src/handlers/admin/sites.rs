@@ -79,12 +79,13 @@ pub async fn list(
         .collect();
 
         for s in &sites {
-            let (admin_email, user_count, subscriber_count, post_count, page_count) = tokio::join!(
+            let (admin_email, user_count, subscriber_count, post_count, page_count, maintenance_mode) = tokio::join!(
                 crate::models::site::admin_email(&state.db, s.id),
                 crate::models::site::user_count(&state.db, s.id),
                 crate::models::site::subscriber_count(&state.db, s.id),
                 crate::models::site::post_count(&state.db, s.id),
                 crate::models::site::page_count(&state.db, s.id),
+                crate::app_state::get_site_setting(&state.db, s.id, "maintenance_mode"),
             );
             let is_sys_default = admin.user.default_site_id == Some(s.id);
             rows.push(SiteRow {
@@ -100,6 +101,7 @@ pub async fn list(
                 ssl_active: caddy_block_exists(&caddyfile_content, &s.hostname),
                 // Only show primary-domain badge for non-system-domain sites.
                 is_primary_domain: !is_sys_default && primary_ids.contains(&s.id),
+                maintenance_mode: maintenance_mode.as_deref() == Some("true"),
             });
         }
     } else if admin.caps.is_global_admin && admin.caps.is_impersonating {
@@ -134,12 +136,13 @@ pub async fn list(
         };
 
         for s in &sites {
-            let (admin_email, user_count, subscriber_count, post_count, page_count) = tokio::join!(
+            let (admin_email, user_count, subscriber_count, post_count, page_count, maintenance_mode) = tokio::join!(
                 crate::models::site::admin_email(&state.db, s.id),
                 crate::models::site::user_count(&state.db, s.id),
                 crate::models::site::subscriber_count(&state.db, s.id),
                 crate::models::site::post_count(&state.db, s.id),
                 crate::models::site::page_count(&state.db, s.id),
+                crate::app_state::get_site_setting(&state.db, s.id, "maintenance_mode"),
             );
             rows.push(SiteRow {
                 id: s.id.to_string(),
@@ -153,6 +156,7 @@ pub async fn list(
                 can_manage: true,
                 ssl_active: caddy_block_exists(&caddyfile_content, &s.hostname),
                 is_primary_domain: owner_default_site_id == Some(s.id),
+                maintenance_mode: maintenance_mode.as_deref() == Some("true"),
             });
         }
     } else {
@@ -166,12 +170,13 @@ pub async fn list(
                 vec![]
             });
         for (s, site_role) in &site_roles {
-            let (admin_email, user_count, subscriber_count, post_count, page_count) = tokio::join!(
+            let (admin_email, user_count, subscriber_count, post_count, page_count, maintenance_mode) = tokio::join!(
                 crate::models::site::admin_email(&state.db, s.id),
                 crate::models::site::user_count(&state.db, s.id),
                 crate::models::site::subscriber_count(&state.db, s.id),
                 crate::models::site::post_count(&state.db, s.id),
                 crate::models::site::page_count(&state.db, s.id),
+                crate::app_state::get_site_setting(&state.db, s.id, "maintenance_mode"),
             );
             // can_manage if they own the site or hold an admin role on it.
             // Delete is separately blocked for the default site in the renderer.
@@ -189,6 +194,7 @@ pub async fn list(
                 can_manage,
                 ssl_active: caddy_block_exists(&caddyfile_content, &s.hostname),
                 is_primary_domain: false,
+                maintenance_mode: maintenance_mode.as_deref() == Some("true"),
             });
         }
     }
