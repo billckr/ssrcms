@@ -170,9 +170,7 @@ pub fn build(
         .route("/admin/appearance/editor/{theme}/restore", post(appearance_editor::restore_file))
         .route("/admin/appearance/editor/{theme}/new-file", post(appearance_editor::new_file))
         .route("/admin/appearance/editor/{theme}/delete-file", post(appearance_editor::delete_file))
-        .route("/admin/appearance/editor/{theme}/colors", post(appearance_editor::save_colors))
-        .route("/admin/appearance/editor/{theme}/options", post(appearance_editor::save_options))
-        .route("/admin/appearance/editor/{theme}/order", post(appearance_editor::save_order))
+        .route("/admin/appearance/editor/{theme}/customizer-save", post(appearance_editor::save_customizer))
         // ── Page builder ───────────────────────────────────────────────────
         .route("/admin/builder",                                        get(admin_builder::list))
         .route("/admin/builder/create",                                 post(admin_builder::create_project))

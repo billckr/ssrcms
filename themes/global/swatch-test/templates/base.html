@@ -6,6 +6,9 @@
   <title>{% block title %}{{ site.name }}{% endblock title %}</title>
   <meta name="robots" content="noindex, nofollow">
   <link rel="stylesheet" href="/theme/static/css/style.css">
+  {% if theme_option_choices.button_style_rounded == "rounded" %}
+  <style>:root { --button-radius: 999px; }</style>
+  {% endif %}
 </head>
 <body>
   <main class="site-main">

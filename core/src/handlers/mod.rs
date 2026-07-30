@@ -75,6 +75,14 @@ pub(super) async fn insert_theme_options(ctx: &mut tera::Context, state: &AppSta
     )
     .await;
     ctx.insert("theme_option_lists", &theme_option_lists);
+    let theme_option_choices = crate::models::theme_options::build_theme_option_choices_context(
+        &state.db,
+        theme_dir.as_deref(),
+        site_id,
+        &theme_name,
+    )
+    .await;
+    ctx.insert("theme_option_choices", &theme_option_choices);
 }
 
 /// Whether the current request is an authenticated admin/editor/author staff

@@ -188,27 +188,6 @@ pub struct EditorFile {
 // [customizer] enabled = true — every other theme (including hand-uploaded
 // ones) keeps today's plain "Select a file above" behavior untouched.
 
-/// Fixed, required CSS custom-property names for the Colors panel — (variable
-/// name without `--`, display label). Every customizer-enabled theme MUST
-/// define all of these under `:root` in `static/css/style.css`, using exactly
-/// these names, so the panel behaves predictably across every theme that
-/// adopts it. This list is the contract — do not add per-theme synonyms.
-pub const CUSTOMIZER_COLORS: &[(&str, &str)] = &[
-    ("color-page-background", "Page background"),
-    ("color-panel-background", "Panel background (cards, inputs)"),
-    ("color-header-background", "Header & footer background"),
-    ("color-text", "Body text"),
-    ("color-text-muted", "Muted text"),
-    ("color-primary", "Primary"),
-    ("color-primary-hover", "Primary (hover)"),
-    ("color-border", "Border"),
-    ("color-button-background", "Button background"),
-    ("color-button-border", "Button border"),
-    ("color-button-background-hover", "Button background (hover)"),
-    ("color-button-text", "Button text"),
-    ("color-button-text-hover", "Button text (hover)"),
-];
-
 /// The subset of theme.toml `[theme]` fields shown in the customizer's
 /// right-side "Theme Details" panel.
 pub struct ThemeManifestInfo {
@@ -220,37 +199,42 @@ pub struct ThemeManifestInfo {
 
 pub struct CustomizerData {
     pub manifest: ThemeManifestInfo,
-    /// (key, label, current hex value — None if that variable wasn't found)
-    pub colors: Vec<(&'static str, &'static str, Option<String>)>,
-    /// Layout options declared in theme.toml's `[customizer.options.*]` —
-    /// (option_key, label, current resolved bool value). Empty for themes
-    /// that declare none.
-    pub options: Vec<(String, String, bool)>,
+    /// Declared in theme.toml's `[customizer.colors.*]` — (key, label, group,
+    /// current hex value read live from the theme's own CSS `:root` block;
+    /// None if that variable isn't actually defined there).
+    pub colors: Vec<(String, String, String, Option<String>)>,
+    /// Bool toggles declared in theme.toml's `[customizer.options.*]`
+    /// (`type = "bool"`) — (option_key, label, group, current resolved
+    /// value). Empty for themes that declare none.
+    pub options: Vec<(String, String, String, bool)>,
     /// Reorderable option groups declared with `type = "order"` —
-    /// (option_key, label, items in the current resolved order as
+    /// (option_key, label, group, items in the current resolved order as
     /// (item_key, item_label)). Empty for themes that declare none.
-    pub order_options: Vec<(String, String, Vec<(String, String)>)>,
+    pub order_options: Vec<(String, String, String, Vec<(String, String)>)>,
+    /// Single-select option groups declared with `type = "choice"` —
+    /// (option_key, label, group, declared (choice_key, choice_label) pairs,
+    /// current resolved choice_key). Empty for themes that declare none.
+    pub choices: Vec<(String, String, String, Vec<(String, String)>, String)>,
     /// Whether a `.bak` backup exists for this theme's `static/css/style.css` —
     /// gates showing the "Restore original" button next to Save Colors.
     pub has_color_backup: bool,
 }
 
+/// Slugify a manifest-declared group name into something safe for DOM ids
+/// (e.g. "Layout Options" -> "layout-options").
+fn slugify_group(group: &str) -> String {
+    group.chars().map(|c| if c.is_ascii_alphanumeric() { c.to_ascii_lowercase() } else { '-' }).collect()
+}
+
+/// The customizer landing page is a pure reader of whatever theme.toml
+/// declares: it groups colors/options/order-groups/choices by their manifest
+/// `group` field and renders one `.card-boxed` per distinct group, in the
+/// order groups first appear. No card names, color roles, or option keys are
+/// hardcoded here — a theme author adds a new panel just by declaring a new
+/// `group` value in theme.toml.
 fn render_customizer_landing(theme_name: &str, source: &str, data: &CustomizerData) -> String {
     let theme_esc = crate::html_escape(theme_name);
     let source_esc = crate::html_escape(source);
-
-    let color_rows: String = data.colors.iter().filter_map(|(key, label, value)| {
-        let hex = value.as_deref()?;
-        Some(format!(
-            r#"<div class="customizer-color-card">
-  <input type="color" name="{key}" value="{hex}" class="customizer-color-swatch" title="{label}">
-  <span class="customizer-color-label">{label}</span>
-</div>"#,
-            key = key,
-            hex = crate::html_escape(hex),
-            label = crate::html_escape(label),
-        ))
-    }).collect();
 
     let restore_colors_btn = if data.has_color_backup {
         format!(
@@ -267,47 +251,34 @@ fn render_customizer_landing(theme_name: &str, source: &str, data: &CustomizerDa
         String::new()
     };
 
-    let colors_card = format!(
-        r#"<div class="card-boxed">
-  <h2 class="card-boxed-header">Colors</h2>
-  <div class="card-boxed-body">
-    <form method="POST" action="/admin/appearance/editor/{theme}/colors" id="customizer-colors-form">
-      <input type="hidden" name="source" value="{source}">
-      <div class="customizer-color-grid">
-      {rows}
-      </div>
-      <div class="form-actions" style="margin-top:1rem;">
-        <button type="submit" class="btn btn-primary" id="colors-save-btn" disabled>Save Colors</button>
-      </div>
-    </form>
-    {restore}
-  </div>
-</div>
-<script>
-(function() {{
-  var form = document.getElementById('customizer-colors-form');
-  var btn  = document.getElementById('colors-save-btn');
-  if (!form || !btn) return;
-  function checkChanged() {{
-    var changed = false;
-    form.querySelectorAll('input[type=color]').forEach(function(inp) {{
-      if (inp.value !== inp.defaultValue) changed = true;
-    }});
-    btn.disabled = !changed;
-  }}
-  form.addEventListener('input', checkChanged);
-}})();
-</script>"#,
-        theme = theme_esc,
-        source = source_esc,
-        rows = color_rows,
-        restore = restore_colors_btn,
-    );
+    // Each of the four render_* closures below returns *inner* markup only —
+    // no <form>, no submit button, no script. One group can mix any
+    // combination of these, so the group-assembly step below wraps
+    // whichever are non-empty in a single shared <form>/button/change-
+    // detector instead of each kind managing its own.
 
-    let options_card = if data.options.is_empty() {
-        String::new()
-    } else {
-        let option_rows: String = data.options.iter().map(|(key, label, value)| {
+    let render_colors_section = |entries: &[&(String, String, String, Option<String>)]| -> String {
+        if entries.is_empty() { return String::new(); }
+        let rows: String = entries.iter().filter_map(|(key, label, _, value)| {
+            let hex = value.as_deref()?;
+            Some(format!(
+                r#"<div class="customizer-color-card">
+  <input type="color" name="{key}" value="{hex}" class="customizer-color-swatch" title="{label}">
+  <span class="customizer-color-label">{label}</span>
+</div>"#,
+                key = key,
+                hex = crate::html_escape(hex),
+                label = crate::html_escape(label),
+            ))
+        }).collect();
+        format!(r#"<div class="customizer-color-grid">
+{rows}
+</div>"#, rows = rows)
+    };
+
+    let render_bool_options_section = |entries: &[&(String, String, String, bool)]| -> String {
+        if entries.is_empty() { return String::new(); }
+        let rows: String = entries.iter().map(|(key, label, _, value)| {
             let checked = if *value { " checked" } else { "" };
             format!(
                 r#"<label class="customizer-option-row">
@@ -319,92 +290,144 @@ fn render_customizer_landing(theme_name: &str, source: &str, data: &CustomizerDa
                 label = crate::html_escape(label),
             )
         }).collect();
-
-        format!(
-            r#"<div class="card-boxed" style="margin-top:1.5rem;">
-  <h2 class="card-boxed-header">Layout Options</h2>
-  <div class="card-boxed-body">
-    <form method="POST" action="/admin/appearance/editor/{theme}/options" id="customizer-options-form">
-      <input type="hidden" name="source" value="{source}">
-      <div class="customizer-option-list">
-      {rows}
-      </div>
-      <div class="form-actions" style="margin-top:1rem;">
-        <button type="submit" class="btn btn-primary" id="options-save-btn" disabled>Save Options</button>
-      </div>
-    </form>
-  </div>
-</div>
-<script>
-(function() {{
-  var form = document.getElementById('customizer-options-form');
-  var btn  = document.getElementById('options-save-btn');
-  if (!form || !btn) return;
-  function checkChanged() {{
-    var changed = false;
-    form.querySelectorAll('input[type=checkbox]').forEach(function(inp) {{
-      if (inp.checked !== inp.defaultChecked) changed = true;
-    }});
-    btn.disabled = !changed;
-  }}
-  form.addEventListener('change', checkChanged);
-}})();
-</script>"#,
-            theme = theme_esc,
-            source = source_esc,
-            rows = option_rows,
-        )
+        format!(r#"<div class="customizer-option-list" style="margin-top:1rem;">
+{rows}
+</div>"#, rows = rows)
     };
 
-    // Reorderable option groups: one .card-boxed per group, each item row has
-    // up/down buttons (JS swaps the <li> and rewrites the hidden input's
-    // comma-joined value). Drag-and-drop is a planned upgrade — arrows are
-    // enough for the proof of concept.
-    let order_cards: String = data.order_options.iter().map(|(key, label, items)| {
-        let item_rows: String = items.iter().map(|(item_key, item_label)| {
+    let render_choices_section = |entries: &[&(String, String, String, Vec<(String, String)>, String)]| -> String {
+        if entries.is_empty() { return String::new(); }
+        entries.iter().map(|(key, label, _, choices, current)| {
+            let key_esc = crate::html_escape(key);
+            let radio_rows: String = choices.iter().map(|(choice_key, choice_label)| {
+                let checked = if choice_key == current { " checked" } else { "" };
+                format!(
+                    r#"<label class="customizer-option-row">
+  <input type="radio" name="{key}" value="{choice_key}"{checked}>
+  <span>{choice_label}</span>
+</label>"#,
+                    key = key_esc,
+                    choice_key = crate::html_escape(choice_key),
+                    checked = checked,
+                    choice_label = crate::html_escape(choice_label),
+                )
+            }).collect();
             format!(
-                r#"<li class="customizer-order-row" data-key="{item_key}">
+                r#"<p class="card-boxed-subheader" style="margin:1rem 0 .6rem;font-weight:600;">{label}</p>
+<div class="customizer-option-list">
+{rows}
+</div>"#,
+                label = crate::html_escape(label),
+                rows = radio_rows,
+            )
+        }).collect()
+    };
+
+    // Reorderable option groups: up/down buttons (JS swaps the <li> and
+    // rewrites the hidden input's comma-joined value, then dispatches a
+    // bubbling 'change' event so the group's shared save button reacts to it
+    // exactly like any other field). Drag-and-drop is a planned upgrade —
+    // arrows are enough for the proof of concept.
+    let render_order_section = |entries: &[&(String, String, String, Vec<(String, String)>)]| -> String {
+        entries.iter().map(|(key, label, _, items)| {
+            let item_rows: String = items.iter().map(|(item_key, item_label)| {
+                format!(
+                    r#"<li class="customizer-order-row" data-key="{item_key}">
   <span>{item_label}</span>
   <div class="customizer-order-buttons">
     <button type="button" class="btn btn-sm btn-secondary btn-order-up" aria-label="Move up">&#9650;</button>
     <button type="button" class="btn btn-sm btn-secondary btn-order-down" aria-label="Move down">&#9660;</button>
   </div>
 </li>"#,
-                item_key = crate::html_escape(item_key),
-                item_label = crate::html_escape(item_label),
-            )
-        }).collect();
+                    item_key = crate::html_escape(item_key),
+                    item_label = crate::html_escape(item_label),
+                )
+            }).collect();
 
-        let joined_keys: String = items.iter().map(|(k, _)| k.as_str()).collect::<Vec<_>>().join(",");
-        let form_id = format!("customizer-order-form-{}", crate::html_escape(key));
-        let input_id = format!("order-input-{}", crate::html_escape(key));
-        let btn_id = format!("order-save-btn-{}", crate::html_escape(key));
+            let joined_keys: String = items.iter().map(|(k, _)| k.as_str()).collect::<Vec<_>>().join(",");
+            let input_id = format!("order-input-{}", crate::html_escape(key));
+
+            format!(
+                r#"<p class="card-boxed-subheader" style="margin:1rem 0 .6rem;font-weight:600;">{label}</p>
+<input type="hidden" name="{key}" id="{input_id}" value="{joined_keys}">
+<ol class="customizer-order-list" data-input-id="{input_id}">
+{rows}
+</ol>"#,
+                label = crate::html_escape(label),
+                key = crate::html_escape(key),
+                input_id = input_id,
+                joined_keys = crate::html_escape(&joined_keys),
+                rows = item_rows,
+            )
+        }).collect()
+    };
+
+    // Distinct group names in first-seen order across every declared kind.
+    let mut groups: Vec<String> = Vec::new();
+    {
+        let mut seen = std::collections::HashSet::new();
+        for (_, _, group, _) in &data.colors { if seen.insert(group.clone()) { groups.push(group.clone()); } }
+        for (_, _, group, _) in &data.options { if seen.insert(group.clone()) { groups.push(group.clone()); } }
+        for (_, _, group, _) in &data.order_options { if seen.insert(group.clone()) { groups.push(group.clone()); } }
+        for (_, _, group, _, _) in &data.choices { if seen.insert(group.clone()) { groups.push(group.clone()); } }
+    }
+
+    let cards: String = groups.iter().map(|group| {
+        let gslug = slugify_group(group);
+        let group_colors: Vec<&(String, String, String, Option<String>)> = data.colors.iter().filter(|(_, _, g, _)| g == group).collect();
+        let group_options: Vec<&(String, String, String, bool)> = data.options.iter().filter(|(_, _, g, _)| g == group).collect();
+        let group_choices: Vec<&(String, String, String, Vec<(String, String)>, String)> = data.choices.iter().filter(|(_, _, g, _, _)| g == group).collect();
+        let group_order: Vec<&(String, String, String, Vec<(String, String)>)> = data.order_options.iter().filter(|(_, _, g, _)| g == group).collect();
+
+        let form_id = format!("customizer-form-{gslug}");
+        let btn_id = format!("customizer-save-btn-{gslug}");
 
         format!(
             r#"<div class="card-boxed" style="margin-top:1.5rem;">
-  <h2 class="card-boxed-header">{label}</h2>
+  <h2 class="card-boxed-header">{group}</h2>
   <div class="card-boxed-body">
-    <form method="POST" action="/admin/appearance/editor/{theme}/order" id="{form_id}">
+    <form method="POST" action="/admin/appearance/editor/{theme}/customizer-save" id="{form_id}">
       <input type="hidden" name="source" value="{source}">
-      <input type="hidden" name="{key}" id="{input_id}" value="{joined_keys}">
-      <ol class="customizer-order-list" data-input-id="{input_id}" data-save-btn-id="{btn_id}">
-      {rows}
-      </ol>
+      {colors}
+      {choices}
+      {options}
+      {order}
       <div class="form-actions" style="margin-top:1rem;">
-        <button type="submit" class="btn btn-primary" id="{btn_id}" disabled>Save Order</button>
+        <button type="submit" class="btn btn-primary" id="{btn_id}" disabled>Save Changes</button>
       </div>
     </form>
+    {restore}
   </div>
-</div>"#,
-            label = crate::html_escape(label),
+</div>
+<script>
+(function() {{
+  var form = document.getElementById('{form_id}');
+  var btn  = document.getElementById('{btn_id}');
+  if (!form || !btn) return;
+  function checkChanged() {{
+    var changed = false;
+    form.querySelectorAll('input[type=color], input[type=hidden]').forEach(function(inp) {{
+      if (inp.value !== inp.defaultValue) changed = true;
+    }});
+    form.querySelectorAll('input[type=checkbox], input[type=radio]').forEach(function(inp) {{
+      if (inp.checked !== inp.defaultChecked) changed = true;
+    }});
+    btn.disabled = !changed;
+  }}
+  form.addEventListener('input', checkChanged);
+  form.addEventListener('change', checkChanged);
+}})();
+</script>"#,
+            group = crate::html_escape(group),
             theme = theme_esc,
             form_id = form_id,
             source = source_esc,
-            key = crate::html_escape(key),
-            input_id = input_id,
-            joined_keys = crate::html_escape(&joined_keys),
+            restore = if group_colors.is_empty() { String::new() } else { restore_colors_btn.clone() },
+            colors = render_colors_section(&group_colors),
+            choices = render_choices_section(&group_choices),
+            options = render_bool_options_section(&group_options),
+            order = render_order_section(&group_order),
             btn_id = btn_id,
-            rows = item_rows,
         )
     }).collect();
 
@@ -415,13 +438,11 @@ fn render_customizer_landing(theme_name: &str, source: &str, data: &CustomizerDa
 (function() {
   document.querySelectorAll('.customizer-order-list').forEach(function(list) {
     var hidden = document.getElementById(list.dataset.inputId);
-    var btn = document.getElementById(list.dataset.saveBtnId);
-    if (!hidden || !btn) return;
-    var original = hidden.value;
+    if (!hidden) return;
     function update() {
       var keys = Array.from(list.querySelectorAll('li')).map(function(li) { return li.dataset.key; });
       hidden.value = keys.join(',');
-      btn.disabled = hidden.value === original;
+      hidden.dispatchEvent(new Event('change', { bubbles: true }));
     }
     list.addEventListener('click', function(e) {
       var actionBtn = e.target.closest('button');
@@ -460,12 +481,10 @@ fn render_customizer_landing(theme_name: &str, source: &str, data: &CustomizerDa
 
     format!(
         r#"<div class="editor-body-row">
-  <div class="editor-main-col">{colors_card}{options_card}{order_cards}{order_script}</div>
+  <div class="editor-main-col">{cards}{order_script}</div>
   {details_card}
 </div>"#,
-        colors_card = colors_card,
-        options_card = options_card,
-        order_cards = order_cards,
+        cards = cards,
         order_script = order_script,
         details_card = details_card,
     )

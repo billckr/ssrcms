@@ -19,6 +19,50 @@ use crate::middleware::admin_auth::AdminUser;
 
 use super::appearance::{render_appearance_list, url_encode_param, REQUIRED_TEMPLATES};
 
+/// One declared `[customizer.colors.<key>]` entry: `key` is the CSS custom
+/// property name (without `--`) the theme's `static/css/style.css` must
+/// define under `:root`. Unlike options/order/choices, the *current value*
+/// is never stored in the DB — it's always read live from the theme's own
+/// CSS file, and `save_colors` writes straight back into that file. The
+/// manifest only supplies which colors exist, their label, and which
+/// customizer card (`group`) they render in.
+struct ColorDef {
+    key: String,
+    label: String,
+    group: String,
+}
+
+/// Parse the `[customizer.colors.*]` table out of an already-parsed
+/// theme.toml. Returns an empty list for themes that declare no colors.
+fn parse_color_defs(parsed: &toml::Table) -> Vec<ColorDef> {
+    let Some(colors) = parsed
+        .get("customizer")
+        .and_then(|v| v.as_table())
+        .and_then(|t| t.get("colors"))
+        .and_then(|v| v.as_table())
+    else {
+        return Vec::new();
+    };
+
+    colors
+        .iter()
+        .filter_map(|(key, def)| {
+            let def = def.as_table()?;
+            let label = def.get("label").and_then(|v| v.as_str()).unwrap_or(key).to_string();
+            // Colors default to their own "Colors" card, distinct from
+            // DEFAULT_GROUP ("Layout Options", used by bool/order options) —
+            // a theme that declares no explicit group for either kind still
+            // gets the same two-card layout the customizer always had.
+            let group = def
+                .get("group")
+                .and_then(|v| v.as_str())
+                .unwrap_or("Colors")
+                .to_string();
+            Some(ColorDef { key: key.clone(), label, group })
+        })
+        .collect()
+}
+
 /// Build the theme customizer data for `theme_dir`, if that theme has opted
 /// in via `[customizer] enabled = true` in its theme.toml. Returns None for
 /// every other theme, which keeps the plain legacy editor landing page.
@@ -53,12 +97,12 @@ async fn build_customizer(
     let root_re = regex_lite::Regex::new(r":root\s*\{([^}]*)\}").unwrap();
     let root_block = root_re.captures(&css).map(|c| c[1].to_string()).unwrap_or_default();
 
-    let colors = admin::pages::appearance::CUSTOMIZER_COLORS
-        .iter()
-        .map(|(key, label)| {
-            let var_re = regex_lite::Regex::new(&format!(r"--{}\s*:\s*(#[0-9a-fA-F]{{3,8}})\s*;", key)).unwrap();
+    let colors = parse_color_defs(&parsed)
+        .into_iter()
+        .map(|def| {
+            let var_re = regex_lite::Regex::new(&format!(r"--{}\s*:\s*(#[0-9a-fA-F]{{3,8}})\s*;", def.key)).unwrap();
             let value = var_re.captures(&root_block).map(|c| c[1].to_string());
-            (*key, *label, value)
+            (def.key, def.label, def.group, value)
         })
         .collect();
 
@@ -68,7 +112,7 @@ async fn build_customizer(
         crate::models::theme_options::resolve_options(pool, theme_dir, sid, theme_name)
             .await
             .into_iter()
-            .map(|(def, value)| (def.key, def.label, value))
+            .map(|(def, value)| (def.key, def.label, def.group, value))
             .collect()
     } else {
         Vec::new()
@@ -91,8 +135,18 @@ async fn build_customizer(
                         (k.clone(), label)
                     })
                     .collect();
-                (def.key, def.label, items_in_order)
+                (def.key, def.label, def.group, items_in_order)
             })
+            .collect()
+    } else {
+        Vec::new()
+    };
+
+    let choices = if let Some(sid) = site_id {
+        crate::models::theme_options::resolve_choices(pool, theme_dir, sid, theme_name)
+            .await
+            .into_iter()
+            .map(|(def, value)| (def.key, def.label, def.group, def.choices, value))
             .collect()
     } else {
         Vec::new()
@@ -100,7 +154,7 @@ async fn build_customizer(
 
     let has_color_backup = bak_path_for(&theme_dir.join("static/css/style.css")).exists();
 
-    Some(admin::pages::appearance::CustomizerData { manifest, colors, options, order_options, has_color_backup })
+    Some(admin::pages::appearance::CustomizerData { manifest, colors, options, order_options, choices, has_color_backup })
 }
 
 #[derive(Deserialize)]
@@ -605,73 +659,19 @@ pub async fn restore_file(
     Redirect::to(&format!("{}&restored=1", redirect_base)).into_response()
 }
 
-// ── Customizer: save colors ────────────────────────────────────────────────────
-// Rewrites the required `--color-*` variables (admin::pages::appearance::
-// CUSTOMIZER_COLORS) directly inside the theme's `:root` block in
-// static/css/style.css. Only touches the exact variables it knows about —
-// any other content in the file is left untouched.
+// ── Customizer: save a group's changes (colors + options + order + choices) ────
+// Every card on the customizer landing page (one per manifest-declared
+// `group`) now submits through this single route with a single Save button,
+// regardless of which combination of colors/bool-options/order-groups/choices
+// it contains — each kind's fields are only present in the submitted form if
+// that card actually rendered them, so no `group` parameter is needed here:
+// this just applies whichever declared keys it finds present.
+//
+// Colors are rewritten straight into the theme's `:root` CSS block (never
+// stored in the DB); options/order/choices are all per-site DB-backed and
+// only meaningful once a site has activated its own copy of the theme.
 
-pub async fn save_colors(
-    State(state): State<AppState>,
-    admin: AdminUser,
-    Path(theme): Path<String>,
-    Form(mut form): Form<HashMap<String, String>>,
-) -> Response {
-    if !admin.caps.can_manage_appearance {
-        return (StatusCode::FORBIDDEN, "Forbidden").into_response();
-    }
-    let cs = state.site_hostname(admin.site_id);
-    let ctx = super::page_ctx_full(&state, &admin, &cs).await;
-
-    let source = form.remove("source").unwrap_or_else(|| "site".to_string());
-    let Some(theme_dir) = resolve_theme_dir_by_source(&state.config.themes_dir, &state.config.sites_dir, &theme, Some(&source), admin.site_id) else {
-        return render_appearance_list(&state, Some("Theme not found."), &ctx, admin.site_id, "my")
-            .await.into_response();
-    };
-
-    if !admin.caps.is_global_admin && (is_in_global_dir(&theme_dir, &state.config.themes_dir) || is_in_private_dir(&theme_dir, &state.config.themes_dir)) {
-        return Redirect::to(&format!("/admin/appearance/editor/{}?source={}", url_encode_param(&theme), source)).into_response();
-    }
-
-    let css_path = theme_dir.join("static/css/style.css");
-    let Ok(mut css) = fs::read_to_string(&css_path) else {
-        return Redirect::to(&format!("/admin/appearance/editor/{}?source={}", url_encode_param(&theme), source)).into_response();
-    };
-
-    let hex_re = regex_lite::Regex::new(r"^#[0-9a-fA-F]{6}$").unwrap();
-    for (key, _label) in admin::pages::appearance::CUSTOMIZER_COLORS {
-        let Some(new_hex) = form.get(*key) else { continue };
-        if !hex_re.is_match(new_hex) {
-            continue; // ignore malformed values rather than risk corrupting the file
-        }
-        let var_re = regex_lite::Regex::new(&format!(r"(--{}\s*:\s*)#[0-9a-fA-F]{{3,8}}(\s*;)", key)).unwrap();
-        if let Some(caps) = var_re.captures(&css) {
-            let whole = caps.get(0).unwrap().as_str().to_string();
-            let replacement = format!("{}{}{}", &caps[1], new_hex, &caps[2]);
-            css = css.replacen(&whole, &replacement, 1);
-        }
-    }
-
-    let bak = bak_path_for(&css_path);
-    if !bak.exists() {
-        if let Err(e) = fs::copy(&css_path, &bak) {
-            tracing::warn!("save_colors: backup failed for {:?}: {e}", css_path);
-        }
-    }
-
-    if let Err(e) = fs::write(&css_path, css.as_bytes()) {
-        tracing::error!("save_colors: write failed for {:?}: {e}", css_path);
-    }
-
-    Redirect::to(&format!("/admin/appearance/editor/{}?source={}&saved=1", url_encode_param(&theme), source)).into_response()
-}
-
-// ── Customizer: save layout options ────────────────────────────────────────────
-// Upserts each declared `[customizer.options.*]` key into the theme_options
-// table for this site. Checkboxes only appear in the submitted form when
-// checked, so any declared key missing from the form is stored as false.
-
-pub async fn save_options(
+pub async fn save_customizer(
     State(state): State<AppState>,
     admin: AdminUser,
     Path(theme): Path<String>,
@@ -695,11 +695,6 @@ pub async fn save_options(
 
     let redirect = format!("/admin/appearance/editor/{}?source={}&saved=1", url_encode_param(&theme), source);
 
-    let Some(site_id) = admin.site_id else {
-        // Layout options are only meaningful for a site's own copy of a theme.
-        return Redirect::to(&redirect).into_response();
-    };
-
     let Ok(toml_content) = fs::read_to_string(theme_dir.join("theme.toml")) else {
         return Redirect::to(&redirect).into_response();
     };
@@ -707,65 +702,73 @@ pub async fn save_options(
         return Redirect::to(&redirect).into_response();
     };
 
-    for def in crate::models::theme_options::parse_option_defs(&parsed) {
-        let checked = form.get(&def.key).is_some();
-        if let Err(e) = crate::models::theme_options::save_option(&state.db, site_id, &theme, &def.key, checked).await {
-            tracing::error!("save_options: failed to save {} for theme {}: {e}", def.key, theme);
+    // Colors — rewrite the theme's own CSS file. Only touches variables the
+    // manifest actually declares; malformed hex values are ignored rather
+    // than risk corrupting the file.
+    let color_defs = parse_color_defs(&parsed);
+    if !color_defs.is_empty() {
+        let css_path = theme_dir.join("static/css/style.css");
+        if let Ok(mut css) = fs::read_to_string(&css_path) {
+            let hex_re = regex_lite::Regex::new(r"^#[0-9a-fA-F]{6}$").unwrap();
+            let mut changed = false;
+            for ColorDef { key, .. } in &color_defs {
+                let Some(new_hex) = form.get(key) else { continue };
+                if !hex_re.is_match(new_hex) { continue; }
+                let var_re = regex_lite::Regex::new(&format!(r"(--{}\s*:\s*)#[0-9a-fA-F]{{3,8}}(\s*;)", key)).unwrap();
+                if let Some(caps) = var_re.captures(&css) {
+                    let whole = caps.get(0).unwrap().as_str().to_string();
+                    let replacement = format!("{}{}{}", &caps[1], new_hex, &caps[2]);
+                    css = css.replacen(&whole, &replacement, 1);
+                    changed = true;
+                }
+            }
+            if changed {
+                let bak = bak_path_for(&css_path);
+                if !bak.exists() {
+                    if let Err(e) = fs::copy(&css_path, &bak) {
+                        tracing::warn!("save_customizer: backup failed for {:?}: {e}", css_path);
+                    }
+                }
+                if let Err(e) = fs::write(&css_path, css.as_bytes()) {
+                    tracing::error!("save_customizer: write failed for {:?}: {e}", css_path);
+                }
+            }
         }
     }
 
-    Redirect::to(&redirect).into_response()
-}
-
-// ── Customizer: save reorderable option groups ─────────────────────────────────
-// Each `type = "order"` option submits its own comma-joined item-key sequence
-// under its own form field name. Unknown item keys (typos, stale form state)
-// are dropped by resolve_order/save_order's caller-side validation below.
-
-pub async fn save_order(
-    State(state): State<AppState>,
-    admin: AdminUser,
-    Path(theme): Path<String>,
-    Form(mut form): Form<HashMap<String, String>>,
-) -> Response {
-    if !admin.caps.can_manage_appearance {
-        return (StatusCode::FORBIDDEN, "Forbidden").into_response();
-    }
-    let cs = state.site_hostname(admin.site_id);
-    let ctx = super::page_ctx_full(&state, &admin, &cs).await;
-
-    let source = form.remove("source").unwrap_or_else(|| "site".to_string());
-    let Some(theme_dir) = resolve_theme_dir_by_source(&state.config.themes_dir, &state.config.sites_dir, &theme, Some(&source), admin.site_id) else {
-        return render_appearance_list(&state, Some("Theme not found."), &ctx, admin.site_id, "my")
-            .await.into_response();
-    };
-
-    if !admin.caps.is_global_admin && (is_in_global_dir(&theme_dir, &state.config.themes_dir) || is_in_private_dir(&theme_dir, &state.config.themes_dir)) {
-        return Redirect::to(&format!("/admin/appearance/editor/{}?source={}", url_encode_param(&theme), source)).into_response();
-    }
-
-    let redirect = format!("/admin/appearance/editor/{}?source={}&saved=1", url_encode_param(&theme), source);
-
-    let Some(site_id) = admin.site_id else {
-        return Redirect::to(&redirect).into_response();
-    };
-
-    let Ok(toml_content) = fs::read_to_string(theme_dir.join("theme.toml")) else {
-        return Redirect::to(&redirect).into_response();
-    };
-    let Ok(parsed) = toml::from_str::<toml::Table>(&toml_content) else {
-        return Redirect::to(&redirect).into_response();
-    };
-
-    for def in crate::models::theme_options::parse_order_defs(&parsed) {
-        let Some(raw) = form.get(&def.key) else { continue };
-        let known: std::collections::HashSet<&str> = def.items.iter().map(|(k, _)| k.as_str()).collect();
-        let order: Vec<String> = raw.split(',').map(|s| s.trim().to_string()).filter(|s| known.contains(s.as_str())).collect();
-        if order.is_empty() {
-            continue; // ignore malformed submissions rather than store an empty order
+    // Bool/order/choice options are per-site DB-backed — meaningless without
+    // a site_id (a global/private theme with no single site to store against).
+    if let Some(site_id) = admin.site_id {
+        for def in crate::models::theme_options::parse_option_defs(&parsed) {
+            // Checkboxes only submit the field when checked, always with
+            // value="true" (see the checkbox markup in render_customizer_landing),
+            // so absence means false and presence-with-that-value means true.
+            let checked = form.get(&def.key).map(|v| v == "true").unwrap_or(false);
+            if let Err(e) = crate::models::theme_options::save_option(&state.db, site_id, &theme, &def.key, checked).await {
+                tracing::error!("save_customizer: failed to save option {} for theme {}: {e}", def.key, theme);
+            }
         }
-        if let Err(e) = crate::models::theme_options::save_order(&state.db, site_id, &theme, &def.key, &order).await {
-            tracing::error!("save_order: failed to save {} for theme {}: {e}", def.key, theme);
+
+        for def in crate::models::theme_options::parse_order_defs(&parsed) {
+            let Some(raw) = form.get(&def.key) else { continue };
+            let known: std::collections::HashSet<&str> = def.items.iter().map(|(k, _)| k.as_str()).collect();
+            let order: Vec<String> = raw.split(',').map(|s| s.trim().to_string()).filter(|s| known.contains(s.as_str())).collect();
+            if order.is_empty() {
+                continue; // ignore malformed submissions rather than store an empty order
+            }
+            if let Err(e) = crate::models::theme_options::save_order(&state.db, site_id, &theme, &def.key, &order).await {
+                tracing::error!("save_customizer: failed to save order {} for theme {}: {e}", def.key, theme);
+            }
+        }
+
+        for def in crate::models::theme_options::parse_choice_defs(&parsed) {
+            let Some(value) = form.get(&def.key) else { continue };
+            if !def.choices.iter().any(|(k, _)| k == value) {
+                continue; // ignore values outside the declared choice set
+            }
+            if let Err(e) = crate::models::theme_options::save_choice(&state.db, site_id, &theme, &def.key, value).await {
+                tracing::error!("save_customizer: failed to save choice {} for theme {}: {e}", def.key, theme);
+            }
         }
     }
 

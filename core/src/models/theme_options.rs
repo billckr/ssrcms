@@ -14,6 +14,13 @@ use std::collections::HashMap;
 use std::path::Path;
 use uuid::Uuid;
 
+/// Default card name for any declared option/color that doesn't set `group`.
+pub const DEFAULT_GROUP: &str = "Layout Options";
+
+fn read_group(def: &toml::Table, default: &str) -> String {
+    def.get("group").and_then(|v| v.as_str()).unwrap_or(default).to_string()
+}
+
 /// One declared option from a theme's `[customizer.options.*]` table.
 #[derive(Debug, Clone)]
 pub struct ThemeOptionDef {
@@ -22,6 +29,9 @@ pub struct ThemeOptionDef {
     pub option_type: String,
     pub default: bool,
     pub label: String,
+    /// Which admin customizer card this renders in — declared per-option via
+    /// `group = "..."`, defaulting to [`DEFAULT_GROUP`].
+    pub group: String,
 }
 
 /// Parse the `[customizer.options.*]` table out of an already-parsed theme.toml.
@@ -55,7 +65,8 @@ pub fn parse_option_defs(parsed: &toml::Table) -> Vec<ThemeOptionDef> {
                 .and_then(|v| v.as_str())
                 .unwrap_or(key)
                 .to_string();
-            Some(ThemeOptionDef { key: key.clone(), option_type, default, label })
+            let group = read_group(def, DEFAULT_GROUP);
+            Some(ThemeOptionDef { key: key.clone(), option_type, default, label, group })
         })
         .collect()
 }
@@ -166,6 +177,7 @@ pub struct ThemeOrderDef {
     pub items: Vec<(String, String)>,
     /// The schema's own default ordering of item keys.
     pub default: Vec<String>,
+    pub group: String,
 }
 
 /// Parse every `type = "order"` entry out of `[customizer.options.*]`.
@@ -202,7 +214,8 @@ pub fn parse_order_defs(parsed: &toml::Table) -> Vec<ThemeOrderDef> {
                         .collect()
                 })
                 .unwrap_or_default();
-            Some(ThemeOrderDef { key: key.clone(), label, items, default })
+            let group = read_group(def, DEFAULT_GROUP);
+            Some(ThemeOrderDef { key: key.clone(), label, items, default, group })
         })
         .collect()
 }
@@ -278,4 +291,123 @@ pub async fn save_order(
     order: &[String],
 ) -> Result<(), sqlx::Error> {
     save_raw_value(pool, site_id, theme_name, key, &order.join(",")).await
+}
+
+/// One declared `type = "choice"` option: a fixed set of named string values
+/// (`[customizer.options.<key>.choices]`, choice key -> display label) the
+/// site picks exactly one of — e.g. a button-shape picker ("square"/"rounded").
+/// Distinct from `type = "order"` (a ranked sequence of all items) in that
+/// only one choice is ever selected, and from `type = "bool"` in that the
+/// stored/resolved value is an arbitrary declared string, not true/false.
+#[derive(Debug, Clone)]
+pub struct ThemeChoiceDef {
+    pub key: String,
+    pub label: String,
+    /// (choice_key, choice_label) — declared choices; order here is not
+    /// meaningful (toml tables don't preserve source order).
+    pub choices: Vec<(String, String)>,
+    pub default: String,
+    pub group: String,
+}
+
+/// Parse every `type = "choice"` entry out of `[customizer.options.*]`.
+pub fn parse_choice_defs(parsed: &toml::Table) -> Vec<ThemeChoiceDef> {
+    let Some(options) = parsed
+        .get("customizer")
+        .and_then(|v| v.as_table())
+        .and_then(|t| t.get("options"))
+        .and_then(|v| v.as_table())
+    else {
+        return Vec::new();
+    };
+
+    options
+        .iter()
+        .filter_map(|(key, def)| {
+            let def = def.as_table()?;
+            let option_type = def.get("type").and_then(|v| v.as_str()).unwrap_or("bool");
+            if option_type != "choice" {
+                return None;
+            }
+            let label = def.get("label").and_then(|v| v.as_str()).unwrap_or(key).to_string();
+            let choices: Vec<(String, String)> = def
+                .get("choices")
+                .and_then(|v| v.as_table())
+                .map(|t| {
+                    t.iter()
+                        .map(|(k, v)| (k.clone(), v.as_str().unwrap_or(k).to_string()))
+                        .collect()
+                })
+                .unwrap_or_default();
+            let default = def
+                .get("default")
+                .and_then(|v| v.as_str())
+                .unwrap_or_else(|| choices.first().map(|(k, _)| k.as_str()).unwrap_or(""))
+                .to_string();
+            let group = read_group(def, DEFAULT_GROUP);
+            Some(ThemeChoiceDef { key: key.clone(), label, choices, default, group })
+        })
+        .collect()
+}
+
+/// Resolve the final selected choice for every `choice`-type option a theme
+/// declares — this site's stored override if present and still a declared
+/// choice, else the schema's own default.
+pub async fn resolve_choices(
+    pool: &PgPool,
+    theme_dir: &Path,
+    site_id: Uuid,
+    theme_name: &str,
+) -> Vec<(ThemeChoiceDef, String)> {
+    let Ok(toml_content) = std::fs::read_to_string(theme_dir.join("theme.toml")) else {
+        return Vec::new();
+    };
+    let Ok(parsed) = toml::from_str::<toml::Table>(&toml_content) else {
+        return Vec::new();
+    };
+    let defs = parse_choice_defs(&parsed);
+    if defs.is_empty() {
+        return Vec::new();
+    }
+    let stored = load_stored_values(pool, site_id, theme_name).await;
+    defs.into_iter()
+        .map(|def| {
+            let value = stored
+                .get(&def.key)
+                .filter(|v| def.choices.iter().any(|(k, _)| &k == v))
+                .cloned()
+                .unwrap_or_else(|| def.default.clone());
+            (def, value)
+        })
+        .collect()
+}
+
+/// Build the `theme_option_choices` map to inject into the Tera context:
+/// choice-option key -> resolved choice key. Returns an empty map when the
+/// theme declares no choice-type options.
+pub async fn build_theme_option_choices_context(
+    pool: &PgPool,
+    theme_dir: Option<&Path>,
+    site_id: Uuid,
+    theme_name: &str,
+) -> HashMap<String, String> {
+    let Some(theme_dir) = theme_dir else { return HashMap::new(); };
+    resolve_choices(pool, theme_dir, site_id, theme_name)
+        .await
+        .into_iter()
+        .map(|(def, value)| (def.key, value))
+        .collect()
+}
+
+/// Upsert one choice option's selected value for a site+theme — called from
+/// the customizer's save-choices route. Caller is responsible for validating
+/// `value` against the option's declared choices first.
+pub async fn save_choice(
+    pool: &PgPool,
+    site_id: Uuid,
+    theme_name: &str,
+    key: &str,
+    value: &str,
+) -> Result<(), sqlx::Error> {
+    save_raw_value(pool, site_id, theme_name, key, value).await
 }
