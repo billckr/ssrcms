@@ -134,7 +134,6 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
       <div class="sidebar-footer">
         <a href="{profile_or_home}">{user_email}</a>
         <span class="sidebar-user-role">{user_role}</span>
-        <a href="/admin/logout">Log out</a>
       </div>
     </nav>
     <main class="admin-main">
@@ -145,6 +144,9 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
         <h1>{title}</h1>
         {visiting_badge}
         {site_indicator}
+        <a href="/admin/logout" class="icon-btn" title="Log out">
+          <img src="/admin/static/icons/log-out.svg" alt="Log out">
+        </a>
       </header>
       {flash_html}
       <div class="admin-content">
