@@ -76,17 +76,39 @@ async fn main() -> anyhow::Result<()> {
 
     let session_store = PostgresStore::new(pool.clone());
     session_store.migrate().await?;
-    let session_layer = SessionManagerLayer::new(session_store)
+
+    // Two separate session cookies/layers, sized to risk level (OWASP session
+    // management guidance): admin/staff accounts can change site config, content,
+    // and users, so they get a short idle timeout; subscriber/account sessions can
+    // only touch their own profile/comments, so they get a longer one. A single
+    // shared session's expiry can't be varied per login type — tower_sessions
+    // recomputes expiry from the layer's config on every save — so this requires
+    // two distinct SessionManagerLayers (and cookie names) split by route group.
+    let admin_session_layer = SessionManagerLayer::new(session_store.clone())
+        .with_name("admin_session")
         // Axum always runs behind Caddy on plain HTTP — never directly over HTTPS.
         // Secure:true means the browser will never send the cookie back over HTTP,
         // which breaks every login. Caddy handles TLS; we own the cookie content.
         .with_secure(false)
         // Lax: cookie is sent on top-level navigations and form POST redirects.
         .with_same_site(tower_sessions::cookie::SameSite::Lax)
-        // 7-day inactivity expiry — industry standard for CMS admin sessions.
         .with_expiry(tower_sessions::Expiry::OnInactivity(
-            tower_sessions::cookie::time::Duration::days(7),
-        ));
+            tower_sessions::cookie::time::Duration::hours(2),
+        ))
+        // Without this, tower_sessions only renews a session's expiry when a request
+        // writes to it — most page views only read the session (checking who's logged
+        // in), so the "OnInactivity" timeout would silently behave like a fixed timer
+        // from login instead of a rolling window. always_save makes every request
+        // extend the session, which is what "inactivity" timeout is supposed to mean.
+        .with_always_save(true);
+    let account_session_layer = SessionManagerLayer::new(session_store)
+        .with_name("session")
+        .with_secure(false)
+        .with_same_site(tower_sessions::cookie::SameSite::Lax)
+        .with_expiry(tower_sessions::Expiry::OnInactivity(
+            tower_sessions::cookie::time::Duration::hours(24),
+        ))
+        .with_always_save(true);
     info!("session store ready");
 
     // ── Site settings (from DB) ───────────────────────────────────────────────
@@ -252,7 +274,7 @@ async fn main() -> anyhow::Result<()> {
     info!("scheduler: view flush task started (60 s interval)");
 
     // ── Router ────────────────────────────────────────────────────────────────
-    let app = router::build(state.clone(), session_layer);
+    let app = router::build(state.clone(), admin_session_layer, account_session_layer);
 
     // ── PID file ──────────────────────────────────────────────────────────────
     let pid = std::process::id();

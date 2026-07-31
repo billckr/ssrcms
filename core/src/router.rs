@@ -58,7 +58,8 @@ async fn track_http_metrics(req: Request, next: Next) -> Response {
 
 pub fn build(
     state: AppState,
-    session_layer: SessionManagerLayer<PostgresStore>,
+    admin_session_layer: SessionManagerLayer<PostgresStore>,
+    account_session_layer: SessionManagerLayer<PostgresStore>,
 ) -> Router {
     let upload_limit = DefaultBodyLimit::max(
         (state.config.max_upload_mb as usize).saturating_mul(1024 * 1024),
@@ -73,7 +74,10 @@ pub fn build(
     let ip_allowlist_layer = middleware::from_fn_with_state(state.clone(), crate::middleware::ip_allowlist::gate);
     let ip_denylist_layer = middleware::from_fn_with_state(state.clone(), crate::middleware::ip_denylist::gate);
 
-    let mut router = Router::new()
+    // Public/subscriber routes get their own session cookie (24h idle timeout —
+    // low-risk accounts, self-service only). Split out from admin so each group
+    // can carry its own SessionManagerLayer with a different expiry.
+    let mut public_router = Router::new()
         // ── Observability ──────────────────────────────────────────────────
         .route("/metrics", get(metrics_handler::metrics))
         // ── Public content routes ──────────────────────────────────────────
@@ -93,9 +97,6 @@ pub fn build(
         .route("/subscribe", get(subscribe::subscribe_form).post(subscribe::subscribe_post))
         // ── Public login (subscriber-facing) ───────────────────────────────
         .route("/login", get(auth::public_login_form).post(auth::public_login_post))
-        // ── Admin auth ─────────────────────────────────────────────────────
-        .route("/admin/login", get(auth::login_form).post(auth::login_post))
-        .route("/admin/logout", get(auth::logout))
         // ── Account area (any authenticated user) ───────────────────────────
         .route("/account",                        get(account::dashboard))
         .route("/account/profile",                get(account::profile_view))
@@ -105,6 +106,35 @@ pub fn build(
         .route("/account/my-comments",            get(account::my_comments))
         .route("/account/comments/{id}/delete",    post(account::delete_comment))
         .route("/account/logout",                 get(auth::account_logout))
+        // ── Static files ──────────────────────────────────────────────────
+        .route("/uploads/{*path}", get(uploads::serve))
+        .route("/theme/static/{*path}", get(theme_static::serve));
+
+    // Register plugin routes — skip any paths already handled by hardcoded routes.
+    for path in &plugin_route_paths {
+        if path == "/sitemap.xml" {
+            continue; // handled by the hardcoded route above
+        }
+        public_router = public_router.route(path, get(plugin_route::dispatch));
+    }
+
+    // /:slug/unlock must be registered before the fallback.
+    // Nested password-protected pages are not supported in MVP (guarded at handler level).
+    public_router = public_router.route("/{slug}/unlock", post(post_unlock::unlock_page));
+    // fallback handles nested page URLs like /a/b/c and any unmatched /{slug} that resolves to
+    // a page. Registered here (inside public_router, before `.layer()` below) rather than on the
+    // merged router, because `page::single_page` extracts `Session` — it must be wrapped by
+    // account_session_layer or that extraction fails at runtime.
+    public_router = public_router.fallback(page::single_page);
+
+    let public_router = public_router.layer(account_session_layer);
+
+    // Admin/staff routes get a short-idle session cookie (2h — higher risk:
+    // can edit site config, content, media, and users).
+    let admin_router = Router::new()
+        // ── Admin auth ─────────────────────────────────────────────────────
+        .route("/admin/login", get(auth::login_form).post(auth::login_post))
+        .route("/admin/logout", get(auth::logout))
         // ── Admin profile ──────────────────────────────────────────────────
         .route("/admin/profile", get(profile::view))
         .route("/admin/profile/update", post(profile::update_profile))
@@ -216,24 +246,11 @@ pub fn build(
         .route("/admin/forms/{name}/delete-all", post(admin_forms::delete_all))
         .route("/admin/forms/{name}/export", get(admin_forms::export_csv))
         .route("/admin/forms/{name}/toggle-block", post(admin_forms::toggle_block))
-    // ── Static files ───────────────────────────────────────────────────
-        .route("/uploads/{*path}", get(uploads::serve))
-        .route("/theme/static/{*path}", get(theme_static::serve))
-        .nest_service("/admin/static", ServeDir::new("admin/static"));
+        // ── Static files ───────────────────────────────────────────────────
+        .nest_service("/admin/static", ServeDir::new("admin/static"))
+        .layer(admin_session_layer);
 
-    // Register plugin routes — skip any paths already handled by hardcoded routes.
-    for path in plugin_route_paths {
-        if path == "/sitemap.xml" {
-            continue; // handled by the hardcoded route above
-        }
-        router = router.route(&path, get(plugin_route::dispatch));
-    }
-
-    // /:slug/unlock must be registered before the fallback.
-    // Nested password-protected pages are not supported in MVP (guarded at handler level).
-    router = router.route("/{slug}/unlock", post(post_unlock::unlock_page));
-    // fallback handles nested page URLs like /a/b/c and any unmatched /{slug} that resolves to a page.
-    router = router.fallback(page::single_page);
+    let router = public_router.merge(admin_router);
 
     router
         .layer(middleware::from_fn(no_store_for_protected))
@@ -241,7 +258,6 @@ pub fn build(
         .layer(ip_allowlist_layer)
         .layer(ip_denylist_layer)
         .layer(middleware::from_fn(track_http_metrics))
-        .layer(session_layer)
         .layer(TraceLayer::new_for_http())
         .with_state(state)
 }

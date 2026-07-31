@@ -205,15 +205,20 @@ pub async fn public_login_post(
     Redirect::to(destination).into_response()
 }
 
-/// GET /admin/logout — clear admin session key only, redirect to admin login.
+/// GET /admin/logout — destroy the session (not just the auth key) and redirect to admin login.
+///
+/// `flush()` (not `remove()`) is required: tower_sessions' cookie-removal check only fires when
+/// a request arrives with no session id at all, so merely removing keys leaves the record (and
+/// cookie) alive and silently renews its expiry on save. `flush()` deletes the store row and
+/// clears the session id, which does trigger cookie removal in the response.
 pub async fn logout(session: Session) -> impl IntoResponse {
-    let _ = session.remove::<String>(SESSION_USER_ID_KEY).await;
-    let _ = session.remove::<String>(SESSION_CURRENT_SITE_KEY).await;
+    let _ = session.flush().await;
     Redirect::to("/admin/login")
 }
 
-/// GET /account/logout — clear account session key only, redirect to /login.
+/// GET /account/logout — destroy the session and redirect to /login. See `logout` above for why
+/// this uses `flush()` rather than removing the account key.
 pub async fn account_logout(session: Session) -> impl IntoResponse {
-    let _ = session.remove::<String>(SESSION_ACCOUNT_USER_ID_KEY).await;
+    let _ = session.flush().await;
     Redirect::to("/login")
 }
