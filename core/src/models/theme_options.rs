@@ -412,6 +412,109 @@ pub async fn save_choice(
     save_raw_value(pool, site_id, theme_name, key, value).await
 }
 
+/// One declared `type = "text"` option: a free-form string a site can type
+/// into a customizer text field — e.g. a hero tagline. Distinct from
+/// `type = "choice"` in that the value isn't constrained to a declared set.
+#[derive(Debug, Clone)]
+pub struct ThemeTextDef {
+    pub key: String,
+    pub label: String,
+    pub default: String,
+    pub group: String,
+}
+
+/// Cap on a stored text option's length — generous enough for a tagline or
+/// short blurb, but bounded so a theme can't be used to stash arbitrary
+/// amounts of data in the DB via this column.
+pub const TEXT_OPTION_MAX_LEN: usize = 200;
+
+/// Parse every `type = "text"` entry out of `[customizer.options.*]`.
+pub fn parse_text_defs(parsed: &toml::Table) -> Vec<ThemeTextDef> {
+    let Some(options) = parsed
+        .get("customizer")
+        .and_then(|v| v.as_table())
+        .and_then(|t| t.get("options"))
+        .and_then(|v| v.as_table())
+    else {
+        return Vec::new();
+    };
+
+    options
+        .iter()
+        .filter_map(|(key, def)| {
+            let def = def.as_table()?;
+            let option_type = def.get("type").and_then(|v| v.as_str()).unwrap_or("bool");
+            if option_type != "text" {
+                return None;
+            }
+            let label = def.get("label").and_then(|v| v.as_str()).unwrap_or(key).to_string();
+            let default = def.get("default").and_then(|v| v.as_str()).unwrap_or("").to_string();
+            let group = read_group(def, DEFAULT_GROUP);
+            Some(ThemeTextDef { key: key.clone(), label, default, group })
+        })
+        .collect()
+}
+
+/// Resolve the final string for every `text`-type option a theme declares —
+/// this site's stored override if present, else the schema's own default.
+pub async fn resolve_texts(
+    pool: &PgPool,
+    theme_dir: &Path,
+    site_id: Uuid,
+    theme_name: &str,
+) -> Vec<(ThemeTextDef, String)> {
+    let Ok(toml_content) = std::fs::read_to_string(theme_dir.join("theme.toml")) else {
+        return Vec::new();
+    };
+    let Ok(parsed) = toml::from_str::<toml::Table>(&toml_content) else {
+        return Vec::new();
+    };
+    let defs = parse_text_defs(&parsed);
+    if defs.is_empty() {
+        return Vec::new();
+    }
+    let stored = load_stored_values(pool, site_id, theme_name).await;
+    defs.into_iter()
+        .map(|def| {
+            let value = stored.get(&def.key).cloned().unwrap_or_else(|| def.default.clone());
+            (def, value)
+        })
+        .collect()
+}
+
+/// Build the `theme_option_texts` map to inject into the Tera context:
+/// text-option key -> resolved string. Returns an empty map when the theme
+/// declares no text-type options.
+pub async fn build_theme_option_texts_context(
+    pool: &PgPool,
+    theme_dir: Option<&Path>,
+    site_id: Uuid,
+    theme_name: &str,
+) -> HashMap<String, String> {
+    let Some(theme_dir) = theme_dir else { return HashMap::new(); };
+    resolve_texts(pool, theme_dir, site_id, theme_name)
+        .await
+        .into_iter()
+        .map(|(def, value)| (def.key, value))
+        .collect()
+}
+
+/// Upsert one text option's value for a site+theme — called from the
+/// customizer's save-text route. Truncates to [`TEXT_OPTION_MAX_LEN`] rather
+/// than rejecting, since this is free-form presentational copy, not data
+/// that needs strict validation.
+pub async fn save_text(
+    pool: &PgPool,
+    site_id: Uuid,
+    theme_name: &str,
+    key: &str,
+    value: &str,
+) -> Result<(), sqlx::Error> {
+    let trimmed = value.trim();
+    let truncated: String = trimmed.chars().take(TEXT_OPTION_MAX_LEN).collect();
+    save_raw_value(pool, site_id, theme_name, key, &truncated).await
+}
+
 /// Which of this site's declared options for `theme_name` currently have a
 /// stored override row (regardless of whether that value equals the schema
 /// default) — used to gate the customizer's per-card "Restore original"

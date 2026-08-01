@@ -439,6 +439,82 @@ img { max-width: 100%; height: auto; display: block; }
 
 .read-more:hover { color: var(--blue-dark); }
 
+/* ── Home layout (with optional sidebar) ──
+   No explicit column-count override needed: .post-grid's own
+   auto-fill/minmax already drops from 3 columns to 2 once .home-main is
+   narrowed by the sidebar's width + gap. */
+.home-layout {
+  display: flex;
+  gap: 2.5rem;
+  align-items: flex-start;
+}
+
+.home-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.home-sidebar {
+  width: 260px;
+  flex-shrink: 0;
+}
+
+.sidebar-widget {
+  background: var(--lavender);
+  border-left: 4px solid var(--blue);
+  border-radius: var(--radius);
+  padding: 1.5rem;
+  margin-top: 1.5rem;
+}
+
+.sidebar-widget:first-child { margin-top: 0; }
+
+.sidebar-widget-title {
+  color: var(--navy);
+  font-size: 0.9rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin: 0 0 1rem;
+}
+
+.sidebar-search-form { flex-direction: column; max-width: none; margin: 0; }
+
+.sidebar-empty {
+  color: var(--muted);
+  font-size: 0.9rem;
+  font-style: italic;
+  margin: 0;
+}
+
+.sidebar-nav { display: flex; flex-direction: column; gap: 0.2rem; }
+
+.sidebar-nav-link {
+  display: block;
+  padding: 0.35rem 0.6rem;
+  border-radius: 4px;
+  color: var(--charcoal);
+  font-size: 0.9rem;
+}
+
+.sidebar-nav-link:hover { background: var(--white); color: var(--blue); }
+
+.sidebar-nav-link--active { font-weight: 600; color: var(--blue); background: var(--white); }
+
+.sidebar-nav-children {
+  padding-left: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  margin-bottom: 0.2rem;
+}
+
+.sidebar-nav-link--child { font-size: 0.85rem; }
+
+@media (max-width: 768px) {
+  .home-layout { flex-direction: column; }
+  .home-sidebar { width: 100%; }
+}
+
 /* ── Page header (archive, search, 404) ── */
 .page-header {
   background: var(--lavender);

@@ -53,9 +53,10 @@ pub(super) async fn resolve_session(state: &AppState, session: &Session) -> Sess
 /// `theme_options` — a plain `{key: bool}` map templates branch on with
 /// `{% if theme_options.some_key %}` — and `theme_option_lists` — a
 /// `{key: [item_key, ...]}` map for reorderable option groups, looped over
-/// with `{% for item in theme_option_lists.some_key %}`. A theme that
-/// declares neither kind (or isn't customizer-enabled) just gets empty maps;
-/// never an error.
+/// with `{% for item in theme_option_lists.some_key %}` — and
+/// `theme_option_texts` — a `{key: string}` map for free-form text options,
+/// read with `{{ theme_option_texts.some_key }}`. A theme that declares none
+/// of these (or isn't customizer-enabled) just gets empty maps; never an error.
 pub(super) async fn insert_theme_options(ctx: &mut tera::Context, state: &AppState, site_id: Uuid) {
     let theme_name = state.active_theme_for_site(Some(site_id));
     let theme_dir = state.templates.resolve_theme_dir_for_site(&theme_name, Some(site_id));
@@ -83,6 +84,14 @@ pub(super) async fn insert_theme_options(ctx: &mut tera::Context, state: &AppSta
     )
     .await;
     ctx.insert("theme_option_choices", &theme_option_choices);
+    let theme_option_texts = crate::models::theme_options::build_theme_option_texts_context(
+        &state.db,
+        theme_dir.as_deref(),
+        site_id,
+        &theme_name,
+    )
+    .await;
+    ctx.insert("theme_option_texts", &theme_option_texts);
 }
 
 /// Whether the current request is an authenticated admin/editor/author staff

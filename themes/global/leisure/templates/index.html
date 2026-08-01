@@ -6,17 +6,23 @@
 <section class="hero" style="background-image: url('/theme/static/images/blog-hero.jpg');">
   <div class="container">
     <h1>{{ site.name }}</h1>
-    <p>{{ site.description }}</p>
+    {% if theme_option_texts.hero_tagline %}
+      <p>{{ theme_option_texts.hero_tagline }}</p>
+    {% elif site.description %}
+      <p>{{ site.description }}</p>
+    {% endif %}
     <div class="hero-actions">
-      {% if posts | length > 0 %}
+      {% if theme_options.show_hero_latest_post and posts | length > 0 %}
         <a href="{{ posts[0].url | safe }}" class="btn">Read Latest Post</a>
       {% endif %}
-      <a href="/newsletter" class="btn btn-outline">Subscribe</a>
+      {% if theme_options.show_hero_subscribe %}
+        <a href="/newsletter" class="btn btn-outline">Subscribe</a>
+      {% endif %}
     </div>
   </div>
 </section>
 
-{% if tag_cloud | length > 0 or category_cloud | length > 0 %}
+{% if not theme_options.show_sidebar and (tag_cloud | length > 0 or category_cloud | length > 0) %}
 <section class="section section-alt">
   <div class="container">
     {% if category_cloud | length > 0 %}
@@ -42,52 +48,146 @@
       <h2>From the Blog</h2>
     </div>
 
-    {% if posts | length == 0 %}
-      <p style="text-align:center;color:var(--muted)">No posts yet.</p>
-    {% else %}
-      <div class="post-grid">
-        {% for post in posts %}
-          <article class="post-card">
-            <a class="post-card-link" href="{{ post.url | safe }}" aria-label="{{ post.title }}"></a>
-            {% if post.featured_image %}
-              <div class="post-card-image">
-                <a href="{{ post.url | safe }}">
-                  <img src="{{ post.featured_image.url | safe }}" alt="{{ post.featured_image.alt_text }}" loading="lazy"{% if post.featured_image.width %} width="{{ post.featured_image.width }}" height="{{ post.featured_image.height }}"{% endif %}>
-                </a>
-              </div>
-            {% endif %}
-            <div class="post-card-body">
-              <div class="post-card-meta">
-                <time datetime="{{ post.published_at }}">
-                  {% if post.published_at %}{{ post.published_at | date_format }}{% endif %}
-                </time>
-                <span>by <a href="{{ post.author.url | safe }}">{{ post.author.display_name }}</a></span>
-                <span>{{ post.reading_time }} min read</span>
-              </div>
-              <h2 class="post-card-title">
-                <a href="{{ post.url | safe }}">{{ post.title }}</a>
-              </h2>
-              <p class="post-card-excerpt">{{ post.excerpt }}</p>
-              <div class="post-card-footer">
-                <a href="{{ post.url | safe }}" class="read-more">Read more →</a>
-              </div>
-            </div>
-          </article>
-        {% endfor %}
+    <div class="home-layout">
+      <div class="home-main">
+        {% if posts | length == 0 %}
+          <p style="text-align:center;color:var(--muted)">No posts yet.</p>
+        {% else %}
+          <div class="post-grid">
+            {% for post in posts %}
+              <article class="post-card">
+                <a class="post-card-link" href="{{ post.url | safe }}" aria-label="{{ post.title }}"></a>
+                {% if post.featured_image %}
+                  <div class="post-card-image">
+                    <a href="{{ post.url | safe }}">
+                      <img src="{{ post.featured_image.url | safe }}" alt="{{ post.featured_image.alt_text }}" loading="lazy"{% if post.featured_image.width %} width="{{ post.featured_image.width }}" height="{{ post.featured_image.height }}"{% endif %}>
+                    </a>
+                  </div>
+                {% endif %}
+                <div class="post-card-body">
+                  <div class="post-card-meta">
+                    <time datetime="{{ post.published_at }}">
+                      {% if post.published_at %}{{ post.published_at | date_format }}{% endif %}
+                    </time>
+                    <span>by <a href="{{ post.author.url | safe }}">{{ post.author.display_name }}</a></span>
+                    <span>{{ post.reading_time }} min read</span>
+                  </div>
+                  <h2 class="post-card-title">
+                    <a href="{{ post.url | safe }}">{{ post.title }}</a>
+                  </h2>
+                  <p class="post-card-excerpt">{{ post.excerpt }}</p>
+                  <div class="post-card-footer">
+                    <a href="{{ post.url | safe }}" class="read-more">Read more →</a>
+                  </div>
+                </div>
+              </article>
+            {% endfor %}
+          </div>
+
+          {% if pagination %}
+            <nav class="pagination" aria-label="Page navigation">
+              {% if pagination.prev_url %}
+                <a href="{{ pagination.prev_url }}" class="pagination-prev">← Newer</a>
+              {% endif %}
+              <span class="pagination-info">Page {{ pagination.current_page }} of {{ pagination.total_pages }}</span>
+              {% if pagination.next_url %}
+                <a href="{{ pagination.next_url }}" class="pagination-next">Older →</a>
+              {% endif %}
+            </nav>
+          {% endif %}
+        {% endif %}
       </div>
 
-      {% if pagination %}
-        <nav class="pagination" aria-label="Page navigation">
-          {% if pagination.prev_url %}
-            <a href="{{ pagination.prev_url }}" class="pagination-prev">← Newer</a>
+      {% if theme_options.show_sidebar %}
+      <aside class="home-sidebar">
+        {% for widget in theme_option_lists.sidebar_order | default(value=["search", "account", "categories", "tags"]) %}
+
+          {% if widget == "search" %}
+          <div class="sidebar-widget">
+            <h3 class="sidebar-widget-title">Search</h3>
+            <form method="get" action="/search" class="search-form sidebar-search-form">
+              {# Search query is capped at 25 characters — enforced here and server-side. #}
+              <input type="search" name="q" placeholder="Search posts..." maxlength="25">
+              <button type="submit">Search</button>
+            </form>
+          </div>
+
+          {% elif widget == "account" %}
+          <div class="sidebar-widget">
+            <h3 class="sidebar-widget-title">Account</h3>
+            {% if session.is_logged_in %}
+            <div class="tag-cloud">
+              <a href="/account" class="tag">{{ session.user.display_name }}</a>
+              <a href="/account/logout" class="tag">Sign out</a>
+            </div>
+            {% else %}
+            <div class="tag-cloud">
+              <a href="/login" class="tag">Sign in</a>
+              <a href="/subscribe" class="tag">Join</a>
+            </div>
+            {% endif %}
+          </div>
+
+          {% elif widget == "categories" %}
+          <div class="sidebar-widget">
+            <h3 class="sidebar-widget-title">Categories</h3>
+            {% if category_cloud | length > 0 %}
+            <div class="tag-cloud">
+              {% for cat in category_cloud %}
+                <a href="{{ cat.url }}" class="tag">{{ cat.name }}</a>
+              {% endfor %}
+            </div>
+            {% else %}
+            <p class="sidebar-empty">No categories yet.</p>
+            {% endif %}
+          </div>
+
+          {% elif widget == "tags" %}
+          <div class="sidebar-widget">
+            <h3 class="sidebar-widget-title">Tags</h3>
+            {% if tag_cloud | length > 0 %}
+            <div class="tag-cloud">
+              {% for tag in tag_cloud %}
+                <a href="{{ tag.url }}" class="tag">{{ tag.name }}</a>
+              {% endfor %}
+            </div>
+            {% else %}
+            <p class="sidebar-empty">No tags yet.</p>
+            {% endif %}
+          </div>
           {% endif %}
-          <span class="pagination-info">Page {{ pagination.current_page }} of {{ pagination.total_pages }}</span>
-          {% if pagination.next_url %}
-            <a href="{{ pagination.next_url }}" class="pagination-next">Older →</a>
-          {% endif %}
-        </nav>
+
+        {% endfor %}
+
+        {% set sidebar_items = get_menu(name="sidebar", path=request.path) %}
+        {% if sidebar_items | length > 0 %}
+        <div class="sidebar-widget">
+          <h3 class="sidebar-widget-title">Navigation</h3>
+          <nav class="sidebar-nav">
+            {% for item in sidebar_items %}
+              <a href="{{ item.url }}"
+                 target="{{ item.target }}"
+                 class="sidebar-nav-link{% if item.is_current %} sidebar-nav-link--active{% endif %}">
+                {{ item.label }}
+              </a>
+              {% if item.children | length > 0 %}
+              <div class="sidebar-nav-children">
+                {% for child in item.children %}
+                <a href="{{ child.url }}"
+                   target="{{ child.target }}"
+                   class="sidebar-nav-link sidebar-nav-link--child{% if child.is_current %} sidebar-nav-link--active{% endif %}">
+                  {{ child.label }}
+                </a>
+                {% endfor %}
+              </div>
+              {% endif %}
+            {% endfor %}
+          </nav>
+        </div>
+        {% endif %}
+      </aside>
       {% endif %}
-    {% endif %}
+    </div>
   </div>
 </section>
 {% endblock content %}

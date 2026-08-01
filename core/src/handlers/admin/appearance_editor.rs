@@ -152,6 +152,16 @@ async fn build_customizer(
         Vec::new()
     };
 
+    let texts = if let Some(sid) = site_id {
+        crate::models::theme_options::resolve_texts(pool, theme_dir, sid, theme_name)
+            .await
+            .into_iter()
+            .map(|(def, value)| (def.key, def.label, def.group, value))
+            .collect()
+    } else {
+        Vec::new()
+    };
+
     let has_color_backup = bak_path_for(&theme_dir.join("static/css/style.css")).exists();
 
     let overridden_option_keys = if let Some(sid) = site_id {
@@ -160,7 +170,7 @@ async fn build_customizer(
         Default::default()
     };
 
-    Some(admin::pages::appearance::CustomizerData { manifest, colors, options, order_options, choices, has_color_backup, overridden_option_keys })
+    Some(admin::pages::appearance::CustomizerData { manifest, colors, options, order_options, choices, texts, has_color_backup, overridden_option_keys })
 }
 
 #[derive(Deserialize)]
@@ -699,6 +709,12 @@ pub async fn save_customizer(
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
 
     let source = form.remove("source").unwrap_or_else(|| "site".to_string());
+    // Which bool-option keys this particular card's form actually covers —
+    // see the field's doc comment in render_customizer_landing. Absent
+    // (themes/cards with no bool options) means "touch none".
+    let bool_option_keys: std::collections::HashSet<String> = form.remove("bool_option_keys")
+        .map(|raw| raw.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect())
+        .unwrap_or_default();
     let Some(theme_dir) = resolve_theme_dir_by_source(&state.config.themes_dir, &state.config.sites_dir, &theme, Some(&source), admin.site_id) else {
         return render_appearance_list(&state, Some("Theme not found."), &ctx, admin.site_id, "my")
             .await.into_response();
@@ -755,6 +771,11 @@ pub async fn save_customizer(
     // a site_id (a global/private theme with no single site to store against).
     if let Some(site_id) = admin.site_id {
         for def in crate::models::theme_options::parse_option_defs(&parsed) {
+            // Only touch bool options that belong to the card actually
+            // submitted — otherwise every other card's bool options (absent
+            // from this POST body since checkboxes only submit when checked)
+            // would read as "unchecked" and get silently zeroed out here.
+            if !bool_option_keys.contains(&def.key) { continue; }
             // Checkboxes only submit the field when checked, always with
             // value="true" (see the checkbox markup in render_customizer_landing),
             // so absence means false and presence-with-that-value means true.
@@ -783,6 +804,13 @@ pub async fn save_customizer(
             }
             if let Err(e) = crate::models::theme_options::save_choice(&state.db, site_id, &theme, &def.key, value).await {
                 tracing::error!("save_customizer: failed to save choice {} for theme {}: {e}", def.key, theme);
+            }
+        }
+
+        for def in crate::models::theme_options::parse_text_defs(&parsed) {
+            let Some(value) = form.get(&def.key) else { continue };
+            if let Err(e) = crate::models::theme_options::save_text(&state.db, site_id, &theme, &def.key, value).await {
+                tracing::error!("save_customizer: failed to save text {} for theme {}: {e}", def.key, theme);
             }
         }
     }

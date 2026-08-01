@@ -215,6 +215,10 @@ pub struct CustomizerData {
     /// (option_key, label, group, declared (choice_key, choice_label) pairs,
     /// current resolved choice_key). Empty for themes that declare none.
     pub choices: Vec<(String, String, String, Vec<(String, String)>, String)>,
+    /// Free-form text fields declared with `type = "text"` — (option_key,
+    /// label, group, current resolved string). Empty for themes that declare
+    /// none.
+    pub texts: Vec<(String, String, String, String)>,
     /// Whether a `.bak` backup exists for this theme's `static/css/style.css` —
     /// gates showing the "Restore original" button next to Save Colors.
     pub has_color_backup: bool,
@@ -354,6 +358,21 @@ fn render_customizer_landing(theme_name: &str, source: &str, data: &CustomizerDa
         }).collect()
     };
 
+    let render_text_options_section = |entries: &[&(String, String, String, String)]| -> String {
+        if entries.is_empty() { return String::new(); }
+        entries.iter().map(|(key, label, _, value)| {
+            format!(
+                r#"<div class="customizer-text-field" style="margin-top:1rem;">
+  <label class="customizer-text-label" for="customizer-text-{key}">{label}</label>
+  <input type="text" name="{key}" id="customizer-text-{key}" value="{value}" maxlength="200" class="customizer-text-input">
+</div>"#,
+                key = crate::html_escape(key),
+                label = crate::html_escape(label),
+                value = crate::html_escape(value),
+            )
+        }).collect()
+    };
+
     // Reorderable option groups: up/down buttons (JS swaps the <li> and
     // rewrites the hidden input's comma-joined value, then dispatches a
     // bubbling 'change' event so the group's shared save button reacts to it
@@ -401,6 +420,7 @@ fn render_customizer_landing(theme_name: &str, source: &str, data: &CustomizerDa
         for (_, _, group, _) in &data.options { if seen.insert(group.clone()) { groups.push(group.clone()); } }
         for (_, _, group, _) in &data.order_options { if seen.insert(group.clone()) { groups.push(group.clone()); } }
         for (_, _, group, _, _) in &data.choices { if seen.insert(group.clone()) { groups.push(group.clone()); } }
+        for (_, _, group, _) in &data.texts { if seen.insert(group.clone()) { groups.push(group.clone()); } }
     }
 
     let cards: String = groups.iter().map(|group| {
@@ -409,6 +429,7 @@ fn render_customizer_landing(theme_name: &str, source: &str, data: &CustomizerDa
         let group_options: Vec<&(String, String, String, bool)> = data.options.iter().filter(|(_, _, g, _)| g == group).collect();
         let group_choices: Vec<&(String, String, String, Vec<(String, String)>, String)> = data.choices.iter().filter(|(_, _, g, _, _)| g == group).collect();
         let group_order: Vec<&(String, String, String, Vec<(String, String)>)> = data.order_options.iter().filter(|(_, _, g, _)| g == group).collect();
+        let group_texts: Vec<&(String, String, String, String)> = data.texts.iter().filter(|(_, _, g, _)| g == group).collect();
 
         let form_id = format!("customizer-form-{gslug}");
         let btn_id = format!("customizer-save-btn-{gslug}");
@@ -416,7 +437,16 @@ fn render_customizer_landing(theme_name: &str, source: &str, data: &CustomizerDa
         let option_keys: Vec<String> = group_options.iter().map(|(k, _, _, _)| k.clone())
             .chain(group_order.iter().map(|(k, _, _, _)| k.clone()))
             .chain(group_choices.iter().map(|(k, _, _, _, _)| k.clone()))
+            .chain(group_texts.iter().map(|(k, _, _, _)| k.clone()))
             .collect();
+
+        // Bool-option keys belonging to *this* card only — submitted as a
+        // hidden field so customizer-save knows which bool options this form
+        // actually covers. Checkboxes only submit when checked, so on their
+        // own an absent key is ambiguous between "unchecked" and "not part of
+        // this card"; without this list, saving one card would silently zero
+        // out every bool option declared in *other* cards too.
+        let bool_keys: String = group_options.iter().map(|(k, _, _, _)| k.as_str()).collect::<Vec<_>>().join(",");
 
         let restore = if !group_colors.is_empty() {
             restore_colors_btn.clone()
@@ -436,8 +466,10 @@ fn render_customizer_landing(theme_name: &str, source: &str, data: &CustomizerDa
   <div class="card-boxed-body">
     <form method="POST" action="/admin/appearance/editor/{theme}/customizer-save" id="{form_id}">
       <input type="hidden" name="source" value="{source}">
+      <input type="hidden" name="bool_option_keys" value="{bool_keys}">
       {colors}
       {choices}
+      {texts}
       {options}
       {order}
     </form>
@@ -457,7 +489,7 @@ fn render_customizer_landing(theme_name: &str, source: &str, data: &CustomizerDa
   form.querySelectorAll('input[type=hidden]').forEach(function(inp) {{ initialHidden.set(inp, inp.value); }});
   function checkChanged() {{
     var changed = false;
-    form.querySelectorAll('input[type=color]').forEach(function(inp) {{
+    form.querySelectorAll('input[type=color], input[type=text]').forEach(function(inp) {{
       if (inp.value !== inp.defaultValue) changed = true;
     }});
     initialHidden.forEach(function(orig, inp) {{
@@ -476,9 +508,11 @@ fn render_customizer_landing(theme_name: &str, source: &str, data: &CustomizerDa
             theme = theme_esc,
             form_id = form_id,
             source = source_esc,
+            bool_keys = crate::html_escape(&bool_keys),
             restore = restore,
             colors = render_colors_section(&group_colors),
             choices = render_choices_section(&group_choices),
+            texts = render_text_options_section(&group_texts),
             options = render_bool_options_section(&group_options),
             order = render_order_section(&group_order),
             btn_id = btn_id,
