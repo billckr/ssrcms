@@ -218,6 +218,10 @@ pub struct CustomizerData {
     /// Whether a `.bak` backup exists for this theme's `static/css/style.css` —
     /// gates showing the "Restore original" button next to Save Colors.
     pub has_color_backup: bool,
+    /// Option keys (bool/order/choice) that currently have a stored per-site
+    /// override — gates showing "Restore original" on a layout-options card
+    /// so it only appears once something in that card has actually changed.
+    pub overridden_option_keys: std::collections::HashSet<String>,
 }
 
 /// Slugify a manifest-declared group name into something safe for DOM ids
@@ -236,19 +240,46 @@ fn render_customizer_landing(theme_name: &str, source: &str, data: &CustomizerDa
     let theme_esc = crate::html_escape(theme_name);
     let source_esc = crate::html_escape(source);
 
+    // Restore original renders as a small Feather-icon button (rotate-ccw, the
+    // same vendored icon set used app-wide e.g. for logout) in the card
+    // header, top-right — rather than a stacked text button under Save
+    // Changes, so it reads as a secondary/undo action, not a peer of Save.
     let restore_colors_btn = if data.has_color_backup {
         format!(
-            r#"<form method="POST" action="/admin/appearance/editor/{theme}/restore" style="margin-top:0.75rem;"
+            r#"<form method="POST" action="/admin/appearance/editor/{theme}/restore" class="customizer-restore-form"
      onsubmit="return confirm('Restore the original backup? Your current color edits will be overwritten.')">
   <input type="hidden" name="file" value="static/css/style.css">
   <input type="hidden" name="source" value="{source}">
-  <button type="submit" class="btn btn-sm btn-secondary">Restore original</button>
+  <input type="hidden" name="stay" value="1">
+  <button type="submit" class="customizer-restore-icon-btn" title="Restore original" aria-label="Restore original"><img src="/admin/static/icons/rotate-ccw.svg" alt=""></button>
 </form>"#,
             theme = theme_esc,
             source = source_esc,
         )
     } else {
         String::new()
+    };
+
+    // Restore original for a card's layout options (bool/order/choice) —
+    // deletes the site's stored overrides for the given keys so they fall
+    // back to each option's manifest-declared default. Unlike colors there's
+    // no backup file to gate on; instead only render when at least one of
+    // this card's keys actually has a stored override (i.e. has been changed
+    // from its default), same "only after changes" behavior as colors.
+    let render_restore_options_btn = |keys: &[String]| -> String {
+        let has_override = keys.iter().any(|k| data.overridden_option_keys.contains(k));
+        if keys.is_empty() || !has_override { return String::new(); }
+        format!(
+            r#"<form method="POST" action="/admin/appearance/editor/{theme}/customizer-reset" class="customizer-restore-form"
+     onsubmit="return confirm('Restore original settings? Your current changes in this section will be overwritten.')">
+  <input type="hidden" name="keys" value="{keys}">
+  <input type="hidden" name="source" value="{source}">
+  <button type="submit" class="customizer-restore-icon-btn" title="Restore original" aria-label="Restore original"><img src="/admin/static/icons/rotate-ccw.svg" alt=""></button>
+</form>"#,
+            theme = theme_esc,
+            source = source_esc,
+            keys = crate::html_escape(&keys.join(",")),
+        )
     };
 
     // Each of the four render_* closures below returns *inner* markup only —
@@ -382,9 +413,26 @@ fn render_customizer_landing(theme_name: &str, source: &str, data: &CustomizerDa
         let form_id = format!("customizer-form-{gslug}");
         let btn_id = format!("customizer-save-btn-{gslug}");
 
+        let option_keys: Vec<String> = group_options.iter().map(|(k, _, _, _)| k.clone())
+            .chain(group_order.iter().map(|(k, _, _, _)| k.clone()))
+            .chain(group_choices.iter().map(|(k, _, _, _, _)| k.clone()))
+            .collect();
+
+        let restore = if !group_colors.is_empty() {
+            restore_colors_btn.clone()
+        } else {
+            render_restore_options_btn(&option_keys)
+        };
+
         format!(
             r#"<div class="card-boxed" style="margin-top:1.5rem;">
-  <h2 class="card-boxed-header">{group}</h2>
+  <h2 class="card-boxed-header" style="display:flex;align-items:center;justify-content:space-between;gap:.5rem;">
+    <span>{group}</span>
+    <div class="customizer-header-actions">
+      <button type="submit" form="{form_id}" id="{btn_id}" class="customizer-save-icon-btn" disabled title="Save Changes" aria-label="Save Changes"><img src="/admin/static/icons/save.svg" alt=""></button>
+      {restore}
+    </div>
+  </h2>
   <div class="card-boxed-body">
     <form method="POST" action="/admin/appearance/editor/{theme}/customizer-save" id="{form_id}">
       <input type="hidden" name="source" value="{source}">
@@ -392,11 +440,7 @@ fn render_customizer_landing(theme_name: &str, source: &str, data: &CustomizerDa
       {choices}
       {options}
       {order}
-      <div class="form-actions" style="margin-top:1rem;">
-        <button type="submit" class="btn btn-primary" id="{btn_id}" disabled>Save Changes</button>
-      </div>
     </form>
-    {restore}
   </div>
 </div>
 <script>
@@ -404,10 +448,20 @@ fn render_customizer_landing(theme_name: &str, source: &str, data: &CustomizerDa
   var form = document.getElementById('{form_id}');
   var btn  = document.getElementById('{btn_id}');
   if (!form || !btn) return;
+  // Hidden inputs are spec'd as "value mode: default" — setting .value also
+  // rewrites the value content attribute, which .defaultValue reflects. So
+  // for <input type=hidden> (used for the order-list fields), .value and
+  // .defaultValue drift together and are never unequal. Snapshot their
+  // original values ourselves instead of relying on .defaultValue.
+  var initialHidden = new Map();
+  form.querySelectorAll('input[type=hidden]').forEach(function(inp) {{ initialHidden.set(inp, inp.value); }});
   function checkChanged() {{
     var changed = false;
-    form.querySelectorAll('input[type=color], input[type=hidden]').forEach(function(inp) {{
+    form.querySelectorAll('input[type=color]').forEach(function(inp) {{
       if (inp.value !== inp.defaultValue) changed = true;
+    }});
+    initialHidden.forEach(function(orig, inp) {{
+      if (inp.value !== orig) changed = true;
     }});
     form.querySelectorAll('input[type=checkbox], input[type=radio]').forEach(function(inp) {{
       if (inp.checked !== inp.defaultChecked) changed = true;
@@ -422,7 +476,7 @@ fn render_customizer_landing(theme_name: &str, source: &str, data: &CustomizerDa
             theme = theme_esc,
             form_id = form_id,
             source = source_esc,
-            restore = if group_colors.is_empty() { String::new() } else { restore_colors_btn.clone() },
+            restore = restore,
             colors = render_colors_section(&group_colors),
             choices = render_choices_section(&group_choices),
             options = render_bool_options_section(&group_options),

@@ -411,3 +411,35 @@ pub async fn save_choice(
 ) -> Result<(), sqlx::Error> {
     save_raw_value(pool, site_id, theme_name, key, value).await
 }
+
+/// Which of this site's declared options for `theme_name` currently have a
+/// stored override row (regardless of whether that value equals the schema
+/// default) — used to gate the customizer's per-card "Restore original"
+/// button so it only appears once a setting has actually been changed.
+pub async fn overridden_keys(pool: &PgPool, site_id: Uuid, theme_name: &str) -> std::collections::HashSet<String> {
+    load_stored_values(pool, site_id, theme_name).await.into_keys().collect()
+}
+
+/// Delete this site's stored overrides for the given option keys (any mix of
+/// bool/order/choice) — used by "Restore original" on a customizer card with
+/// no colors. Once a row is gone, `resolve_options`/`resolve_order`/
+/// `resolve_choices` fall back to the schema's own `default` on next read.
+pub async fn delete_options(
+    pool: &PgPool,
+    site_id: Uuid,
+    theme_name: &str,
+    keys: &[String],
+) -> Result<(), sqlx::Error> {
+    if keys.is_empty() {
+        return Ok(());
+    }
+    sqlx::query(
+        "DELETE FROM theme_options WHERE site_id = $1 AND theme_name = $2 AND option_key = ANY($3)",
+    )
+    .bind(site_id)
+    .bind(theme_name)
+    .bind(keys)
+    .execute(pool)
+    .await?;
+    Ok(())
+}

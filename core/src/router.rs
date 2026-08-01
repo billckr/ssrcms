@@ -201,6 +201,7 @@ pub fn build(
         .route("/admin/appearance/editor/{theme}/new-file", post(appearance_editor::new_file))
         .route("/admin/appearance/editor/{theme}/delete-file", post(appearance_editor::delete_file))
         .route("/admin/appearance/editor/{theme}/customizer-save", post(appearance_editor::save_customizer))
+        .route("/admin/appearance/editor/{theme}/customizer-reset", post(appearance_editor::reset_options))
         // ── Page builder ───────────────────────────────────────────────────
         .route("/admin/builder",                                        get(admin_builder::list))
         .route("/admin/builder/create",                                 post(admin_builder::create_project))

@@ -154,7 +154,13 @@ async fn build_customizer(
 
     let has_color_backup = bak_path_for(&theme_dir.join("static/css/style.css")).exists();
 
-    Some(admin::pages::appearance::CustomizerData { manifest, colors, options, order_options, choices, has_color_backup })
+    let overridden_option_keys = if let Some(sid) = site_id {
+        crate::models::theme_options::overridden_keys(pool, sid, theme_name).await
+    } else {
+        Default::default()
+    };
+
+    Some(admin::pages::appearance::CustomizerData { manifest, colors, options, order_options, choices, has_color_backup, overridden_option_keys })
 }
 
 #[derive(Deserialize)]
@@ -285,6 +291,10 @@ pub struct SaveFileForm {
 pub struct RestoreFileForm {
     pub file: String,
     pub source: Option<String>,
+    /// Set by the customizer landing page's "Restore original" button (for
+    /// colors) so the redirect after restoring lands back on the customizer
+    /// page instead of opening the raw CSS file in the file editor.
+    pub stay: Option<String>,
 }
 
 /// Convert days since Unix epoch (1970-01-01) to (year, month, day).
@@ -633,6 +643,10 @@ pub async fn restore_file(
         "/admin/appearance/editor/{}?source={}&file={}",
         url_encode_param(&theme), source, url_encode_param(&form.file)
     );
+    // When restored from the customizer landing page (colors card), stay on
+    // that page instead of navigating into the raw file editor view.
+    let stay_redirect = format!("/admin/appearance/editor/{}?source={}", url_encode_param(&theme), source);
+    let redirect_base = if form.stay.is_some() { stay_redirect } else { redirect_base };
 
     let Some(abs_path) = resolve_file_in_theme(&theme_dir, &form.file) else {
         return Redirect::to(&redirect_base).into_response();
@@ -656,7 +670,8 @@ pub async fn restore_file(
         state.templates.invalidate_theme(&theme, admin.site_id);
     }
 
-    Redirect::to(&format!("{}&restored=1", redirect_base)).into_response()
+    let sep = if redirect_base.contains('?') { "&" } else { "?" };
+    Redirect::to(&format!("{}{}restored=1", redirect_base, sep)).into_response()
 }
 
 // ── Customizer: save a group's changes (colors + options + order + choices) ────
@@ -773,6 +788,56 @@ pub async fn save_customizer(
     }
 
     Redirect::to(&redirect).into_response()
+}
+
+// ── Customizer: restore a group's layout options to their manifest defaults ────
+// Layout options (bool/order/choice) are DB-backed per site with no `.bak`
+// file, so "Restore original" here means deleting the site's stored override
+// rows for the given keys rather than copying a backup — resolve_options/
+// resolve_order/resolve_choices then fall back to each option's declared
+// `default`. Always redirects back to the customizer landing page (never a
+// file view), matching save_customizer's redirect.
+
+#[derive(Deserialize)]
+pub struct ResetOptionsForm {
+    /// Comma-separated option keys (bool/order/choice) belonging to one
+    /// customizer card — set by the group's "Restore original" button.
+    pub keys: String,
+    pub source: Option<String>,
+}
+
+pub async fn reset_options(
+    State(state): State<AppState>,
+    admin: AdminUser,
+    Path(theme): Path<String>,
+    Form(form): Form<ResetOptionsForm>,
+) -> Response {
+    if !admin.caps.can_manage_appearance {
+        return (StatusCode::FORBIDDEN, "Forbidden").into_response();
+    }
+    let cs = state.site_hostname(admin.site_id);
+    let ctx = super::page_ctx_full(&state, &admin, &cs).await;
+
+    let source = form.source.as_deref().unwrap_or("site");
+    let Some(theme_dir) = resolve_theme_dir_by_source(&state.config.themes_dir, &state.config.sites_dir, &theme, Some(source), admin.site_id) else {
+        return render_appearance_list(&state, Some("Theme not found."), &ctx, admin.site_id, "my")
+            .await.into_response();
+    };
+
+    let redirect = format!("/admin/appearance/editor/{}?source={}", url_encode_param(&theme), source);
+
+    if !admin.caps.is_global_admin && (is_in_global_dir(&theme_dir, &state.config.themes_dir) || is_in_private_dir(&theme_dir, &state.config.themes_dir)) {
+        return Redirect::to(&redirect).into_response();
+    }
+
+    if let Some(site_id) = admin.site_id {
+        let keys: Vec<String> = form.keys.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect();
+        if let Err(e) = crate::models::theme_options::delete_options(&state.db, site_id, &theme, &keys).await {
+            tracing::error!("reset_options: failed to delete options {:?} for theme {}: {e}", keys, theme);
+        }
+    }
+
+    Redirect::to(&format!("{}&restored=1", redirect)).into_response()
 }
 
 // ── Delete file ───────────────────────────────────────────────────────────────
