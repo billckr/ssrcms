@@ -8,10 +8,8 @@ use serde::Deserialize;
 /// Context passed to every account page shell.
 pub struct AccountContext {
     pub user_email: String,
-    pub user_role: String,
     pub user_display_name: String,
     pub site_name: String,
-    pub site_base_url: String,
 }
 
 /// Wrap page content in the full account page shell (sidebar + nav + footer).
@@ -52,8 +50,6 @@ pub fn account_page(
 
     let site_name         = crate::html_escape(&ctx.site_name);
     let user_email        = crate::html_escape(&ctx.user_email);
-    let user_role         = crate::html_escape(&ctx.user_role);
-    let back_url          = crate::html_escape(&ctx.site_base_url);
     let user_display_name = crate::html_escape(&ctx.user_display_name);
 
     format!(
@@ -77,10 +73,7 @@ pub fn account_page(
         {profile_link}
       </ul>
       <div class="sidebar-footer">
-        <span>{user_email}</span>
-        <span class="sidebar-user-role">{user_role}</span>
-        <a href="{back_url}">&larr; Back to site</a>
-        <a href="/account/logout">Log out</a>
+        <span class="sidebar-user-email">{user_email}</span>
       </div>
     </nav>
     <main class="admin-main">
@@ -90,6 +83,9 @@ pub fn account_page(
         </button>
         <h1>{title}</h1>
         <span class="admin-header-user">{user_display_name}</span>
+        <a href="/account/logout" class="icon-btn" title="Log out">
+          <img src="/admin/static/icons/log-out.svg" alt="Log out">
+        </a>
       </header>
       <div class="admin-content">
         {flash_html}
@@ -135,8 +131,6 @@ pub fn account_page(
         comments_link = comments_link,
         profile_link  = profile_link,
         user_email  = user_email,
-        user_role   = user_role,
-        back_url    = back_url,
         user_display_name = user_display_name,
         flash_html  = flash_html,
         content     = content,

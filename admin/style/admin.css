@@ -573,6 +573,17 @@ legend {
   text-decoration: none;
 }
 
+/* Explicit class rather than relying on `a:first-child` — the account-area
+   footer uses a <span> (not a link), so tag-dependent selectors would give
+   it different styling from the admin footer's email link. */
+.sidebar-user-email {
+  display: block;
+  padding: 0.5rem 0;
+  color: #f8fafc;
+  font-size: 13px;
+  font-weight: 700;
+}
+
 .sidebar-user-role {
   font-size: 11px;
   color: #64748b;

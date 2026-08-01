@@ -16,10 +16,8 @@ use admin::pages::account::{AccountContext, MyCommentRow, ProfileData};
 fn build_ctx(account: &AccountUser) -> AccountContext {
     AccountContext {
         user_email:        account.user.email.clone(),
-        user_role:         account.user.role.clone(),
         user_display_name: account.user.display_name.clone(),
         site_name:         account.site_name.clone(),
-        site_base_url:     account.site_base_url.clone(),
     }
 }
 
