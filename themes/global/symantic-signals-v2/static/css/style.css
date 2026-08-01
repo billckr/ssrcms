@@ -85,6 +85,27 @@ body {
   background-color: rgba(255, 255, 255, 0.2);
 }
 
+.nav-toggle {
+  display: none;
+  flex-direction: column;
+  justify-content: center;
+  gap: 5px;
+  width: 32px;
+  height: 32px;
+  padding: 4px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  margin-left: auto;
+}
+
+.nav-toggle span {
+  display: block;
+  height: 2px;
+  background: white;
+  border-radius: 2px;
+}
+
 /* --- Main Content --- */
 
 .site-main {
@@ -736,27 +757,31 @@ a:hover {
 
 @media (max-width: 768px) {
   .site-nav {
-    flex-direction: row;
     flex-wrap: wrap;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.75rem 1rem;
   }
 
-  .site-title {
-    order: 1;
+  .nav-toggle {
+    display: flex;
   }
 
+  .nav-links,
   .user-bar {
-    order: 2;
-    margin-left: 0;
+    display: none;
+    width: 100%;
+  }
+
+  .site-nav.nav-open .nav-links,
+  .site-nav.nav-open .user-bar {
+    display: flex;
   }
 
   .nav-links {
-    order: 3;
     flex-direction: column;
     gap: 0.5rem;
-    width: 100%;
+  }
+
+  .user-bar {
+    margin-left: 0;
   }
 
   .nav-links a {

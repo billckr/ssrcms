@@ -126,9 +126,9 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
         {users}
         {sites}
         {plugins}
-        {documentation}
         {appearance}
         {builder}
+        {documentation}
         {settings}
       </ul>
       <div class="sidebar-footer">

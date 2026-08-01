@@ -46,6 +46,9 @@
   <header class="site-header">
     <nav class="site-nav">
       <a class="site-title" href="/">{{ site.name }}</a>
+      <button class="nav-toggle" type="button" aria-label="Toggle navigation" aria-expanded="false" onclick="const n=this.closest('.site-nav');n.classList.toggle('nav-open');this.setAttribute('aria-expanded', n.classList.contains('nav-open'));">
+        <span></span><span></span><span></span>
+      </button>
       <ul class="nav-links">
         {% for item in nav.primary.items %}
           <li><a href="{{ item.url }}"{% if item.target == "_blank" %} target="_blank" rel="noopener"{% endif %}{% if item.is_current %} aria-current="page"{% endif %}>{{ item.label }}</a></li>
