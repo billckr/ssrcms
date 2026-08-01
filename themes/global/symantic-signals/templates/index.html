@@ -5,7 +5,11 @@
 {% block content %}
 <div class="archive-header">
   <h1>{{ site.name }}</h1>
-  <p class="site-description">{{ site.description }}</p>
+  {% if theme_option_texts.hero_tagline %}
+    <p class="site-description">{{ theme_option_texts.hero_tagline }}</p>
+  {% elif site.description %}
+    <p class="site-description">{{ site.description }}</p>
+  {% endif %}
 </div>
 
 <div class="home-layout">
@@ -64,56 +68,66 @@
     {% endif %}
   </div>
 
+  {% if theme_options.show_sidebar %}
   <aside class="home-sidebar">
-    <div class="sidebar-widget">
-      <h3 class="sidebar-widget-title">Search</h3>
-      <form method="get" action="/search" class="search-form sidebar-search-form">
-        {# Search query is capped at 25 characters — enforced here and server-side. #}
-        <input type="text" name="q" placeholder="Search posts..." class="search-input" maxlength="25">
-        <button type="submit" class="search-button">Search</button>
-      </form>
-    </div>
+    {% for widget in theme_option_lists.sidebar_order | default(value=["search", "account", "categories", "tags"]) %}
 
-    <div class="sidebar-widget">
-      <h3 class="sidebar-widget-title">Account</h3>
-      {% if session.is_logged_in %}
-      <div class="tag-cloud">
-        <a href="/account" class="tag">{{ session.user.display_name }}</a>
-        <a href="/account/logout" class="tag">Sign out</a>
+      {% if widget == "search" %}
+      <div class="sidebar-widget">
+        <h3 class="sidebar-widget-title">Search</h3>
+        <form method="get" action="/search" class="search-form sidebar-search-form">
+          {# Search query is capped at 25 characters — enforced here and server-side. #}
+          <input type="text" name="q" placeholder="Search posts..." class="search-input" maxlength="25">
+          <button type="submit" class="search-button">Search</button>
+        </form>
       </div>
-      {% else %}
-      <div class="tag-cloud">
-        <a href="/login" class="tag">Sign in</a>
-        <a href="/subscribe" class="tag">Join</a>
+
+      {% elif widget == "account" %}
+      <div class="sidebar-widget">
+        <h3 class="sidebar-widget-title">Account</h3>
+        {% if session.is_logged_in %}
+        <div class="tag-cloud">
+          <a href="/account" class="tag">{{ session.user.display_name }}</a>
+          <a href="/account/logout" class="tag">Sign out</a>
+        </div>
+        {% else %}
+        <div class="tag-cloud">
+          <a href="/login" class="tag">Sign in</a>
+          <a href="/subscribe" class="tag">Join</a>
+        </div>
+        {% endif %}
+      </div>
+
+      {% elif widget == "categories" %}
+      <div class="sidebar-widget">
+        <h3 class="sidebar-widget-title">Categories</h3>
+        {% if category_cloud | length > 0 %}
+        <div class="tag-cloud">
+          {% for cat in category_cloud %}
+            <a href="{{ cat.url }}" class="tag">{{ cat.name }}</a>
+          {% endfor %}
+        </div>
+        {% else %}
+        <p class="sidebar-empty">No categories yet.</p>
+        {% endif %}
+      </div>
+
+      {% elif widget == "tags" %}
+      <div class="sidebar-widget">
+        <h3 class="sidebar-widget-title">Tags</h3>
+        {% if tag_cloud | length > 0 %}
+        <div class="tag-cloud">
+          {% for tag in tag_cloud %}
+            <a href="{{ tag.url }}" class="tag">{{ tag.name }}</a>
+          {% endfor %}
+        </div>
+        {% else %}
+        <p class="sidebar-empty">No tags yet.</p>
+        {% endif %}
       </div>
       {% endif %}
-    </div>
 
-    <div class="sidebar-widget">
-      <h3 class="sidebar-widget-title">Categories</h3>
-      {% if category_cloud | length > 0 %}
-      <div class="tag-cloud">
-        {% for cat in category_cloud %}
-          <a href="{{ cat.url }}" class="tag">{{ cat.name }}</a>
-        {% endfor %}
-      </div>
-      {% else %}
-      <p class="sidebar-empty">No categories yet.</p>
-      {% endif %}
-    </div>
-
-    <div class="sidebar-widget">
-      <h3 class="sidebar-widget-title">Tags</h3>
-      {% if tag_cloud | length > 0 %}
-      <div class="tag-cloud">
-        {% for tag in tag_cloud %}
-          <a href="{{ tag.url }}" class="tag">{{ tag.name }}</a>
-        {% endfor %}
-      </div>
-      {% else %}
-      <p class="sidebar-empty">No tags yet.</p>
-      {% endif %}
-    </div>
+    {% endfor %}
 
     {#
       ── Sidebar Menu Widget ───────────────────────────────────────────────────
@@ -172,5 +186,6 @@
     {# ── End Sidebar Menu Widget ──────────────────────────────────────────── #}
 
   </aside>
+  {% endif %}
 </div>
 {% endblock content %}
