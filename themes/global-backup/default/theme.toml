@@ -1,0 +1,42 @@
+[theme]
+name        = "Default"
+version     = "1.0.0"
+api_version = "1"
+description = "Plain, but not without style — Includes theme customizer."
+author      = "Synaptic Signals"
+
+[nav_locations]
+primary = "Primary Navigation"
+footer  = "Footer Links"
+
+[customizer]
+enabled = true
+
+[customizer.colors.color-page-background]
+label = "Page background"
+
+[customizer.colors.color-panel-background]
+label = "Panel background (cards, inputs)"
+
+[customizer.colors.color-header-background]
+label = "Header & footer background"
+
+[customizer.colors.color-text]
+label = "Body text"
+
+[customizer.colors.color-text-muted]
+label = "Muted text"
+
+[customizer.colors.color-primary]
+label = "Primary"
+
+[customizer.colors.color-primary-hover]
+label = "Primary (hover)"
+
+[customizer.colors.color-border]
+label = "Border"
+
+[customizer.options.show_header_search]
+type    = "bool"
+default = true
+label   = "Show search field in header"

@@ -1,0 +1,173 @@
+{# subscribe-page.html — Subscriber registration page. Rendered when a post or page
+   uses the "subscribe-page" template. Displays optional page content above the
+   sign-up form which POSTs to /subscribe. #}
+{% extends "base.html" %}
+
+{% block title %}{{ page.title }} — {{ site.name }}{% endblock title %}
+
+{% block content %}
+<article class="single-page subscribe-page">
+  <header class="subscribe-header">
+    <h1 class="subscribe-title">{{ page.title }}</h1>
+  </header>
+
+  {% if page.content %}
+  <div class="page-content">
+    {{ page.content | safe }}
+  </div>
+  {% endif %}
+
+  <form class="subscribe-form" method="POST" action="/subscribe">
+
+    <!-- Honeypot: hidden from real users; bots fill it; handler rejects if non-empty -->
+    <div class="subscribe-honeypot" aria-hidden="true" tabindex="-1">
+      <label for="sf-website">Website</label>
+      <input type="text" id="sf-website" name="website" tabindex="-1" autocomplete="off">
+    </div>
+
+    <div class="subscribe-field">
+      <label for="sf-name">Display Name <span class="subscribe-required" aria-hidden="true">*</span></label>
+      <input type="text" id="sf-name" name="display_name" required autocomplete="name" placeholder="Jane Smith">
+    </div>
+
+    <div class="subscribe-field">
+      <label for="sf-email">Email address <span class="subscribe-required" aria-hidden="true">*</span></label>
+      <input type="email" id="sf-email" name="email" required autocomplete="email" placeholder="jane@example.com">
+    </div>
+
+    <div class="subscribe-field">
+      <label for="sf-password">Password <span class="subscribe-required" aria-hidden="true">*</span></label>
+      <input type="password" id="sf-password" name="password" required autocomplete="new-password">
+      <span class="subscribe-hint">8–12 characters &middot; uppercase &middot; number &middot; symbol (! @ # $ % &amp;)</span>
+    </div>
+
+    <div class="subscribe-field">
+      <label for="sf-confirm">Confirm password <span class="subscribe-required" aria-hidden="true">*</span></label>
+      <input type="password" id="sf-confirm" name="confirm_password" required autocomplete="new-password">
+    </div>
+
+    <div class="subscribe-field subscribe-field--check">
+      <label class="subscribe-checkbox-label">
+        <input type="checkbox" name="human_check" value="on" required>
+        <span>I'm Human</span>
+      </label>
+    </div>
+
+    <div class="subscribe-field subscribe-field--check">
+      <label class="subscribe-checkbox-label">
+        <input type="checkbox" name="terms" value="on" required>
+        <span>Agree to <a href="/terms" target="_blank" rel="noopener noreferrer">Terms of Service</a></span>
+      </label>
+    </div>
+
+    <button type="submit" class="subscribe-submit">Create account</button>
+  </form>
+</article>
+
+<style>
+/* ── Subscribe page — Symantic Signals theme ── */
+.subscribe-page { max-width: 560px; }
+
+.subscribe-header {
+  background: linear-gradient(135deg, var(--orange-pale), white);
+  padding: 1.5rem 1.75rem;
+  border-radius: 8px;
+  border-left: 4px solid var(--orange-primary);
+  margin-bottom: 2rem;
+}
+
+.subscribe-title {
+  margin: 0;
+  font-size: 1.75rem;
+  color: var(--orange-dark);
+}
+
+.subscribe-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.subscribe-field {
+  display: flex;
+  flex-direction: column;
+  gap: .35rem;
+}
+
+.subscribe-field label {
+  font-size: .9rem;
+  font-weight: 600;
+  color: var(--text-dark);
+}
+
+.subscribe-field input[type="text"],
+.subscribe-field input[type="email"],
+.subscribe-field input[type="password"] {
+  padding: .55rem .75rem;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  font-size: .95rem;
+  color: var(--text-dark);
+  background: var(--bg-light);
+  transition: border-color .15s;
+}
+
+.subscribe-field input:focus {
+  outline: none;
+  border-color: var(--orange-primary);
+  box-shadow: 0 0 0 3px rgba(255,107,53,.15);
+}
+
+.subscribe-hint {
+  font-size: .8rem;
+  color: var(--text-light);
+}
+
+.subscribe-required {
+  color: var(--orange-primary);
+  margin-left: .15rem;
+}
+
+.subscribe-field--check { flex-direction: row; align-items: center; }
+
+.subscribe-checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  font-size: .9rem;
+  cursor: pointer;
+}
+
+.subscribe-checkbox-label input[type="checkbox"] {
+  accent-color: var(--orange-primary);
+  width: 1rem;
+  height: 1rem;
+}
+
+.subscribe-checkbox-label a {
+  color: var(--orange-primary);
+  text-decoration: underline;
+}
+
+.subscribe-submit {
+  align-self: flex-start;
+  padding: .6rem 1.5rem;
+  background: linear-gradient(135deg, var(--orange-primary), var(--orange-dark));
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: .95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity .15s;
+}
+
+.subscribe-submit:hover { opacity: .88; }
+
+.subscribe-honeypot {
+  position: absolute;
+  left: -9999px;
+  visibility: hidden;
+}
+</style>
+{% endblock content %}

@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+
+{% block title %}Page Not Found — {{ site.name }}{% endblock title %}
+
+{% block content %}
+<section class="error-page not-found">
+  <h1>404 — Not Found</h1>
+  <p>The page at <code>{{ request.path }}</code> could not be found.</p>
+  <p><a href="/">← Back to home</a></p>
+</section>
+{% endblock content %}

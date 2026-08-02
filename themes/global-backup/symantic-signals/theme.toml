@@ -1,0 +1,67 @@
+[theme]
+name        = "Symantic Signals"
+version     = "1.0.0"
+api_version = "1"
+description = "Modern theme with style — Included theme customizer."
+author      = "Synaptic Signals"
+
+[nav_locations]
+primary = "Primary Navigation"
+footer  = "Footer Links"
+
+[customizer]
+enabled = true
+
+[customizer.colors.color-page-background]
+label = "Page background"
+
+[customizer.colors.color-panel-background]
+label = "Panel background (cards, inputs)"
+
+[customizer.colors.color-header-background]
+label = "Header & footer background"
+
+[customizer.colors.color-text]
+label = "Body text"
+
+[customizer.colors.color-text-muted]
+label = "Muted text"
+
+[customizer.colors.color-primary]
+label = "Primary"
+
+[customizer.colors.color-primary-hover]
+label = "Primary (hover)"
+
+[customizer.colors.color-border]
+label = "Border"
+
+[customizer.options.show_sidebar]
+type    = "bool"
+default = true
+label   = "Show right sidebar (search, account, categories, tags)"
+
+[customizer.options.sidebar_order]
+type    = "order"
+default = ["search", "account", "categories", "tags"]
+label   = "Sidebar widget order"
+
+[customizer.options.sidebar_order.items]
+search     = "Search"
+account    = "Account"
+categories = "Categories"
+tags       = "Tags"
+
+[customizer.options.hero_tagline]
+type    = "text"
+default = ""
+label   = "Tagline (shown below site name)"
+
+[customizer.options.nav_dropdown_trigger]
+type    = "choice"
+default = "hover"
+label   = "Header submenu trigger (for menu items with sub-items)"
+
+[customizer.options.nav_dropdown_trigger.choices]
+hover = "Hover to open"
+click = "Click to open"
