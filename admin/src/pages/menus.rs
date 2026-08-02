@@ -141,13 +141,13 @@ pub fn render_edit(
         )
     }).collect::<Vec<_>>().join("");
 
-    // Build item cards (recursive, depth-indented)
+    // Build item cards (recursive; nested in .menu-item-children containers so
+    // drag-and-drop reordering can be scoped to one sibling group at a time).
     fn render_items(
         items: &[MenuItemRow],
         pages: &[(Uuid, String)],
         parent_id: Option<&str>,
         menu_id: &str,
-        depth: usize,
     ) -> String {
         items.iter()
             .filter(|i| i.parent_id.as_deref() == parent_id)
@@ -165,8 +165,16 @@ pub fn render_edit(
                 let target_badge = if i.target == "_blank" {
                     r#"<span class="badge" style="margin-left:.4rem">new tab</span>"#
                 } else { "" };
-                let depth_indicator = "— ".repeat(depth);
-                let children = render_items(items, pages, Some(&i.id), menu_id, depth + 1);
+                let children = render_items(items, pages, Some(&i.id), menu_id);
+                let children_section = if children.is_empty() {
+                    String::new()
+                } else {
+                    format!(
+                        r#"<div class="menu-item-children" data-parent-id="{item_id}">{children}</div>"#,
+                        item_id  = crate::html_escape(&i.id),
+                        children = children,
+                    )
+                };
 
                 let page_opts: String = std::iter::once(("".to_string(), "Select Page".to_string()))
                     .chain(pages.iter().map(|(id, title)| (id.to_string(), title.clone())))
@@ -197,18 +205,28 @@ pub fn render_edit(
                         format!(r#"<option value="{val}"{sel}>{label}</option>"#, val=val, label=label, sel=sel)
                     }).collect();
 
+                let parent_attr = i.parent_id.as_deref().unwrap_or("");
+
                 format!(
-                    r#"<div class="menu-item-card">
+                    r#"<div class="menu-item-group" data-item-id="{item_id}" data-parent-id="{parent_attr}">
+  <div class="menu-item-card">
   <div class="menu-item-card__row">
+    <span class="drag-handle" title="Drag to reorder" draggable="true">
+      <img src="/admin/static/icons/move.svg" alt="">
+    </span>
     <div class="menu-item-card__info">
-      <span class="menu-item-card__label">{depth_indicator}{label}</span>{target_badge}
+      <span class="menu-item-card__label">{label}</span>{target_badge}
       <span class="menu-item-card__dest">{dest}</span>
     </div>
     <div class="menu-item-card__actions">
-      <label class="btn btn-primary btn-sm" for="edit-toggle-{item_id}" style="cursor:pointer;padding:.25rem .6rem;font-size:.8rem">Edit</label>
+      <label class="icon-btn" for="edit-toggle-{item_id}" title="Edit" style="cursor:pointer">
+        <img src="/admin/static/icons/edit.svg" alt="Edit">
+      </label>
       <form method="POST" action="/admin/menus/{menu_id}/items/{item_id}/delete"
             onsubmit="return confirm('Delete the following menu item?\n\n{label_val}')" style="display:inline">
-        <button class="btn btn-danger btn-sm" type="submit" style="padding:.25rem .6rem;font-size:.8rem">Delete</button>
+        <button class="icon-btn icon-danger" type="submit" title="Delete">
+          <img src="/admin/static/icons/delete.svg" alt="Delete">
+        </button>
       </form>
     </div>
   </div>
@@ -253,31 +271,36 @@ pub fn render_edit(
       </div>
     </form>
   </div>
-</div>
-{children}"#,
-                    depth_indicator = depth_indicator,
-                    label           = crate::html_escape(&i.label),
-                    target_badge    = target_badge,
-                    dest            = dest,
-                    menu_id         = crate::html_escape(menu_id),
-                    item_id         = crate::html_escape(&i.id),
-                    label_val       = crate::html_escape(&i.label),
-                    url_val         = crate::html_escape(i.url.as_deref().unwrap_or("")),
-                    sort_order      = i.sort_order,
-                    page_opts       = page_opts,
-                    parent_opts     = parent_opts,
-                    target_opts     = target_opts,
-                    children        = children,
+  </div>
+{children_section}
+</div>"#,
+                    label            = crate::html_escape(&i.label),
+                    target_badge     = target_badge,
+                    dest             = dest,
+                    menu_id          = crate::html_escape(menu_id),
+                    item_id          = crate::html_escape(&i.id),
+                    parent_attr      = crate::html_escape(parent_attr),
+                    label_val        = crate::html_escape(&i.label),
+                    url_val          = crate::html_escape(i.url.as_deref().unwrap_or("")),
+                    sort_order       = i.sort_order,
+                    page_opts        = page_opts,
+                    parent_opts      = parent_opts,
+                    target_opts      = target_opts,
+                    children_section = children_section,
                 )
             })
             .collect::<Vec<_>>().join("\n")
     }
 
-    let items_html = render_items(items, pages, None, &menu.id, 0);
+    let items_html = render_items(items, pages, None, &menu.id);
     let items_section = if items.is_empty() {
         r#"<p style="color:var(--muted);font-size:.875rem;margin:.25rem 0 1rem">No items yet.</p>"#.to_string()
     } else {
-        format!(r#"<div class="menu-item-list">{items_html}</div>"#, items_html = items_html)
+        format!(
+            r#"<div class="menu-item-list" data-parent-id="" data-reorder-url="/admin/menus/{menu_id}/items/reorder">{items_html}</div>"#,
+            menu_id   = crate::html_escape(&menu.id),
+            items_html = items_html,
+        )
     };
 
     // Add item form
@@ -348,18 +371,40 @@ pub fn render_edit(
 .menu-item-card {{
   border-bottom: 1px solid var(--border);
 }}
-.menu-item-card:last-child {{ border-bottom: none; }}
+.menu-item-group:last-child > .menu-item-card {{ border-bottom: none; }}
+.menu-item-children {{
+  padding-left: 1.75rem;
+  border-top: 1px solid var(--border);
+  background: var(--sidebar-bg, #f8f8f8);
+}}
+.menu-item-children .menu-item-group:last-child > .menu-item-card {{ border-bottom: none; }}
 .menu-item-card__row {{
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: .65rem 1rem;
   background: var(--card-bg, #fff);
+  gap: .65rem;
 }}
+.drag-handle {{
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  cursor: grab;
+  opacity: .5;
+}}
+.drag-handle:hover {{ opacity: .9; }}
+.drag-handle img {{ width: 16px; height: 16px; }}
+.menu-item-group.dragging > .menu-item-card {{ opacity: .4; }}
 .menu-item-card__info {{
   display: flex;
   flex-direction: column;
   gap: .15rem;
+  flex: 1;
+  min-width: 0;
 }}
 .menu-item-card__label {{
   font-weight: 600;
@@ -490,6 +535,63 @@ pub fn render_edit(
     update();
   }}
   document.querySelectorAll('.js-menu-item-form').forEach(bind);
+}})();
+</script>
+<script>
+(function() {{
+  function directGroups(container) {{
+    return Array.prototype.filter.call(container.children, function(el) {{
+      return el.classList.contains('menu-item-group');
+    }});
+  }}
+
+  function reorderUrlFor(container) {{
+    var withUrl = container.closest('[data-reorder-url]');
+    return withUrl ? withUrl.dataset.reorderUrl : null;
+  }}
+
+  function saveOrder(container) {{
+    var url = reorderUrlFor(container);
+    if (!url) return;
+    var ids = directGroups(container).map(function(el) {{ return el.dataset.itemId; }});
+    fetch(url, {{
+      method: 'POST',
+      headers: {{ 'Content-Type': 'application/json' }},
+      body: JSON.stringify({{ order: ids }})
+    }}).catch(function() {{}});
+  }}
+
+  function setupReorder(container) {{
+    var dragEl = null;
+
+    directGroups(container).forEach(function(group) {{
+      var handle = group.querySelector(':scope > .menu-item-card .drag-handle');
+      if (!handle) return;
+      handle.addEventListener('dragstart', function(e) {{
+        dragEl = group;
+        group.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move';
+        try {{ e.dataTransfer.setData('text/plain', group.dataset.itemId || ''); }} catch (err) {{}}
+      }});
+      handle.addEventListener('dragend', function() {{
+        if (dragEl) dragEl.classList.remove('dragging');
+        dragEl = null;
+        saveOrder(container);
+      }});
+    }});
+
+    container.addEventListener('dragover', function(e) {{
+      if (!dragEl) return;
+      e.preventDefault();
+      var target = e.target.closest('.menu-item-group');
+      if (!target || target === dragEl || target.parentElement !== container) return;
+      var rect = target.getBoundingClientRect();
+      var after = (e.clientY - rect.top) / rect.height > 0.5;
+      container.insertBefore(dragEl, after ? target.nextSibling : target);
+    }});
+  }}
+
+  document.querySelectorAll('.menu-item-list, .menu-item-children').forEach(setupReorder);
 }})();
 </script>"#,
 

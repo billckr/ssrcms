@@ -225,6 +225,7 @@ pub fn build(
         .route("/admin/menus/{id}/items/new",                       post(admin_menus::add_item))
         .route("/admin/menus/{id}/items/{item_id}/edit",            post(admin_menus::edit_item))
         .route("/admin/menus/{id}/items/{item_id}/delete",          post(admin_menus::delete_item))
+        .route("/admin/menus/{id}/items/reorder",                   post(admin_menus::reorder_items))
         // ── Admin settings ─────────────────────────────────────────────────
         .route("/admin/settings", get(settings::settings).post(settings::save_settings))
         .route("/admin/settings/dev-tools/seed-users", post(dev_tools::seed_users))

@@ -2,8 +2,9 @@
 
 use axum::{
     extract::{Path, State},
+    http::StatusCode,
     response::{Html, IntoResponse, Redirect},
-    Form,
+    Form, Json,
 };
 use serde::Deserialize;
 use uuid::Uuid;
@@ -339,6 +340,46 @@ pub async fn delete_item(
     }
 
     Redirect::to(&format!("/admin/menus/{}", menu_id)).into_response()
+}
+
+// ── Item: Reorder (drag-and-drop) ───────────────────────────────────────────
+
+#[derive(Deserialize)]
+pub struct ReorderItemsBody {
+    pub order: Vec<Uuid>,
+}
+
+/// Reassigns sort_order for one sibling group at a time (the top-level items, or a single
+/// parent's children) based on the order submitted by the drag-and-drop UI.
+pub async fn reorder_items(
+    State(state): State<AppState>,
+    admin: AdminUser,
+    Path(id): Path<Uuid>,
+    Json(body): Json<ReorderItemsBody>,
+) -> impl IntoResponse {
+    if !admin.caps.can_manage_appearance {
+        return StatusCode::FORBIDDEN.into_response();
+    }
+
+    let menu = match nav_menu::get_by_id(&state.db, id).await {
+        Ok(m) => m,
+        Err(_) => return StatusCode::NOT_FOUND.into_response(),
+    };
+
+    if !admin.caps.is_global_admin && admin.site_id != Some(menu.site_id) {
+        return StatusCode::FORBIDDEN.into_response();
+    }
+
+    if body.order.len() > 500 {
+        return StatusCode::BAD_REQUEST.into_response();
+    }
+
+    if let Err(e) = nav_menu::reorder_items(&state.db, id, &body.order).await {
+        tracing::error!("reorder nav items for menu {} error: {:?}", id, e);
+        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+    }
+
+    StatusCode::OK.into_response()
 }
 
 // ── Sanitisation ─────────────────────────────────────────────────────────────

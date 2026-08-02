@@ -269,6 +269,24 @@ pub async fn delete_item(pool: &PgPool, item_id: Uuid) -> Result<()> {
     Ok(())
 }
 
+/// Reassign `sort_order` (0, 1, 2, …) to a set of sibling items based on their position in
+/// `ordered_ids`, scoped to `menu_id` so an id from another menu can't be smuggled in. Used by
+/// the drag-and-drop reorder UI, which submits one sibling group (a single parent's children,
+/// or the top-level group) at a time.
+pub async fn reorder_items(pool: &PgPool, menu_id: Uuid, ordered_ids: &[Uuid]) -> Result<()> {
+    let mut tx = pool.begin().await?;
+    for (i, item_id) in ordered_ids.iter().enumerate() {
+        sqlx::query("UPDATE nav_menu_items SET sort_order = $1 WHERE id = $2 AND menu_id = $3")
+            .bind(i as i32)
+            .bind(item_id)
+            .bind(menu_id)
+            .execute(&mut *tx)
+            .await?;
+    }
+    tx.commit().await?;
+    Ok(())
+}
+
 // ── Context builder ───────────────────────────────────────────────────────────
 
 /// Build a [`NavContext`] for the given site and request path.
