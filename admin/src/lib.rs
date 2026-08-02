@@ -394,29 +394,6 @@ pub fn media_picker_modal_html() -> String {
     if (rb) rb.style.display = 'none';
     if (window.markDirty) window.markDirty();
   };
-
-  // Resets a customizer image field back to empty (theme's built-in default).
-  window.clearCustomizerImage = function(targetId) {
-    var hidden = document.getElementById(targetId);
-    var defaultPreview = hidden ? (hidden.dataset.defaultPreview || '') : '';
-    if (hidden) {
-      hidden.value = '';
-      hidden.dispatchEvent(new Event('input', { bubbles: true }));
-      hidden.dispatchEvent(new Event('change', { bubbles: true }));
-    }
-    var preview = document.getElementById(targetId + '-preview');
-    if (preview) {
-      if (defaultPreview) {
-        preview.style.backgroundImage = "url('" + escHtml(defaultPreview) + "')";
-        preview.classList.add('has-image');
-      } else {
-        preview.style.backgroundImage = '';
-        preview.classList.remove('has-image');
-      }
-    }
-    var clearBtn = document.getElementById(targetId + '-clear');
-    if (clearBtn) clearBtn.style.display = 'none';
-  };
 })();
 </script>"#)
 }

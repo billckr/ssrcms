@@ -167,8 +167,7 @@ tr.muted td { opacity: .55; }
 }
 .customizer-color-swatch::-webkit-color-swatch-wrapper { padding: 0; border-radius: 6px; }
 .customizer-color-swatch::-webkit-color-swatch { border: none; border-radius: 6px; }
-.customizer-sidebar-col { width: 260px; flex-shrink: 0; display: flex; flex-direction: column; gap: 1rem; }
-.customizer-sidebar-col .card-boxed { margin-top: 0 !important; }
+.customizer-sidebar-col { width: 260px; flex-shrink: 0; display: flex; flex-direction: column; }
 .customizer-details-panel { width: 100%; }
 .customizer-color-swatch::-moz-color-swatch { border: none; border-radius: 6px; }
 .customizer-color-label { font-size: .8rem; color: var(--text); text-align: center; line-height: 1.3; }

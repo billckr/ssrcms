@@ -21,6 +21,21 @@ fn read_group(def: &toml::Table, default: &str) -> String {
     def.get("group").and_then(|v| v.as_str()).unwrap_or(default).to_string()
 }
 
+/// Which customizer column an option's card renders in — "main" (the wide
+/// column with the file selector above it) or "sidebar" (the narrow column
+/// next to Theme Details). Declared per-option via `placement = "..."` in
+/// theme.toml; any value other than "sidebar" is treated as "main". Themes
+/// that don't set it get `default_placement`, chosen per option type below
+/// (every type defaults to "main" except "image", which defaults to
+/// "sidebar" since a preview thumbnail reads better there).
+fn read_placement(def: &toml::Table, default_placement: &str) -> String {
+    match def.get("placement").and_then(|v| v.as_str()) {
+        Some("sidebar") => "sidebar".to_string(),
+        Some(_) => "main".to_string(),
+        None => default_placement.to_string(),
+    }
+}
+
 /// One declared option from a theme's `[customizer.options.*]` table.
 #[derive(Debug, Clone)]
 pub struct ThemeOptionDef {
@@ -32,6 +47,8 @@ pub struct ThemeOptionDef {
     /// Which admin customizer card this renders in — declared per-option via
     /// `group = "..."`, defaulting to [`DEFAULT_GROUP`].
     pub group: String,
+    /// Which customizer column this renders in — see [`read_placement`].
+    pub placement: String,
 }
 
 /// Parse the `[customizer.options.*]` table out of an already-parsed theme.toml.
@@ -66,7 +83,8 @@ pub fn parse_option_defs(parsed: &toml::Table) -> Vec<ThemeOptionDef> {
                 .unwrap_or(key)
                 .to_string();
             let group = read_group(def, DEFAULT_GROUP);
-            Some(ThemeOptionDef { key: key.clone(), option_type, default, label, group })
+            let placement = read_placement(def, "main");
+            Some(ThemeOptionDef { key: key.clone(), option_type, default, label, group, placement })
         })
         .collect()
 }
@@ -178,6 +196,8 @@ pub struct ThemeOrderDef {
     /// The schema's own default ordering of item keys.
     pub default: Vec<String>,
     pub group: String,
+    /// Which customizer column this renders in — see [`read_placement`].
+    pub placement: String,
 }
 
 /// Parse every `type = "order"` entry out of `[customizer.options.*]`.
@@ -215,7 +235,8 @@ pub fn parse_order_defs(parsed: &toml::Table) -> Vec<ThemeOrderDef> {
                 })
                 .unwrap_or_default();
             let group = read_group(def, DEFAULT_GROUP);
-            Some(ThemeOrderDef { key: key.clone(), label, items, default, group })
+            let placement = read_placement(def, "main");
+            Some(ThemeOrderDef { key: key.clone(), label, items, default, group, placement })
         })
         .collect()
 }
@@ -308,6 +329,8 @@ pub struct ThemeChoiceDef {
     pub choices: Vec<(String, String)>,
     pub default: String,
     pub group: String,
+    /// Which customizer column this renders in — see [`read_placement`].
+    pub placement: String,
 }
 
 /// Parse every `type = "choice"` entry out of `[customizer.options.*]`.
@@ -345,7 +368,8 @@ pub fn parse_choice_defs(parsed: &toml::Table) -> Vec<ThemeChoiceDef> {
                 .unwrap_or_else(|| choices.first().map(|(k, _)| k.as_str()).unwrap_or(""))
                 .to_string();
             let group = read_group(def, DEFAULT_GROUP);
-            Some(ThemeChoiceDef { key: key.clone(), label, choices, default, group })
+            let placement = read_placement(def, "main");
+            Some(ThemeChoiceDef { key: key.clone(), label, choices, default, group, placement })
         })
         .collect()
 }
@@ -421,6 +445,8 @@ pub struct ThemeTextDef {
     pub label: String,
     pub default: String,
     pub group: String,
+    /// Which customizer column this renders in — see [`read_placement`].
+    pub placement: String,
 }
 
 /// Cap on a stored text option's length — generous enough for a tagline or
@@ -450,7 +476,8 @@ pub fn parse_text_defs(parsed: &toml::Table) -> Vec<ThemeTextDef> {
             let label = def.get("label").and_then(|v| v.as_str()).unwrap_or(key).to_string();
             let default = def.get("default").and_then(|v| v.as_str()).unwrap_or("").to_string();
             let group = read_group(def, DEFAULT_GROUP);
-            Some(ThemeTextDef { key: key.clone(), label, default, group })
+            let placement = read_placement(def, "main");
+            Some(ThemeTextDef { key: key.clone(), label, default, group, placement })
         })
         .collect()
 }
@@ -563,6 +590,10 @@ pub struct ThemeImageDef {
     /// a site actually picks something, so theme authors don't need to touch
     /// their template's fallback logic.
     pub default_preview: Option<String>,
+    /// Which customizer column this renders in — see [`read_placement`].
+    /// Defaults to "sidebar" for this type (a preview thumbnail reads better
+    /// there), unlike every other option type's "main" default.
+    pub placement: String,
 }
 
 /// Parse every `type = "image"` entry out of `[customizer.options.*]`.
@@ -588,7 +619,8 @@ pub fn parse_image_defs(parsed: &toml::Table) -> Vec<ThemeImageDef> {
             let default = def.get("default").and_then(|v| v.as_str()).unwrap_or("").to_string();
             let group = read_group(def, DEFAULT_GROUP);
             let default_preview = def.get("default_preview").and_then(|v| v.as_str()).map(|s| s.to_string());
-            Some(ThemeImageDef { key: key.clone(), label, default, group, default_preview })
+            let placement = read_placement(def, "sidebar");
+            Some(ThemeImageDef { key: key.clone(), label, default, group, default_preview, placement })
         })
         .collect()
 }

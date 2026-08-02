@@ -112,7 +112,7 @@ async fn build_customizer(
         crate::models::theme_options::resolve_options(pool, theme_dir, sid, theme_name)
             .await
             .into_iter()
-            .map(|(def, value)| (def.key, def.label, def.group, value))
+            .map(|(def, value)| (def.key, def.label, def.group, value, def.placement))
             .collect()
     } else {
         Vec::new()
@@ -135,7 +135,7 @@ async fn build_customizer(
                         (k.clone(), label)
                     })
                     .collect();
-                (def.key, def.label, def.group, items_in_order)
+                (def.key, def.label, def.group, items_in_order, def.placement)
             })
             .collect()
     } else {
@@ -146,7 +146,7 @@ async fn build_customizer(
         crate::models::theme_options::resolve_choices(pool, theme_dir, sid, theme_name)
             .await
             .into_iter()
-            .map(|(def, value)| (def.key, def.label, def.group, def.choices, value))
+            .map(|(def, value)| (def.key, def.label, def.group, def.choices, value, def.placement))
             .collect()
     } else {
         Vec::new()
@@ -156,7 +156,7 @@ async fn build_customizer(
         crate::models::theme_options::resolve_texts(pool, theme_dir, sid, theme_name)
             .await
             .into_iter()
-            .map(|(def, value)| (def.key, def.label, def.group, value))
+            .map(|(def, value)| (def.key, def.label, def.group, value, def.placement))
             .collect()
     } else {
         Vec::new()
@@ -169,7 +169,7 @@ async fn build_customizer(
             .map(|(def, value)| {
                 let default_preview = def.default_preview.clone().unwrap_or_default();
                 let preview_url = if !value.is_empty() { value.clone() } else { default_preview.clone() };
-                (def.key, def.label, def.group, value, preview_url, default_preview)
+                (def.key, def.label, def.group, value, preview_url, default_preview, def.placement)
             })
             .collect()
     } else {
