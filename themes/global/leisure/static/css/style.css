@@ -588,7 +588,11 @@ img { max-width: 100%; height: auto; display: block; }
   margin: 0 0 1rem;
 }
 
-.sidebar-search-form { flex-direction: column; max-width: none; margin: 0; }
+/* .search-form's own margin: 0 auto 3rem (below, for the standalone /search
+   page) has equal specificity and comes later in the file, so it was
+   winning over this plain-class override and leaving a large gap under the
+   sidebar's Search button. Bump specificity so this always wins instead. */
+.sidebar-widget .sidebar-search-form.search-form { flex-direction: column; max-width: none; margin: 0; }
 
 .sidebar-empty {
   color: var(--muted);
@@ -1195,12 +1199,23 @@ img { max-width: 100%; height: auto; display: block; }
   margin-top: 5rem;
 }
 
+/* Flex, not a fixed-column grid — the footer's sections (brand/navigation/
+   updates) are user-reorderable and any of them can be hidden, so a fixed
+   grid-template-columns would leave an empty track (and everything after it
+   visually off-center) whenever a section is missing. flex-basis lets
+   whichever sections are actually present reflow to fill the row. */
 .footer-inner {
-  display: grid;
-  grid-template-columns: 2fr 1fr 1fr;
+  display: flex;
+  flex-wrap: wrap;
   gap: 3rem;
   margin-bottom: 2.5rem;
 }
+
+/* flex-grow: 0 — columns sit at their own width left-to-right instead of
+   stretching to fill the row, so removing/reordering a section doesn't pull
+   the remaining ones apart to redistribute the freed-up space. */
+.footer-brand { flex: 0 1 280px; }
+.footer-col { flex: 0 1 200px; }
 
 .footer-brand .site-title {
   font-size: 1.375rem;
@@ -1265,6 +1280,10 @@ img { max-width: 100%; height: auto; display: block; }
   color: rgba(255,255,255,0.4);
 }
 
+.footer-bottom.footer-align-left { text-align: left; }
+.footer-bottom.footer-align-center { text-align: center; }
+.footer-bottom.footer-align-right { text-align: right; }
+
 /* ── Cookie banner ── */
 .cookie-banner {
   display: none;
@@ -1320,11 +1339,7 @@ img { max-width: 100%; height: auto; display: block; }
   .hero h1 { font-size: 2.5rem; }
   .post-title { font-size: 2rem; }
 
-  .footer-inner {
-    grid-template-columns: 1fr 1fr;
-  }
-
-  .footer-brand { grid-column: 1 / -1; }
+  .footer-brand { flex-basis: 100%; }
 }
 
 @media (max-width: 640px) {
@@ -1393,7 +1408,8 @@ img { max-width: 100%; height: auto; display: block; }
 
   .post-grid { grid-template-columns: 1fr; }
 
-  .footer-inner { grid-template-columns: 1fr; gap: 2rem; }
+  .footer-inner { gap: 2rem; }
+  .footer-brand, .footer-col { flex-basis: 100%; }
 
   .post-nav { flex-direction: column; }
   .post-nav-prev, .post-nav-next { max-width: 100%; }

@@ -422,21 +422,20 @@ fn render_customizer_landing(theme_name: &str, source: &str, data: &CustomizerDa
         }).collect()
     };
 
-    // Reorderable option groups: up/down buttons (JS swaps the <li> and
-    // rewrites the hidden input's comma-joined value, then dispatches a
-    // bubbling 'change' event so the group's shared save button reacts to it
-    // exactly like any other field). Drag-and-drop is a planned upgrade —
-    // arrows are enough for the proof of concept.
+    // Reorderable option groups: drag handle (JS reorders the <li> live on
+    // dragover, then rewrites the hidden input's comma-joined value and
+    // dispatches a bubbling 'change' event on dragend so the group's shared
+    // save button reacts to it exactly like any other field) — same pattern
+    // as the menu editor's item reordering, minus the parent/child nesting
+    // and the separate auto-save endpoint (this reuses the customizer's
+    // existing dirty-check + Save button flow instead).
     let render_order_section = |entries: &[&(String, String, String, Vec<(String, String)>, String)]| -> String {
         entries.iter().map(|(key, label, _, items, _)| {
             let item_rows: String = items.iter().map(|(item_key, item_label)| {
                 format!(
                     r#"<li class="customizer-order-row" data-key="{item_key}">
+  <span class="drag-handle" title="Drag to reorder" draggable="true"><img src="/admin/static/icons/move.svg" alt=""></span>
   <span>{item_label}</span>
-  <div class="customizer-order-buttons">
-    <button type="button" class="btn btn-sm btn-secondary btn-order-up" aria-label="Move up">&#9650;</button>
-    <button type="button" class="btn btn-sm btn-secondary btn-order-down" aria-label="Move down">&#9660;</button>
-  </div>
 </li>"#,
                     item_key = crate::html_escape(item_key),
                     item_label = crate::html_escape(item_label),
@@ -624,23 +623,37 @@ fn render_customizer_landing(theme_name: &str, source: &str, data: &CustomizerDa
   document.querySelectorAll('.customizer-order-list').forEach(function(list) {
     var hidden = document.getElementById(list.dataset.inputId);
     if (!hidden) return;
+    var dragEl = null;
+
     function update() {
       var keys = Array.from(list.querySelectorAll('li')).map(function(li) { return li.dataset.key; });
       hidden.value = keys.join(',');
       hidden.dispatchEvent(new Event('change', { bubbles: true }));
     }
-    list.addEventListener('click', function(e) {
-      var actionBtn = e.target.closest('button');
-      if (!actionBtn) return;
-      var li = actionBtn.closest('li');
-      if (actionBtn.classList.contains('btn-order-up')) {
-        var prev = li.previousElementSibling;
-        if (prev) list.insertBefore(li, prev);
-      } else if (actionBtn.classList.contains('btn-order-down')) {
-        var next = li.nextElementSibling;
-        if (next) list.insertBefore(next, li);
-      }
-      update();
+
+    list.querySelectorAll('li').forEach(function(li) {
+      var handle = li.querySelector('.drag-handle');
+      if (!handle) return;
+      handle.addEventListener('dragstart', function(e) {
+        dragEl = li;
+        li.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move';
+      });
+      handle.addEventListener('dragend', function() {
+        if (dragEl) dragEl.classList.remove('dragging');
+        dragEl = null;
+        update();
+      });
+    });
+
+    list.addEventListener('dragover', function(e) {
+      if (!dragEl) return;
+      e.preventDefault();
+      var target = e.target.closest('li');
+      if (!target || target === dragEl || target.parentElement !== list) return;
+      var rect = target.getBoundingClientRect();
+      var after = (e.clientY - rect.top) / rect.height > 0.5;
+      list.insertBefore(dragEl, after ? target.nextSibling : target);
     });
   });
 })();

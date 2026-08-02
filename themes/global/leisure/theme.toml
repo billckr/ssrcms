@@ -76,3 +76,47 @@ group   = "Layout Options"
 [customizer.options.nav_dropdown_trigger.choices]
 hover = "Hover to open"
 click = "Click to open"
+
+[customizer.options.footer_section_order]
+type    = "order"
+default = ["brand", "navigation", "updates"]
+label   = "Footer section order (left to right)"
+group   = "Footer"
+
+[customizer.options.footer_section_order.items]
+brand      = "Site Name & Description"
+navigation = "Navigation"
+updates    = "Stay Updated"
+
+[customizer.options.show_footer_updates]
+type    = "bool"
+default = true
+label   = "Show \"Stay Updated\" section in footer"
+group   = "Footer"
+
+[customizer.options.footer_updates_order]
+type    = "order"
+default = ["newsletter", "rss"]
+label   = "Newsletter / RSS order"
+group   = "Footer"
+
+[customizer.options.footer_updates_order.items]
+newsletter = "Newsletter"
+rss        = "RSS Feed"
+
+[customizer.options.footer_copyright_align]
+type    = "choice"
+default = "center"
+label   = "Copyright alignment"
+group   = "Footer"
+
+[customizer.options.footer_copyright_align.choices]
+left   = "Left"
+center = "Center"
+right  = "Right"
+
+[customizer.options.footer_copyright_text]
+type    = "text"
+default = ""
+label   = "Custom copyright text (leave blank for © site name)"
+group   = "Footer"

@@ -87,7 +87,7 @@ pub async fn create(
         return Redirect::to("/admin").into_response();
     }
 
-    let Some(name) = clean_text(&form.name, 100) else {
+    let Some(name) = clean_text(&form.name, 1, 100) else {
         return Redirect::to("/admin/menus").into_response();
     };
     let location = if form.location.is_empty() { None } else { Some(form.location.as_str()) };
@@ -185,7 +185,7 @@ pub async fn update(
         return Redirect::to("/admin/menus").into_response();
     }
 
-    let Some(name) = clean_text(&form.name, 100) else {
+    let Some(name) = clean_text(&form.name, 1, 100) else {
         return Redirect::to(&format!("/admin/menus/{}", id)).into_response();
     };
     let location = if form.location.is_empty() { None } else { Some(form.location.as_str()) };
@@ -267,7 +267,7 @@ pub async fn add_item(
         return Redirect::to("/admin/menus").into_response();
     }
 
-    let Some(label) = clean_text(&form.label, 100) else {
+    let Some(label) = clean_text(&form.label, 2, 25) else {
         return Redirect::to(&format!("/admin/menus/{}", id)).into_response();
     };
     let page_id: Option<Uuid> = form.page_id.parse().ok();
@@ -323,7 +323,7 @@ pub async fn edit_item(
         return Redirect::to("/admin/menus").into_response();
     }
 
-    let Some(label) = clean_text(&form.label, 100) else {
+    let Some(label) = clean_text(&form.label, 2, 25) else {
         return Redirect::to(&format!("/admin/menus/{}", menu_id)).into_response();
     };
     let page_id: Option<Uuid> = form.page_id.parse().ok();
@@ -420,25 +420,45 @@ fn is_unique_violation(err: &crate::errors::AppError) -> bool {
 // ── Sanitisation ─────────────────────────────────────────────────────────────
 
 /// Trim and cap a text field. Returns `None` when the result is empty.
-fn clean_text(s: &str, max_len: usize) -> Option<String> {
+fn clean_text(s: &str, min_len: usize, max_len: usize) -> Option<String> {
     let s = s.trim();
-    if s.is_empty() { return None; }
+    if s.chars().count() < min_len { return None; }
     Some(s.chars().take(max_len).collect())
 }
 
+/// Whether `rest` (the part of a URL after `http://`/`https://`) starts with
+/// a real host containing a TLD, e.g. "example.com" or "example.com/path" —
+/// rejects a bare word like "k" with no dot, same standard a person reading
+/// the URL would expect.
+fn has_valid_host(rest: &str) -> bool {
+    let host = rest.split('/').next().unwrap_or("");
+    match host.find('.') {
+        Some(pos) => pos > 0 && pos < host.len() - 1,
+        None => false,
+    }
+}
+
 /// Validate and normalise a menu item URL.
-/// Accepts relative paths (`/…`) and absolute `http(s)://` and `mailto:` URLs.
-/// Rejects `javascript:`, `data:`, and any other scheme.
-/// Returns `None` for empty input (meaning "no custom URL").
+/// Accepts relative paths (`/…`, root `/` included) and absolute `http(s)://`
+/// URLs with a real host + TLD (e.g. `https://example.com`) and `mailto:`
+/// URLs with something after the scheme. A bare `"https://"` or a host with
+/// no TLD like `"https://k"` is rejected, not silently accepted as a broken
+/// link. Rejects `javascript:`, `data:`, and any other scheme.
+/// Returns `None` for empty (or invalid) input, meaning "no custom URL".
 fn clean_url(s: &str) -> Option<String> {
     let s = s.trim();
     if s.is_empty() { return None; }
     let lower = s.to_ascii_lowercase();
-    let allowed = lower.starts_with('/')
-        || lower.starts_with("http://")
-        || lower.starts_with("https://")
-        || lower.starts_with("mailto:");
-    if !allowed { return None; }
+    let valid = if lower.starts_with('/') {
+        true
+    } else if let Some(rest) = lower.strip_prefix("http://").or_else(|| lower.strip_prefix("https://")) {
+        has_valid_host(rest)
+    } else if let Some(rest) = lower.strip_prefix("mailto:") {
+        !rest.is_empty()
+    } else {
+        false
+    };
+    if !valid { return None; }
     Some(s.chars().take(500).collect())
 }
 

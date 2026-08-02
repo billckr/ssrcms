@@ -211,6 +211,9 @@ pub fn render_edit(
                     }).collect();
 
                 let parent_attr = i.parent_id.as_deref().unwrap_or("");
+                let is_label_only = i.url.is_none() && i.page_id.is_none();
+                let label_only_checked = if is_label_only { " checked" } else { "" };
+                let url_disabled = if is_label_only { " disabled" } else { "" };
 
                 format!(
                     r#"<div class="menu-item-group" data-item-id="{item_id}" data-parent-id="{parent_attr}">
@@ -238,13 +241,13 @@ pub fn render_edit(
   <input type="checkbox" id="edit-toggle-{item_id}" class="menu-item-toggle" style="display:none">
   <div class="menu-item-card__form">
     <form method="POST" action="/admin/menus/{menu_id}/items/{item_id}/edit" class="js-menu-item-form">
-      <div class="form-row">
-        <div class="form-group">
+      <div class="form-stack">
+        <div class="form-group" style="margin:0">
           <label>Label</label>
-          <input type="text" name="label" value="{label_val}" required maxlength="100">
-          <span class="form-hint char-count item-label-count">{label_len}/100</span>
+          <input type="text" name="label" value="{label_val}" required minlength="2" maxlength="25">
+          <span class="form-hint char-count item-label-count">{label_len}/25</span>
         </div>
-        <div class="form-group">
+        <div class="form-group" style="margin:0">
           <label>Target</label>
           <select name="target">{target_opts}</select>
         </div>
@@ -256,8 +259,12 @@ pub fn render_edit(
         </div>
         <div class="form-group" style="margin:0">
           <label>Custom URL</label>
-          <span class="form-hint form-hint-block">optional, for label-only items leave blank</span>
-          <input type="text" name="url" value="{url_val}" placeholder="/about or https://…" maxlength="500">
+          <label class="switch-toggle" style="margin:.35rem 0 .5rem">
+            <input type="checkbox" class="label-only-toggle"{label_only_checked}>
+            <span class="switch-slider"></span>
+            <span>Label only (no link)</span>
+          </label>
+          <input type="text" name="url" value="{url_val}" placeholder="/about or https://…" maxlength="500"{url_disabled}>
           <span class="field-error field-error-url">Enter a path starting with / or a full http(s):// URL</span>
         </div>
       </div>
@@ -289,6 +296,8 @@ pub fn render_edit(
                     label_val        = crate::html_escape(&i.label),
                     label_len        = i.label.chars().count(),
                     url_val          = crate::html_escape(i.url.as_deref().unwrap_or("")),
+                    label_only_checked = label_only_checked,
+                    url_disabled     = url_disabled,
                     sort_order       = i.sort_order,
                     page_opts        = page_opts,
                     parent_opts      = parent_opts,
@@ -393,18 +402,6 @@ pub fn render_edit(
   background: var(--card-bg, #fff);
   gap: .65rem;
 }}
-.drag-handle {{
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  width: 20px;
-  height: 20px;
-  cursor: grab;
-  opacity: .5;
-}}
-.drag-handle:hover {{ opacity: .9; }}
-.drag-handle img {{ width: 16px; height: 16px; }}
 .menu-item-group.dragging > .menu-item-card {{ opacity: .4; }}
 .menu-item-card__info {{
   display: flex;
@@ -496,11 +493,11 @@ pub fn render_edit(
   <div class="card-boxed-body">
     <p class="form-note">To create a dropdown parent (a menu heading that reveals sub-items), give it a Label and leave both Page and Custom URL blank — then add its sub-items with this one set as their Parent item.</p>
     <form method="POST" action="/admin/menus/{menu_id}/items/new" class="js-menu-item-form">
-      <div class="form-row">
+      <div class="form-stack">
         <div class="form-group" style="margin:0">
           <label>Label</label>
-          <input type="text" name="label" required placeholder="e.g. Home" maxlength="100">
-          <span class="form-hint char-count item-label-count">0/100</span>
+          <input type="text" name="label" required minlength="2" placeholder="e.g. Home" maxlength="25">
+          <span class="form-hint char-count item-label-count">0/25</span>
         </div>
         <div class="form-group" style="margin:0">
           <label>Target</label>
@@ -517,7 +514,11 @@ pub fn render_edit(
         </div>
         <div class="form-group" style="margin:0">
           <label>Custom URL</label>
-          <span class="form-hint form-hint-block">optional, for label-only items leave blank</span>
+          <label class="switch-toggle" style="margin:.35rem 0 .5rem">
+            <input type="checkbox" class="label-only-toggle">
+            <span class="switch-slider"></span>
+            <span>Label only (no link)</span>
+          </label>
           <input type="text" name="url" placeholder="/about or https://…" maxlength="500">
           <span class="field-error field-error-url">Enter a path starting with / or a full http(s):// URL</span>
         </div>
@@ -542,24 +543,35 @@ pub fn render_edit(
 (function() {{
   function isValidUrl(v) {{
     if (!v) return true;
-    return /^(\/|https?:\/\/)\S*$/.test(v);
+    // http(s) requires a real host with a TLD (e.g. example.com) — bare
+    // "https://" or a single word like "https://k" isn't a usable URL.
+    return /^(\/\S*|https?:\/\/[^\s\/]+\.[^\s\/]+(\/\S*)?|mailto:\S+)$/.test(v);
   }}
   function bind(form) {{
     var label = form.querySelector('input[name="label"]');
     var url = form.querySelector('input[name="url"]');
+    var labelOnlyToggle = form.querySelector('.label-only-toggle');
     var submitBtn = form.querySelector('button[type="submit"]');
     var urlError = form.querySelector('.field-error-url');
     var labelCount = form.querySelector('.item-label-count');
     function update() {{
-      var labelValid = label.value.trim().length > 0;
-      var urlValid = isValidUrl(url.value.trim());
+      var labelValid = label.value.trim().length >= 2;
+      var urlValid = url.disabled || isValidUrl(url.value.trim());
       if (urlError) urlError.style.display = urlValid ? 'none' : 'block';
-      if (labelCount) labelCount.textContent = label.value.length + '/100';
+      if (labelCount) labelCount.textContent = label.value.length + '/25';
       url.classList.toggle('field-invalid', !urlValid);
       submitBtn.disabled = !(labelValid && urlValid);
     }}
     label.addEventListener('input', update);
     url.addEventListener('input', update);
+    if (labelOnlyToggle) {{
+      labelOnlyToggle.addEventListener('change', function() {{
+        url.disabled = labelOnlyToggle.checked;
+        if (labelOnlyToggle.checked) url.value = '';
+        update();
+      }});
+      url.disabled = labelOnlyToggle.checked;
+    }}
     update();
   }}
   document.querySelectorAll('.js-menu-item-form').forEach(bind);

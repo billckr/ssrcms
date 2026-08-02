@@ -135,49 +135,66 @@
   <footer class="site-footer">
     <div class="container">
       <div class="footer-inner">
-        <div class="footer-brand">
-          <a class="site-title" href="/">{{ site.name }}</a>
-          <p>{{ site.description }}</p>
-        </div>
-        {% if nav.footer.items | length > 0 %}
-        <div class="footer-col">
-          <h4>Navigation</h4>
-          <ul>
-            {% for item in nav.footer.items %}
-              <li>
-                {% if item.url %}
-                  <a href="{{ item.url }}"{% if item.target == "_blank" %} target="_blank" rel="noopener"{% endif %}>{{ item.label }}</a>
-                {% else %}
-                  <span class="footer-nav-label">{{ item.label }}</span>
-                {% endif %}
-                {% if item.children | length > 0 %}
-                  <ul class="footer-nav-children">
-                    {% for child in item.children %}
-                      <li>
-                        {% if child.url %}
-                          <a href="{{ child.url }}"{% if child.target == "_blank" %} target="_blank" rel="noopener"{% endif %}>{{ child.label }}</a>
-                        {% else %}
-                          <span class="footer-nav-label">{{ child.label }}</span>
-                        {% endif %}
-                      </li>
-                    {% endfor %}
-                  </ul>
-                {% endif %}
-              </li>
-            {% endfor %}
-          </ul>
-        </div>
-        {% endif %}
-        <div class="footer-col">
-          <h4>Stay Updated</h4>
-          <ul>
-            <li><a href="/newsletter">Newsletter</a></li>
-            <li><a href="/feed">RSS Feed</a></li>
-          </ul>
-        </div>
+        {% for section in theme_option_lists.footer_section_order | default(value=["brand", "navigation", "updates"]) %}
+
+          {% if section == "brand" %}
+            <div class="footer-brand">
+              <a class="site-title" href="/">{{ site.name }}</a>
+              <p>{{ site.description }}</p>
+            </div>
+
+          {% elif section == "navigation" and nav.footer.items | length > 0 %}
+            <div class="footer-col">
+              <h4>Navigation</h4>
+              <ul>
+                {% for item in nav.footer.items %}
+                  <li>
+                    {% if item.url %}
+                      <a href="{{ item.url }}"{% if item.target == "_blank" %} target="_blank" rel="noopener"{% endif %}>{{ item.label }}</a>
+                    {% else %}
+                      <span class="footer-nav-label">{{ item.label }}</span>
+                    {% endif %}
+                    {% if item.children | length > 0 %}
+                      <ul class="footer-nav-children">
+                        {% for child in item.children %}
+                          <li>
+                            {% if child.url %}
+                              <a href="{{ child.url }}"{% if child.target == "_blank" %} target="_blank" rel="noopener"{% endif %}>{{ child.label }}</a>
+                            {% else %}
+                              <span class="footer-nav-label">{{ child.label }}</span>
+                            {% endif %}
+                          </li>
+                        {% endfor %}
+                      </ul>
+                    {% endif %}
+                  </li>
+                {% endfor %}
+              </ul>
+            </div>
+
+          {% elif section == "updates" and theme_options.show_footer_updates %}
+            <div class="footer-col">
+              <h4>Stay Updated</h4>
+              <ul>
+                {% for item in theme_option_lists.footer_updates_order | default(value=["newsletter", "rss"]) %}
+                  {% if item == "newsletter" %}
+                    <li><a href="/newsletter">Newsletter</a></li>
+                  {% elif item == "rss" %}
+                    <li><a href="/feed">RSS Feed</a></li>
+                  {% endif %}
+                {% endfor %}
+              </ul>
+            </div>
+          {% endif %}
+
+        {% endfor %}
       </div>
-      <div class="footer-bottom">
-        <p>&copy; {{ site.name }}</p>
+      <div class="footer-bottom footer-align-{{ theme_option_choices.footer_copyright_align | default(value="center") }}">
+        {% if theme_option_texts.footer_copyright_text %}
+          <p>{{ theme_option_texts.footer_copyright_text }}</p>
+        {% else %}
+          <p>&copy; {{ site.name }}</p>
+        {% endif %}
         {{ hook(name="footer") | safe }}
       </div>
     </div>
