@@ -116,12 +116,27 @@ pub async fn get_by_location(
     .await?)
 }
 
+/// Create a new menu. If assigning a location, clears any other menu currently at that
+/// location for the same site first (enforces at-most-one-menu-per-location, matching `update`).
 pub async fn create(
     pool: &PgPool,
     site_id: Uuid,
     name: &str,
     location: Option<&str>,
 ) -> Result<NavMenu> {
+    let location = location.filter(|s| !s.is_empty());
+
+    if let Some(loc) = location {
+        sqlx::query(
+            "UPDATE nav_menus SET location = NULL, updated_at = NOW() \
+             WHERE site_id = $1 AND location = $2",
+        )
+        .bind(site_id)
+        .bind(loc)
+        .execute(pool)
+        .await?;
+    }
+
     let menu = sqlx::query_as::<_, NavMenu>(
         "INSERT INTO nav_menus (site_id, name, location) VALUES ($1, $2, $3) RETURNING *",
     )

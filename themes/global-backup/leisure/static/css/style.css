@@ -127,6 +127,10 @@ img { max-width: 100%; height: auto; display: block; }
   display: flex;
   align-items: center;
   gap: 0.25rem;
+  /* Docks the nav (and header-right, if present) to the right edge even
+     when header-right is empty — otherwise space-between centers the nav
+     in the middle third instead of pushing it flush right. */
+  margin-left: auto;
 }
 
 .nav-links {
@@ -148,10 +152,117 @@ img { max-width: 100%; height: auto; display: block; }
   text-decoration: none;
 }
 
-.nav-links a:hover,
-.nav-links a[aria-current="page"] {
+.nav-links a:hover {
   color: var(--white);
   background: rgba(255,255,255,0.1);
+}
+
+.nav-links a[aria-current="page"] {
+  color: var(--white);
+  background: rgba(255,255,255,0.14);
+  font-weight: 600;
+}
+
+.nav-links a[aria-current="page"]:hover {
+  background: rgba(255,255,255,0.22);
+}
+
+/* ── Header submenu (nav items with children) ── */
+
+.nav-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+/* Standalone caret next to a real link — hidden in hover mode (hovering the
+   item already opens the dropdown), shown in click mode as the click target. */
+.nav-dropdown-caret-only {
+  display: none;
+  background: none;
+  border: none;
+  color: rgba(255,255,255,0.85);
+  cursor: pointer;
+  padding: 0.25rem 0.35rem;
+  font-size: 0.7rem;
+  line-height: 1;
+}
+
+/* Label-only item (no item.url) with children — whole label is the click
+   target in click mode, plain text in hover mode. */
+.nav-dropdown-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  background: none;
+  border: none;
+  color: rgba(255,255,255,0.85);
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 0.5rem 0.85rem;
+  border-radius: var(--radius);
+}
+
+.nav-dropdown-label:hover {
+  color: var(--white);
+  background: rgba(255,255,255,0.1);
+}
+
+.nav-dropdown-caret {
+  font-size: 0.65rem;
+  opacity: 0.85;
+}
+
+.nav-item-label-only {
+  padding: 0.5rem 0.85rem;
+  color: rgba(255,255,255,0.85);
+  cursor: default;
+}
+
+.nav-dropdown-label-only {
+  display: block;
+  padding: 0.5rem 0.75rem;
+  color: rgba(255,255,255,0.5);
+  cursor: default;
+  white-space: nowrap;
+}
+
+.nav-dropdown {
+  display: none;
+  position: absolute;
+  /* No margin-top: a gap there is a dead zone between the parent item and
+     the dropdown, breaking :hover continuity. padding-top gives the same
+     visual space without leaving the hoverable box. */
+  top: 100%;
+  left: 0;
+  min-width: 180px;
+  padding: 0.4rem 0.2rem 0.2rem;
+  background: var(--navy);
+  border-radius: 5px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.25);
+  list-style: none;
+  z-index: 10;
+}
+
+.nav-dropdown a {
+  display: block;
+  padding: 0.5rem 0.75rem;
+  white-space: nowrap;
+}
+
+/* Hover mode (default): whole item reveals its dropdown on hover. */
+.site-nav:not(.nav-trigger-click) .nav-item.has-children:hover > .nav-dropdown {
+  display: block;
+}
+
+/* Click mode: caret/label toggles an .open class via inline script. */
+.site-nav.nav-trigger-click .nav-dropdown-caret-only {
+  display: inline-flex;
+}
+
+.site-nav.nav-trigger-click .nav-item.open > .nav-dropdown {
+  display: block;
 }
 
 /* ── Header right: search + user bar ── */
@@ -1231,6 +1342,31 @@ img { max-width: 100%; height: auto; display: block; }
   .site-nav {
     order: 3;
     width: 100%;
+  }
+
+  /* Nav already wraps to full width on mobile with no separate hamburger
+     gate, so hover/click submenu behavior would just be confusing — always
+     show children inline instead. */
+  .nav-item {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .nav-dropdown-caret-only {
+    display: none !important;
+  }
+
+  .nav-dropdown-label {
+    cursor: default;
+  }
+
+  .nav-dropdown {
+    display: block !important;
+    position: static;
+    margin: 0 0 0 1rem;
+    padding: 0;
+    background: none;
+    box-shadow: none;
   }
 
   .header-search {

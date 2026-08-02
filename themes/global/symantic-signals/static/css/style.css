@@ -81,9 +81,22 @@ body {
   transition: background-color 0.2s;
 }
 
-.nav-links a:hover,
-.nav-links a[aria-current="page"] {
+.nav-links a:hover {
   background-color: rgba(255, 255, 255, 0.2);
+}
+
+/* Current-page marker uses its own (lighter) shade rather than reusing the
+   hover color — sharing one color meant that once you'd navigated to a
+   sub-item's page, it (and any sibling pointing at the same page) sat
+   permanently at the "hovered" shade, so hovering it again produced no
+   visible change at all. */
+.nav-links a[aria-current="page"] {
+  background-color: rgba(255, 255, 255, 0.12);
+  font-weight: 700;
+}
+
+.nav-links a[aria-current="page"]:hover {
+  background-color: rgba(255, 255, 255, 0.28);
 }
 
 /* --- Header submenu (nav items with children) --- */
@@ -162,9 +175,9 @@ body {
   top: 100%;
   left: 0;
   min-width: 180px;
-  padding: 0.75rem 0.4rem 0.4rem;
+  padding: 0.4rem 0.2rem 0.2rem;
   background: var(--color-header-background);
-  border-radius: 8px;
+  border-radius: 5px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
   list-style: none;
   z-index: 10;

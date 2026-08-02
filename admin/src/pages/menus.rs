@@ -102,12 +102,21 @@ pub fn render_list(menus: &[MenuRow], ctx: &crate::PageContext) -> String {
             <label for="new-menu-location">Location</label>
             <select id="new-menu-location" name="location">{location_opts}</select>
           </div>
-          <button type="submit" class="btn btn-primary">Create Menu</button>
+          <button type="submit" class="btn btn-primary" id="create-menu-submit" disabled>Create Menu</button>
         </form>
       </div>
     </div>
   </div>
-</div>"#,
+</div>
+<script>
+(function() {{
+  var nameInput = document.getElementById('new-menu-name');
+  var submitBtn = document.getElementById('create-menu-submit');
+  function update() {{ submitBtn.disabled = nameInput.value.trim().length === 0; }}
+  nameInput.addEventListener('input', update);
+  update();
+}})();
+</script>"#,
         location_opts = location_opts,
         rows          = rows,
     );
@@ -143,12 +152,15 @@ pub fn render_edit(
         items.iter()
             .filter(|i| i.parent_id.as_deref() == parent_id)
             .map(|i| {
+                let has_children = items.iter().any(|c| c.parent_id.as_deref() == Some(i.id.as_str()));
                 let dest = if let Some(ref pt) = i.page_title {
                     format!("Page: {}", crate::html_escape(pt))
                 } else if let Some(ref url) = i.url {
                     crate::html_escape(url)
+                } else if has_children {
+                    "Dropdown parent (no link)".to_string()
                 } else {
-                    "No link (label only)".to_string()
+                    "No link".to_string()
                 };
                 let target_badge = if i.target == "_blank" {
                     r#"<span class="badge" style="margin-left:.4rem">new tab</span>"#
@@ -156,7 +168,7 @@ pub fn render_edit(
                 let depth_indicator = "— ".repeat(depth);
                 let children = render_items(items, pages, Some(&i.id), menu_id, depth + 1);
 
-                let page_opts: String = std::iter::once(("".to_string(), "— Custom URL (or leave blank) —".to_string()))
+                let page_opts: String = std::iter::once(("".to_string(), "Select Page".to_string()))
                     .chain(pages.iter().map(|(id, title)| (id.to_string(), title.clone())))
                     .map(|(pid, ptitle)| {
                         let sel = if i.page_id.as_deref() == Some(&pid) { " selected" } else { "" };
@@ -202,7 +214,7 @@ pub fn render_edit(
   </div>
   <input type="checkbox" id="edit-toggle-{item_id}" class="menu-item-toggle" style="display:none">
   <div class="menu-item-card__form">
-    <form method="POST" action="/admin/menus/{menu_id}/items/{item_id}/edit">
+    <form method="POST" action="/admin/menus/{menu_id}/items/{item_id}/edit" class="js-menu-item-form">
       <div class="form-row">
         <div class="form-group">
           <label>Label</label>
@@ -213,14 +225,16 @@ pub fn render_edit(
           <select name="target">{target_opts}</select>
         </div>
       </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label>Page <span class="form-hint">overrides URL when selected</span></label>
+      <div class="form-stack">
+        <div class="form-group" style="margin:0">
+          <label>Page</label>
           <select name="page_id">{page_opts}</select>
         </div>
-        <div class="form-group">
-          <label>Custom URL <span class="form-hint">leave Page and URL both blank for a label-only item — a dropdown parent that isn't itself clickable</span></label>
+        <div class="form-group" style="margin:0">
+          <label>Custom URL</label>
+          <span class="form-hint form-hint-block">optional, for label-only items leave blank</span>
           <input type="text" name="url" value="{url_val}" placeholder="/about or https://…">
+          <span class="field-error field-error-url">Enter a path starting with / or a full http(s):// URL</span>
         </div>
       </div>
       <div class="form-row">
@@ -267,7 +281,7 @@ pub fn render_edit(
     };
 
     // Add item form
-    let page_opts_add: String = std::iter::once(("".to_string(), "— Custom URL (or leave blank) —".to_string()))
+    let page_opts_add: String = std::iter::once(("".to_string(), "Select Page".to_string()))
         .chain(pages.iter().map(|(id, title)| (id.to_string(), title.clone())))
         .map(|(pid, ptitle)| {
             format!(r#"<option value="{pid}">{ptitle}</option>"#,
@@ -294,6 +308,17 @@ pub fn render_edit(
   margin-bottom: .75rem;
 }}
 .form-row .form-group {{ margin: 0; }}
+.form-stack {{
+  display: flex;
+  flex-direction: column;
+  gap: .75rem;
+  margin-bottom: .75rem;
+  max-width: 260px;
+}}
+.form-hint-block {{
+  display: block;
+  margin: .1rem 0 .35rem;
+}}
 .form-hint {{
   font-size: 11px;
   color: var(--muted);
@@ -307,6 +332,13 @@ pub fn render_edit(
   padding-top: .75rem;
 }}
 .btn-sm {{ font-size: 12px; padding: .2rem .6rem; }}
+.field-error {{
+  display: none;
+  color: var(--danger, #c0392b);
+  font-size: 11px;
+  margin-top: .25rem;
+}}
+.field-invalid {{ border-color: var(--danger, #c0392b) !important; }}
 .menu-item-list {{
   border: 1px solid var(--border);
   border-radius: var(--radius, 6px);
@@ -392,7 +424,8 @@ pub fn render_edit(
 <div class="card-boxed">
   <h2 class="card-boxed-header">Add Item</h2>
   <div class="card-boxed-body">
-    <form method="POST" action="/admin/menus/{menu_id}/items/new">
+    <p class="form-note">To create a dropdown parent (a menu heading that reveals sub-items), give it a Label and leave both Page and Custom URL blank — then add its sub-items with this one set as their Parent item.</p>
+    <form method="POST" action="/admin/menus/{menu_id}/items/new" class="js-menu-item-form">
       <div class="form-row">
         <div class="form-group" style="margin:0">
           <label>Label</label>
@@ -406,14 +439,16 @@ pub fn render_edit(
           </select>
         </div>
       </div>
-      <div class="form-row">
+      <div class="form-stack">
         <div class="form-group" style="margin:0">
-          <label>Page <span class="form-hint">overrides URL when selected</span></label>
+          <label>Page</label>
           <select name="page_id">{page_opts_add}</select>
         </div>
         <div class="form-group" style="margin:0">
-          <label>Custom URL <span class="form-hint">leave Page and URL both blank for a label-only item — a dropdown parent that isn't itself clickable</span></label>
+          <label>Custom URL</label>
+          <span class="form-hint form-hint-block">optional, for label-only items leave blank</span>
           <input type="text" name="url" placeholder="/about or https://…">
+          <span class="field-error field-error-url">Enter a path starting with / or a full http(s):// URL</span>
         </div>
       </div>
       <div class="form-row">
@@ -431,7 +466,32 @@ pub fn render_edit(
       </div>
     </form>
   </div>
-</div>"#,
+</div>
+<script>
+(function() {{
+  function isValidUrl(v) {{
+    if (!v) return true;
+    return /^(\/|https?:\/\/)\S*$/.test(v);
+  }}
+  function bind(form) {{
+    var label = form.querySelector('input[name="label"]');
+    var url = form.querySelector('input[name="url"]');
+    var submitBtn = form.querySelector('button[type="submit"]');
+    var urlError = form.querySelector('.field-error-url');
+    function update() {{
+      var labelValid = label.value.trim().length > 0;
+      var urlValid = isValidUrl(url.value.trim());
+      if (urlError) urlError.style.display = urlValid ? 'none' : 'block';
+      url.classList.toggle('field-invalid', !urlValid);
+      submitBtn.disabled = !(labelValid && urlValid);
+    }}
+    label.addEventListener('input', update);
+    url.addEventListener('input', update);
+    update();
+  }}
+  document.querySelectorAll('.js-menu-item-form').forEach(bind);
+}})();
+</script>"#,
 
         menu_id         = crate::html_escape(&menu.id),
         menu_name       = crate::html_escape(&menu.name),
