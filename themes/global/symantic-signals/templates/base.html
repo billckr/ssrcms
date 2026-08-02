@@ -44,14 +44,39 @@
   {{ hook(name="body_start") | safe }}
 
   <header class="site-header">
-    <nav class="site-nav">
+    <nav class="site-nav{% if theme_option_choices.nav_dropdown_trigger == "click" %} nav-trigger-click{% endif %}">
       <a class="site-title" href="/">{{ site.name }}</a>
       <button class="nav-toggle" type="button" aria-label="Toggle navigation" aria-expanded="false" onclick="const n=this.closest('.site-nav');n.classList.toggle('nav-open');this.setAttribute('aria-expanded', n.classList.contains('nav-open'));">
         <span></span><span></span><span></span>
       </button>
       <ul class="nav-links">
         {% for item in nav.primary.items %}
-          <li><a href="{{ item.url }}"{% if item.target == "_blank" %} target="_blank" rel="noopener"{% endif %}{% if item.is_current %} aria-current="page"{% endif %}>{{ item.label }}</a></li>
+          <li class="nav-item{% if item.children | length > 0 %} has-children{% endif %}">
+            {% if item.url %}
+              <a href="{{ item.url }}"{% if item.target == "_blank" %} target="_blank" rel="noopener"{% endif %}{% if item.is_current %} aria-current="page"{% endif %}>{{ item.label }}</a>
+              {% if item.children | length > 0 %}
+                <button type="button" class="nav-dropdown-toggle nav-dropdown-caret-only" aria-label="Toggle submenu" aria-expanded="false">&#9662;</button>
+              {% endif %}
+            {% elif item.children | length > 0 %}
+              {# No page/URL set — a label-only parent that exists purely to hold a dropdown. Not a link: clicking it does nothing on its own except (in click mode) toggle the submenu. #}
+              <button type="button" class="nav-dropdown-toggle nav-dropdown-label" aria-haspopup="true" aria-expanded="false">{{ item.label }} <span class="nav-dropdown-caret">&#9662;</span></button>
+            {% else %}
+              <span class="nav-item-label-only">{{ item.label }}</span>
+            {% endif %}
+            {% if item.children | length > 0 %}
+              <ul class="nav-dropdown">
+                {% for child in item.children %}
+                  <li>
+                    {% if child.url %}
+                      <a href="{{ child.url }}"{% if child.target == "_blank" %} target="_blank" rel="noopener"{% endif %}{% if child.is_current %} aria-current="page"{% endif %}>{{ child.label }}</a>
+                    {% else %}
+                      <span class="nav-dropdown-label-only">{{ child.label }}</span>
+                    {% endif %}
+                  </li>
+                {% endfor %}
+              </ul>
+            {% endif %}
+          </li>
         {% endfor %}
       </ul>
       {% if session.is_logged_in %}
@@ -61,6 +86,27 @@
       {% endif %}
     </nav>
   </header>
+  <script>
+  (function() {
+    document.querySelectorAll('.nav-dropdown-toggle').forEach(function(btn) {
+      btn.addEventListener('click', function(e) {
+        e.preventDefault();
+        var li = btn.closest('.nav-item');
+        var isOpen = li.classList.contains('open');
+        document.querySelectorAll('.nav-item.open').forEach(function(open) {
+          if (open !== li) { open.classList.remove('open'); }
+        });
+        li.classList.toggle('open', !isOpen);
+        btn.setAttribute('aria-expanded', String(!isOpen));
+      });
+    });
+    document.addEventListener('click', function(e) {
+      if (!e.target.closest('.nav-item')) {
+        document.querySelectorAll('.nav-item.open').forEach(function(li) { li.classList.remove('open'); });
+      }
+    });
+  })();
+  </script>
 
   <main class="site-main">
     {{ hook(name="before_content") | safe }}

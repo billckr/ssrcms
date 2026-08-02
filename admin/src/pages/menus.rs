@@ -148,7 +148,7 @@ pub fn render_edit(
                 } else if let Some(ref url) = i.url {
                     crate::html_escape(url)
                 } else {
-                    "—".to_string()
+                    "No link (label only)".to_string()
                 };
                 let target_badge = if i.target == "_blank" {
                     r#"<span class="badge" style="margin-left:.4rem">new tab</span>"#
@@ -156,7 +156,7 @@ pub fn render_edit(
                 let depth_indicator = "— ".repeat(depth);
                 let children = render_items(items, pages, Some(&i.id), menu_id, depth + 1);
 
-                let page_opts: String = std::iter::once(("".to_string(), "— Custom URL —".to_string()))
+                let page_opts: String = std::iter::once(("".to_string(), "— Custom URL (or leave blank) —".to_string()))
                     .chain(pages.iter().map(|(id, title)| (id.to_string(), title.clone())))
                     .map(|(pid, ptitle)| {
                         let sel = if i.page_id.as_deref() == Some(&pid) { " selected" } else { "" };
@@ -219,7 +219,7 @@ pub fn render_edit(
           <select name="page_id">{page_opts}</select>
         </div>
         <div class="form-group">
-          <label>Custom URL <span class="form-hint">used when no page selected</span></label>
+          <label>Custom URL <span class="form-hint">leave Page and URL both blank for a label-only item — a dropdown parent that isn't itself clickable</span></label>
           <input type="text" name="url" value="{url_val}" placeholder="/about or https://…">
         </div>
       </div>
@@ -267,7 +267,7 @@ pub fn render_edit(
     };
 
     // Add item form
-    let page_opts_add: String = std::iter::once(("".to_string(), "— Custom URL —".to_string()))
+    let page_opts_add: String = std::iter::once(("".to_string(), "— Custom URL (or leave blank) —".to_string()))
         .chain(pages.iter().map(|(id, title)| (id.to_string(), title.clone())))
         .map(|(pid, ptitle)| {
             format!(r#"<option value="{pid}">{ptitle}</option>"#,
@@ -412,7 +412,7 @@ pub fn render_edit(
           <select name="page_id">{page_opts_add}</select>
         </div>
         <div class="form-group" style="margin:0">
-          <label>Custom URL <span class="form-hint">used when no page selected</span></label>
+          <label>Custom URL <span class="form-hint">leave Page and URL both blank for a label-only item — a dropdown parent that isn't itself clickable</span></label>
           <input type="text" name="url" placeholder="/about or https://…">
         </div>
       </div>

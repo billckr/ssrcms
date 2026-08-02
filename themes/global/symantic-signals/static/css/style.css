@@ -69,6 +69,7 @@ body {
   display: flex;
   list-style: none;
   gap: 2rem;
+  margin-left: auto;
 }
 
 .nav-links a {
@@ -83,6 +84,112 @@ body {
 .nav-links a:hover,
 .nav-links a[aria-current="page"] {
   background-color: rgba(255, 255, 255, 0.2);
+}
+
+/* --- Header submenu (nav items with children) --- */
+
+.nav-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+/* The standalone caret shown next to a real link (item.url set) — hidden in
+   hover mode since hovering the item already opens the dropdown; shown in
+   click mode as the click target. */
+.nav-dropdown-caret-only {
+  display: none;
+  background: none;
+  border: none;
+  color: white;
+  cursor: pointer;
+  padding: 0.25rem 0.35rem;
+  font-size: 0.7rem;
+  line-height: 1;
+  opacity: 0.85;
+}
+
+/* A label-only item (no item.url) with children — the whole label is the
+   click target in click mode, and just plain text in hover mode (hovering
+   the item opens the dropdown regardless of this element's own styling). */
+.nav-dropdown-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  background: none;
+  border: none;
+  color: white;
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 0.5rem 0.75rem;
+  border-radius: 4px;
+}
+
+.nav-dropdown-label:hover {
+  background-color: rgba(255, 255, 255, 0.2);
+}
+
+.nav-dropdown-caret {
+  font-size: 0.65rem;
+  opacity: 0.85;
+}
+
+/* A plain label-only item with no children either — not clickable, not a
+   dropdown trigger, just static text (e.g. a section heading in the nav). */
+.nav-item-label-only {
+  padding: 0.5rem 0.75rem;
+  color: rgba(255, 255, 255, 0.85);
+  cursor: default;
+}
+
+.nav-dropdown-label-only {
+  display: block;
+  padding: 0.5rem 0.75rem;
+  color: rgba(255, 255, 255, 0.6);
+  cursor: default;
+  white-space: nowrap;
+}
+
+.nav-dropdown {
+  display: none;
+  position: absolute;
+  /* Flush against the parent item (no margin-top gap) — a gap there is a
+     dead zone: the cursor crosses it while moving from the parent link down
+     to the dropdown, :hover on .nav-item drops, and the menu closes before
+     you arrive. padding-top fakes the same visual breathing room without
+     creating that gap, since it's still inside the hoverable box. */
+  top: 100%;
+  left: 0;
+  min-width: 180px;
+  padding: 0.75rem 0.4rem 0.4rem;
+  background: var(--color-header-background);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+  list-style: none;
+  z-index: 10;
+}
+
+.nav-dropdown a {
+  display: block;
+  padding: 0.5rem 0.75rem;
+  white-space: nowrap;
+}
+
+/* Hover mode (default): the whole item reveals its dropdown on hover, no
+   caret needed. */
+.site-nav:not(.nav-trigger-click) .nav-item.has-children:hover > .nav-dropdown {
+  display: block;
+}
+
+/* Click mode: caret button toggles an .open class via the inline script
+   below the header markup. */
+.site-nav.nav-trigger-click .nav-dropdown-caret-only {
+  display: inline-flex;
+}
+
+.site-nav.nav-trigger-click .nav-item.open > .nav-dropdown {
+  display: block;
 }
 
 .nav-toggle {
@@ -494,7 +601,7 @@ a:hover {
   gap: 0.75rem;
   font-size: 0.875rem;
   white-space: nowrap;
-  margin-left: auto;
+  margin-left: 2rem;
 }
 
 .user-bar-name {
@@ -778,6 +885,7 @@ a:hover {
   .nav-links {
     flex-direction: column;
     gap: 0.5rem;
+    margin-left: 0;
   }
 
   .user-bar {
@@ -787,6 +895,31 @@ a:hover {
   .nav-links a {
     display: block;
     padding: 0.75rem;
+  }
+
+  /* Submenus are always expanded inline in the collapsed mobile menu —
+     the hamburger toggle already gates visibility, so a second hover/click
+     layer on top of it would just be confusing. */
+  .nav-item {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .nav-dropdown-caret-only {
+    display: none !important;
+  }
+
+  .nav-dropdown-label {
+    cursor: default;
+  }
+
+  .nav-dropdown {
+    display: block !important;
+    position: static;
+    margin: 0 0 0 1rem;
+    padding: 0;
+    background: none;
+    box-shadow: none;
   }
 
   h1 { font-size: 2rem; }
