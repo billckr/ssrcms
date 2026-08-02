@@ -1,7 +1,7 @@
 //! Admin navigation menu handlers.
 
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::StatusCode,
     response::{Html, IntoResponse, Redirect},
     Form, Json,
@@ -16,9 +16,15 @@ use admin::pages::menus::{MenuEdit, MenuItemRow, MenuRow};
 
 // ── List ─────────────────────────────────────────────────────────────────────
 
+#[derive(Deserialize)]
+pub struct MenusListQuery {
+    pub error: Option<String>,
+}
+
 pub async fn list(
     State(state): State<AppState>,
     admin: AdminUser,
+    Query(q): Query<MenusListQuery>,
 ) -> impl IntoResponse {
     let Some(site_id) = admin.site_id else {
         return Redirect::to("/admin").into_response();
@@ -52,7 +58,12 @@ pub async fn list(
         });
     }
 
-    Html(admin::pages::menus::render_list(&rows, &ctx)).into_response()
+    let flash = match q.error.as_deref() {
+        Some("duplicate_name") => Some("A menu with that name already exists."),
+        _ => None,
+    };
+
+    Html(admin::pages::menus::render_list(&rows, &ctx, flash)).into_response()
 }
 
 // ── Create ────────────────────────────────────────────────────────────────────
@@ -85,6 +96,9 @@ pub async fn create(
         Ok(menu) => {
             Redirect::to(&format!("/admin/menus/{}", menu.id)).into_response()
         }
+        Err(e) if is_unique_violation(&e) => {
+            Redirect::to("/admin/menus?error=duplicate_name").into_response()
+        }
         Err(e) => {
             tracing::error!("create menu error: {:?}", e);
             Redirect::to("/admin/menus").into_response()
@@ -94,10 +108,16 @@ pub async fn create(
 
 // ── Edit ─────────────────────────────────────────────────────────────────────
 
+#[derive(Deserialize)]
+pub struct EditMenuQuery {
+    pub error: Option<String>,
+}
+
 pub async fn edit(
     State(state): State<AppState>,
     admin: AdminUser,
     Path(id): Path<Uuid>,
+    Query(q): Query<EditMenuQuery>,
 ) -> impl IntoResponse {
     if !admin.caps.can_manage_appearance {
         return Redirect::to("/admin").into_response();
@@ -128,7 +148,12 @@ pub async fn edit(
         location: menu.location.clone(),
     };
 
-    Html(admin::pages::menus::render_edit(&menu_edit, &item_rows, &pages, &ctx, None)).into_response()
+    let flash = match q.error.as_deref() {
+        Some("duplicate_name") => Some("A menu with that name already exists."),
+        _ => None,
+    };
+
+    Html(admin::pages::menus::render_edit(&menu_edit, &item_rows, &pages, &ctx, flash)).into_response()
 }
 
 // ── Update ────────────────────────────────────────────────────────────────────
@@ -166,6 +191,9 @@ pub async fn update(
     let location = if form.location.is_empty() { None } else { Some(form.location.as_str()) };
 
     if let Err(e) = nav_menu::update(&state.db, id, &name, location).await {
+        if is_unique_violation(&e) {
+            return Redirect::to(&format!("/admin/menus/{}?error=duplicate_name", id)).into_response();
+        }
         tracing::error!("update menu {} error: {:?}", id, e);
     }
 
@@ -380,6 +408,13 @@ pub async fn reorder_items(
     }
 
     StatusCode::OK.into_response()
+}
+
+fn is_unique_violation(err: &crate::errors::AppError) -> bool {
+    matches!(
+        err,
+        crate::errors::AppError::Database(sqlx::Error::Database(db_err)) if db_err.is_unique_violation()
+    )
 }
 
 // ── Sanitisation ─────────────────────────────────────────────────────────────

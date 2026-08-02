@@ -43,7 +43,7 @@ fn location_label(location: Option<&str>) -> &'static str {
     }
 }
 
-pub fn render_list(menus: &[MenuRow], ctx: &crate::PageContext) -> String {
+pub fn render_list(menus: &[MenuRow], ctx: &crate::PageContext, flash: Option<&str>) -> String {
     let location_opts = LOCATION_OPTIONS.iter().map(|(val, label)| {
         format!(
             r#"<option value="{val}">{label}</option>"#,
@@ -97,6 +97,7 @@ pub fn render_list(menus: &[MenuRow], ctx: &crate::PageContext) -> String {
           <div class="form-group">
             <label for="new-menu-name">Menu Name</label>
             <input id="new-menu-name" type="text" name="name" required placeholder="e.g. Main Menu" maxlength="25">
+            <span class="form-hint char-count" id="new-menu-name-count">0/25</span>
           </div>
           <div class="form-group">
             <label for="new-menu-location">Location</label>
@@ -112,7 +113,11 @@ pub fn render_list(menus: &[MenuRow], ctx: &crate::PageContext) -> String {
 (function() {{
   var nameInput = document.getElementById('new-menu-name');
   var submitBtn = document.getElementById('create-menu-submit');
-  function update() {{ submitBtn.disabled = nameInput.value.trim().length === 0; }}
+  var count = document.getElementById('new-menu-name-count');
+  function update() {{
+    submitBtn.disabled = nameInput.value.trim().length === 0;
+    if (count) count.textContent = nameInput.value.length + '/25';
+  }}
   nameInput.addEventListener('input', update);
   update();
 }})();
@@ -121,7 +126,7 @@ pub fn render_list(menus: &[MenuRow], ctx: &crate::PageContext) -> String {
         rows          = rows,
     );
 
-    crate::admin_page("Menus", "/admin/menus", None, &content, ctx)
+    crate::admin_page("Menus", "/admin/menus", flash, &content, ctx)
 }
 
 pub fn render_edit(
@@ -236,7 +241,8 @@ pub fn render_edit(
       <div class="form-row">
         <div class="form-group">
           <label>Label</label>
-          <input type="text" name="label" value="{label_val}" required>
+          <input type="text" name="label" value="{label_val}" required maxlength="100">
+          <span class="form-hint char-count item-label-count">{label_len}/100</span>
         </div>
         <div class="form-group">
           <label>Target</label>
@@ -251,7 +257,7 @@ pub fn render_edit(
         <div class="form-group" style="margin:0">
           <label>Custom URL</label>
           <span class="form-hint form-hint-block">optional, for label-only items leave blank</span>
-          <input type="text" name="url" value="{url_val}" placeholder="/about or https://…">
+          <input type="text" name="url" value="{url_val}" placeholder="/about or https://…" maxlength="500">
           <span class="field-error field-error-url">Enter a path starting with / or a full http(s):// URL</span>
         </div>
       </div>
@@ -281,6 +287,7 @@ pub fn render_edit(
                     item_id          = crate::html_escape(&i.id),
                     parent_attr      = crate::html_escape(parent_attr),
                     label_val        = crate::html_escape(&i.label),
+                    label_len        = i.label.chars().count(),
                     url_val          = crate::html_escape(i.url.as_deref().unwrap_or("")),
                     sort_order       = i.sort_order,
                     page_opts        = page_opts,
@@ -441,6 +448,7 @@ pub fn render_edit(
       <div class="form-group" style="margin:0">
         <label for="menu-name">Menu Name</label>
         <input id="menu-name" type="text" name="name" value="{menu_name}" required maxlength="25" style="width:200px" form="menu-settings-form">
+        <span class="form-hint char-count" id="menu-name-count">0/25</span>
       </div>
       <div class="form-group" style="margin:0">
         <label for="menu-location">Assign to Location</label>
@@ -449,15 +457,32 @@ pub fn render_edit(
     </div>
     <div class="form-actions">
       <form id="menu-settings-form" method="POST" action="/admin/menus/{menu_id}" style="margin:0;display:inline">
-        <button type="submit" class="btn btn-primary">Save Menu</button>
+        <button type="submit" class="btn btn-primary" id="menu-settings-save" disabled>Save</button>
       </form>
       <form method="POST" action="/admin/menus/{menu_id}/delete"
             onsubmit="return confirm('Delete this menu and all its items?')" style="margin:0;display:inline">
-        <button type="submit" class="btn btn-danger">Delete Menu</button>
+        <button type="submit" class="btn btn-danger">Delete</button>
       </form>
     </div>
   </div>
 </div>
+<script>
+(function() {{
+  var nameInput = document.getElementById('menu-name');
+  var locationSelect = document.getElementById('menu-location');
+  var saveBtn = document.getElementById('menu-settings-save');
+  var count = document.getElementById('menu-name-count');
+  var initialName = nameInput.value;
+  var initialLocation = locationSelect.value;
+  function update() {{
+    saveBtn.disabled = nameInput.value === initialName && locationSelect.value === initialLocation;
+    if (count) count.textContent = nameInput.value.length + '/25';
+  }}
+  nameInput.addEventListener('input', update);
+  locationSelect.addEventListener('change', update);
+  update();
+}})();
+</script>
 
 <div class="card-boxed">
   <h2 class="card-boxed-header">Menu Items</h2>
@@ -474,7 +499,8 @@ pub fn render_edit(
       <div class="form-row">
         <div class="form-group" style="margin:0">
           <label>Label</label>
-          <input type="text" name="label" required placeholder="e.g. Home">
+          <input type="text" name="label" required placeholder="e.g. Home" maxlength="100">
+          <span class="form-hint char-count item-label-count">0/100</span>
         </div>
         <div class="form-group" style="margin:0">
           <label>Target</label>
@@ -492,7 +518,7 @@ pub fn render_edit(
         <div class="form-group" style="margin:0">
           <label>Custom URL</label>
           <span class="form-hint form-hint-block">optional, for label-only items leave blank</span>
-          <input type="text" name="url" placeholder="/about or https://…">
+          <input type="text" name="url" placeholder="/about or https://…" maxlength="500">
           <span class="field-error field-error-url">Enter a path starting with / or a full http(s):// URL</span>
         </div>
       </div>
@@ -523,10 +549,12 @@ pub fn render_edit(
     var url = form.querySelector('input[name="url"]');
     var submitBtn = form.querySelector('button[type="submit"]');
     var urlError = form.querySelector('.field-error-url');
+    var labelCount = form.querySelector('.item-label-count');
     function update() {{
       var labelValid = label.value.trim().length > 0;
       var urlValid = isValidUrl(url.value.trim());
       if (urlError) urlError.style.display = urlValid ? 'none' : 'block';
+      if (labelCount) labelCount.textContent = label.value.length + '/100';
       url.classList.toggle('field-invalid', !urlValid);
       submitBtn.disabled = !(labelValid && urlValid);
     }}

@@ -1242,6 +1242,21 @@ img { max-width: 100%; height: auto; display: block; }
 
 .footer-col a:hover { color: var(--white); }
 
+.footer-nav-label {
+  color: rgba(255,255,255,0.85);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.footer-col ul.footer-nav-children {
+  list-style: none;
+  padding: 0;
+  margin: 0.4rem 0 0 0.75rem;
+}
+
+.footer-nav-children li { margin-bottom: 0.4rem; }
+.footer-nav-children li:last-child { margin-bottom: 0; }
+
 .footer-bottom {
   border-top: 1px solid rgba(255,255,255,0.1);
   padding-top: 1.5rem;

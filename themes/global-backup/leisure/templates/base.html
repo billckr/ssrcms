@@ -139,14 +139,35 @@
           <a class="site-title" href="/">{{ site.name }}</a>
           <p>{{ site.description }}</p>
         </div>
+        {% if nav.footer.items | length > 0 %}
         <div class="footer-col">
           <h4>Navigation</h4>
           <ul>
-            {% for item in nav.primary.items %}
-              <li><a href="{{ item.url }}">{{ item.label }}</a></li>
+            {% for item in nav.footer.items %}
+              <li>
+                {% if item.url %}
+                  <a href="{{ item.url }}"{% if item.target == "_blank" %} target="_blank" rel="noopener"{% endif %}>{{ item.label }}</a>
+                {% else %}
+                  <span class="footer-nav-label">{{ item.label }}</span>
+                {% endif %}
+                {% if item.children | length > 0 %}
+                  <ul class="footer-nav-children">
+                    {% for child in item.children %}
+                      <li>
+                        {% if child.url %}
+                          <a href="{{ child.url }}"{% if child.target == "_blank" %} target="_blank" rel="noopener"{% endif %}>{{ child.label }}</a>
+                        {% else %}
+                          <span class="footer-nav-label">{{ child.label }}</span>
+                        {% endif %}
+                      </li>
+                    {% endfor %}
+                  </ul>
+                {% endif %}
+              </li>
             {% endfor %}
           </ul>
         </div>
+        {% endif %}
         <div class="footer-col">
           <h4>Stay Updated</h4>
           <ul>
