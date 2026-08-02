@@ -48,6 +48,13 @@ default = ""
 label   = "Tagline (shown below site name in hero)"
 group   = "Layout Options"
 
+[customizer.options.hero_background]
+type            = "image"
+default         = ""
+default_preview = "/theme/static/images/blog-hero.jpg"
+label           = "Hero background image"
+group           = "Hero Image"
+
 [customizer.options.show_header_search]
 type    = "bool"
 default = false

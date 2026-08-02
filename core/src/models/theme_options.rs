@@ -524,7 +524,7 @@ pub async fn overridden_keys(pool: &PgPool, site_id: Uuid, theme_name: &str) -> 
 }
 
 /// Delete this site's stored overrides for the given option keys (any mix of
-/// bool/order/choice) — used by "Restore original" on a customizer card with
+/// bool/order/choice/text/image) — used by "Restore original" on a customizer card with
 /// no colors. Once a row is gone, `resolve_options`/`resolve_order`/
 /// `resolve_choices` fall back to the schema's own `default` on next read.
 pub async fn delete_options(
@@ -545,4 +545,114 @@ pub async fn delete_options(
     .execute(pool)
     .await?;
     Ok(())
+}
+
+/// One declared `type = "image"` option: a site picks a URL (via the media
+/// library) that overrides a theme's built-in default image — e.g. a hero
+/// background. An empty resolved value means "use the theme's own default",
+/// same convention as `type = "text"` with an empty default.
+#[derive(Debug, Clone)]
+pub struct ThemeImageDef {
+    pub key: String,
+    pub label: String,
+    pub default: String,
+    pub group: String,
+    /// Optional URL (typically under `/theme/static/...`) shown as the
+    /// customizer preview when no override is stored — purely a display
+    /// convenience; the resolved *value* used by templates stays empty until
+    /// a site actually picks something, so theme authors don't need to touch
+    /// their template's fallback logic.
+    pub default_preview: Option<String>,
+}
+
+/// Parse every `type = "image"` entry out of `[customizer.options.*]`.
+pub fn parse_image_defs(parsed: &toml::Table) -> Vec<ThemeImageDef> {
+    let Some(options) = parsed
+        .get("customizer")
+        .and_then(|v| v.as_table())
+        .and_then(|t| t.get("options"))
+        .and_then(|v| v.as_table())
+    else {
+        return Vec::new();
+    };
+
+    options
+        .iter()
+        .filter_map(|(key, def)| {
+            let def = def.as_table()?;
+            let option_type = def.get("type").and_then(|v| v.as_str()).unwrap_or("bool");
+            if option_type != "image" {
+                return None;
+            }
+            let label = def.get("label").and_then(|v| v.as_str()).unwrap_or(key).to_string();
+            let default = def.get("default").and_then(|v| v.as_str()).unwrap_or("").to_string();
+            let group = read_group(def, DEFAULT_GROUP);
+            let default_preview = def.get("default_preview").and_then(|v| v.as_str()).map(|s| s.to_string());
+            Some(ThemeImageDef { key: key.clone(), label, default, group, default_preview })
+        })
+        .collect()
+}
+
+/// Resolve the final URL for every `image`-type option a theme declares —
+/// this site's stored override if present, else the schema's own default
+/// (typically empty, meaning "fall back to the theme's built-in image").
+pub async fn resolve_images(
+    pool: &PgPool,
+    theme_dir: &Path,
+    site_id: Uuid,
+    theme_name: &str,
+) -> Vec<(ThemeImageDef, String)> {
+    let Ok(toml_content) = std::fs::read_to_string(theme_dir.join("theme.toml")) else {
+        return Vec::new();
+    };
+    let Ok(parsed) = toml::from_str::<toml::Table>(&toml_content) else {
+        return Vec::new();
+    };
+    let defs = parse_image_defs(&parsed);
+    if defs.is_empty() {
+        return Vec::new();
+    }
+    let stored = load_stored_values(pool, site_id, theme_name).await;
+    defs.into_iter()
+        .map(|def| {
+            let value = stored.get(&def.key).cloned().unwrap_or_else(|| def.default.clone());
+            (def, value)
+        })
+        .collect()
+}
+
+/// Build the `theme_option_images` map to inject into the Tera context:
+/// image-option key -> resolved URL (empty string if unset). Returns an
+/// empty map when the theme declares no image-type options.
+pub async fn build_theme_option_images_context(
+    pool: &PgPool,
+    theme_dir: Option<&Path>,
+    site_id: Uuid,
+    theme_name: &str,
+) -> HashMap<String, String> {
+    let Some(theme_dir) = theme_dir else { return HashMap::new(); };
+    resolve_images(pool, theme_dir, site_id, theme_name)
+        .await
+        .into_iter()
+        .map(|(def, value)| (def.key, value))
+        .collect()
+}
+
+/// Upsert one image option's value for a site+theme — called from the
+/// customizer's save-image route. `value` must be empty (reset to the
+/// theme's default) or contain "/uploads/", i.e. actually come from this
+/// site's media library rather than an arbitrary hotlinked or `javascript:`
+/// URL — the media picker is the only supported way to set this, by design.
+pub async fn save_image(
+    pool: &PgPool,
+    site_id: Uuid,
+    theme_name: &str,
+    key: &str,
+    value: &str,
+) -> Result<(), sqlx::Error> {
+    let trimmed = value.trim();
+    if !trimmed.is_empty() && !trimmed.contains("/uploads/") {
+        return Ok(()); // silently ignore anything that didn't come from the media picker
+    }
+    save_raw_value(pool, site_id, theme_name, key, trimmed).await
 }

@@ -285,14 +285,16 @@ pub fn media_picker_modal_html() -> String {
 </div>
 <script>
 (function() {
-  var pickerMode = 'featured'; // 'featured', 'inline', or 'audio'
+  var pickerMode = 'featured'; // 'featured', 'inline', 'audio', or 'customizer_image'
+  var currentTargetId = null; // hidden-input id, only used by 'customizer_image'
 
   function escHtml(s) {
     return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   }
 
-  window.openMediaPicker = function(mode) {
+  window.openMediaPicker = function(mode, targetId) {
     pickerMode = mode || 'featured';
+    currentTargetId = targetId || null;
     var frame = document.getElementById('media-picker-frame');
     // Always reload so the correct type filter and fresh state is applied.
     var src = '/admin/media?picker=1';
@@ -340,6 +342,23 @@ pub fn media_picker_modal_html() -> String {
         q.setSelection(range.index + 1, 0, 'silent');
         if (window.refreshInlineMediaList) window.refreshInlineMediaList();
       }
+    } else if (pickerMode === 'customizer_image' && currentTargetId) {
+      var hidden = document.getElementById(currentTargetId);
+      if (hidden) {
+        hidden.value = path;
+        // Setting .value on a hidden input doesn't fire input/change by
+        // itself — dispatch both so the customizer's dirty-check script
+        // (which listens for bubbling input/change) sees this as a change.
+        hidden.dispatchEvent(new Event('input', { bubbles: true }));
+        hidden.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+      var preview = document.getElementById(currentTargetId + '-preview');
+      if (preview) {
+        preview.style.backgroundImage = "url('" + escHtml(path) + "')";
+        preview.classList.add('has-image');
+      }
+      var clearBtn = document.getElementById(currentTargetId + '-clear');
+      if (clearBtn) clearBtn.style.display = '';
     } else {
       var fidEl  = document.getElementById('featured_image_id');
       var furlEl = document.getElementById('featured_image_url_field');
@@ -374,6 +393,29 @@ pub fn media_picker_modal_html() -> String {
     var rb = document.getElementById('fi-remove-btn');
     if (rb) rb.style.display = 'none';
     if (window.markDirty) window.markDirty();
+  };
+
+  // Resets a customizer image field back to empty (theme's built-in default).
+  window.clearCustomizerImage = function(targetId) {
+    var hidden = document.getElementById(targetId);
+    var defaultPreview = hidden ? (hidden.dataset.defaultPreview || '') : '';
+    if (hidden) {
+      hidden.value = '';
+      hidden.dispatchEvent(new Event('input', { bubbles: true }));
+      hidden.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+    var preview = document.getElementById(targetId + '-preview');
+    if (preview) {
+      if (defaultPreview) {
+        preview.style.backgroundImage = "url('" + escHtml(defaultPreview) + "')";
+        preview.classList.add('has-image');
+      } else {
+        preview.style.backgroundImage = '';
+        preview.classList.remove('has-image');
+      }
+    }
+    var clearBtn = document.getElementById(targetId + '-clear');
+    if (clearBtn) clearBtn.style.display = 'none';
   };
 })();
 </script>"#)

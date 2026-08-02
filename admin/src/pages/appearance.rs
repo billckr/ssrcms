@@ -219,6 +219,14 @@ pub struct CustomizerData {
     /// label, group, current resolved string). Empty for themes that declare
     /// none.
     pub texts: Vec<(String, String, String, String)>,
+    /// Image-picker fields declared with `type = "image"` — (option_key,
+    /// label, group, raw stored value [empty means no override — this is
+    /// what actually gets submitted/saved], preview URL to display right now
+    /// [raw value if set, else the theme's default_preview, else empty],
+    /// the theme's own default_preview URL [independent of override state,
+    /// so "Use Theme Default" can restore it client-side]). Empty for themes
+    /// that declare none.
+    pub images: Vec<(String, String, String, String, String, String)>,
     /// Whether a `.bak` backup exists for this theme's `static/css/style.css` —
     /// gates showing the "Restore original" button next to Save Colors.
     pub has_color_backup: bool,
@@ -373,6 +381,51 @@ fn render_customizer_landing(theme_name: &str, source: &str, data: &CustomizerDa
         }).collect()
     };
 
+    // Image-picker fields: a hidden input holds the actual value (a media
+    // library URL); "Choose Image" opens the shared media picker in
+    // 'customizer_image' mode targeting this field's id, "Use Theme Default"
+    // clears it back to empty (falls back to the theme's built-in image).
+    // Both JS handlers live in media_picker_modal_html() / the script below.
+    let render_image_options_section = |entries: &[&(String, String, String, String, String, String)]| -> String {
+        if entries.is_empty() { return String::new(); }
+        entries.iter().map(|(key, label, _, value, preview_url, default_preview)| {
+            let key_esc = crate::html_escape(key);
+            let input_id = format!("customizer-image-{key_esc}");
+            let has_override = !value.is_empty();
+            let has_preview = !preview_url.is_empty();
+            let bg_style = if has_preview {
+                format!(" style=\"background-image:url('{}')\"", crate::html_escape(preview_url))
+            } else {
+                String::new()
+            };
+            // Carried as a data attribute so clearCustomizerImage() can restore
+            // the theme's default preview client-side immediately, without
+            // waiting for a save + page reload.
+            let default_preview_esc = crate::html_escape(default_preview);
+            format!(
+                r#"<div class="customizer-image-field" style="margin-top:1rem;">
+  <label class="customizer-text-label">{label}</label>
+  <div class="customizer-image-picker">
+    <div class="customizer-image-preview{has_image_class}" id="{input_id}-preview"{bg_style}></div>
+    <div class="customizer-image-actions">
+      <button type="button" class="btn btn-primary btn-sm" onclick="openMediaPicker('customizer_image', '{input_id}')">Choose Image</button>
+      <button type="button" class="btn btn-sm" id="{input_id}-clear" style="{clear_display}" onclick="clearCustomizerImage('{input_id}')">Use Theme Default</button>
+    </div>
+  </div>
+  <input type="hidden" name="{key}" id="{input_id}" value="{value}" data-default-preview="{default_preview_esc}">
+</div>"#,
+                key = key_esc,
+                label = crate::html_escape(label),
+                input_id = input_id,
+                has_image_class = if has_preview { " has-image" } else { "" },
+                bg_style = bg_style,
+                clear_display = if has_override { "" } else { "display:none" },
+                value = crate::html_escape(value),
+                default_preview_esc = default_preview_esc,
+            )
+        }).collect()
+    };
+
     // Reorderable option groups: up/down buttons (JS swaps the <li> and
     // rewrites the hidden input's comma-joined value, then dispatches a
     // bubbling 'change' event so the group's shared save button reacts to it
@@ -412,25 +465,20 @@ fn render_customizer_landing(theme_name: &str, source: &str, data: &CustomizerDa
         }).collect()
     };
 
-    // Distinct group names in first-seen order across every declared kind.
-    let mut groups: Vec<String> = Vec::new();
-    {
-        let mut seen = std::collections::HashSet::new();
-        for (_, _, group, _) in &data.colors { if seen.insert(group.clone()) { groups.push(group.clone()); } }
-        for (_, _, group, _) in &data.options { if seen.insert(group.clone()) { groups.push(group.clone()); } }
-        for (_, _, group, _) in &data.order_options { if seen.insert(group.clone()) { groups.push(group.clone()); } }
-        for (_, _, group, _, _) in &data.choices { if seen.insert(group.clone()) { groups.push(group.clone()); } }
-        for (_, _, group, _) in &data.texts { if seen.insert(group.clone()) { groups.push(group.clone()); } }
-    }
-
-    let cards: String = groups.iter().map(|group| {
+    // Renders one customizer card (header + save/restore icons + form) for a
+    // single group's fields. Shared by the main-column cards and the
+    // sidebar's image-only cards below, so both get identical save/dirty-
+    // check behavior without duplicating the template.
+    let render_group_card = |
+        group: &str,
+        group_colors: &[&(String, String, String, Option<String>)],
+        group_options: &[&(String, String, String, bool)],
+        group_choices: &[&(String, String, String, Vec<(String, String)>, String)],
+        group_order: &[&(String, String, String, Vec<(String, String)>)],
+        group_texts: &[&(String, String, String, String)],
+        group_images: &[&(String, String, String, String, String, String)],
+    | -> String {
         let gslug = slugify_group(group);
-        let group_colors: Vec<&(String, String, String, Option<String>)> = data.colors.iter().filter(|(_, _, g, _)| g == group).collect();
-        let group_options: Vec<&(String, String, String, bool)> = data.options.iter().filter(|(_, _, g, _)| g == group).collect();
-        let group_choices: Vec<&(String, String, String, Vec<(String, String)>, String)> = data.choices.iter().filter(|(_, _, g, _, _)| g == group).collect();
-        let group_order: Vec<&(String, String, String, Vec<(String, String)>)> = data.order_options.iter().filter(|(_, _, g, _)| g == group).collect();
-        let group_texts: Vec<&(String, String, String, String)> = data.texts.iter().filter(|(_, _, g, _)| g == group).collect();
-
         let form_id = format!("customizer-form-{gslug}");
         let btn_id = format!("customizer-save-btn-{gslug}");
 
@@ -438,6 +486,7 @@ fn render_customizer_landing(theme_name: &str, source: &str, data: &CustomizerDa
             .chain(group_order.iter().map(|(k, _, _, _)| k.clone()))
             .chain(group_choices.iter().map(|(k, _, _, _, _)| k.clone()))
             .chain(group_texts.iter().map(|(k, _, _, _)| k.clone()))
+            .chain(group_images.iter().map(|(k, _, _, _, _, _)| k.clone()))
             .collect();
 
         // Bool-option keys belonging to *this* card only — submitted as a
@@ -470,6 +519,7 @@ fn render_customizer_landing(theme_name: &str, source: &str, data: &CustomizerDa
       {colors}
       {choices}
       {texts}
+      {images}
       {options}
       {order}
     </form>
@@ -510,13 +560,49 @@ fn render_customizer_landing(theme_name: &str, source: &str, data: &CustomizerDa
             source = source_esc,
             bool_keys = crate::html_escape(&bool_keys),
             restore = restore,
-            colors = render_colors_section(&group_colors),
-            choices = render_choices_section(&group_choices),
-            texts = render_text_options_section(&group_texts),
-            options = render_bool_options_section(&group_options),
-            order = render_order_section(&group_order),
+            colors = render_colors_section(group_colors),
+            choices = render_choices_section(group_choices),
+            texts = render_text_options_section(group_texts),
+            images = render_image_options_section(group_images),
+            options = render_bool_options_section(group_options),
+            order = render_order_section(group_order),
             btn_id = btn_id,
         )
+    };
+
+    // Distinct group names in first-seen order across every declared kind
+    // except images — image-picker fields render as their own cards in the
+    // sidebar below Theme Details instead (see image_cards), since a big
+    // preview thumbnail reads better there than mixed into the main column.
+    let mut groups: Vec<String> = Vec::new();
+    {
+        let mut seen = std::collections::HashSet::new();
+        for (_, _, group, _) in &data.colors { if seen.insert(group.clone()) { groups.push(group.clone()); } }
+        for (_, _, group, _) in &data.options { if seen.insert(group.clone()) { groups.push(group.clone()); } }
+        for (_, _, group, _) in &data.order_options { if seen.insert(group.clone()) { groups.push(group.clone()); } }
+        for (_, _, group, _, _) in &data.choices { if seen.insert(group.clone()) { groups.push(group.clone()); } }
+        for (_, _, group, _) in &data.texts { if seen.insert(group.clone()) { groups.push(group.clone()); } }
+    }
+
+    let cards: String = groups.iter().map(|group| {
+        let group_colors: Vec<&(String, String, String, Option<String>)> = data.colors.iter().filter(|(_, _, g, _)| g == group).collect();
+        let group_options: Vec<&(String, String, String, bool)> = data.options.iter().filter(|(_, _, g, _)| g == group).collect();
+        let group_choices: Vec<&(String, String, String, Vec<(String, String)>, String)> = data.choices.iter().filter(|(_, _, g, _, _)| g == group).collect();
+        let group_order: Vec<&(String, String, String, Vec<(String, String)>)> = data.order_options.iter().filter(|(_, _, g, _)| g == group).collect();
+        let group_texts: Vec<&(String, String, String, String)> = data.texts.iter().filter(|(_, _, g, _)| g == group).collect();
+        render_group_card(group, &group_colors, &group_options, &group_choices, &group_order, &group_texts, &[])
+    }).collect();
+
+    // Image-picker groups, rendered as their own compact card(s) in the
+    // sidebar (see below, after details_card) rather than the main column.
+    let mut image_groups: Vec<String> = Vec::new();
+    {
+        let mut seen = std::collections::HashSet::new();
+        for (_, _, group, _, _, _) in &data.images { if seen.insert(group.clone()) { image_groups.push(group.clone()); } }
+    }
+    let image_cards: String = image_groups.iter().map(|group| {
+        let group_images: Vec<&(String, String, String, String, String, String)> = data.images.iter().filter(|(_, _, g, _, _, _)| g == group).collect();
+        render_group_card(group, &[], &[], &[], &[], &[], &group_images)
     }).collect();
 
     let order_script = if data.order_options.is_empty() {
@@ -567,14 +653,22 @@ fn render_customizer_landing(theme_name: &str, source: &str, data: &CustomizerDa
         description = crate::html_escape(&data.manifest.description),
     );
 
+    let media_picker = if data.images.is_empty() { String::new() } else { crate::media_picker_modal_html() };
+
     format!(
         r#"<div class="editor-body-row">
   <div class="editor-main-col">{cards}{order_script}</div>
-  {details_card}
-</div>"#,
+  <div class="customizer-sidebar-col">
+    {details_card}
+    {image_cards}
+  </div>
+</div>
+{media_picker}"#,
         cards = cards,
         order_script = order_script,
         details_card = details_card,
+        image_cards = image_cards,
+        media_picker = media_picker,
     )
 }
 

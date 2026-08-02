@@ -3,7 +3,11 @@
 {% block title %}{{ site.name }} — {{ site.description }}{% endblock title %}
 
 {% block content %}
+{% if theme_option_images.hero_background %}
+<section class="hero" style="background-image: url('{{ theme_option_images.hero_background | safe }}');">
+{% else %}
 <section class="hero" style="background-image: url('/theme/static/images/blog-hero.jpg');">
+{% endif %}
   <div class="container">
     <h1>{{ site.name }}</h1>
     {% if theme_option_texts.hero_tagline %}

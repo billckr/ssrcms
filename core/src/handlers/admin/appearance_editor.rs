@@ -162,6 +162,20 @@ async fn build_customizer(
         Vec::new()
     };
 
+    let images = if let Some(sid) = site_id {
+        crate::models::theme_options::resolve_images(pool, theme_dir, sid, theme_name)
+            .await
+            .into_iter()
+            .map(|(def, value)| {
+                let default_preview = def.default_preview.clone().unwrap_or_default();
+                let preview_url = if !value.is_empty() { value.clone() } else { default_preview.clone() };
+                (def.key, def.label, def.group, value, preview_url, default_preview)
+            })
+            .collect()
+    } else {
+        Vec::new()
+    };
+
     let has_color_backup = bak_path_for(&theme_dir.join("static/css/style.css")).exists();
 
     let overridden_option_keys = if let Some(sid) = site_id {
@@ -170,7 +184,7 @@ async fn build_customizer(
         Default::default()
     };
 
-    Some(admin::pages::appearance::CustomizerData { manifest, colors, options, order_options, choices, texts, has_color_backup, overridden_option_keys })
+    Some(admin::pages::appearance::CustomizerData { manifest, colors, options, order_options, choices, texts, images, has_color_backup, overridden_option_keys })
 }
 
 #[derive(Deserialize)]
@@ -811,6 +825,13 @@ pub async fn save_customizer(
             let Some(value) = form.get(&def.key) else { continue };
             if let Err(e) = crate::models::theme_options::save_text(&state.db, site_id, &theme, &def.key, value).await {
                 tracing::error!("save_customizer: failed to save text {} for theme {}: {e}", def.key, theme);
+            }
+        }
+
+        for def in crate::models::theme_options::parse_image_defs(&parsed) {
+            let Some(value) = form.get(&def.key) else { continue };
+            if let Err(e) = crate::models::theme_options::save_image(&state.db, site_id, &theme, &def.key, value).await {
+                tracing::error!("save_customizer: failed to save image {} for theme {}: {e}", def.key, theme);
             }
         }
     }
