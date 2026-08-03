@@ -81,9 +81,22 @@ body {
   transition: background-color 0.2s;
 }
 
-.nav-links a:hover,
-.nav-links a[aria-current="page"] {
+.nav-links a:hover {
   background-color: rgba(255, 255, 255, 0.2);
+}
+
+/* Current-page marker uses its own (lighter) shade rather than reusing the
+   hover color — sharing one color meant that once you'd navigated to a
+   sub-item's page, it (and any sibling pointing at the same page) sat
+   permanently at the "hovered" shade, so hovering it again produced no
+   visible change at all. */
+.nav-links a[aria-current="page"] {
+  background-color: rgba(255, 255, 255, 0.12);
+  font-weight: 700;
+}
+
+.nav-links a[aria-current="page"]:hover {
+  background-color: rgba(255, 255, 255, 0.28);
 }
 
 /* --- Header submenu (nav items with children) --- */
@@ -162,9 +175,9 @@ body {
   top: 100%;
   left: 0;
   min-width: 180px;
-  padding: 0.75rem 0.4rem 0.4rem;
+  padding: 0.4rem 0.2rem 0.2rem;
   background: var(--color-header-background);
-  border-radius: 8px;
+  border-radius: 5px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
   list-style: none;
   z-index: 10;
@@ -176,10 +189,15 @@ body {
   white-space: nowrap;
 }
 
-/* Hover mode (default): the whole item reveals its dropdown on hover, no
-   caret needed. */
-.site-nav:not(.nav-trigger-click) .nav-item.has-children:hover > .nav-dropdown {
-  display: block;
+/* Hover mode (default): the whole item reveals its dropdown on hover — but
+   only on devices that actually support hover. Touchscreens (including
+   tablets wider than the mobile breakpoint) get the click/tap accordion
+   below instead; some mobile browsers simulate a "sticky hover" on first
+   tap, which would otherwise fight with the click-driven .open toggle. */
+@media (hover: hover) and (pointer: fine) {
+  .site-nav:not(.nav-trigger-click) .nav-item.has-children:hover > .nav-dropdown {
+    display: block;
+  }
 }
 
 /* Click mode: caret button toggles an .open class via the inline script
@@ -190,6 +208,23 @@ body {
 
 .site-nav.nav-trigger-click .nav-item.open > .nav-dropdown {
   display: block;
+}
+
+/* Devices without real hover (touch — phones, tablets, hybrids) always get
+   the tap-to-expand caret and .open-driven toggle, regardless of which
+   trigger mode the site owner picked for hover-capable devices above. */
+@media (hover: none), (pointer: coarse) {
+  .nav-dropdown-caret-only {
+    display: inline-flex !important;
+  }
+
+  .nav-dropdown-label {
+    cursor: pointer;
+  }
+
+  .nav-item.open > .nav-dropdown {
+    display: block !important;
+  }
 }
 
 .nav-toggle {
@@ -897,24 +932,16 @@ a:hover {
     padding: 0.75rem;
   }
 
-  /* Submenus are always expanded inline in the collapsed mobile menu —
-     the hamburger toggle already gates visibility, so a second hover/click
-     layer on top of it would just be confusing. */
+  /* Caret visibility and the .open toggle itself are handled by the
+     (hover: none) query above, for any touch device at any width. This
+     just switches the dropdown from an absolute floating panel to an
+     inline block that stacks within the full-width mobile nav. */
   .nav-item {
     flex-direction: column;
     align-items: stretch;
   }
 
-  .nav-dropdown-caret-only {
-    display: none !important;
-  }
-
-  .nav-dropdown-label {
-    cursor: default;
-  }
-
   .nav-dropdown {
-    display: block !important;
     position: static;
     margin: 0 0 0 1rem;
     padding: 0;

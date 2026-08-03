@@ -40,3 +40,13 @@ label = "Border"
 type    = "bool"
 default = true
 label   = "Show search field in header"
+
+[customizer.options.nav_dropdown_trigger]
+type    = "choice"
+default = "hover"
+label   = "Header submenu trigger (for menu items with sub-items)"
+group   = "Layout Options"
+
+[customizer.options.nav_dropdown_trigger.choices]
+hover = "Hover to open"
+click = "Click to open"

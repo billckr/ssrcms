@@ -103,6 +103,127 @@ a:hover { color: var(--color-primary-hover); text-decoration: none; }
   text-decoration: none;
 }
 
+/* ── Header submenu (nav items with children) ── */
+
+.nav-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.nav-dropdown-caret-only {
+  display: none;
+  background: none;
+  border: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  padding: 0.25rem 0.35rem;
+  font-size: 0.7rem;
+  line-height: 1;
+}
+
+.nav-dropdown-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  background: none;
+  border: none;
+  color: var(--color-text-muted);
+  font: inherit;
+  font-size: 0.9375rem;
+  cursor: pointer;
+  padding: 0.25rem 0.6rem;
+  border-radius: var(--radius);
+}
+
+.nav-dropdown-label:hover {
+  color: var(--color-primary);
+  background: rgba(37, 99, 235, 0.07);
+}
+
+.nav-dropdown-caret {
+  font-size: 0.65rem;
+}
+
+.nav-item-label-only {
+  padding: 0.25rem 0.6rem;
+  color: var(--color-text-muted);
+  cursor: default;
+}
+
+.nav-dropdown-label-only {
+  display: block;
+  padding: 0.5rem 0.75rem;
+  color: var(--color-text-muted);
+  cursor: default;
+  white-space: nowrap;
+}
+
+.nav-dropdown {
+  display: none;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  min-width: 180px;
+  padding: 0.4rem 0.2rem 0.2rem;
+  background: var(--color-page-background);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+  list-style: none;
+  z-index: 10;
+}
+
+.nav-dropdown a {
+  display: block;
+  padding: 0.5rem 0.75rem;
+  white-space: nowrap;
+  color: var(--color-text-muted);
+  text-decoration: none;
+  border-radius: var(--radius);
+}
+
+.nav-dropdown a:hover {
+  color: var(--color-primary);
+  background: rgba(37, 99, 235, 0.07);
+}
+
+/* Hover mode (default): whole item reveals its dropdown on hover — only on
+   devices that actually support hover. Touch devices always get the
+   click/tap accordion below regardless of width. */
+@media (hover: hover) and (pointer: fine) {
+  .site-nav:not(.nav-trigger-click) .nav-item.has-children:hover > .nav-dropdown {
+    display: block;
+  }
+}
+
+/* Click mode: caret/label toggles an .open class via the inline script
+   below the header markup. */
+.site-nav.nav-trigger-click .nav-dropdown-caret-only {
+  display: inline-flex;
+}
+
+.site-nav.nav-trigger-click .nav-item.open > .nav-dropdown {
+  display: block;
+}
+
+/* Devices without real hover (touch — phones, tablets, hybrids) always get
+   the tap-to-expand caret and .open-driven toggle, regardless of which
+   trigger mode the site owner picked for hover-capable devices above. */
+@media (hover: none), (pointer: coarse) {
+  .nav-dropdown-caret-only {
+    display: inline-flex !important;
+  }
+
+  .nav-dropdown-label {
+    cursor: pointer;
+  }
+
+  .nav-item.open > .nav-dropdown {
+    display: block !important;
+  }
+}
+
 /* ── Header search ── */
 /* Search input is limited to 25 characters (maxlength on the input element). */
 .header-right {
@@ -896,6 +1017,30 @@ p { margin: 0 0 1rem; }
     order: 3;
     width: 100%;
     gap: 0;
+  }
+
+  /* Caret visibility and the .open toggle are handled by the (hover: none)
+     query above, for any touch device at any width. This just switches the
+     dropdown from an absolute floating panel to an inline block that
+     stacks within the full-width mobile nav-links list. */
+  .nav-item {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .nav-links a,
+  .nav-dropdown-label,
+  .nav-item-label-only {
+    padding: 0.6rem;
+  }
+
+  .nav-dropdown {
+    position: static;
+    margin: 0 0 0 1rem;
+    padding: 0;
+    background: none;
+    border: none;
+    box-shadow: none;
   }
 
   .header-search {

@@ -4,12 +4,13 @@
 *, *::before, *::after { box-sizing: border-box; }
 
 :root {
-  --color-bg:           #ffffff;
-  --color-surface:      #f8f9fa;
+  --color-page-background:           #ffffff;
+  --color-panel-background:      #f8f9fa;
   --color-text:         #1c1c1e;
-  --color-muted:        #6b7280;
-  --color-accent:       #2563eb;
-  --color-accent-dark:  #1d4ed8;
+  --color-text-muted:        #6b7280;
+  --color-primary:       #2563eb;
+  --color-primary-hover:  #1d4ed8;
+  --color-header-background: #ffffff;
   --color-border:       #e5e7eb;
   --font-sans:          system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --font-mono:          "SFMono-Regular", Consolas, "Liberation Mono", monospace;
@@ -19,7 +20,7 @@
 }
 
 body {
-  background: var(--color-bg);
+  background: var(--color-page-background);
   color: var(--color-text);
   font-family: var(--font-sans);
   font-size: 1.0625rem;
@@ -29,12 +30,12 @@ body {
 }
 
 /* ── Links ── */
-a { color: var(--color-accent); text-decoration: underline; text-underline-offset: 2px; }
-a:hover { color: var(--color-accent-dark); text-decoration: none; }
+a { color: var(--color-primary); text-decoration: underline; text-underline-offset: 2px; }
+a:hover { color: var(--color-primary-hover); text-decoration: none; }
 
 /* ── Layout ── */
 .site-header {
-  background: var(--color-bg);
+  background: var(--color-header-background);
   border-bottom: 1px solid var(--color-border);
   position: sticky;
   top: 0;
@@ -75,7 +76,7 @@ a:hover { color: var(--color-accent-dark); text-decoration: none; }
   flex-shrink: 0;
 }
 
-.site-title:hover { color: var(--color-accent); text-decoration: none; }
+.site-title:hover { color: var(--color-primary); text-decoration: none; }
 
 .nav-links {
   list-style: none;
@@ -88,7 +89,7 @@ a:hover { color: var(--color-accent-dark); text-decoration: none; }
 
 .nav-links a {
   text-decoration: none;
-  color: var(--color-muted);
+  color: var(--color-text-muted);
   font-size: 0.9375rem;
   padding: 0.25rem 0.6rem;
   border-radius: var(--radius);
@@ -97,9 +98,130 @@ a:hover { color: var(--color-accent-dark); text-decoration: none; }
 
 .nav-links a:hover,
 .nav-links a[aria-current="page"] {
-  color: var(--color-accent);
+  color: var(--color-primary);
   background: rgba(37, 99, 235, 0.07);
   text-decoration: none;
+}
+
+/* ── Header submenu (nav items with children) ── */
+
+.nav-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.nav-dropdown-caret-only {
+  display: none;
+  background: none;
+  border: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  padding: 0.25rem 0.35rem;
+  font-size: 0.7rem;
+  line-height: 1;
+}
+
+.nav-dropdown-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  background: none;
+  border: none;
+  color: var(--color-text-muted);
+  font: inherit;
+  font-size: 0.9375rem;
+  cursor: pointer;
+  padding: 0.25rem 0.6rem;
+  border-radius: var(--radius);
+}
+
+.nav-dropdown-label:hover {
+  color: var(--color-primary);
+  background: rgba(37, 99, 235, 0.07);
+}
+
+.nav-dropdown-caret {
+  font-size: 0.65rem;
+}
+
+.nav-item-label-only {
+  padding: 0.25rem 0.6rem;
+  color: var(--color-text-muted);
+  cursor: default;
+}
+
+.nav-dropdown-label-only {
+  display: block;
+  padding: 0.5rem 0.75rem;
+  color: var(--color-text-muted);
+  cursor: default;
+  white-space: nowrap;
+}
+
+.nav-dropdown {
+  display: none;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  min-width: 180px;
+  padding: 0.4rem 0.2rem 0.2rem;
+  background: var(--color-page-background);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+  list-style: none;
+  z-index: 10;
+}
+
+.nav-dropdown a {
+  display: block;
+  padding: 0.5rem 0.75rem;
+  white-space: nowrap;
+  color: var(--color-text-muted);
+  text-decoration: none;
+  border-radius: var(--radius);
+}
+
+.nav-dropdown a:hover {
+  color: var(--color-primary);
+  background: rgba(37, 99, 235, 0.07);
+}
+
+/* Hover mode (default): whole item reveals its dropdown on hover — only on
+   devices that actually support hover. Touch devices always get the
+   click/tap accordion below regardless of width. */
+@media (hover: hover) and (pointer: fine) {
+  .site-nav:not(.nav-trigger-click) .nav-item.has-children:hover > .nav-dropdown {
+    display: block;
+  }
+}
+
+/* Click mode: caret/label toggles an .open class via the inline script
+   below the header markup. */
+.site-nav.nav-trigger-click .nav-dropdown-caret-only {
+  display: inline-flex;
+}
+
+.site-nav.nav-trigger-click .nav-item.open > .nav-dropdown {
+  display: block;
+}
+
+/* Devices without real hover (touch — phones, tablets, hybrids) always get
+   the tap-to-expand caret and .open-driven toggle, regardless of which
+   trigger mode the site owner picked for hover-capable devices above. */
+@media (hover: none), (pointer: coarse) {
+  .nav-dropdown-caret-only {
+    display: inline-flex !important;
+  }
+
+  .nav-dropdown-label {
+    cursor: pointer;
+  }
+
+  .nav-item.open > .nav-dropdown {
+    display: block !important;
+  }
 }
 
 /* ── Header search ── */
@@ -132,17 +254,17 @@ a:hover { color: var(--color-accent-dark); text-decoration: none; }
   color: var(--color-text);
 }
 
-.user-bar-name:hover { color: var(--color-accent); }
+.user-bar-name:hover { color: var(--color-primary); }
 
 .user-bar-logout,
 .user-bar-login {
-  color: var(--color-muted);
+  color: var(--color-text-muted);
   text-decoration: none;
   font-size: 0.8rem;
 }
 
 .user-bar-logout:hover,
-.user-bar-login:hover { color: var(--color-accent); }
+.user-bar-login:hover { color: var(--color-primary); }
 
 .header-search input[type="search"] {
   padding: 0.3rem 0.6rem;
@@ -151,14 +273,14 @@ a:hover { color: var(--color-accent-dark); text-decoration: none; }
   font-size: 0.875rem;
   font-family: var(--font-sans);
   width: 160px;
-  background: var(--color-surface);
+  background: var(--color-panel-background);
   color: var(--color-text);
   outline: none;
   transition: border-color 0.15s;
 }
 
 .header-search input[type="search"]:focus {
-  border-color: var(--color-accent);
+  border-color: var(--color-primary);
 }
 
 .header-search button {
@@ -168,15 +290,15 @@ a:hover { color: var(--color-accent-dark); text-decoration: none; }
   border-radius: var(--radius);
   font-size: 0.875rem;
   cursor: pointer;
-  color: var(--color-muted);
+  color: var(--color-text-muted);
   font-family: var(--font-sans);
   white-space: nowrap;
   transition: border-color 0.15s, color 0.15s;
 }
 
 .header-search button:hover {
-  border-color: var(--color-accent);
-  color: var(--color-accent);
+  border-color: var(--color-primary);
+  color: var(--color-primary);
 }
 
 /* ── Main & Footer ── */
@@ -192,13 +314,13 @@ a:hover { color: var(--color-accent-dark); text-decoration: none; }
   margin: 0 auto;
   padding: var(--space) var(--space);
   border-top: 1px solid var(--color-border);
-  color: var(--color-muted);
+  color: var(--color-text-muted);
   font-size: 0.875rem;
 }
 
 .site-footer p { margin: 0; }
-.site-footer a { color: var(--color-muted); }
-.site-footer a:hover { color: var(--color-accent); }
+.site-footer a { color: var(--color-text-muted); }
+.site-footer a:hover { color: var(--color-primary); }
 
 /* ── Typography ── */
 h1, h2, h3, h4, h5, h6 {
@@ -235,7 +357,7 @@ p { margin: 0 0 1rem; }
 
 .cloud-label {
   font-size: 0.75rem;
-  color: var(--color-muted);
+  color: var(--color-text-muted);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -244,8 +366,8 @@ p { margin: 0 0 1rem; }
 /* ── Archive header ── */
 .archive-header { margin-bottom: 2rem; }
 .archive-header h1 { font-size: 1.75rem; }
-.site-description { color: var(--color-muted); margin: 0.25rem 0 0; }
-.author-bio { color: var(--color-muted); }
+.site-description { color: var(--color-text-muted); margin: 0.25rem 0 0; }
+.author-bio { color: var(--color-text-muted); }
 
 /* ── Post list ── */
 .post-list { list-style: none; margin: 0; padding: 0; }
@@ -264,24 +386,24 @@ p { margin: 0 0 1rem; }
 }
 
 .post-title a { color: var(--color-text); text-decoration: none; }
-.post-title a:hover { color: var(--color-accent); }
+.post-title a:hover { color: var(--color-primary); }
 
 .post-meta {
   font-size: 0.875rem;
-  color: var(--color-muted);
+  color: var(--color-text-muted);
   display: flex;
   flex-wrap: wrap;
   gap: 0.4rem 1rem;
   margin-bottom: 0.75rem;
 }
 
-.post-meta a { color: var(--color-muted); text-decoration: none; }
-.post-meta a:hover { color: var(--color-accent); }
+.post-meta a { color: var(--color-text-muted); text-decoration: none; }
+.post-meta a:hover { color: var(--color-primary); }
 
-.post-excerpt { margin: 0; color: var(--color-muted); }
+.post-excerpt { margin: 0; color: var(--color-text-muted); }
 
 .no-posts {
-  color: var(--color-muted);
+  color: var(--color-text-muted);
   font-style: italic;
   padding: 1.5rem 0;
 }
@@ -292,7 +414,7 @@ p { margin: 0 0 1rem; }
   font-size: 0.9rem;
   font-weight: 500;
   text-decoration: none;
-  color: var(--color-accent);
+  color: var(--color-primary);
 }
 
 .read-more:hover { text-decoration: underline; }
@@ -315,7 +437,7 @@ p { margin: 0 0 1rem; }
   max-height: 520px;
   border-radius: var(--radius);
   margin-bottom: 1.75rem;
-  background: var(--color-surface);
+  background: var(--color-panel-background);
 }
 
 /* Thumbnail treatment in post lists (home + archive) */
@@ -345,29 +467,29 @@ p { margin: 0 0 1rem; }
 /* ── Single post ── */
 .single-post .post-header { margin-bottom: 2rem; }
 .single-post .post-title { font-size: 2rem; line-height: 1.2; margin-bottom: 0.75rem; }
-.post-subtitle { font-size: 1.15rem; line-height: 1.5; color: var(--color-muted); margin-bottom: 1rem; }
+.post-subtitle { font-size: 1.15rem; line-height: 1.5; color: var(--color-text-muted); margin-bottom: 1rem; }
 
 .post-content { line-height: 1.8; }
 .post-content p { margin-bottom: 1.25rem; }
 .post-content h2, .post-content h3 { margin-top: 2rem; }
 
-.post-content a { color: var(--color-accent); }
+.post-content a { color: var(--color-primary); }
 
 .post-content blockquote {
-  border-left: 3px solid var(--color-accent);
-  background: var(--color-surface);
+  border-left: 3px solid var(--color-primary);
+  background: var(--color-panel-background);
   margin: 1.5rem 0;
   padding: 0.75rem 1.25rem;
-  color: var(--color-muted);
+  color: var(--color-text-muted);
   border-radius: 0 var(--radius) var(--radius) 0;
 }
 
 .post-content blockquote p { margin: 0; }
 
 .post-content pre {
-  background: var(--color-surface);
+  background: var(--color-panel-background);
   border: 1px solid var(--color-border);
-  border-left: 3px solid var(--color-accent);
+  border-left: 3px solid var(--color-primary);
   padding: 1rem 1.25rem;
   overflow-x: auto;
   border-radius: 0 var(--radius) var(--radius) 0;
@@ -379,7 +501,7 @@ p { margin: 0 0 1rem; }
 .post-content code {
   font-family: var(--font-mono);
   font-size: 0.9em;
-  background: var(--color-surface);
+  background: var(--color-panel-background);
   padding: 0.1em 0.35em;
   border-radius: 3px;
   border: 1px solid var(--color-border);
@@ -405,7 +527,7 @@ p { margin: 0 0 1rem; }
   gap: 0.4rem;
 }
 
-.post-tags > span { color: var(--color-muted); font-size: 0.875rem; }
+.post-tags > span { color: var(--color-text-muted); font-size: 0.875rem; }
 
 .tag {
   display: inline-block;
@@ -414,8 +536,8 @@ p { margin: 0 0 1rem; }
   border-radius: 20px;
   font-size: 0.8125rem;
   text-decoration: none;
-  color: var(--color-muted);
-  background: var(--color-surface);
+  color: var(--color-text-muted);
+  background: var(--color-panel-background);
   transition: border-color 0.15s, color 0.15s;
 }
 
@@ -432,8 +554,8 @@ p { margin: 0 0 1rem; }
 .post-sources a { color: var(--color-primary, inherit); }
 
 .tag:hover {
-  border-color: var(--color-accent);
-  color: var(--color-accent);
+  border-color: var(--color-primary);
+  color: var(--color-primary);
   text-decoration: none;
 }
 
@@ -463,7 +585,7 @@ p { margin: 0 0 1rem; }
   background: none;
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
-  color: var(--color-muted);
+  color: var(--color-text-muted);
   cursor: pointer;
   font-family: var(--font-sans);
   font-size: 0.8rem;
@@ -473,8 +595,8 @@ p { margin: 0 0 1rem; }
 
 .btn-save-post:hover,
 .btn-save-post.saved {
-  border-color: var(--color-accent);
-  color: var(--color-accent);
+  border-color: var(--color-primary);
+  color: var(--color-primary);
 }
 
 /* ── Saved posts list (account page) ── */
@@ -499,18 +621,18 @@ p { margin: 0 0 1rem; }
   color: var(--color-text);
 }
 
-.saved-post-title:hover { color: var(--color-accent); }
+.saved-post-title:hover { color: var(--color-primary); }
 
 .saved-post-meta {
   font-size: 0.8rem;
-  color: var(--color-muted);
+  color: var(--color-text-muted);
   white-space: nowrap;
 }
 
 .btn-unsave {
   background: none;
   border: none;
-  color: var(--color-muted);
+  color: var(--color-text-muted);
   cursor: pointer;
   font-size: 0.8rem;
   padding: 0;
@@ -521,20 +643,20 @@ p { margin: 0 0 1rem; }
 
 .post-nav span {
   display: block;
-  color: var(--color-muted);
+  color: var(--color-text-muted);
   font-size: 0.8rem;
   margin-bottom: 0.25rem;
 }
 
 .post-nav a { text-decoration: none; font-weight: 500; color: var(--color-text); }
-.post-nav a:hover { color: var(--color-accent); }
+.post-nav a:hover { color: var(--color-primary); }
 
 /* ── Related posts ── */
 .related-posts { margin-top: 2.5rem; }
 .related-posts h2 { font-size: 1.1rem; margin-bottom: 0.75rem; }
 .related-posts ul { padding-left: 1.25rem; margin: 0; }
 .related-posts li { margin-bottom: 0.4rem; }
-.related-posts a { text-decoration: none; color: var(--color-accent); }
+.related-posts a { text-decoration: none; color: var(--color-primary); }
 .related-posts a:hover { text-decoration: underline; }
 
 /* ── Single page ── */
@@ -568,12 +690,12 @@ p { margin: 0 0 1rem; }
 
 .pagination-prev:hover,
 .pagination-next:hover {
-  border-color: var(--color-accent);
-  color: var(--color-accent);
+  border-color: var(--color-primary);
+  color: var(--color-primary);
   text-decoration: none;
 }
 
-.pagination-info { color: var(--color-muted); }
+.pagination-info { color: var(--color-text-muted); }
 
 /* ── Search ── */
 /* Search input is limited to 25 characters (maxlength on the input element). */
@@ -590,15 +712,15 @@ p { margin: 0 0 1rem; }
   font-size: 1rem;
   font-family: var(--font-sans);
   outline: none;
-  background: var(--color-surface);
+  background: var(--color-panel-background);
   transition: border-color 0.15s;
 }
 
-.search-form input[type="search"]:focus { border-color: var(--color-accent); }
+.search-form input[type="search"]:focus { border-color: var(--color-primary); }
 
 .search-form button {
   padding: 0.5rem 1.1rem;
-  background: var(--color-accent);
+  background: var(--color-primary);
   color: #fff;
   border: none;
   border-radius: var(--radius);
@@ -609,10 +731,10 @@ p { margin: 0 0 1rem; }
   transition: background 0.15s;
 }
 
-.search-form button:hover { background: var(--color-accent-dark); }
+.search-form button:hover { background: var(--color-primary-hover); }
 
 .search-result-count, .no-results, .search-prompt {
-  color: var(--color-muted);
+  color: var(--color-text-muted);
   margin: 1rem 0;
 }
 
@@ -623,11 +745,11 @@ p { margin: 0 0 1rem; }
 }
 
 .error-page h1 { font-size: 2.25rem; margin-bottom: 1rem; }
-.error-page p { color: var(--color-muted); }
+.error-page p { color: var(--color-text-muted); }
 .error-page code {
   font-family: var(--font-mono);
   font-size: 0.9em;
-  background: var(--color-surface);
+  background: var(--color-panel-background);
   padding: 0.15em 0.4em;
   border-radius: 3px;
   border: 1px solid var(--color-border);
@@ -667,7 +789,7 @@ p { margin: 0 0 1rem; }
   gap: 0.35rem 0.85rem;
   margin-bottom: 0.35rem;
   font-size: 0.8125rem;
-  color: var(--color-muted);
+  color: var(--color-text-muted);
 }
 
 .comment-author {
@@ -690,13 +812,13 @@ p { margin: 0 0 1rem; }
 
 .comment-reply-link {
   font-size: 0.8125rem;
-  color: var(--color-muted);
+  color: var(--color-text-muted);
   text-decoration: none;
   margin-top: 0.35rem;
   display: inline-block;
 }
 
-.comment-reply-link:hover { color: var(--color-accent); }
+.comment-reply-link:hover { color: var(--color-primary); }
 
 .reply-form { display: none; margin-top: 0.75rem; }
 
@@ -707,7 +829,7 @@ p { margin: 0 0 1rem; }
   border: none;
   padding: 0;
   cursor: pointer;
-  color: var(--color-muted);
+  color: var(--color-text-muted);
   font-size: 0.8125rem;
   font-family: var(--font-sans);
   text-decoration: underline;
@@ -737,14 +859,14 @@ p { margin: 0 0 1rem; }
   line-height: 1.6;
   resize: vertical;
   min-height: 90px;
-  background: var(--color-surface);
+  background: var(--color-panel-background);
   color: var(--color-text);
   outline: none;
   box-sizing: border-box;
   transition: border-color 0.15s;
 }
 
-.comment-textarea:focus { border-color: var(--color-accent); }
+.comment-textarea:focus { border-color: var(--color-primary); }
 
 .comment-form-footer {
   display: flex;
@@ -755,7 +877,7 @@ p { margin: 0 0 1rem; }
 
 .comment-submit {
   padding: 0.4rem 1rem;
-  background: var(--color-accent);
+  background: var(--color-primary);
   color: #fff;
   border: none;
   border-radius: var(--radius);
@@ -766,8 +888,8 @@ p { margin: 0 0 1rem; }
   transition: background 0.15s;
 }
 
-.comment-submit:hover { background: var(--color-accent-dark); }
-.comment-submit:disabled { background: var(--color-muted); cursor: not-allowed; }
+.comment-submit:hover { background: var(--color-primary-hover); }
+.comment-submit:disabled { background: var(--color-text-muted); cursor: not-allowed; }
 
 .comment-error {
   color: #dc2626;
@@ -780,14 +902,14 @@ p { margin: 0 0 1rem; }
   align-items: center;
   gap: 0.4rem;
   font-size: 0.875rem;
-  color: var(--color-muted);
+  color: var(--color-text-muted);
   margin: 0.5rem 0 0;
   cursor: pointer;
   user-select: none;
 }
 
 .comment-login-prompt {
-  color: var(--color-muted);
+  color: var(--color-text-muted);
   font-size: 0.9375rem;
   margin: 0;
 }
@@ -895,6 +1017,30 @@ p { margin: 0 0 1rem; }
     order: 3;
     width: 100%;
     gap: 0;
+  }
+
+  /* Caret visibility and the .open toggle are handled by the (hover: none)
+     query above, for any touch device at any width. This just switches the
+     dropdown from an absolute floating panel to an inline block that
+     stacks within the full-width mobile nav-links list. */
+  .nav-item {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .nav-links a,
+  .nav-dropdown-label,
+  .nav-item-label-only {
+    padding: 0.6rem;
+  }
+
+  .nav-dropdown {
+    position: static;
+    margin: 0 0 0 1rem;
+    padding: 0;
+    background: none;
+    border: none;
+    box-shadow: none;
   }
 
   .header-search {
