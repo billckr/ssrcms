@@ -12,6 +12,30 @@ footer  = "Footer Links"
 [customizer]
 enabled = true
 
+[customizer.colors.navy]
+label = "Header, footer & heading color"
+
+[customizer.colors.blue]
+label = "Primary accent (links, buttons)"
+
+[customizer.colors.blue-dark]
+label = "Primary accent (hover)"
+
+[customizer.colors.charcoal]
+label = "Body text"
+
+[customizer.colors.muted]
+label = "Muted text"
+
+[customizer.colors.lavender]
+label = "Panel background"
+
+[customizer.colors.white]
+label = "Page background"
+
+[customizer.colors.border]
+label = "Border"
+
 [customizer.options.show_sidebar]
 type    = "bool"
 default = true

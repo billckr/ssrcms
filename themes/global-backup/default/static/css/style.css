@@ -103,6 +103,44 @@ a:hover { color: var(--color-primary-hover); text-decoration: none; }
   text-decoration: none;
 }
 
+/* ── Mobile hamburger toggle ── */
+/* Hidden until the mobile breakpoint gates the nav behind it. */
+.nav-toggle {
+  display: none;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 5px;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.nav-toggle-bar {
+  display: block;
+  width: 22px;
+  height: 2px;
+  background: var(--color-text);
+  border-radius: 1px;
+  transition: transform 0.2s ease, opacity 0.2s ease;
+}
+
+.nav-toggle.open .nav-toggle-bar:nth-child(1) {
+  transform: translateY(7px) rotate(45deg);
+}
+
+.nav-toggle.open .nav-toggle-bar:nth-child(2) {
+  opacity: 0;
+}
+
+.nav-toggle.open .nav-toggle-bar:nth-child(3) {
+  transform: translateY(-7px) rotate(-45deg);
+}
+
 /* ── Header submenu (nav items with children) ── */
 
 .nav-item {
@@ -1007,16 +1045,53 @@ p { margin: 0 0 1rem; }
     order: 1;
   }
 
-  .user-bar {
+  .nav-toggle {
+    display: flex;
     order: 2;
     margin-left: auto;
-    padding-bottom: 0;
+  }
+
+  .header-search {
+    order: 3;
+    width: 100%;
+    padding-bottom: 0.75rem;
+  }
+
+  .header-search input[type="search"] { flex: 1; width: auto; }
+
+  /* Hidden behind the hamburger toggle by default — .mobile-nav-open (set
+     by the inline script) reveals the custom menu and sign-in/out links
+     together as one full-width stacked panel. */
+  .nav-links,
+  .user-bar {
+    display: none;
+    order: 4;
+    width: 100%;
+  }
+
+  .site-header.mobile-nav-open .nav-links,
+  .site-header.mobile-nav-open .user-bar {
+    display: flex;
   }
 
   .nav-links {
-    order: 3;
-    width: 100%;
+    flex-direction: column;
+    align-items: stretch;
     gap: 0;
+  }
+
+  .user-bar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
+    padding-top: 0.5rem;
+    padding-bottom: 0.75rem;
+    margin-top: 0.25rem;
+    border-top: 1px solid var(--color-border);
+  }
+
+  .user-bar a {
+    padding: 0.6rem;
   }
 
   /* Caret visibility and the .open toggle are handled by the (hover: none)
@@ -1042,14 +1117,6 @@ p { margin: 0 0 1rem; }
     border: none;
     box-shadow: none;
   }
-
-  .header-search {
-    order: 4;
-    width: 100%;
-    padding-bottom: 0.75rem;
-  }
-
-  .header-search input[type="search"] { flex: 1; width: auto; }
 
   .post-nav { flex-direction: column; }
   .post-nav-prev, .post-nav-next { max-width: 100%; }
