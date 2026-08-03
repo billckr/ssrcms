@@ -661,8 +661,8 @@ fn render_customizer_landing(theme_name: &str, source: &str, data: &CustomizerDa
     };
 
     let details_card = format!(
-        r#"<aside class="card-boxed customizer-details-panel">
-  <h2 class="card-boxed-header">Theme Details</h2>
+        r#"<details class="card-boxed customizer-details-panel">
+  <summary class="card-boxed-header">Theme Details</summary>
   <div class="card-boxed-body">
     <p style="margin-bottom:.6rem;"><strong>Name:</strong> {name}</p>
     <p style="margin-bottom:.6rem;"><strong>Version:</strong> {version}</p>
@@ -670,7 +670,7 @@ fn render_customizer_landing(theme_name: &str, source: &str, data: &CustomizerDa
     <p style="margin-bottom:0;"><strong>Description:</strong> {description}</p>
     <p class="muted" style="font-size:.8rem;margin-top:1.25rem;">News and update checks are coming soon.</p>
   </div>
-</aside>"#,
+</details>"#,
         name = crate::html_escape(&data.manifest.name),
         version = crate::html_escape(&data.manifest.version),
         author = crate::html_escape(&data.manifest.author),

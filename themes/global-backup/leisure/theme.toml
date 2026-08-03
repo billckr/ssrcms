@@ -55,6 +55,13 @@ default_preview = "/theme/static/images/blog-hero.jpg"
 label           = "Hero background image"
 group           = "Hero Image"
 
+[customizer.options.hero_overlay]
+type      = "bool"
+default   = true
+label     = "Darken hero image (overlay for text readability)"
+group     = "Hero Image"
+placement = "sidebar"
+
 [customizer.options.show_header_search]
 type    = "bool"
 default = false

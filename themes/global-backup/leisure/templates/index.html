@@ -3,10 +3,12 @@
 {% block title %}{{ site.name }} — {{ site.description }}{% endblock title %}
 
 {% block content %}
+{% set hero_class = "hero" %}
+{% if theme_options.hero_overlay == false %}{% set hero_class = "hero hero-no-overlay" %}{% endif %}
 {% if theme_option_images.hero_background %}
-<section class="hero" style="background-image: url('{{ theme_option_images.hero_background | safe }}');">
+<section class="{{ hero_class }}" style="background-image: url('{{ theme_option_images.hero_background | safe }}');">
 {% else %}
-<section class="hero" style="background-image: url('/theme/static/images/blog-hero.jpg');">
+<section class="{{ hero_class }}" style="background-image: url('/theme/static/images/blog-hero.jpg');">
 {% endif %}
   <div class="container">
     <h1>{{ site.name }}</h1>

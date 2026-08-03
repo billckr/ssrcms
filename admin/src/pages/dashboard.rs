@@ -620,6 +620,7 @@ fn widgets_section(
   .widget-card.dragging .widget-drag-handle {{ cursor: grabbing; }}
   .widget-card.dragging {{ opacity: .4; }}
   .widget-card.drag-over {{ border-top: 2px solid var(--primary); }}
+  .widget-stats.stat-panel-3 {{ grid-template-columns: repeat(3, 1fr); }}
   .widget-stats.stat-panel-4 {{ grid-template-columns: repeat(4, 1fr); }}
   .widget-stats .stat-cell {{ padding: .7rem .4rem; }}
   .widget-stats .stat-label {{ font-size: .74rem; white-space: nowrap; }}

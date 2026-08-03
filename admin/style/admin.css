@@ -538,8 +538,14 @@ body.sidebar-open .sidebar-overlay {
      its normal side-by-side row layout, and would otherwise shrink each
      stacked panel down to its own content width instead of stretching. */
   .editor-body-row { flex-direction: column; align-items: stretch; }
-  .customizer-sidebar-col { width: 100%; }
-  .customizer-details-panel { width: 100%; }
+  /* display: contents un-wraps the sidebar column so Theme Details and the
+     sidebar-placement cards become direct flex items of .editor-body-row —
+     only then does `order` have anything to reorder them against
+     .editor-main-col. Otherwise Theme Details is stuck at the bottom of the
+     stack, behind every main-column card, instead of being the first thing
+     a mobile visitor sees. */
+  .customizer-sidebar-col { display: contents; }
+  .customizer-details-panel { order: -1; width: 100%; }
   .editor-color-sidebar { width: 100%; }
   .customizer-color-grid { grid-template-columns: repeat(2, 1fr); }
 
@@ -617,6 +623,26 @@ body.sidebar-open .sidebar-overlay {
   border-bottom: 1px solid var(--border);
 }
 .card-boxed-body { padding: 1rem; }
+
+/* Theme Details is a <details>/<summary> so it can collapse — mainly for
+   the mobile reorder below, where it's promoted to the top of a long
+   stacked list of cards and shouldn't push everything else down a screen's
+   worth by default. */
+summary.card-boxed-header {
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+summary.card-boxed-header::-webkit-details-marker { display: none; }
+summary.card-boxed-header::after {
+  content: '\25BE';
+  font-size: .75rem;
+  color: var(--muted);
+  transition: transform .15s ease;
+}
+details[open] > summary.card-boxed-header::after { transform: rotate(180deg); }
 
 fieldset {
   border: none;
