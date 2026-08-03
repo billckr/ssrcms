@@ -50,7 +50,12 @@
   <header class="site-header">
     <div class="container">
       <a class="site-title" href="/">{{ site.name }}</a>
-      <nav class="site-nav{% if theme_option_choices.nav_dropdown_trigger == "click" %} nav-trigger-click{% endif %}">
+      <button type="button" class="nav-toggle" aria-label="Toggle menu" aria-expanded="false" aria-controls="site-nav">
+        <span class="nav-toggle-bar"></span>
+        <span class="nav-toggle-bar"></span>
+        <span class="nav-toggle-bar"></span>
+      </button>
+      <nav id="site-nav" class="site-nav{% if theme_option_choices.nav_dropdown_trigger == "click" %} nav-trigger-click{% endif %}">
         <ul class="nav-links">
           {% for item in nav.primary.items %}
             <li class="nav-item{% if item.children | length > 0 %} has-children{% endif %}">
@@ -123,6 +128,16 @@
         document.querySelectorAll('.nav-item.open').forEach(function(li) { li.classList.remove('open'); });
       }
     });
+
+    var navToggle = document.querySelector('.nav-toggle');
+    var siteNav = document.getElementById('site-nav');
+    if (navToggle && siteNav) {
+      navToggle.addEventListener('click', function() {
+        var isOpen = siteNav.classList.toggle('mobile-open');
+        navToggle.classList.toggle('open', isOpen);
+        navToggle.setAttribute('aria-expanded', String(isOpen));
+      });
+    }
   })();
   </script>
 

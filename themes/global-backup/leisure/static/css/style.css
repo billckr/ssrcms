@@ -103,6 +103,18 @@ img { max-width: 100%; height: auto; display: block; }
   box-shadow: 0 2px 12px rgba(36,42,86,0.15);
 }
 
+/* Gradient-fade separator instead of a flat edge-to-edge rule — reads as a
+   subtle accent rather than a hard line, especially over a hero image. */
+.site-header::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.7) 50%, transparent);
+}
+
 .site-header .container {
   display: flex;
   align-items: center;
@@ -131,6 +143,44 @@ img { max-width: 100%; height: auto; display: block; }
      when header-right is empty — otherwise space-between centers the nav
      in the middle third instead of pushing it flush right. */
   margin-left: auto;
+}
+
+/* Hamburger toggle — hidden until the mobile breakpoint gates the nav
+   behind it (see max-width: 640px below). */
+.nav-toggle {
+  display: none;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 5px;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.nav-toggle-bar {
+  display: block;
+  width: 22px;
+  height: 2px;
+  background: var(--white);
+  border-radius: 1px;
+  transition: transform var(--transition), opacity var(--transition);
+}
+
+.nav-toggle.open .nav-toggle-bar:nth-child(1) {
+  transform: translateY(7px) rotate(45deg);
+}
+
+.nav-toggle.open .nav-toggle-bar:nth-child(2) {
+  opacity: 0;
+}
+
+.nav-toggle.open .nav-toggle-bar:nth-child(3) {
+  transform: translateY(-7px) rotate(-45deg);
 }
 
 .nav-links {
@@ -413,6 +463,13 @@ img { max-width: 100%; height: auto; display: block; }
   padding: 5rem 0;
 }
 
+/* The last section before the footer doesn't need as much bottom padding —
+   pagination/content already has its own spacing, so the full 5rem here on
+   top of that stacked up into an oversized gap above the footer. */
+.site-main > .section:last-child {
+  padding-bottom: 3rem;
+}
+
 .section-alt {
   background: var(--lavender);
 }
@@ -593,6 +650,15 @@ img { max-width: 100%; height: auto; display: block; }
    winning over this plain-class override and leaving a large gap under the
    sidebar's Search button. Bump specificity so this always wins instead. */
 .sidebar-widget .sidebar-search-form.search-form { flex-direction: column; max-width: none; margin: 0; }
+
+/* Relied on inline wrapping + template whitespace for spacing before —
+   fine at the old smaller .tag size, but rows started overlapping once the
+   pills grew taller. Explicit wrap + row/column gap fixes it at any size. */
+.tag-cloud {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem 0.5rem;
+}
 
 .sidebar-empty {
   color: var(--muted);
@@ -781,9 +847,9 @@ img { max-width: 100%; height: auto; display: block; }
 .tag {
   background: var(--lavender);
   color: var(--blue);
-  padding: 0.2rem 0.65rem;
+  padding: 0.3rem 0.85rem;
   border-radius: 20px;
-  font-size: 0.8rem;
+  font-size: 0.9rem;
   font-weight: 600;
   text-decoration: none;
   transition: background var(--transition), color var(--transition);
@@ -909,7 +975,7 @@ img { max-width: 100%; height: auto; display: block; }
   align-items: center;
   justify-content: center;
   gap: 1rem;
-  margin-top: 3rem;
+  margin-top: 2rem;
   font-size: 0.9375rem;
 }
 
@@ -1195,7 +1261,7 @@ img { max-width: 100%; height: auto; display: block; }
 .site-footer {
   background: var(--navy);
   color: rgba(255,255,255,0.7);
-  padding: 3.5rem 0 2rem;
+  padding: 3.5rem 0 1.25rem;
   margin-top: 5rem;
 }
 
@@ -1364,19 +1430,37 @@ img { max-width: 100%; height: auto; display: block; }
     order: 1;
   }
 
-  .user-bar {
+  .nav-toggle {
+    display: flex;
     order: 2;
     margin-left: auto;
   }
 
-  .site-nav {
+  .user-bar {
     order: 3;
-    width: 100%;
   }
 
-  /* Nav already wraps to full width on mobile with no separate hamburger
-     gate, so hover/click submenu behavior would just be confusing — always
-     show children inline instead. */
+  /* Nav is hidden behind the hamburger toggle by default — .mobile-open
+     (set by the inline script) reveals it as a full-width stacked panel. */
+  .site-nav {
+    order: 4;
+    width: 100%;
+    display: none;
+  }
+
+  .site-nav.mobile-open {
+    display: block;
+  }
+
+  .nav-links {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
+  }
+
+  /* Children are always shown inline within the open mobile panel — no
+     separate hover/click submenu behavior, that would just be confusing
+     on touch. */
   .nav-item {
     flex-direction: column;
     align-items: stretch;
@@ -1400,7 +1484,7 @@ img { max-width: 100%; height: auto; display: block; }
   }
 
   .header-search {
-    order: 4;
+    order: 5;
     width: 100%;
     padding-bottom: 0.5rem;
   }

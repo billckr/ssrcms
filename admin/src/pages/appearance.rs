@@ -948,7 +948,10 @@ pub fn render_theme_editor(
     <form method="POST" action="/admin/appearance/editor/{theme}/save" class="editor-form" id="save-form">
       <input type="hidden" name="file" value="{file}">
       <input type="hidden" name="source" value="{source}">
-      <textarea name="content" class="editor-textarea" spellcheck="false" autocorrect="off" autocapitalize="off"{ro}>{content}</textarea>
+      <div class="editor-textarea-wrap">
+        <div class="editor-gutter" id="editor-gutter" aria-hidden="true"></div>
+        <textarea name="content" class="editor-textarea" spellcheck="false" autocorrect="off" autocapitalize="off"{ro}>{content}</textarea>
+      </div>
     </form>
     <div class="editor-actions">
       {save_btn}
@@ -972,6 +975,20 @@ pub fn render_theme_editor(
   textarea.addEventListener('input', function() {{
     btn.disabled = textarea.value === original;
   }});
+}})();
+(function() {{
+  var textarea = document.querySelector('.editor-textarea');
+  var gutter = document.getElementById('editor-gutter');
+  if (!textarea || !gutter) return;
+  function render() {{
+    var count = textarea.value.split('\n').length;
+    var html = '';
+    for (var i = 1; i <= count; i++) {{ html += '<div>' + i + '</div>'; }}
+    gutter.innerHTML = html;
+  }}
+  textarea.addEventListener('input', render);
+  textarea.addEventListener('scroll', function() {{ gutter.scrollTop = textarea.scrollTop; }});
+  render();
 }})();
 </script>
 {color_script}"#,
