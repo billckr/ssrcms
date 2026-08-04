@@ -326,8 +326,9 @@ fn render_customizer_landing(theme_name: &str, source: &str, data: &CustomizerDa
         let rows: String = entries.iter().map(|(key, label, _, value, _)| {
             let checked = if *value { " checked" } else { "" };
             format!(
-                r#"<label class="customizer-option-row">
+                r#"<label class="switch-toggle customizer-option-row">
   <input type="checkbox" name="{key}" value="true"{checked}>
+  <span class="switch-slider"></span>
   <span>{label}</span>
 </label>"#,
                 key = crate::html_escape(key),

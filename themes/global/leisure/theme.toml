@@ -58,19 +58,19 @@ tags       = "Tags"
 type    = "bool"
 default = false
 label   = "Show Subscribe button in hero section"
-group   = "Layout Options"
+group   = "Header"
 
 [customizer.options.show_hero_latest_post]
 type    = "bool"
 default = false
 label   = "Show Read Latest Post button in hero section"
-group   = "Layout Options"
+group   = "Header"
 
 [customizer.options.hero_tagline]
 type    = "text"
 default = ""
 label   = "Tagline (shown below site name in hero)"
-group   = "Layout Options"
+group   = "Header"
 
 [customizer.options.hero_background]
 type            = "image"
@@ -90,19 +90,19 @@ placement = "sidebar"
 type    = "bool"
 default = false
 label   = "Show search in header"
-group   = "Layout Options"
+group   = "Header"
 
 [customizer.options.show_header_signin]
 type    = "bool"
 default = false
 label   = "Show Sign in / Sign out in header"
-group   = "Layout Options"
+group   = "Header"
 
 [customizer.options.nav_dropdown_trigger]
 type    = "choice"
 default = "hover"
 label   = "Header submenu trigger (for menu items with sub-items)"
-group   = "Layout Options"
+group   = "Header"
 
 [customizer.options.nav_dropdown_trigger.choices]
 hover = "Hover to open"

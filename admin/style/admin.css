@@ -196,7 +196,7 @@ tr.muted td { opacity: .55; }
   padding: .5rem .65rem; border: 1px solid var(--border); border-radius: var(--radius);
   font-size: .9rem; font-family: inherit; color: var(--text); background: #fff;
 }
-.customizer-text-input:focus { outline: none; border-color: var(--primary); }
+.customizer-text-input:focus { outline: none; border-color: var(--text); }
 
 /* Theme customizer — image-picker options (hero background, etc.) */
 .customizer-image-field { display: flex; flex-direction: column; gap: .5rem; }
@@ -379,6 +379,15 @@ tr.muted td { opacity: .55; }
 .form-group input[type=datetime-local],
 .form-group select,
 .source-url-input { height: 2.25rem; line-height: 1.4; }
+.form-group input[type=text]:focus,
+.form-group input[type=email]:focus,
+.form-group input[type=url]:focus,
+.form-group input[type=password]:focus,
+.form-group input[type=number]:focus,
+.form-group input[type=datetime-local]:focus,
+.form-group select:focus,
+.form-group textarea:focus,
+.source-url-input:focus { outline: none; border-color: var(--text); }
 .form-group textarea { resize: vertical; }
 .form-group select { font-family: inherit; color: var(--text); background: var(--surface); }
 .form-group small { display: block; color: var(--muted); margin-top: .25rem; font-size: 12px; }

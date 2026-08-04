@@ -40,11 +40,13 @@ label = "Border"
 type    = "bool"
 default = true
 label   = "Show right sidebar (search, account, categories, tags)"
+group   = "Sidebar"
 
 [customizer.options.sidebar_order]
 type    = "order"
 default = ["search", "account", "categories", "tags"]
 label   = "Sidebar widget order"
+group   = "Sidebar"
 
 [customizer.options.sidebar_order.items]
 search     = "Search"
@@ -56,11 +58,13 @@ tags       = "Tags"
 type    = "text"
 default = ""
 label   = "Tagline (shown below site name)"
+group   = "Header"
 
 [customizer.options.nav_dropdown_trigger]
 type    = "choice"
 default = "hover"
 label   = "Header submenu trigger (for menu items with sub-items)"
+group   = "Header"
 
 [customizer.options.nav_dropdown_trigger.choices]
 hover = "Hover to open"
