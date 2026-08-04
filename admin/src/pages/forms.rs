@@ -142,6 +142,21 @@ pub fn render_forms_list(
 
 // ── Submission detail ─────────────────────────────────────────────────────────
 
+/// Link a submission's IP to its ARIN RDAP lookup, opening in a new tab.
+/// `stopPropagation` keeps the click from also toggling the enclosing
+/// `<details>` — without it, clicking the link both opens ARIN and
+/// collapses/expands the row underneath it.
+fn ip_link_html(ip: Option<&str>) -> String {
+    match ip {
+        Some(ip) if !ip.is_empty() => format!(
+            r#"<a href="https://search.arin.net/rdap/?query={ip_enc}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">{ip_esc}</a>"#,
+            ip_enc = html_escape(ip),
+            ip_esc = html_escape(ip),
+        ),
+        _ => "—".to_string(),
+    }
+}
+
 fn submission_pagination(form_name: &str, page: i64, total_pages: i64) -> String {
     if total_pages <= 1 {
         return String::new();
@@ -213,7 +228,7 @@ pub fn render_form_detail(
 </details>"#,
                 submitted = html_escape(&s.submitted_at),
                 fields = fields,
-                ip = html_escape(s.ip_address.as_deref().unwrap_or("—")),
+                ip = ip_link_html(s.ip_address.as_deref()),
                 fname = html_escape(form_name),
                 id = html_escape(&s.id),
             )
@@ -233,6 +248,8 @@ pub fn render_form_detail(
     let content = format!(
         r#"<style>
 .submission-list .card-boxed {{ margin-bottom: .6rem; }}
+.submission-row summary.card-boxed-header {{ transition: background-color .1s ease; }}
+.submission-row summary.card-boxed-header:hover {{ background: #eef1f5; }}
 .submission-summary-date {{
   flex-shrink: 0;
   font-variant-numeric: tabular-nums;
@@ -244,6 +261,8 @@ pub fn render_form_detail(
   border-right: 1px solid var(--border);
 }}
 .submission-summary-ip {{ flex: 1; color: var(--muted); font-weight: 400; font-size: .85rem; }}
+.submission-summary-ip a {{ color: var(--muted); text-decoration: none; }}
+.submission-summary-ip a:hover {{ color: var(--primary); text-decoration: underline; }}
 .submission-fields {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: .75rem 1.5rem; }}
 .submission-field dt {{ font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .03em; color: var(--muted); margin-bottom: .15rem; }}
 .submission-field dd {{ font-size: 13px; color: var(--text); word-break: break-word; }}

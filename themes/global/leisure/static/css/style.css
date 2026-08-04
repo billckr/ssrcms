@@ -1748,6 +1748,29 @@ img { max-width: 100%; height: auto; display: block; }
 .form-toggle-input:checked + .form-toggle-slider::before { transform: translateX(16px); }
 .form-toggle-input:focus-visible + .form-toggle-slider { box-shadow: 0 0 0 3px rgba(104,120,214,0.25); }
 
+/* ── Visual-only form elements: separator line, note/callout ── */
+.form-field-separator { margin: 0.5rem 0; }
+.form-separator-title {
+  margin: 0 0 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+}
+.form-separator { border: none; border-top: 1.5px solid var(--border); margin: 0; }
+
+.form-callout {
+  margin: 0;
+  padding: 0.85rem 1.1rem;
+  background: color-mix(in srgb, var(--blue) 8%, white);
+  border-left: 3px solid var(--blue);
+  border-radius: var(--radius);
+  color: var(--charcoal);
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
 /* ── Screen-reader only utility ── */
 .sr-only {
   position: absolute;

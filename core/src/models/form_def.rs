@@ -239,6 +239,29 @@ fn render_field_html(f: &FormField, slug: &str) -> String {
     let name = html_escape(&f.name);
 
     match f.field_type.as_str() {
+        // Visual-only — no input, no `name`, nothing submitted. `label`
+        // doubles as an optional section title (separator) or the callout
+        // text itself (note).
+        "separator" => {
+            let title = if f.label.trim().is_empty() {
+                String::new()
+            } else {
+                format!(r#"<p class="form-separator-title">{label}</p>"#)
+            };
+            format!(
+                r#"<div class="form-field form-field-separator">
+  {title}
+  <hr class="form-separator">
+</div>
+"#
+            )
+        }
+        "note" => format!(
+            r#"<div class="form-field form-field-note">
+  <p class="form-callout">{label}</p>
+</div>
+"#
+        ),
         "checkbox" => format!(
             r#"<div class="form-field form-field-checkbox">
   <label class="form-checkbox-label"><input type="checkbox" id="{id}" name="{name}" value="true"{required_attr}> <span>{label}{required_mark}</span></label>

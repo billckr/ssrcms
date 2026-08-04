@@ -64,7 +64,26 @@ const FIELD_TYPES: &[(&str, &str)] = &[
     ("radio", "Radio group"),
     ("checkbox", "Checkbox"),
     ("toggle", "Toggle"),
+    ("separator", "Separator line"),
+    ("note", "Note / callout"),
 ];
+
+/// `separator` and `note` are visual-only elements — nothing is submitted
+/// for them, so "Field name" and "Required" don't apply and are hidden.
+fn is_visual_only(field_type: &str) -> bool {
+    matches!(field_type, "separator" | "note")
+}
+
+/// (label-of-the-label-input, placeholder) for the "Field label" input,
+/// which doubles as an optional section title for separators and as the
+/// callout text itself for notes.
+fn field_label_meta(field_type: &str) -> (&'static str, &'static str) {
+    match field_type {
+        "separator" => ("Section title (optional)", "e.g. Shipping details"),
+        "note" => ("Note text", "e.g. We'll never share your email with anyone."),
+        _ => ("Field label", "e.g. Your name"),
+    }
+}
 
 pub fn render_list(rows: &[FormRow], ctx: &PageContext, flash: Option<&str>) -> String {
     let body = if rows.is_empty() {
@@ -139,19 +158,21 @@ fn field_row_html(f: &FieldRow, index: usize) -> String {
 
     let (has_options, options_label, options_hint, options_placeholder) = options_meta(&f.field_type);
     let options_display = if has_options { "" } else { "display:none" };
+    let (label_of_label, label_placeholder) = field_label_meta(&f.field_type);
+    let visual_only_display = if is_visual_only(&f.field_type) { "display:none" } else { "" };
 
     format!(
-        r#"<div class="field-row" data-index="{index}" style="border:1px solid var(--border);border-radius:var(--radius);padding:.85rem 1rem;margin-bottom:.6rem;background:var(--surface)">
+        r#"<div class="field-row" data-index="{index}" style="border:1px solid var(--border);border-radius:var(--radius);padding:.85rem 1rem;margin-bottom:.6rem;background:#f8fafc">
   <div style="display:flex;align-items:flex-start;gap:.6rem">
     <span class="drag-handle" title="Drag to reorder" draggable="true" style="margin-top:1.6rem">
       <img src="/admin/static/icons/move.svg" alt="">
     </span>
     <div style="flex:1;display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:.6rem;align-items:end">
       <div class="form-group" style="margin:0">
-        <label>Field label</label>
-        <input type="text" class="field-label" value="{label}" placeholder="e.g. Your name">
+        <label class="field-label-caption">{label_of_label}</label>
+        <input type="text" class="field-label" value="{label}" placeholder="{label_placeholder}">
       </div>
-      <div class="form-group" style="margin:0">
+      <div class="form-group field-name-wrap" style="margin:0;{visual_only_display}">
         <label>Field name <span class="field-hint">(used in submissions)</span></label>
         <input type="text" class="field-name" value="{name}" placeholder="e.g. name">
       </div>
@@ -164,7 +185,7 @@ fn field_row_html(f: &FieldRow, index: usize) -> String {
       </button>
     </div>
   </div>
-  <div style="margin-left:2.2rem;margin-top:.5rem;display:flex;align-items:center;gap:1.2rem">
+  <div class="field-required-wrap" style="margin-left:2.2rem;margin-top:.5rem;display:flex;align-items:center;gap:1.2rem;{visual_only_display}">
     <label style="display:flex;align-items:center;gap:.4rem;font-size:13px;cursor:pointer">
       <input type="checkbox" class="field-required"{required}>
       Required
@@ -177,9 +198,12 @@ fn field_row_html(f: &FieldRow, index: usize) -> String {
 </div>"#,
         index = index,
         label = html_escape(&f.label),
+        label_of_label = label_of_label,
+        label_placeholder = label_placeholder,
         name = html_escape(&f.name),
         type_opts = type_opts,
         required = if f.required { " checked" } else { "" },
+        visual_only_display = visual_only_display,
         options_display = options_display,
         options_label = options_label,
         options_hint = options_hint,
@@ -259,23 +283,28 @@ pub fn render_editor(data: &FormEditData, ctx: &PageContext, flash: Option<&str>
       </div>
     </div>
     <div>
-      <div class="card-boxed" style="position:sticky;top:1rem">
-        <h2 class="card-boxed-header">Preview</h2>
+      <details class="card-boxed" style="position:sticky;top:1rem">
+        <summary class="card-boxed-header">Preview</summary>
         <div class="card-boxed-body">
           <p class="field-hint" style="margin-bottom:.85rem">A live mockup — this is what visitors will see. It isn't wired to submit anything from here.</p>
           <div id="form-preview"></div>
         </div>
-      </div>
+      </details>
     </div>
   </div>
 </form>
 <script>
 (function() {{
   var FIELD_TYPES_WITH_OPTIONS = ['select', 'radio', 'toggle'];
+  var VISUAL_ONLY_TYPES = ['separator', 'note'];
   var OPTIONS_META = {{
     toggle: {{ label: 'Off / On labels', hint: 'exactly two lines — off state, then on state', placeholder: 'e.g.\noff|Off\non|On' }},
     select: {{ label: 'Options', hint: 'one per line — "value|Label", or just "Label"', placeholder: 'e.g.\nyes|Yes\nno|No' }},
     radio:  {{ label: 'Options', hint: 'one per line — "value|Label", or just "Label"', placeholder: 'e.g.\nyes|Yes\nno|No' }}
+  }};
+  var LABEL_META = {{
+    separator: {{ caption: 'Section title (optional)', placeholder: 'e.g. Shipping details' }},
+    note:      {{ caption: 'Note text', placeholder: "e.g. We'll never share your email with anyone." }}
   }};
   var container = document.getElementById('field-rows');
   var addBtn = document.getElementById('add-field-btn');
@@ -288,7 +317,7 @@ pub fn render_editor(data: &FormEditData, ctx: &PageContext, flash: Option<&str>
   function makeRow() {{
     var row = document.createElement('div');
     row.className = 'field-row';
-    row.style.cssText = 'border:1px solid var(--border);border-radius:var(--radius);padding:.85rem 1rem;margin-bottom:.6rem;background:var(--surface)';
+    row.style.cssText = 'border:1px solid var(--border);border-radius:var(--radius);padding:.85rem 1rem;margin-bottom:.6rem;background:#f8fafc';
     var typeOpts = {type_opts_js}.map(function(t) {{
       return '<option value="' + t[0] + '">' + t[1] + '</option>';
     }}).join('');
@@ -296,13 +325,13 @@ pub fn render_editor(data: &FormEditData, ctx: &PageContext, flash: Option<&str>
       '<div style="display:flex;align-items:flex-start;gap:.6rem">' +
         '<span class="drag-handle" title="Drag to reorder" draggable="true" style="margin-top:1.6rem"><img src="/admin/static/icons/move.svg" alt=""></span>' +
         '<div style="flex:1;display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:.6rem;align-items:end">' +
-          '<div class="form-group" style="margin:0"><label>Field label</label><input type="text" class="field-label" placeholder="e.g. Your name"></div>' +
-          '<div class="form-group" style="margin:0"><label>Field name <span class="field-hint">(used in submissions)</span></label><input type="text" class="field-name" placeholder="e.g. name"></div>' +
+          '<div class="form-group" style="margin:0"><label class="field-label-caption">Field label</label><input type="text" class="field-label" placeholder="e.g. Your name"></div>' +
+          '<div class="form-group field-name-wrap" style="margin:0"><label>Field name <span class="field-hint">(used in submissions)</span></label><input type="text" class="field-name" placeholder="e.g. name"></div>' +
           '<div class="form-group" style="margin:0"><label>Type</label><select class="field-type">' + typeOpts + '</select></div>' +
           '<button type="button" class="icon-btn icon-danger field-remove" title="Remove field" style="margin-bottom:.45rem"><img src="/admin/static/icons/delete.svg" alt="Remove"></button>' +
         '</div>' +
       '</div>' +
-      '<div style="margin-left:2.2rem;margin-top:.5rem;display:flex;align-items:center;gap:1.2rem">' +
+      '<div class="field-required-wrap" style="margin-left:2.2rem;margin-top:.5rem;display:flex;align-items:center;gap:1.2rem">' +
         '<label style="display:flex;align-items:center;gap:.4rem;font-size:13px;cursor:pointer"><input type="checkbox" class="field-required">Required</label>' +
       '</div>' +
       '<div class="field-options-wrap form-group" style="margin:.6rem 0 0 2.2rem;display:none">' +
@@ -321,6 +350,16 @@ pub fn render_editor(data: &FormEditData, ctx: &PageContext, flash: Option<&str>
     row.querySelector('.field-options').placeholder = meta.placeholder;
   }}
 
+  function updateFieldMeta(row) {{
+    var type = row.querySelector('.field-type').value;
+    var meta = LABEL_META[type];
+    row.querySelector('.field-label-caption').textContent = meta ? meta.caption : 'Field label';
+    row.querySelector('.field-label').placeholder = meta ? meta.placeholder : 'e.g. Your name';
+    var visualOnly = VISUAL_ONLY_TYPES.indexOf(type) !== -1;
+    row.querySelector('.field-name-wrap').style.display = visualOnly ? 'none' : '';
+    row.querySelector('.field-required-wrap').style.display = visualOnly ? 'none' : '';
+  }}
+
   function wireRow(row) {{
     var labelInput = row.querySelector('.field-label');
     var nameInput  = row.querySelector('.field-name');
@@ -336,6 +375,7 @@ pub fn render_editor(data: &FormEditData, ctx: &PageContext, flash: Option<&str>
     typeSelect.addEventListener('change', function() {{
       optionsWrap.style.display = FIELD_TYPES_WITH_OPTIONS.indexOf(typeSelect.value) !== -1 ? '' : 'none';
       updateOptionsMeta(row);
+      updateFieldMeta(row);
       updatePreview();
     }});
     row.querySelector('.field-required').addEventListener('change', updatePreview);
@@ -347,6 +387,7 @@ pub fn render_editor(data: &FormEditData, ctx: &PageContext, flash: Option<&str>
       updatePreview();
     }});
     if (!row.querySelector('.field-options').placeholder) updateOptionsMeta(row);
+    updateFieldMeta(row);
   }}
 
   container.querySelectorAll('.field-row').forEach(wireRow);
@@ -383,8 +424,12 @@ pub fn render_editor(data: &FormEditData, ctx: &PageContext, flash: Option<&str>
     container.querySelectorAll('.field-row').forEach(function(row) {{
       var label = row.querySelector('.field-label').value.trim();
       var name  = row.querySelector('.field-name').value.trim();
-      if (!label && !name) return; // skip fully-empty rows
       var type  = row.querySelector('.field-type').value;
+      var isVisualOnly = VISUAL_ONLY_TYPES.indexOf(type) !== -1;
+      // Skip fully-empty rows — but a separator/note with no title text is
+      // a normal, common case (not "nobody filled this in yet"), so only
+      // apply that guard to types that actually submit data.
+      if (!isVisualOnly && !label && !name) return;
       var required = row.querySelector('.field-required').checked;
       var options = [];
       if (FIELD_TYPES_WITH_OPTIONS.indexOf(type) !== -1) {{
@@ -416,6 +461,13 @@ pub fn render_editor(data: &FormEditData, ctx: &PageContext, flash: Option<&str>
   }}
 
   function renderPreviewField(f) {{
+    if (f.type === 'separator') {{
+      var title = f.label ? '<p style="margin:0 0 6px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)">' + esc(f.label) + '</p>' : '';
+      return '<div style="margin:18px 0">' + title + '<hr style="border:none;border-top:1px solid var(--border);margin:0"></div>';
+    }}
+    if (f.type === 'note') {{
+      return '<div style="margin-bottom:14px;padding:.7rem .9rem;background:#f8fafc;border-left:3px solid var(--primary);border-radius:3px;font-size:13px;color:var(--text)">' + esc(f.label || 'Note text goes here') + '</div>';
+    }}
     var req = f.required ? ' <span style="color:var(--danger)">*</span>' : '';
     var html = '<div style="margin-bottom:14px">';
     if (f.type !== 'checkbox') {{
