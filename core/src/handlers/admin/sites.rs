@@ -199,8 +199,35 @@ pub async fn list(
         }
     }
 
+    // Search + pagination are applied in-memory rather than pushed into SQL —
+    // each branch above already builds `rows` via N+1 per-site enrichment
+    // queries (admin_email/user_count/etc.), not a single paginated query,
+    // so filtering/slicing the already-built Vec is the simplest option that
+    // doesn't require restructuring those three branches.
+    let search = params.get("search").map(|s| s.trim()).unwrap_or("");
+    if !search.is_empty() {
+        let needle = search.to_lowercase();
+        rows.retain(|r| {
+            r.hostname.to_lowercase().contains(&needle)
+                || r.admin_email.as_deref().unwrap_or("").to_lowercase().contains(&needle)
+        });
+    }
+
+    const PER_PAGE: i64 = 20;
+    let total = rows.len() as i64;
+    let total_pages = ((total + PER_PAGE - 1) / PER_PAGE).max(1);
+    let page = params.get("page").and_then(|p| p.parse::<i64>().ok()).unwrap_or(1).clamp(1, total_pages);
+    let start = ((page - 1) * PER_PAGE) as usize;
+    let end = (start + PER_PAGE as usize).min(rows.len());
+    let page_rows = rows.get(start..end).unwrap_or(&[]);
+
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
-    Html(admin::pages::sites::render_list(&rows, flash, can_create, &ctx))
+
+    if params.contains_key("partial") {
+        return Html(admin::pages::sites::sites_list_fragment(page_rows, page, total_pages, search, &ctx));
+    }
+
+    Html(admin::pages::sites::render_list(page_rows, flash, can_create, page, total_pages, search, &ctx))
 }
 
 /// Assignable users for the "existing user" dropdown on the new-site form —

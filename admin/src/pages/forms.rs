@@ -22,34 +22,9 @@ pub struct SubmissionRow {
 
 pub fn render_forms_list(
     forms: &[FormSummaryRow],
-    all_names: &[String],
-    active_filter: &str,
     flash: Option<&str>,
     ctx: &PageContext,
 ) -> String {
-    // ── filter dropdown ───────────────────────────────────────────────────────
-    let filter_dropdown = if all_names.is_empty() {
-        String::new()
-    } else {
-        let options = std::iter::once(
-            format!(
-                r#"<option value=""{}>(All forms)</option>"#,
-                if active_filter.is_empty() { " selected" } else { "" }
-            )
-        ).chain(all_names.iter().map(|n| {
-            let sel = if n == active_filter { " selected" } else { "" };
-            format!(r#"<option value="{n}"{sel}>{n}</option>"#, n = html_escape(n), sel = sel)
-        })).collect::<Vec<_>>().join("\n");
-
-        format!(
-            r#"<form method="GET" action="/admin/forms" style="display:inline;margin-left:0.5rem;">
-  <select name="filter" class="forms-filter-select" onchange="this.form.submit()" aria-label="Filter by form name">
-    {options}
-  </select>
-</form>"#
-        )
-    };
-
     let rows = if forms.is_empty() {
         r#"<tr><td colspan="5" class="empty-state">No form submissions yet.</td></tr>"#.to_string()
     } else {
@@ -59,16 +34,16 @@ pub fn render_forms_list(
             } else { "" };
             let block_btn = if f.blocked {
                 format!(
-                    r#"<form method="POST" action="/admin/forms/{}/toggle-block" style="display:inline">
-  <button class="btn btn-sm btn-secondary" type="submit">Unblock</button>
+                    r#"<form method="POST" action="/admin/form-data-analytics/{}/toggle-block" style="display:inline">
+  <button class="icon-btn" type="submit" title="Unblock" aria-label="Unblock"><img src="/admin/static/icons/unlock.svg" alt=""></button>
 </form>"#,
                     html_escape(&f.form_name)
                 )
             } else {
                 format!(
-                    r#"<form method="POST" action="/admin/forms/{}/toggle-block" style="display:inline"
+                    r#"<form method="POST" action="/admin/form-data-analytics/{}/toggle-block" style="display:inline"
       onsubmit="return confirm('Block this form? New submissions will be silently discarded.')">
-  <button class="btn btn-sm btn-danger" type="submit">Block</button>
+  <button class="icon-btn icon-danger" type="submit" title="Block" aria-label="Block"><img src="/admin/static/icons/lock.svg" alt=""></button>
 </form>"#,
                     html_escape(&f.form_name)
                 )
@@ -76,12 +51,11 @@ pub fn render_forms_list(
             let row_class = if f.blocked { " class=\"muted\"" } else { "" };
             format!(
                 r#"<tr{row_class}>
-  <td><a href="/admin/forms/{name}">{name}</a>{blocked_badge}</td>
+  <td><a href="/admin/form-data-analytics/{name}">{name}</a>{blocked_badge}</td>
   <td>{count}</td>
   <td>{last}</td>
   <td>
-    <a href="/admin/forms/{name}" class="btn btn-sm btn-secondary">View</a>
-    <a href="/admin/forms/{name}/export" class="btn btn-sm btn-secondary">CSV</a>
+    <a href="/admin/form-data-analytics/{name}/export" class="icon-btn" title="Export CSV" aria-label="Export CSV"><img src="/admin/static/icons/download.svg" alt=""></a>
     {block_btn}
   </td>
 </tr>"#,
@@ -96,9 +70,16 @@ pub fn render_forms_list(
     };
 
     let content = format!(
-        r#"<div style="margin-bottom:1rem;display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;">
-  <a href="/admin/pages/new" class="btn btn-primary">New Form</a>
-  {filter_dropdown}
+        r#"<div style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;margin-bottom:1rem;flex-wrap:wrap">
+  <div style="display:flex;align-items:center;gap:.75rem">
+    <div class="icon-search-box" style="margin-bottom:0">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input id="forms-search" type="search" placeholder="Search forms&hellip;" autocomplete="off">
+    </div>
+  </div>
+  <div style="display:flex;align-items:center;gap:.5rem">
+    <a href="/admin/form-designer/new" class="icon-btn" title="New Form" aria-label="New Form"><img src="/admin/static/icons/file-plus.svg" alt=""></a>
+  </div>
 </div>
 <div class="table-wrap">
 <table class="data-table">
@@ -110,34 +91,28 @@ pub fn render_forms_list(
       <th>Actions</th>
     </tr>
   </thead>
-  <tbody>
+  <tbody id="forms-table-body">
     {rows}
   </tbody>
 </table>
 </div>
-<style>
-.forms-filter-select {{
-  padding: 0.4rem 0.65rem;
-  font-size: 0.875rem;
-  font-family: inherit;
-  border: 1.5px solid var(--color-border, #d1d5db);
-  border-radius: 6px;
-  background: #fff;
-  color: var(--color-text, #1a1a2e);
-  cursor: pointer;
-  height: 2.15rem;
-}}
-.forms-filter-select:focus {{
-  outline: none;
-  border-color: var(--color-primary, #2b6cb0);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary, #2b6cb0) 15%, transparent);
-}}
-</style>"#,
-        filter_dropdown = filter_dropdown,
+<script>
+(function() {{
+  var input = document.getElementById('forms-search');
+  var rows = document.querySelectorAll('#forms-table-body tr');
+  if (!input) return;
+  input.addEventListener('input', function() {{
+    var q = input.value.trim().toLowerCase();
+    rows.forEach(function(row) {{
+      row.style.display = (!q || row.textContent.toLowerCase().indexOf(q) !== -1) ? '' : 'none';
+    }});
+  }});
+}})();
+</script>"#,
         rows = rows,
     );
 
-    admin_page("Forms", "/admin/forms", flash, &content, ctx)
+    admin_page("Forms", "/admin/form-data-analytics", flash, &content, ctx)
 }
 
 // ── Submission detail ─────────────────────────────────────────────────────────
@@ -161,7 +136,7 @@ fn submission_pagination(form_name: &str, page: i64, total_pages: i64) -> String
     if total_pages <= 1 {
         return String::new();
     }
-    let base_path = format!("/admin/forms/{}", html_escape(form_name));
+    let base_path = format!("/admin/form-data-analytics/{}", html_escape(form_name));
     let prev = if page > 1 {
         format!(r#"<a href="{base_path}?page={}" class="page-btn">&laquo; Prev</a>"#, page - 1)
     } else {
@@ -220,7 +195,7 @@ pub fn render_form_detail(
     <dl class="submission-fields">
       {fields}
     </dl>
-    <form method="POST" action="/admin/forms/{fname}/{id}/delete"
+    <form method="POST" action="/admin/form-data-analytics/{fname}/{id}/delete"
           onsubmit="return confirm('Delete this submission?')" style="margin-top:.75rem">
       <button class="btn btn-sm btn-danger" type="submit">Delete</button>
     </form>
@@ -269,12 +244,12 @@ pub fn render_form_detail(
 #submission-no-matches {{ display: none; color: var(--muted); font-size: .9rem; padding: 1rem 0; }}
 </style>
 <div class="page-actions" style="margin-bottom:1rem;display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center;">
-  <a href="/admin/forms/{fname}/export" class="btn btn-secondary">Export CSV</a>
-  <form method="POST" action="/admin/forms/{fname}/delete-all" style="display:inline"
+  <a href="/admin/form-data-analytics/{fname}/export" class="btn btn-secondary">Export CSV</a>
+  <form method="POST" action="/admin/form-data-analytics/{fname}/delete-all" style="display:inline"
         onsubmit="return confirm('Delete ALL submissions for this form?')">
     <button class="btn btn-danger" type="submit">Delete All</button>
   </form>
-  <a href="/admin/forms" class="btn btn-secondary" style="margin-left:auto">← All Forms</a>
+  <a href="/admin/form-data-analytics" class="btn btn-secondary" style="margin-left:auto">← All Forms</a>
 </div>
 {search_box}
 <div class="submission-list">
@@ -307,5 +282,5 @@ pub fn render_form_detail(
     );
 
     let title = format!("Form: {}", form_name);
-    admin_page(&title, "/admin/forms", flash, &content, ctx)
+    admin_page(&title, "/admin/form-data-analytics", flash, &content, ctx)
 }

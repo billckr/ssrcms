@@ -246,12 +246,12 @@ pub fn build(
         .route("/admin/form-designer/new", get(admin_form_designer::new_form))
         .route("/admin/form-designer/{id}", get(admin_form_designer::edit_form).post(admin_form_designer::update))
         .route("/admin/form-designer/{id}/delete", post(admin_form_designer::delete))
-        .route("/admin/forms", get(admin_forms::list_forms))
-        .route("/admin/forms/{name}", get(admin_forms::view_form))
-        .route("/admin/forms/{name}/{id}/delete", post(admin_forms::delete_submission))
-        .route("/admin/forms/{name}/delete-all", post(admin_forms::delete_all))
-        .route("/admin/forms/{name}/export", get(admin_forms::export_csv))
-        .route("/admin/forms/{name}/toggle-block", post(admin_forms::toggle_block))
+        .route("/admin/form-data-analytics", get(admin_forms::list_forms))
+        .route("/admin/form-data-analytics/{name}", get(admin_forms::view_form))
+        .route("/admin/form-data-analytics/{name}/{id}/delete", post(admin_forms::delete_submission))
+        .route("/admin/form-data-analytics/{name}/delete-all", post(admin_forms::delete_all))
+        .route("/admin/form-data-analytics/{name}/export", get(admin_forms::export_csv))
+        .route("/admin/form-data-analytics/{name}/toggle-block", post(admin_forms::toggle_block))
         // ── Static files ───────────────────────────────────────────────────
         .nest_service("/admin/static", ServeDir::new("admin/static"))
         .layer(admin_session_layer);

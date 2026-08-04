@@ -1,18 +1,19 @@
 //! Admin handlers for the Form Designer — CRUD over saved form definitions.
 
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::StatusCode,
     response::{Html, IntoResponse, Redirect, Response},
 };
 use serde::Deserialize;
+use std::collections::HashMap;
 use uuid::Uuid;
 
 use crate::app_state::AppState;
 use crate::middleware::admin_auth::AdminUser;
 use crate::models::form_def::{self, CreateFormDef, FormField, FormSettings, UpdateFormDef};
 
-use admin::pages::form_designer::{render_editor, render_list, FieldRow, FormEditData, FormRow};
+use admin::pages::form_designer::{forms_list_fragment, render_editor, render_list, FieldRow, FormEditData, FormRow};
 
 fn require_forms_cap(admin: &AdminUser) -> Result<(), Response> {
     if !admin.caps.can_manage_forms {
@@ -28,7 +29,7 @@ fn require_site_id(admin: &AdminUser) -> Result<Uuid, Response> {
 
 // ── list ─────────────────────────────────────────────────────────────────────
 
-pub async fn list(State(state): State<AppState>, admin: AdminUser) -> Response {
+pub async fn list(State(state): State<AppState>, admin: AdminUser, Query(params): Query<HashMap<String, String>>) -> Response {
     if let Err(e) = require_forms_cap(&admin) { return e; }
     let site_id = match require_site_id(&admin) { Ok(id) => id, Err(e) => return e };
 
@@ -36,7 +37,7 @@ pub async fn list(State(state): State<AppState>, admin: AdminUser) -> Response {
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
 
     let forms = form_def::list_for_site(&state.db, site_id).await.unwrap_or_default();
-    let rows: Vec<FormRow> = forms.into_iter().map(|f| FormRow {
+    let mut rows: Vec<FormRow> = forms.into_iter().map(|f| FormRow {
         id: f.id.to_string(),
         name: f.name,
         slug: f.slug,
@@ -44,7 +45,28 @@ pub async fn list(State(state): State<AppState>, admin: AdminUser) -> Response {
         updated_at: f.updated_at.format("%Y-%m-%d %H:%M UTC").to_string(),
     }).collect();
 
-    Html(render_list(&rows, &ctx, None)).into_response()
+    // In-memory search + pagination — same reasoning as /admin/sites: the
+    // list is small enough per site that a second SQL query isn't worth
+    // the added complexity over filtering/slicing the Vec already fetched.
+    let search = params.get("search").map(|s| s.trim()).unwrap_or("");
+    if !search.is_empty() {
+        let needle = search.to_lowercase();
+        rows.retain(|r| r.name.to_lowercase().contains(&needle) || r.slug.to_lowercase().contains(&needle));
+    }
+
+    const PER_PAGE: i64 = 20;
+    let total = rows.len() as i64;
+    let total_pages = ((total + PER_PAGE - 1) / PER_PAGE).max(1);
+    let page = params.get("page").and_then(|p| p.parse::<i64>().ok()).unwrap_or(1).clamp(1, total_pages);
+    let start = ((page - 1) * PER_PAGE) as usize;
+    let end = (start + PER_PAGE as usize).min(rows.len());
+    let page_rows = rows.get(start..end).unwrap_or(&[]);
+
+    if params.contains_key("partial") {
+        return Html(forms_list_fragment(page_rows, page, total_pages, search)).into_response();
+    }
+
+    Html(render_list(page_rows, page, total_pages, search, &ctx, None)).into_response()
 }
 
 // ── new / edit form ─────────────────────────────────────────────────────────

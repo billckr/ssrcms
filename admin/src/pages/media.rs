@@ -892,63 +892,71 @@ body.sidebar-open .admin-sidebar {{
 
   <!-- Delete folder modal -->
   <div id="mmDeleteFolderModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;align-items:center;justify-content:center">
-    <div style="background:var(--surface);border-radius:var(--radius);padding:1.5rem;max-width:400px;width:90%;box-shadow:0 4px 24px rgba(0,0,0,.25)">
-      <h3 style="margin:0 0 .75rem;font-size:1rem;font-weight:600">Delete folder</h3>
-      <p id="mmDeleteFolderMsg" style="font-size:14px;color:var(--muted);margin-bottom:1rem"></p>
-      <div id="mmDeleteFolderActions" style="display:flex;flex-direction:column;gap:.5rem">
-        <button class="btn btn-secondary" id="mmDeleteFolderMoveBtn" onclick="confirmDeleteFolder(false)" style="justify-content:center">Move files to All Media, then delete folder</button>
-        <button class="btn btn-danger" onclick="confirmDeleteFolder(true)" style="justify-content:center">Delete folder and all its files permanently</button>
-      </div>
-      <div style="margin-top:.75rem;text-align:right">
-        <button class="btn btn-secondary" onclick="document.getElementById('mmDeleteFolderModal').style.display='none'">Cancel</button>
+    <div class="modal-card" style="max-width:400px;width:90%">
+      <h3 class="modal-card-header">Delete folder</h3>
+      <div class="modal-card-body">
+        <p id="mmDeleteFolderMsg" style="font-size:14px;color:var(--muted);margin-bottom:1rem"></p>
+        <div id="mmDeleteFolderActions" style="display:flex;flex-direction:column;gap:.5rem">
+          <button class="btn btn-secondary" id="mmDeleteFolderMoveBtn" onclick="confirmDeleteFolder(false)" style="justify-content:center">Move files to All Media, then delete folder</button>
+          <button class="btn btn-danger" onclick="confirmDeleteFolder(true)" style="justify-content:center">Delete folder and all its files permanently</button>
+        </div>
+        <div style="margin-top:.75rem;text-align:right">
+          <button class="btn btn-secondary" onclick="document.getElementById('mmDeleteFolderModal').style.display='none'">Cancel</button>
+        </div>
       </div>
     </div>
   </div>
 
   <!-- Move-to folder modal -->
   <div id="mmMoveModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;align-items:center;justify-content:center">
-    <div style="background:var(--surface);border-radius:var(--radius);padding:1.5rem;max-width:360px;width:90%;box-shadow:0 4px 24px rgba(0,0,0,.25)">
-      <h3 style="margin:0 0 .75rem;font-size:1rem;font-weight:600">Move to folder</h3>
-      <div class="form-group" style="margin-bottom:1rem">
-        <select id="mmMoveSelect" style="width:100%;padding:.45rem .75rem;border:1px solid var(--border);border-radius:var(--radius);font-size:14px;background:var(--surface);color:var(--text)">
-          <option value="">— No folder (All media) —</option>
-        </select>
-      </div>
-      <p id="mmMoveError" style="display:none;font-size:13px;color:#dc2626;margin:-.5rem 0 1rem">Move failed. Please try again.</p>
-      <div style="display:flex;gap:.5rem;justify-content:flex-end">
-        <button class="btn btn-secondary" onclick="document.getElementById('mmMoveModal').style.display='none'">Cancel</button>
-        <button class="btn btn-primary" onclick="bulkMoveConfirm()">Move</button>
+    <div class="modal-card" style="max-width:360px;width:90%">
+      <h3 class="modal-card-header">Move to folder</h3>
+      <div class="modal-card-body">
+        <div class="form-group" style="margin-bottom:1rem">
+          <select id="mmMoveSelect" style="width:100%;padding:.45rem .75rem;border:1px solid var(--border);border-radius:var(--radius);font-size:14px;background:var(--surface);color:var(--text)">
+            <option value="">— No folder (All media) —</option>
+          </select>
+        </div>
+        <p id="mmMoveError" style="display:none;font-size:13px;color:#dc2626;margin:-.5rem 0 1rem">Move failed. Please try again.</p>
+        <div style="display:flex;gap:.5rem;justify-content:flex-end">
+          <button class="btn btn-secondary" onclick="document.getElementById('mmMoveModal').style.display='none'">Cancel</button>
+          <button class="btn btn-primary" onclick="bulkMoveConfirm()">Move</button>
+        </div>
       </div>
     </div>
   </div>
 
   <!-- Delete media modal -->
   <div id="mmDeleteMediaModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;align-items:center;justify-content:center">
-    <div style="background:var(--surface);border-radius:var(--radius);padding:1.5rem;max-width:400px;width:90%;box-shadow:0 4px 24px rgba(0,0,0,.25)">
-      <h3 style="margin:0 0 .75rem;font-size:1rem;font-weight:600">Delete files</h3>
-      <p id="mmDeleteMediaMsg" style="font-size:14px;color:var(--muted);margin-bottom:1rem;white-space:pre-line"></p>
-      <div style="display:flex;gap:.5rem;justify-content:flex-end">
-        <button class="btn btn-secondary" onclick="document.getElementById('mmDeleteMediaModal').style.display='none'">Cancel</button>
-        <button class="btn btn-danger" onclick="confirmBulkDelete()">Delete</button>
+    <div class="modal-card" style="max-width:400px;width:90%">
+      <h3 class="modal-card-header">Delete files</h3>
+      <div class="modal-card-body">
+        <p id="mmDeleteMediaMsg" style="font-size:14px;color:var(--muted);margin-bottom:1rem;white-space:pre-line"></p>
+        <div style="display:flex;gap:.5rem;justify-content:flex-end">
+          <button class="btn btn-secondary" onclick="document.getElementById('mmDeleteMediaModal').style.display='none'">Cancel</button>
+          <button class="btn btn-danger" onclick="confirmBulkDelete()">Delete</button>
+        </div>
       </div>
     </div>
   </div>
 
   <!-- New folder modal -->
   <div id="mmNewFolderModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;align-items:center;justify-content:center">
-    <div style="background:var(--surface);border-radius:var(--radius);padding:1.5rem;max-width:360px;width:90%;box-shadow:0 4px 24px rgba(0,0,0,.25)">
-      <h3 style="margin:0 0 .75rem;font-size:1rem;font-weight:600">New folder</h3>
-      <div class="form-group" style="margin-bottom:.35rem">
-        <input type="text" id="mmNewFolderInput" placeholder="Folder name" maxlength="25"
-               style="width:100%;padding:.45rem .75rem;border:1px solid var(--border);border-radius:var(--radius);font-size:14px;background:var(--surface);color:var(--text);box-sizing:border-box"
-               oninput="validateNewFolderName()" onkeydown="if(event.key==='Enter'){{event.preventDefault();submitNewFolder();}}">
-      </div>
-      <p id="mmNewFolderHint" style="font-size:12px;color:var(--muted);margin:0 0 1rem">
-        4–25 characters: letters, numbers, and hyphens only.
-      </p>
-      <div style="display:flex;gap:.5rem;justify-content:flex-end">
-        <button class="btn btn-secondary" onclick="document.getElementById('mmNewFolderModal').style.display='none'">Cancel</button>
-        <button class="btn btn-primary" id="mmNewFolderBtn" onclick="submitNewFolder()" disabled>Create</button>
+    <div class="modal-card" style="max-width:360px;width:90%">
+      <h3 class="modal-card-header">New folder</h3>
+      <div class="modal-card-body">
+        <div class="form-group" style="margin-bottom:.35rem">
+          <input type="text" id="mmNewFolderInput" placeholder="Folder name" maxlength="25"
+                 style="width:100%;padding:.45rem .75rem;border:1px solid var(--border);border-radius:var(--radius);font-size:14px;background:var(--surface);color:var(--text);box-sizing:border-box"
+                 oninput="validateNewFolderName()" onkeydown="if(event.key==='Enter'){{event.preventDefault();submitNewFolder();}}">
+        </div>
+        <p id="mmNewFolderHint" style="font-size:12px;color:var(--muted);margin:0 0 1rem">
+          4–25 characters: letters, numbers, and hyphens only.
+        </p>
+        <div style="display:flex;gap:.5rem;justify-content:flex-end">
+          <button class="btn btn-secondary" onclick="document.getElementById('mmNewFolderModal').style.display='none'">Cancel</button>
+          <button class="btn btn-primary" id="mmNewFolderBtn" onclick="submitNewFolder()" disabled>Create</button>
+        </div>
       </div>
     </div>
   </div>

@@ -85,7 +85,41 @@ fn field_label_meta(field_type: &str) -> (&'static str, &'static str) {
     }
 }
 
-pub fn render_list(rows: &[FormRow], ctx: &PageContext, flash: Option<&str>) -> String {
+fn forms_pagination(page: i64, total_pages: i64, search_qs: &str) -> String {
+    if total_pages <= 1 {
+        return String::new();
+    }
+    let prev = if page > 1 {
+        format!(r#"<a href="/admin/form-designer?page={}{search_qs}" class="page-btn">&laquo; Prev</a>"#, page - 1)
+    } else {
+        r#"<span class="page-btn page-btn-disabled">&laquo; Prev</span>"#.to_string()
+    };
+    let next = if page < total_pages {
+        format!(r#"<a href="/admin/form-designer?page={}{search_qs}" class="page-btn">Next &raquo;</a>"#, page + 1)
+    } else {
+        r#"<span class="page-btn page-btn-disabled">Next &raquo;</span>"#.to_string()
+    };
+    let start = (page - 3).max(1);
+    let end = (page + 3).min(total_pages);
+    let mut nums = String::new();
+    for p in start..=end {
+        if p == page {
+            nums.push_str(&format!(r#"<span class="page-btn page-btn-active">{p}</span>"#));
+        } else {
+            nums.push_str(&format!(r#"<a href="/admin/form-designer?page={p}{search_qs}" class="page-btn">{p}</a>"#));
+        }
+    }
+    format!(r#"<div class="pagination">{prev}{nums}{next}</div>"#)
+}
+
+/// Table + pagination only — swapped by the live-search JS, and reused for
+/// the initial full-page render so both paths render identically.
+pub fn forms_list_fragment(rows: &[FormRow], page: i64, total_pages: i64, search: &str) -> String {
+    let search_qs = if search.is_empty() {
+        String::new()
+    } else {
+        format!("&search={}", html_escape(search))
+    };
     let body = if rows.is_empty() {
         r#"<tr><td colspan="4" style="text-align:center;color:var(--muted)">No forms yet. Create one to get started.</td></tr>"#.to_string()
     } else {
@@ -116,13 +150,36 @@ pub fn render_list(rows: &[FormRow], ctx: &PageContext, flash: Option<&str>) -> 
         }).collect::<Vec<_>>().join("\n")
     };
 
-    let content = format!(
-        r#"<p style="margin-bottom:1rem"><a href="/admin/form-designer/new" class="btn btn-primary">New Form</a></p>
-<table class="data-table">
+    format!(
+        r#"<table class="data-table">
   <thead><tr><th>Name</th><th>Slug</th><th>Fields</th><th>Actions</th></tr></thead>
   <tbody>{body}</tbody>
-</table>"#,
+</table>
+{pagination}"#,
         body = body,
+        pagination = forms_pagination(page, total_pages, &search_qs),
+    )
+}
+
+pub fn render_list(rows: &[FormRow], page: i64, total_pages: i64, search: &str, ctx: &PageContext, flash: Option<&str>) -> String {
+    let fragment = forms_list_fragment(rows, page, total_pages, search);
+    let live_search = crate::live_search_script("form-search", "form-designer-list", "/admin/form-designer?partial=1");
+
+    let content = format!(
+        r#"<div style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;margin-bottom:1rem;flex-wrap:wrap">
+  <div class="icon-search-box" style="margin-bottom:0">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+    <input id="form-search" type="search" placeholder="Search forms&hellip;" value="{search_val}" autocomplete="off">
+  </div>
+  <div style="display:flex;align-items:center;gap:.5rem">
+    <a href="/admin/form-designer/new" class="icon-btn" title="New Form" aria-label="New Form"><img src="/admin/static/icons/file-plus.svg" alt=""></a>
+  </div>
+</div>
+<div id="form-designer-list">{fragment}</div>
+{live_search}"#,
+        search_val = html_escape(search),
+        fragment = fragment,
+        live_search = live_search,
     );
 
     admin_page("Form Designer", "/admin/form-designer", flash, &content, ctx)

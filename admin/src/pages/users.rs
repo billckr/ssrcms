@@ -518,11 +518,10 @@ function bulkDeleteUsers(tab) {
 
     // ── Live search ──────────────────────────────────────────────────────────
     let search_input = format!(
-        r#"<input id="user-search"
-               type="search"
-               placeholder="Search users&hellip;"
-               value="{search_val}"
-               style="margin-left:auto;width:100%;max-width:320px;padding:.4rem .75rem;border:1px solid var(--border);border-radius:4px;font-size:14px;background:var(--card-bg);color:inherit">"#,
+        r#"<div class="icon-search-box" style="margin-bottom:0">
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+  <input id="user-search" type="search" placeholder="Search users&hellip;" value="{search_val}" autocomplete="off">
+</div>"#,
         search_val = crate::html_escape(search),
     );
     let site_qs = if selected_site_id.is_empty() {
@@ -538,12 +537,16 @@ function bulkDeleteUsers(tab) {
     let content = if !is_subscribers {
         format!(
             r#"{tabs}
-<div style="display:flex;align-items:center;gap:.75rem;margin-bottom:1rem;flex-wrap:wrap">
-  <a href="/admin/users/new" class="btn btn-primary">New User</a>
-  {site_filter_staff}
-  <button id="bulk-delete-btn-staff" type="button" class="btn btn-danger" style="display:none"
-          onclick="bulkDeleteUsers('site-users')">Delete Selected (<span id="bulk-count-staff">0</span>)</button>
-  {search_input}
+<div style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;margin-bottom:1rem;flex-wrap:wrap">
+  <div style="display:flex;align-items:center;gap:.75rem">
+    <button id="bulk-delete-btn-staff" type="button" class="btn btn-danger" style="display:none"
+            onclick="bulkDeleteUsers('site-users')">Delete Selected (<span id="bulk-count-staff">0</span>)</button>
+    {search_input}
+    {site_filter_staff}
+  </div>
+  <div style="display:flex;align-items:center;gap:.5rem">
+    <a href="/admin/users/new" class="icon-btn" title="New User" aria-label="New User"><img src="/admin/static/icons/file-plus.svg" alt=""></a>
+  </div>
 </div>
 <div id="users-list">{fragment}</div>
 {bulk_script}
@@ -558,11 +561,13 @@ function bulkDeleteUsers(tab) {
     } else {
         format!(
             r#"{tabs}
-<div style="display:flex;align-items:center;gap:.75rem;margin-bottom:1rem;flex-wrap:wrap">
-  {site_filter_subs}
-  <button id="bulk-delete-btn-subs" type="button" class="btn btn-danger" style="display:none"
-          onclick="bulkDeleteUsers('subscribers')">Delete Selected (<span id="bulk-count-subs">0</span>)</button>
-  {search_input}
+<div style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;margin-bottom:1rem;flex-wrap:wrap">
+  <div style="display:flex;align-items:center;gap:.75rem">
+    <button id="bulk-delete-btn-subs" type="button" class="btn btn-danger" style="display:none"
+            onclick="bulkDeleteUsers('subscribers')">Delete Selected (<span id="bulk-count-subs">0</span>)</button>
+    {search_input}
+    {site_filter_subs}
+  </div>
 </div>
 <div id="users-list">{fragment}</div>
 {bulk_script}

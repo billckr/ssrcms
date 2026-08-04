@@ -91,9 +91,14 @@ pub fn render_list(menus: &[MenuRow], ctx: &crate::PageContext, flash: Option<&s
   </div>
   <div>
     <div class="card-boxed">
-      <h2 class="card-boxed-header">Add Menu</h2>
+      <h2 class="card-boxed-header" style="display:flex;align-items:center;justify-content:space-between;gap:.5rem;">
+        <span>Add Menu</span>
+        <button type="submit" form="new-menu-form" class="icon-btn" id="create-menu-submit" title="Create Menu" aria-label="Create Menu" disabled>
+          <img src="/admin/static/icons/file-plus.svg" alt="">
+        </button>
+      </h2>
       <div class="card-boxed-body">
-        <form method="POST" action="/admin/menus">
+        <form method="POST" action="/admin/menus" id="new-menu-form">
           <div class="form-group">
             <label for="new-menu-name">Menu Name</label>
             <input id="new-menu-name" type="text" name="name" required placeholder="e.g. Main Menu" maxlength="25">
@@ -103,7 +108,6 @@ pub fn render_list(menus: &[MenuRow], ctx: &crate::PageContext, flash: Option<&s
             <label for="new-menu-location">Location</label>
             <select id="new-menu-location" name="location">{location_opts}</select>
           </div>
-          <button type="submit" class="btn btn-primary" id="create-menu-submit" disabled>Create Menu</button>
         </form>
       </div>
     </div>

@@ -633,10 +633,13 @@ body.sidebar-open .sidebar-overlay {
   border-bottom: 1px solid var(--border);
 }
 
-/* Fixed modal dialogs (<dialog>). A standalone copy of .card-boxed's current
-   look (background/border/radius/shadow/header bar) rather than sharing its
-   selector — so either one can be restyled later without dragging the other
-   along. Positioning (fixed + centered) is modal-specific and lives only here. */
+/* Modal dialog panel — a standalone copy of .card-boxed's current look
+   (background/border/radius/shadow/header bar) rather than sharing its
+   selector, so either one can be restyled later without dragging the other
+   along. Used both by native <dialog> elements and by plain <div> modals
+   that a JS-driven fixed-overlay backdrop already centers — positioning is
+   scoped to dialog.modal-card only so it doesn't fight that overlay's own
+   flex-centering when applied to a div instead. */
 .modal-card {
   background: var(--surface);
   border: 1px solid var(--border);
@@ -644,6 +647,8 @@ body.sidebar-open .sidebar-overlay {
   box-shadow: var(--shadow);
   overflow: hidden;
   padding: 0;
+}
+dialog.modal-card {
   min-width: 400px;
   position: fixed;
   top: 50%;

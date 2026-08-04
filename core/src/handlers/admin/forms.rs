@@ -31,15 +31,9 @@ fn require_site_id(admin: &AdminUser) -> Result<uuid::Uuid, Response> {
 
 // ── list all forms ────────────────────────────────────────────────────────────
 
-#[derive(Deserialize, Default)]
-pub struct FormsFilter {
-    pub filter: Option<String>,
-}
-
 pub async fn list_forms(
     State(state): State<AppState>,
     admin: AdminUser,
-    Query(params): Query<FormsFilter>,
 ) -> Response {
     if let Err(r) = require_forms_cap(&admin) { return r; }
     let site_id = match require_site_id(&admin) { Ok(id) => id, Err(r) => return r };
@@ -50,7 +44,7 @@ pub async fn list_forms(
     match form_submission::list_forms(&state.db, site_id).await {
         Ok(summaries) => {
             let blocked = form_submission::blocked_names(&state.db, site_id).await;
-            let mut rows: Vec<FormSummaryRow> = summaries.into_iter().map(|s| {
+            let rows: Vec<FormSummaryRow> = summaries.into_iter().map(|s| {
                 let is_blocked = blocked.contains(&s.form_name);
                 FormSummaryRow {
                     form_name: s.form_name,
@@ -61,24 +55,11 @@ pub async fn list_forms(
                 }
             }).collect();
 
-            // Collect distinct names for the dropdown (before filtering).
-            let all_names: Vec<String> = rows.iter().map(|r| r.form_name.clone()).collect();
-
-            // Apply filter if set and non-empty.
-            let active_filter = params.filter.as_deref().unwrap_or("").trim().to_string();
-            if !active_filter.is_empty() {
-                rows.retain(|r| r.form_name == active_filter);
-            }
-
-            Html(admin::pages::forms::render_forms_list(
-                &rows, &all_names, &active_filter, None, &ctx,
-            )).into_response()
+            Html(admin::pages::forms::render_forms_list(&rows, None, &ctx)).into_response()
         }
         Err(e) => {
             tracing::error!("list_forms error: {:?}", e);
-            Html(admin::pages::forms::render_forms_list(
-                &[], &[], "", Some("Failed to load forms."), &ctx,
-            )).into_response()
+            Html(admin::pages::forms::render_forms_list(&[], Some("Failed to load forms."), &ctx)).into_response()
         }
     }
 }
@@ -150,7 +131,7 @@ pub async fn delete_submission(
     if let Err(e) = form_submission::delete(&state.db, site_id, id).await {
         tracing::error!("delete_submission error: {:?}", e);
     }
-    Redirect::to(&format!("/admin/forms/{}", name)).into_response()
+    Redirect::to(&format!("/admin/form-data-analytics/{}", name)).into_response()
 }
 
 // ── delete all submissions for a form ────────────────────────────────────────
@@ -166,7 +147,7 @@ pub async fn delete_all(
     if let Err(e) = form_submission::delete_all(&state.db, site_id, &name).await {
         tracing::error!("delete_all '{}' error: {:?}", name, e);
     }
-    Redirect::to("/admin/forms").into_response()
+    Redirect::to("/admin/form-data-analytics").into_response()
 }
 
 // ── export CSV ────────────────────────────────────────────────────────────────
@@ -286,5 +267,5 @@ pub async fn toggle_block(
     } else {
         let _ = form_submission::block(&state.db, site_id, &name).await;
     }
-    Redirect::to("/admin/forms").into_response()
+    Redirect::to("/admin/form-data-analytics").into_response()
 }

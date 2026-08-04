@@ -24,12 +24,41 @@ pub struct SiteRow {
     pub maintenance_mode: bool,
 }
 
-pub fn render_list(
-    sites: &[SiteRow],
-    flash: Option<&str>,
-    can_create: bool,
-    ctx: &crate::PageContext,
-) -> String {
+fn sites_pagination(page: i64, total_pages: i64, search_qs: &str) -> String {
+    if total_pages <= 1 {
+        return String::new();
+    }
+    let prev = if page > 1 {
+        format!(r#"<a href="/admin/sites?page={}{search_qs}" class="page-btn">&laquo; Prev</a>"#, page - 1)
+    } else {
+        r#"<span class="page-btn page-btn-disabled">&laquo; Prev</span>"#.to_string()
+    };
+    let next = if page < total_pages {
+        format!(r#"<a href="/admin/sites?page={}{search_qs}" class="page-btn">Next &raquo;</a>"#, page + 1)
+    } else {
+        r#"<span class="page-btn page-btn-disabled">Next &raquo;</span>"#.to_string()
+    };
+    let start = (page - 3).max(1);
+    let end = (page + 3).min(total_pages);
+    let mut nums = String::new();
+    for p in start..=end {
+        if p == page {
+            nums.push_str(&format!(r#"<span class="page-btn page-btn-active">{p}</span>"#));
+        } else {
+            nums.push_str(&format!(r#"<a href="/admin/sites?page={p}{search_qs}" class="page-btn">{p}</a>"#));
+        }
+    }
+    format!(r#"<div class="pagination">{prev}{nums}{next}</div>"#)
+}
+
+/// Table + pagination only — swapped by the live-search JS, and reused for
+/// the initial full-page render so both paths render identically.
+pub fn sites_list_fragment(sites: &[SiteRow], page: i64, total_pages: i64, search: &str, ctx: &crate::PageContext) -> String {
+    let search_qs = if search.is_empty() {
+        String::new()
+    } else {
+        format!("&search={}", crate::html_escape(search))
+    };
     let rows = sites.iter().map(|s| {
         let manage_html = if s.can_manage {
             let delete_html = if s.is_default {
@@ -148,19 +177,57 @@ pub fn render_list(
         )
     }).collect::<Vec<_>>().join("\n");
 
+    let rows = if rows.is_empty() {
+        r#"<tr><td colspan="7" class="empty-state">No sites found.</td></tr>"#.to_string()
+    } else {
+        rows
+    };
+
+    format!(
+        r#"<table class="data-table">
+  <thead><tr><th>Site</th><th>Admin</th><th>Users</th><th>Subs</th><th>Posts</th><th>Pages</th><th>Actions</th></tr></thead>
+  <tbody>{rows}</tbody>
+</table>
+{pagination}"#,
+        rows = rows,
+        pagination = sites_pagination(page, total_pages, &search_qs),
+    )
+}
+
+pub fn render_list(
+    sites: &[SiteRow],
+    flash: Option<&str>,
+    can_create: bool,
+    page: i64,
+    total_pages: i64,
+    search: &str,
+    ctx: &crate::PageContext,
+) -> String {
     let new_site_btn = if can_create {
-        r#"<p style="margin-bottom:1rem"><a href="/admin/sites/new" class="btn btn-primary">New Site</a></p>"#
+        r#"<a href="/admin/sites/new" class="icon-btn" title="New Site" aria-label="New Site"><img src="/admin/static/icons/file-plus.svg" alt=""></a>"#
     } else {
         ""
     };
 
+    let fragment = sites_list_fragment(sites, page, total_pages, search, ctx);
+    let live_search = crate::live_search_script("site-search", "sites-list", "/admin/sites?partial=1");
+
     let content = format!(
-        r#"{new_site_btn}<table class="data-table">
-  <thead><tr><th>Site</th><th>Admin</th><th>Users</th><th>Subs</th><th>Posts</th><th>Pages</th><th>Actions</th></tr></thead>
-  <tbody>{rows}</tbody>
-</table>"#,
+        r#"<div style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;margin-bottom:1rem;flex-wrap:wrap">
+  <div class="icon-search-box" style="margin-bottom:0">
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+    <input id="site-search" type="search" placeholder="Search sites&hellip;" value="{search_val}" autocomplete="off">
+  </div>
+  <div style="display:flex;align-items:center;gap:.5rem">
+    {new_site_btn}
+  </div>
+</div>
+<div id="sites-list">{fragment}</div>
+{live_search}"#,
+        search_val = crate::html_escape(search),
         new_site_btn = new_site_btn,
-        rows = rows,
+        fragment = fragment,
+        live_search = live_search,
     );
 
     crate::admin_page("Sites", "/admin/sites", flash, &content, ctx)
