@@ -378,7 +378,7 @@ impl FormDef {
   <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
   <span>{success}</span>
 </div>
-<script>(function(){{var f=document.getElementById('ss-form-{slug}'),s=document.getElementById('ss-form-success-{slug}');if(!f||!s)return;if(new URLSearchParams(location.search).get('submitted')==={slug_js}){{f.style.display='none';s.style.display='';}}}})();</script>
+<script>(function(){{var f=document.getElementById('ss-form-{slug}'),s=document.getElementById('ss-form-success-{slug}');if(!f||!s)return;if(new URLSearchParams(location.search).get('submitted')==={slug_js}){{f.style.display='none';s.style.display='';s.scrollIntoView({{behavior:'smooth',block:'start'}});}}}})();</script>
 "#,
             button_label = html_escape(&self.settings.button_label),
             success = html_escape(&self.settings.success_message),

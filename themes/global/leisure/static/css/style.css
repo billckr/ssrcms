@@ -1566,6 +1566,12 @@ img { max-width: 100%; height: auto; display: block; }
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
+  /* The sticky header covers the top of the viewport, so when the browser's
+     native "please fill out this field" validation jumps to an invalid
+     field, it scrolls that field to the very top — right under the header,
+     hidden. scroll-margin-top reserves that space so the field (and the
+     validation bubble anchored to it) lands visibly below the header instead. */
+  scroll-margin-top: 100px;
 }
 
 .form-field label {
@@ -1593,6 +1599,18 @@ img { max-width: 100%; height: auto; display: block; }
   transition: border-color var(--transition), box-shadow var(--transition);
   outline: none;
   width: 100%;
+  scroll-margin-top: 100px;
+}
+
+/* Same sticky-header clearance as .form-field above, but targeting the
+   actual form control the browser scrolls to/validates — the radio/
+   checkbox/toggle/select inputs aren't covered by the input[type=...]
+   list above. */
+.form-field select,
+.form-radio-label input,
+.form-checkbox-label input,
+.form-toggle-input {
+  scroll-margin-top: 100px;
 }
 
 .form-field input:focus,
@@ -1647,6 +1665,10 @@ img { max-width: 100%; height: auto; display: block; }
   border-radius: var(--radius);
   color: color-mix(in srgb, var(--blue) 65%, black);
   font-weight: 500;
+  /* Matches the scroll-margin-top on form fields above — the success
+     message is scrolled into view on submit (see FormDef::render_html's
+     inline script), and this keeps it clear of the sticky header too. */
+  scroll-margin-top: 100px;
 }
 
 .form-success svg { flex-shrink: 0; color: var(--blue); }

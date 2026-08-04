@@ -136,7 +136,7 @@ pub fn forms_list_fragment(rows: &[FormRow], page: i64, total_pages: i64, search
     <form method="POST" action="/admin/form-designer/{id}/delete" style="display:inline"
           onsubmit="return confirm('Delete the form \'{name_js}\'? This does not delete any submissions already collected under it.')">
       <button class="icon-btn icon-danger" title="Delete" type="submit">
-        <img src="/admin/static/icons/delete.svg" alt="Delete">
+        <img src="/admin/static/icons/trash.svg" alt="Delete">
       </button>
     </form>
   </td>
@@ -238,7 +238,7 @@ fn field_row_html(f: &FieldRow, index: usize) -> String {
         <select class="field-type">{type_opts}</select>
       </div>
       <button type="button" class="icon-btn icon-danger field-remove" title="Remove field" style="margin-bottom:.45rem">
-        <img src="/admin/static/icons/delete.svg" alt="Remove">
+        <img src="/admin/static/icons/trash.svg" alt="Remove">
       </button>
     </div>
   </div>
@@ -294,7 +294,7 @@ pub fn render_editor(data: &FormEditData, ctx: &PageContext, flash: Option<&str>
         format!(
             r#"<button type="button" class="icon-btn icon-danger" title="Delete Form" aria-label="Delete Form"
         onclick="event.preventDefault();event.stopPropagation();deleteFormConfirm('{id}')">
-    <img src="/admin/static/icons/delete.svg" alt="">
+    <img src="/admin/static/icons/trash.svg" alt="">
   </button>"#,
             id = html_escape(id)
         )
@@ -303,12 +303,7 @@ pub fn render_editor(data: &FormEditData, ctx: &PageContext, flash: Option<&str>
     };
 
     let content = format!(
-        r#"<style>
-.field-hint {{ font-size: 11px; color: var(--muted); font-weight: 400; }}
-.settings-box {{ border: 1px solid var(--border); border-radius: var(--radius); padding: .85rem 1rem; margin-bottom: .6rem; background: #f8fafc; }}
-.settings-box:last-child {{ margin-bottom: 0; }}
-.settings-box .form-group {{ margin: 0; }}
-</style>
+        r#"<style>.field-hint {{ font-size: 11px; color: var(--muted); font-weight: 400; }}</style>
 <form method="POST" action="{action}" id="form-designer-form">
   <div class="two-col">
     <div>
@@ -421,7 +416,7 @@ pub fn render_editor(data: &FormEditData, ctx: &PageContext, flash: Option<&str>
           '<div class="form-group" style="margin:0"><label class="field-label-caption">Field label</label><input type="text" class="field-label" placeholder="e.g. Your name"></div>' +
           '<div class="form-group field-name-wrap" style="margin:0"><label>Field name <span class="field-hint">(used in submissions)</span></label><input type="text" class="field-name" placeholder="e.g. name"></div>' +
           '<div class="form-group" style="margin:0"><label>Type</label><select class="field-type">' + typeOpts + '</select></div>' +
-          '<button type="button" class="icon-btn icon-danger field-remove" title="Remove field" style="margin-bottom:.45rem"><img src="/admin/static/icons/delete.svg" alt="Remove"></button>' +
+          '<button type="button" class="icon-btn icon-danger field-remove" title="Remove field" style="margin-bottom:.45rem"><img src="/admin/static/icons/trash.svg" alt="Remove"></button>' +
         '</div>' +
       '</div>' +
       '<div class="field-required-wrap" style="margin-left:2.2rem;margin-top:.5rem;display:flex;align-items:center;gap:1.2rem">' +

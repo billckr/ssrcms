@@ -68,7 +68,7 @@ pub fn render_list(menus: &[MenuRow], ctx: &crate::PageContext, flash: Option<&s
     <form method="POST" action="/admin/menus/{id}/delete" style="display:inline"
           onsubmit="return confirm('Delete this menu?')">
       <button class="icon-btn icon-danger" title="Delete" type="submit">
-        <img src="/admin/static/icons/delete.svg" alt="Delete">
+        <img src="/admin/static/icons/trash.svg" alt="Delete">
       </button>
     </form>
   </td>
@@ -237,7 +237,7 @@ pub fn render_edit(
       <form method="POST" action="/admin/menus/{menu_id}/items/{item_id}/delete"
             onsubmit="return confirm('Delete the following menu item?\n\n{label_val}')" style="display:inline">
         <button class="icon-btn icon-danger" type="submit" title="Delete">
-          <img src="/admin/static/icons/delete.svg" alt="Delete">
+          <img src="/admin/static/icons/trash.svg" alt="Delete">
         </button>
       </form>
     </div>

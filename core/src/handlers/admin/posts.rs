@@ -1104,6 +1104,18 @@ fn friendly_save_error(e: &crate::errors::AppError) -> String {
 /// Returns true when the content is empty or contains only whitespace / blank
 /// HTML tags (e.g. Quill's default `<p><br></p>`).
 fn content_is_empty(html: &str) -> bool {
+    // A saved-form embed (see FormEmbedBlot in posts.rs) is a self-closing
+    // <ss-form data-slug="..."> tag with no text between it and its close —
+    // stripping tags below would leave nothing behind and wrongly call the
+    // page empty, even though it expands into a real form at render time.
+    // Matches the exact same well-formed-embed pattern form_def::expand_embeds
+    // looks for (not just a loose substring check), so typing the bare text
+    // "<ss-form" without a real embed doesn't count as content.
+    if let Ok(re) = regex_lite::Regex::new(r#"<ss-form\b[^>]*data-slug="[^"]*"[^>]*></ss-form>"#) {
+        if re.is_match(html) {
+            return false;
+        }
+    }
     // Strip every HTML tag and check if anything meaningful remains.
     let mut out = String::with_capacity(html.len());
     let mut in_tag = false;

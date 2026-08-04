@@ -96,7 +96,7 @@ fn build_staff_rows(staff: &[UserRow], current_user_id: &str, can_manage_access:
                 r#"<form method="POST" action="/admin/users/{id}/delete" style="display:inline" data-confirm="{warn_msg}" onsubmit="return confirm(this.dataset.confirm)">
                   <input type="hidden" name="tab" value="site-users">
                   <button class="icon-btn icon-danger" title="Delete user" type="submit">
-                    <img src="/admin/static/icons/delete.svg" alt="Delete">
+                    <img src="/admin/static/icons/trash.svg" alt="Delete">
                   </button>
                 </form>"#,
                 id = crate::html_escape(&u.id),
@@ -185,7 +185,7 @@ fn build_sub_rows(subscribers: &[UserRow], current_user_id: &str) -> String {
                 r#"<form method="POST" action="/admin/users/{id}/delete" style="display:inline" data-confirm="{warn_msg}" onsubmit="return confirm(this.dataset.confirm)">
                   <input type="hidden" name="tab" value="subscribers">
                   <button class="icon-btn icon-danger" title="Delete" type="submit">
-                    <img src="/admin/static/icons/delete.svg" alt="Delete">
+                    <img src="/admin/static/icons/trash.svg" alt="Delete">
                   </button>
                 </form>"#,
                 id = crate::html_escape(&u.id),

@@ -258,7 +258,7 @@ pub fn render_form_detail(
   <a href="/admin/form-data-analytics/{fname}/export" class="btn btn-secondary">Export CSV</a>
   <form method="POST" action="/admin/form-data-analytics/{fname}/delete-all" style="display:inline"
         onsubmit="return confirm('Delete ALL submissions for this form?')">
-    <button class="icon-btn icon-danger" type="submit" title="Delete All" aria-label="Delete All"><img src="/admin/static/icons/delete.svg" alt=""></button>
+    <button class="icon-btn icon-danger" type="submit" title="Delete All" aria-label="Delete All"><img src="/admin/static/icons/trash.svg" alt=""></button>
   </form>
   <a href="/admin/form-data-analytics" class="btn btn-secondary" style="margin-left:auto">← All Forms</a>
 </div>

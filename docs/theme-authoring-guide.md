@@ -1347,7 +1347,40 @@ Run your rendered output through the W3C HTML validator or a local equivalent. C
 
 ---
 
-## 18. Theme Authoring Checklist
+## 18. Forms (Form Designer)
+
+> This is a brief note, not a full reference — a dedicated Form Designer
+> section will be written once the broader theme-authoring docs system is
+> built out.
+
+Forms built in the admin's Form Designer and inserted into a post/page render
+as plain HTML using a shared class convention — `.themed-form`, `.form-field`,
+`.form-required`, `.form-checkbox-label`, `.honeypot-field`, `.form-success`,
+plus your theme's own generic `.btn` for the submit button. Style those
+classes once and every form dropped into your content picks it up
+automatically; no per-form template work needed. (See Leisure's or Symantic
+Signals' `static/css/style.css` for a complete example — search for "Shared
+form styles".)
+
+**If your theme has a sticky/fixed header:** add `scroll-margin-top` (roughly
+your header's rendered height) to your form field classes and to
+`.form-success`. Two platform behaviors rely on this to work correctly:
+
+- The browser's native "please fill out this field" validation scrolls the
+  invalid field to the very top of the viewport — with no `scroll-margin-top`,
+  a sticky header covers it and the validation bubble points at a hidden
+  element.
+- After a successful submission, the CMS automatically scrolls the success
+  message into view (`scrollIntoView()`, fired by a small script the CMS
+  generates with the form — not something you write). Without
+  `scroll-margin-top` on `.form-success`, that scroll can still land the
+  message partially hidden under the header.
+
+This is ordinary CSS on your own class names — there's no required property
+name, value, or mechanism here beyond what `scroll-margin-top` already does
+natively. If your theme has no sticky header, you can skip this entirely.
+
+## 19. Theme Authoring Checklist
 
 Use this checklist before publishing or deploying a theme.
 

@@ -1188,9 +1188,20 @@ a:hover {
   align-self: flex-start;
 }
 
-.form-field { display: flex; flex-direction: column; gap: 0.4rem; }
+/* scroll-margin-top: the sticky header covers the top of the viewport, so
+   the browser's native "please fill out this field" validation jump would
+   otherwise land an invalid field right under the header, hidden. This
+   reserves that space so the field (and its validation bubble) lands
+   visibly below the header instead. */
+.form-field { display: flex; flex-direction: column; gap: 0.4rem; scroll-margin-top: 100px; }
 .form-field label { font-size: 0.875rem; font-weight: 600; color: var(--color-text); }
 .form-required { color: #dc2626; }
+
+.form-radio-label input,
+.form-checkbox-label input,
+.form-toggle-input {
+  scroll-margin-top: 100px;
+}
 
 .form-field input[type="text"],
 .form-field input[type="email"],
@@ -1210,6 +1221,7 @@ a:hover {
   transition: border-color 0.15s, box-shadow 0.15s;
   outline: none;
   width: 100%;
+  scroll-margin-top: 100px;
 }
 .form-field input:focus,
 .form-field select:focus,
@@ -1252,6 +1264,10 @@ a:hover {
   border-radius: 6px;
   color: color-mix(in srgb, var(--color-primary) 65%, black);
   font-weight: 500;
+  /* Matches the scroll-margin-top on form fields above — the success
+     message is scrolled into view on submit (see FormDef::render_html's
+     inline script), and this keeps it clear of the sticky header too. */
+  scroll-margin-top: 100px;
 }
 .form-success svg { flex-shrink: 0; color: var(--color-primary); }
 

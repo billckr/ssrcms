@@ -138,6 +138,14 @@ a.stat-cell-link:hover { background: #f8f9fd; }
 .icon-search-box input[type=search] { width: 100%; padding: .5rem .75rem .5rem 2.1rem; border: 1px solid var(--border); border-radius: var(--radius); font-size: 14px; background: var(--surface); color: var(--text); }
 .icon-search-box input[type=search]:focus { outline: none; border-color: var(--text); }
 
+/* Tinted box separating one distinct field/option from its neighbors within
+   the same card body — same fix applied to Form Designer's Settings card
+   and its field rows, reused wherever a card body would otherwise stack
+   several unrelated fields with nothing visually telling them apart. */
+.settings-box { border: 1px solid var(--border); border-radius: var(--radius); padding: .85rem 1rem; margin-bottom: .6rem; background: #f8fafc; }
+.settings-box:last-child { margin-bottom: 0; }
+.settings-box .form-group { margin: 0; }
+
 /* Badges */
 .badge { display: inline-block; padding: .1rem .4rem; border-radius: 3px; font-size: 11px; font-weight: 600; background: #e2e8f0; color: var(--muted); }
 .badge-danger { background: #fee2e2; color: #b91c1c; }

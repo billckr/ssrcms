@@ -231,7 +231,7 @@ pub fn posts_list_fragment(
             format!(
                 r#"<form method="POST" action="{prefix}/{id}/delete" style="display:inline" onsubmit="return confirm('Delete this?')">
               <button class="icon-btn icon-danger" title="Delete" type="submit">
-                <img src="/admin/static/icons/delete.svg" alt="Delete">
+                <img src="/admin/static/icons/trash.svg" alt="Delete">
               </button>
             </form>"#,
                 prefix = edit_prefix,
@@ -754,6 +754,18 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
         )
     };
 
+    // Wrapped together (both hidden for authors) so the box doesn't render
+    // empty when neither control is shown.
+    let password_and_comments_box = if password_section.is_empty() && comments_section.is_empty() {
+        String::new()
+    } else {
+        format!(
+            r#"<div class="settings-box">{password_section}{comments_section}</div>"#,
+            password_section = password_section,
+            comments_section = comments_section,
+        )
+    };
+
     // Author card: shown to editors/admins when viewing an existing post written by someone else.
     let author_card = if !ctx.user_role.eq_ignore_ascii_case("author") && !post.author_name.is_empty() {
         let site_line = if !post.site_name.is_empty() {
@@ -839,28 +851,34 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
       <div class="card-boxed">
         <h2 class="card-boxed-header">Content</h2>
         <div class="card-boxed-body">
-          <div style="display:grid;grid-template-columns:1fr auto;gap:.75rem;align-items:start;margin-bottom:1.25rem">
-            <div class="form-group" style="margin:0">
-              <label for="title">Title <span style="color:var(--danger);font-weight:700">*</span></label>
-              <input type="text" id="title" name="title" value="{title_val}" required class="title-input" maxlength="255"{autofocus}>
-              <small id="title-count" style="color:var(--muted)">255 remaining</small>
-            </div>
-            <div class="form-group" style="margin:0;min-width:200px;max-width:280px">
-              <label for="slug">Slug</label>
-              <input type="text" id="slug" name="slug" value="{slug}" maxlength="200"
-                onkeydown="if(event.key===' '){{ event.preventDefault(); var i=this.selectionStart; this.value=this.value.slice(0,i)+'-'+this.value.slice(this.selectionEnd); this.selectionStart=this.selectionEnd=i+1; }}"
-                onblur="this.value=this.value.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'');">
+          <div class="settings-box">
+            <div style="display:grid;grid-template-columns:1fr auto;gap:.75rem;align-items:start">
+              <div class="form-group" style="margin:0">
+                <label for="title">Title <span style="color:var(--danger);font-weight:700">*</span></label>
+                <input type="text" id="title" name="title" value="{title_val}" required class="title-input" maxlength="255"{autofocus}>
+                <small id="title-count" style="color:var(--muted)">255 remaining</small>
+              </div>
+              <div class="form-group" style="margin:0;min-width:200px;max-width:280px">
+                <label for="slug">Slug</label>
+                <input type="text" id="slug" name="slug" value="{slug}" maxlength="200"
+                  onkeydown="if(event.key===' '){{ event.preventDefault(); var i=this.selectionStart; this.value=this.value.slice(0,i)+'-'+this.value.slice(this.selectionEnd); this.selectionStart=this.selectionEnd=i+1; }}"
+                  onblur="this.value=this.value.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'');">
+              </div>
             </div>
           </div>
-          <div class="form-group" style="margin-bottom:1.25rem">
-            <label for="excerpt">Excerpt <span style="color:var(--danger);font-weight:700">*</span> <small style="font-weight:400;color:var(--muted)">Used as meta description — required for SEO</small></label>
-            <textarea id="excerpt" name="excerpt" rows="3" required maxlength="500" style="resize:none">{excerpt}</textarea>
-            <small id="excerpt-count" style="color:var(--muted)">500 remaining</small>
+          <div class="settings-box">
+            <div class="form-group">
+              <label for="excerpt">Excerpt <span style="color:var(--danger);font-weight:700">*</span> <small style="font-weight:400;color:var(--muted)">Used as meta description — required for SEO</small></label>
+              <textarea id="excerpt" name="excerpt" rows="3" required maxlength="500" style="resize:none">{excerpt}</textarea>
+              <small id="excerpt-count" style="color:var(--muted)">500 remaining</small>
+            </div>
           </div>
-          <div class="form-group">
-            <label>Content <span style="color:var(--danger);font-weight:700">*</span></label>
-            <div id="quill-editor" style="height:620px;background:#fff;font-size:1rem"></div>
-            <input type="hidden" id="content" name="content">
+          <div class="settings-box">
+            <div class="form-group">
+              <label>Content <span style="color:var(--danger);font-weight:700">*</span></label>
+              <div id="quill-editor" style="height:620px;background:#fff;font-size:1rem"></div>
+              <input type="hidden" id="content" name="content">
+            </div>
           </div>
         </div>
       </div>
@@ -871,17 +889,20 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
       {template_section}
       <div class="form-section">
         <h3>Publish</h3>
-        <div class="form-group">
-          <label for="status">Status</label>
-          <select id="status" name="status">{status_options}</select>
-          {status_hint}
-          {live_url_link}
+        <div class="settings-box">
+          <div class="form-group">
+            <label for="status">Status</label>
+            <select id="status" name="status">{status_options}</select>
+            {status_hint}
+            {live_url_link}
+          </div>
         </div>
-        <div class="form-group">
-          {datetime_field}
+        <div class="settings-box">
+          <div class="form-group">
+            {datetime_field}
+          </div>
         </div>
-        {password_section}
-        {comments_section}
+        {password_and_comments_box}
         <input type="hidden" name="post_type" value="{post_type}">
         <div style="display:flex;align-items:center;gap:.6rem">
           <button type="submit" class="btn btn-primary">Save</button>
@@ -1270,8 +1291,7 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
         categories_section = categories_section,
         featured_image_section = featured_image_section,
         inline_media_section = inline_media_section,
-        password_section = password_section,
-        comments_section = comments_section,
+        password_and_comments_box = password_and_comments_box,
         author_card = author_card,
         sources_section = sources_section,
         live_url_link = live_url_link,
