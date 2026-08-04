@@ -1032,7 +1032,7 @@ pub fn render_site_access(
                           data-confirm="{confirm_msg}" onsubmit="return confirm(this.dataset.confirm)">
                       <input type="hidden" name="site_id" value="{site_id}">
                       <button type="submit" class="icon-btn icon-danger" title="Remove from site">
-                        <img src="/admin/static/icons/trash-2.svg" alt="Remove">
+                        <img src="/admin/static/icons/trash.svg" alt="Remove">
                       </button>
                     </form>
                   </td>

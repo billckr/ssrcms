@@ -68,7 +68,7 @@ pub fn render_project_list(projects: &[ProjectRow], flash: Option<&str>, ctx: &c
     <form method="POST" action="/admin/builder/{id}/delete" style="display:inline"
           onsubmit="return confirmDelete(this, {is_active})">
       <button class="icon-btn icon-danger" type="submit" title="Delete">
-        <img src="/admin/static/icons/trash-2.svg" alt="Delete">
+        <img src="/admin/static/icons/trash.svg" alt="Delete">
       </button>
     </form>
     {activate_btn}
@@ -232,7 +232,7 @@ pub fn render_page_list(project: &ProjectRow, pages: &[PageRow], ctx: &crate::Pa
     <form method="POST" action="/admin/builder/{proj}/pages/{page}/delete" style="display:inline"
           onsubmit="return confirm('Delete this page?')">
       <button class="icon-btn icon-danger" type="submit" title="Delete">
-        <img src="/admin/static/icons/trash-2.svg" alt="Delete">
+        <img src="/admin/static/icons/trash.svg" alt="Delete">
       </button>
     </form>
   </td>

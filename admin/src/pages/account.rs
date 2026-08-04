@@ -323,7 +323,7 @@ pub fn saved_posts_list_fragment(rows: &[SavedPostRow], page: i64, total_pages: 
                       onsubmit="return confirm('Remove this post from your saved list?')">
                   <input type="hidden" name="return_to" value="/account/saved-posts">
                   <button class="icon-btn icon-danger" title="Remove" type="submit">
-                    <img src="/admin/static/icons/trash-2.svg" alt="Remove">
+                    <img src="/admin/static/icons/trash.svg" alt="Remove">
                   </button>
                 </form>
               </td>
@@ -464,7 +464,7 @@ pub fn comments_list_fragment(rows: &[MyCommentRow], page: i64, total_pages: i64
                 r#"<form method="POST" action="/account/comments/{id}/delete" style="display:inline"
                      onsubmit="return confirm('Delete this comment? This cannot be undone.')">
                   <button class="icon-btn icon-danger" title="Delete" type="submit">
-                    <img src="/admin/static/icons/trash-2.svg" alt="Delete">
+                    <img src="/admin/static/icons/trash.svg" alt="Delete">
                   </button>
                 </form>"#,
                 id = crate::html_escape(&r.id),

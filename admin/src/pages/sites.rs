@@ -72,7 +72,7 @@ pub fn sites_list_fragment(sites: &[SiteRow], page: i64, total_pages: i64, searc
                     r#"<form method="post" action="/admin/sites/{id}/delete" style="display:inline"
                           data-confirm="{confirm_msg}" onsubmit="return confirm(this.dataset.confirm)">
                       <button type="submit" class="icon-btn icon-danger" title="Delete site">
-                        <img src="/admin/static/icons/trash-2.svg" alt="Delete">
+                        <img src="/admin/static/icons/trash.svg" alt="Delete">
                       </button>
                     </form>"#,
                     id = crate::html_escape(&s.id),

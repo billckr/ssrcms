@@ -815,7 +815,7 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
             r#"<div class="source-row" style="display:flex;gap:.5rem;margin-bottom:.5rem;align-items:center">
         <input type="url" class="source-url-input" value="{url}" placeholder="https://example.com/article" style="flex:1">
         <button type="button" class="icon-btn icon-danger" title="Remove" onclick="this.closest('.source-row').remove(); markDirty();">
-          <img src="/admin/static/icons/trash-2.svg" alt="Remove">
+          <img src="/admin/static/icons/trash.svg" alt="Remove">
         </button>
       </div>"#,
             url = crate::html_escape(url),
@@ -1027,7 +1027,7 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
     row.style.cssText = 'display:flex;gap:.5rem;margin-bottom:.5rem;align-items:center';
     row.innerHTML = '<input type="url" class="source-url-input" placeholder="https://example.com/article" style="flex:1">'
       + '<button type="button" class="icon-btn icon-danger" title="Remove" onclick="this.closest(\'.source-row\').remove(); markDirty();">'
-      + '<img src="/admin/static/icons/trash-2.svg" alt="Remove"></button>';
+      + '<img src="/admin/static/icons/trash.svg" alt="Remove"></button>';
     list.appendChild(row);
     row.querySelector('input').focus();
     markDirty();
