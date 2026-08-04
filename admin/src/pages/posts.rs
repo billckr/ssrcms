@@ -354,19 +354,10 @@ pub fn render_list(posts: &[PostRow], post_type: &str, page: i64, total_pages: i
         Some(s) if !s.is_empty() => format!("&status={}", s),
         _ => String::new(),
     };
-    let search_qs = if search.is_empty() {
-        String::new()
-    } else {
-        format!("&search={}", crate::html_escape(search))
-    };
     let sort_qs = match sort {
         Some(s) if !s.is_empty() => format!("&sort={}&dir={}", s, dir.unwrap_or("desc")),
         _ => String::new(),
     };
-
-    // Top pagination lives outside div#posts-list so the search input (also outside)
-    // is never wiped by the JS live-search innerHTML swap.
-    let top_pagination = posts_pagination(base_path, page, total_pages, &status_qs, &search_qs, &sort_qs);
 
     // Filter tabs — pages have fewer statuses; authors don't see Trash and only see
     // Scheduled when they actually have scheduled posts.
@@ -418,14 +409,10 @@ pub fn render_list(posts: &[PostRow], post_type: &str, page: i64, total_pages: i
   {template_filter_html}
   <button id="bulk-delete-btn" type="button" class="btn btn-danger" style="display:none"
           onclick="bulkDelete()">Delete Selected (<span id="bulk-count">0</span>)</button>
-  <div style="flex:1;display:flex;align-items:center;justify-content:space-between;gap:.75rem">
-    <div>{top_pagination}</div>
-    <input id="post-search"
-           type="search"
-           placeholder="Search {post_type}s&hellip;"
-           value="{search_val}"
-           style="width:100%;max-width:320px;padding:.4rem .75rem;border:1px solid var(--border);border-radius:4px;font-size:14px;background:var(--card-bg);color:inherit">
-  </div>
+</div>
+<div class="icon-search-box">
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+  <input id="post-search" type="search" placeholder="Search {post_type}s&hellip;" value="{search_val}" autocomplete="off">
 </div>
 <div id="posts-list">{fragment}</div>
 {live_search}
@@ -479,7 +466,6 @@ pub fn render_list(posts: &[PostRow], post_type: &str, page: i64, total_pages: i
         new_href       = new_href,
         new_label      = new_label,
         template_filter_html = template_filter_html,
-        top_pagination = top_pagination,
         post_type      = post_type,
         search_val     = crate::html_escape(search),
         fragment       = fragment,

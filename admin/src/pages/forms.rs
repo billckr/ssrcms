@@ -237,7 +237,7 @@ pub fn render_form_detail(
 
     let has_submissions = !submissions.is_empty();
     let search_box = if has_submissions {
-        r#"<div class="submission-search-wrap">
+        r#"<div class="icon-search-box">
   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
   <input type="search" id="submission-search" placeholder="Search responses…" autocomplete="off">
 </div>"#
@@ -266,10 +266,6 @@ pub fn render_form_detail(
 .submission-fields {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: .75rem 1.5rem; }}
 .submission-field dt {{ font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .03em; color: var(--muted); margin-bottom: .15rem; }}
 .submission-field dd {{ font-size: 13px; color: var(--text); word-break: break-word; }}
-.submission-search-wrap {{ position: relative; max-width: 320px; margin-bottom: 1rem; }}
-.submission-search-wrap svg {{ position: absolute; left: .7rem; top: 50%; transform: translateY(-50%); color: var(--muted); pointer-events: none; }}
-.submission-search-wrap input {{ width: 100%; padding: .5rem .75rem .5rem 2.1rem; border: 1px solid var(--border); border-radius: var(--radius); font-size: 14px; background: var(--surface); color: var(--text); }}
-.submission-search-wrap input:focus {{ outline: none; border-color: var(--text); }}
 #submission-no-matches {{ display: none; color: var(--muted); font-size: .9rem; padding: 1rem 0; }}
 </style>
 <div class="page-actions" style="margin-bottom:1rem;display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center;">

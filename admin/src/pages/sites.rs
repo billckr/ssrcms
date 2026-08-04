@@ -334,7 +334,12 @@ pub fn render_new(data: &NewSiteData, flash: Option<&str>, ctx: &crate::PageCont
 
     let content = format!(
         r#"<div class="card-boxed">
-  <h2 class="card-boxed-header">New Site</h2>
+  <h2 class="card-boxed-header" style="display:flex;align-items:center;justify-content:space-between;gap:.5rem;">
+    <span>New Site</span>
+    <button type="submit" form="new-site-form" id="create-btn" class="icon-btn" title="Create Site" aria-label="Create Site" disabled>
+      <img src="/admin/static/icons/file-plus.svg" alt="">
+    </button>
+  </h2>
   <div class="card-boxed-body">
   <form method="post" action="/admin/sites" class="edit-form" id="new-site-form" style="max-width:580px">
   <div class="form-group">
@@ -412,7 +417,6 @@ pub fn render_new(data: &NewSiteData, flash: Option<&str>, ctx: &crate::PageCont
   </div>
 
   <div class="form-actions">
-    <button type="submit" id="create-btn" class="btn btn-primary" disabled>Create Site</button>
     <a href="/admin/sites" class="btn btn-secondary">Cancel</a>
   </div>
   </form>

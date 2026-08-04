@@ -751,9 +751,14 @@ function toggleSiteFields() {{
 
     let content = format!(
         r#"<div class="card-boxed">
-  <h2 class="card-boxed-header">{form_title}</h2>
+  <h2 class="card-boxed-header" style="display:flex;align-items:center;justify-content:space-between;gap:.5rem;">
+    <span>{form_title}</span>
+    <button type="submit" form="user-editor-form" id="save-btn" class="icon-btn" title="Save" aria-label="Save"{save_disabled}>
+      <img src="/admin/static/icons/save.svg" alt="">
+    </button>
+  </h2>
   <div class="card-boxed-body">
-  <form method="POST" action="{action}" style="max-width:580px">
+  <form method="POST" action="{action}" id="user-editor-form" style="max-width:580px">
     <div class="user-form-grid">
       <div class="form-group">
         <label for="username">Username <span class="field-hint">(letters, numbers, hyphens only)</span></label>
@@ -791,7 +796,6 @@ function toggleSiteFields() {{
       </ul>
     </div>
     <div style="display:flex;gap:0.75rem">
-      <button type="submit" id="save-btn" class="btn btn-primary"{save_disabled}>Save</button>
       <a href="/admin/users" class="btn btn-secondary">Cancel</a>
     </div>
   </form>

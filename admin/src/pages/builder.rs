@@ -35,13 +35,15 @@ pub fn render_project_list(projects: &[ProjectRow], flash: Option<&str>, ctx: &c
             let activate_btn = if p.is_active {
                 format!(
                     r#"<form method="POST" action="/admin/builder/deactivate" style="display:inline">
-                        <button class="btn btn-sm" type="submit" style="background:#e2e8f0;border-color:#cbd5e1;color:#475569">Deactivate</button>
+                        <button class="icon-btn icon-danger" type="submit" title="Deactivate" aria-label="Deactivate" style="color:#16a34a">
+                          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>
+                        </button>
                     </form>"#
                 )
             } else {
                 format!(
                     r#"<form method="POST" action="/admin/builder/{id}/activate" style="display:inline">
-                        <button class="btn btn-sm btn-primary" type="submit">Set Live</button>
+                        <button class="icon-btn" type="submit" title="Set Live" aria-label="Set Live"><img src="/admin/static/icons/power.svg" alt=""></button>
                     </form>"#,
                     id = crate::html_escape(&p.id),
                 )
@@ -96,7 +98,7 @@ pub fn render_project_list(projects: &[ProjectRow], flash: Option<&str>, ctx: &c
     let content = format!(
         r#"{flash_html}<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.5rem">
   <p style="margin:0;color:var(--muted)">Organise your site pages into projects. One project can be live at a time.</p>
-  <button type="button" class="btn btn-primary" onclick="document.getElementById('new-project-dialog').showModal();document.querySelector('.admin-content').style.filter='blur(1.5px)'">+ Project</button>
+  <button type="button" class="icon-btn" title="New Project" aria-label="New Project" onclick="document.getElementById('new-project-dialog').showModal();document.querySelector('.admin-content').style.filter='blur(1.5px)'"><img src="/admin/static/icons/file-plus.svg" alt=""></button>
 </div>
 <table class="data-table" style="margin-bottom:2rem">
   <thead>
@@ -106,43 +108,47 @@ pub fn render_project_list(projects: &[ProjectRow], flash: Option<&str>, ctx: &c
 </table>
 
 <!-- New project dialog -->
-<dialog id="new-project-dialog" style="border:1px solid #e2e8f0;border-radius:8px;padding:1.5rem;min-width:400px;box-shadow:0 4px 24px rgba(0,0,0,.12);position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);margin:0">
+<dialog id="new-project-dialog" class="modal-card">
   <form method="POST" action="/admin/builder/create">
-    <h3 style="margin:0 0 1rem">New Project</h3>
-    <div class="form-group">
-      <label for="proj-name">Project Name</label>
-      <input id="proj-name" type="text" name="name" required maxlength="35"
-             placeholder="e.g. Main Site" style="width:100%">
-    </div>
-    <div class="form-group">
-      <label for="proj-desc">Description <span style="color:var(--muted)">(optional)</span></label>
-      <input id="proj-desc" type="text" name="description" maxlength="100"
-             placeholder="e.g. Full site redesign 2026" style="width:100%">
-    </div>
-    <div style="display:flex;gap:.5rem;justify-content:flex-end;margin-top:1rem">
-      <button type="button" class="btn" onclick="this.closest('form').reset();closeNewProjectDialog()">Cancel</button>
-      <button type="submit" class="btn btn-primary">Save</button>
+    <h3 class="modal-card-header">New Project</h3>
+    <div class="modal-card-body">
+      <div class="form-group">
+        <label for="proj-name">Project Name</label>
+        <input id="proj-name" type="text" name="name" required maxlength="35"
+               placeholder="e.g. Main Site" style="width:100%">
+      </div>
+      <div class="form-group">
+        <label for="proj-desc">Description <span style="color:var(--muted)">(optional)</span></label>
+        <input id="proj-desc" type="text" name="description" maxlength="100"
+               placeholder="e.g. Full site redesign 2026" style="width:100%">
+      </div>
+      <div style="display:flex;gap:.5rem;justify-content:flex-end;margin-top:1rem">
+        <button type="button" class="btn" onclick="this.closest('form').reset();closeNewProjectDialog()">Cancel</button>
+        <button type="submit" class="btn btn-primary">Save</button>
+      </div>
     </div>
   </form>
 </dialog>
 
 <!-- Rename project dialog -->
-<dialog id="rename-dialog" style="border:1px solid #e2e8f0;border-radius:8px;padding:1.5rem;min-width:400px;box-shadow:0 4px 24px rgba(0,0,0,.12);position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);margin:0">
+<dialog id="rename-dialog" class="modal-card">
   <form method="POST" id="rename-form">
-    <h3 style="margin:0 0 1rem">Edit Project</h3>
-    <div class="form-group">
-      <label for="rename-input">Project Name</label>
-      <input id="rename-input" type="text" name="project_name" required maxlength="35"
-             style="width:100%" autocomplete="off">
-    </div>
-    <div class="form-group">
-      <label for="rename-desc-input">Description <span style="color:var(--muted)">(optional)</span></label>
-      <input id="rename-desc-input" type="text" name="description" maxlength="100"
-             style="width:100%" autocomplete="off">
-    </div>
-    <div style="display:flex;gap:.5rem;justify-content:flex-end;margin-top:1rem">
-      <button type="button" class="btn" onclick="document.getElementById('rename-dialog').close();document.querySelector('.admin-content').style.filter=''">Cancel</button>
-      <button type="submit" class="btn btn-primary">Save</button>
+    <h3 class="modal-card-header">Edit Project</h3>
+    <div class="modal-card-body">
+      <div class="form-group">
+        <label for="rename-input">Project Name</label>
+        <input id="rename-input" type="text" name="project_name" required maxlength="35"
+               style="width:100%" autocomplete="off">
+      </div>
+      <div class="form-group">
+        <label for="rename-desc-input">Description <span style="color:var(--muted)">(optional)</span></label>
+        <input id="rename-desc-input" type="text" name="description" maxlength="100"
+               style="width:100%" autocomplete="off">
+      </div>
+      <div style="display:flex;gap:.5rem;justify-content:flex-end;margin-top:1rem">
+        <button type="button" class="btn" onclick="document.getElementById('rename-dialog').close();document.querySelector('.admin-content').style.filter=''">Cancel</button>
+        <button type="submit" class="btn btn-primary">Save</button>
+      </div>
     </div>
   </form>
 </dialog>

@@ -43,7 +43,12 @@ pub fn render(terms: &[TermItem], taxonomy: &str, flash: Option<&str>, ctx: &cra
   </div>
   <div>
     <div class="card-boxed">
-      <h2 class="card-boxed-header">Add {title_s}</h2>
+      <h2 class="card-boxed-header" style="display:flex;align-items:center;justify-content:space-between;gap:.5rem;">
+        <span>Add {title_s}</span>
+        <button type="submit" form="add-term-form" id="add-term-btn" class="icon-btn" title="Add {title_s}" aria-label="Add {title_s}" disabled>
+          <img src="/admin/static/icons/file-plus.svg" alt="">
+        </button>
+      </h2>
       <div class="card-boxed-body">
       <form method="POST" action="{path}/new" id="add-term-form">
         <div class="form-group">
@@ -58,7 +63,6 @@ pub fn render(terms: &[TermItem], taxonomy: &str, flash: Option<&str>, ctx: &cra
           <small>Lowercase, hyphens only. Auto-filled from name as you type &mdash; edit it here to override.</small>
         </div>
         <input type="hidden" name="taxonomy" value="{taxonomy}">
-        <button type="submit" id="add-term-btn" class="btn btn-primary" disabled>Add {title_s}</button>
       </form>
       </div>
       <script>

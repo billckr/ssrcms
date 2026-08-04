@@ -131,6 +131,13 @@ a.stat-cell-link:hover { background: #f8f9fd; }
 .page-btn-active { background: var(--primary); border-color: var(--primary); color: #fff; pointer-events: none; }
 .page-btn-disabled { color: var(--muted); pointer-events: none; opacity: .5; }
 
+/* Icon-prefixed search box — a magnifying-glass icon inset into a
+   type=search input. Shared across list pages (form submissions, posts). */
+.icon-search-box { position: relative; max-width: 320px; margin-bottom: 1rem; }
+.icon-search-box svg { position: absolute; left: .7rem; top: 50%; transform: translateY(-50%); color: var(--muted); pointer-events: none; }
+.icon-search-box input[type=search] { width: 100%; padding: .5rem .75rem .5rem 2.1rem; border: 1px solid var(--border); border-radius: var(--radius); font-size: 14px; background: var(--surface); color: var(--text); }
+.icon-search-box input[type=search]:focus { outline: none; border-color: var(--text); }
+
 /* Badges */
 .badge { display: inline-block; padding: .1rem .4rem; border-radius: 3px; font-size: 11px; font-weight: 600; background: #e2e8f0; color: var(--muted); }
 .badge-danger { background: #fee2e2; color: #b91c1c; }
@@ -275,17 +282,6 @@ tr.muted td { opacity: .55; }
    read as compact card-level actions rather than competing with page content. */
 .customizer-header-actions { display: flex; align-items: center; gap: .5rem; flex-shrink: 0; }
 .customizer-restore-form { display: flex; flex-shrink: 0; }
-.customizer-restore-icon-btn, .customizer-save-icon-btn {
-  display: flex; align-items: center; justify-content: center;
-  width: 30px; height: 30px; padding: 0; border: 1px solid var(--border); border-radius: 50%;
-  font-size: 1.1rem; line-height: 1; cursor: pointer;
-  transition: background .15s, border-color .15s, opacity .15s;
-}
-.customizer-restore-icon-btn, .customizer-save-icon-btn { background: #fff; color: var(--text); }
-.customizer-restore-icon-btn:hover, .customizer-save-icon-btn:hover:not(:disabled) { background: #f1f5f9; border-color: #94a3b8; }
-.customizer-save-icon-btn:disabled { opacity: .4; cursor: not-allowed; }
-.customizer-restore-icon-btn img, .customizer-save-icon-btn img { width: 16px; height: 16px; display: block; }
-.customizer-restore-icon-btn.icon-danger:hover, .customizer-save-icon-btn.icon-danger:hover { background: #fee2e2; border-color: var(--danger); }
 .editor-color-hint { margin: .6rem 0 0; font-size: .75rem; color: var(--muted); }
 .badge-published { background: #dcfce7; color: #166534; }
 .badge-draft { background: #fef9c3; color: #854d0e; }
@@ -354,13 +350,15 @@ tr.muted td { opacity: .55; }
 .copy-email-btn:hover { color: var(--primary-dark); }
 
 /* Icon buttons */
-.icon-btn { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; flex-shrink: 0; padding: 0; background: none; border: 1px solid var(--border); border-radius: var(--radius); cursor: pointer; color: var(--primary); transition: background .2s, border-color .2s; }
+/* Border/background stay transparent until hover — just the bare icon
+   otherwise, across every page that uses this class. */
+.icon-btn { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; flex-shrink: 0; padding: 0; background: none; border: 1px solid transparent; border-radius: var(--radius); cursor: pointer; color: var(--primary); transition: background .2s, border-color .2s; }
 .icon-btn:hover { background: #f8fafc; border-color: var(--primary); }
 .icon-btn img { width: 18px; height: 18px; display: block; }
 .icon-btn.icon-danger { color: var(--danger); }
 .icon-btn.icon-danger:hover { background: #fee2e2; border-color: var(--danger); }
 .icon-btn:disabled { opacity: .4; cursor: not-allowed; }
-.icon-btn:disabled:hover { background: none; border-color: var(--border); }
+.icon-btn:disabled:hover { background: none; border-color: transparent; }
 
 /* Forms */
 .form-group { margin-bottom: 1rem; }
@@ -634,6 +632,34 @@ body.sidebar-open .sidebar-overlay {
   font-weight: 600;
   border-bottom: 1px solid var(--border);
 }
+
+/* Fixed modal dialogs (<dialog>). A standalone copy of .card-boxed's current
+   look (background/border/radius/shadow/header bar) rather than sharing its
+   selector — so either one can be restyled later without dragging the other
+   along. Positioning (fixed + centered) is modal-specific and lives only here. */
+.modal-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  padding: 0;
+  min-width: 400px;
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  margin: 0;
+}
+.modal-card-header {
+  margin: 0;
+  background: #f8fafc;
+  padding: .5rem .875rem;
+  font-size: .95rem;
+  font-weight: 600;
+  border-bottom: 1px solid var(--border);
+}
+.modal-card-body { padding: 1rem; }
 .card-boxed-body { padding: 1rem; }
 
 /* Theme Details is a <details>/<summary> so it can collapse — mainly for

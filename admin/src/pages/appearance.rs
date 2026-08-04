@@ -265,7 +265,7 @@ fn render_customizer_landing(theme_name: &str, source: &str, data: &CustomizerDa
   <input type="hidden" name="file" value="static/css/style.css">
   <input type="hidden" name="source" value="{source}">
   <input type="hidden" name="stay" value="1">
-  <button type="submit" class="customizer-restore-icon-btn" title="Restore original" aria-label="Restore original"><img src="/admin/static/icons/rotate-ccw.svg" alt=""></button>
+  <button type="submit" class="icon-btn" title="Restore original" aria-label="Restore original"><img src="/admin/static/icons/rotate-ccw.svg" alt=""></button>
 </form>"#,
             theme = theme_esc,
             source = source_esc,
@@ -288,7 +288,7 @@ fn render_customizer_landing(theme_name: &str, source: &str, data: &CustomizerDa
      onsubmit="return confirm('Restore original settings? Your current changes in this section will be overwritten.')">
   <input type="hidden" name="keys" value="{keys}">
   <input type="hidden" name="source" value="{source}">
-  <button type="submit" class="customizer-restore-icon-btn" title="Restore original" aria-label="Restore original"><img src="/admin/static/icons/rotate-ccw.svg" alt=""></button>
+  <button type="submit" class="icon-btn" title="Restore original" aria-label="Restore original"><img src="/admin/static/icons/rotate-ccw.svg" alt=""></button>
 </form>"#,
             theme = theme_esc,
             source = source_esc,
@@ -504,7 +504,7 @@ fn render_customizer_landing(theme_name: &str, source: &str, data: &CustomizerDa
   <h2 class="card-boxed-header" style="display:flex;align-items:center;justify-content:space-between;gap:.5rem;">
     <span>{group}</span>
     <div class="customizer-header-actions">
-      <button type="submit" form="{form_id}" id="{btn_id}" class="customizer-save-icon-btn" disabled title="Save Changes" aria-label="Save Changes"><img src="/admin/static/icons/save.svg" alt=""></button>
+      <button type="submit" form="{form_id}" id="{btn_id}" class="icon-btn" disabled title="Save Changes" aria-label="Save Changes"><img src="/admin/static/icons/save.svg" alt=""></button>
       {restore}
     </div>
   </h2>
