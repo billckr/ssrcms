@@ -66,6 +66,36 @@ pub struct FormSummary {
     pub unread_count: i64,
 }
 
+/// Total submission count for a specific form — drives pagination on the
+/// submissions list, separate from `list_forms`' per-form counts (that
+/// query groups across every form name at once, not useful for a single
+/// form's page count).
+pub async fn count_for_form(pool: &PgPool, site_id: Uuid, form_name: &str) -> Result<i64> {
+    let row: (i64,) = sqlx::query_as(
+        "SELECT COUNT(*) FROM form_submissions WHERE site_id = $1 AND form_name = $2",
+    )
+    .bind(site_id)
+    .bind(form_name)
+    .fetch_one(pool)
+    .await?;
+    Ok(row.0)
+}
+
+/// Every submission's raw `data` for a form, across all pages — used only
+/// to derive the full column set (see `collect_columns`), so a submission
+/// on page 2 with a field no longer used on page 1 doesn't just vanish
+/// from the displayed columns because the paginated fetch never saw it.
+pub async fn list_all_data_for_form(pool: &PgPool, site_id: Uuid, form_name: &str) -> Result<Vec<serde_json::Value>> {
+    let rows: Vec<(serde_json::Value,)> = sqlx::query_as(
+        "SELECT data FROM form_submissions WHERE site_id = $1 AND form_name = $2",
+    )
+    .bind(site_id)
+    .bind(form_name)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows.into_iter().map(|(d,)| d).collect())
+}
+
 /// List submissions for a specific form, newest first.
 pub async fn list_submissions(
     pool: &PgPool,

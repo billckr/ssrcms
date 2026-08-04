@@ -142,10 +142,40 @@ pub fn render_forms_list(
 
 // ── Submission detail ─────────────────────────────────────────────────────────
 
+fn submission_pagination(form_name: &str, page: i64, total_pages: i64) -> String {
+    if total_pages <= 1 {
+        return String::new();
+    }
+    let base_path = format!("/admin/forms/{}", html_escape(form_name));
+    let prev = if page > 1 {
+        format!(r#"<a href="{base_path}?page={}" class="page-btn">&laquo; Prev</a>"#, page - 1)
+    } else {
+        r#"<span class="page-btn page-btn-disabled">&laquo; Prev</span>"#.to_string()
+    };
+    let next = if page < total_pages {
+        format!(r#"<a href="{base_path}?page={}" class="page-btn">Next &raquo;</a>"#, page + 1)
+    } else {
+        r#"<span class="page-btn page-btn-disabled">Next &raquo;</span>"#.to_string()
+    };
+    let start = (page - 3).max(1);
+    let end = (page + 3).min(total_pages);
+    let mut nums = String::new();
+    for p in start..=end {
+        if p == page {
+            nums.push_str(&format!(r#"<span class="page-btn page-btn-active">{p}</span>"#));
+        } else {
+            nums.push_str(&format!(r#"<a href="{base_path}?page={p}" class="page-btn">{p}</a>"#));
+        }
+    }
+    format!(r#"<div class="pagination">{prev}{nums}{next}</div>"#)
+}
+
 pub fn render_form_detail(
     form_name: &str,
     submissions: &[SubmissionRow],
     columns: &[String],
+    page: i64,
+    total_pages: i64,
     flash: Option<&str>,
     ctx: &PageContext,
 ) -> String {
@@ -236,6 +266,7 @@ pub fn render_form_detail(
 {rows}
 </div>
 <p id="submission-no-matches">No responses match your search.</p>
+{pagination}
 <script>
 (function() {{
   var input = document.getElementById('submission-search');
@@ -257,6 +288,7 @@ pub fn render_form_detail(
         fname = html_escape(form_name),
         search_box = search_box,
         rows = rows,
+        pagination = submission_pagination(form_name, page, total_pages),
     );
 
     let title = format!("Form: {}", form_name);

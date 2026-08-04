@@ -85,10 +85,18 @@ pub async fn list_forms(
 
 // ── view a single form's submissions ─────────────────────────────────────────
 
+#[derive(Deserialize, Default)]
+pub struct ViewFormQuery {
+    pub page: Option<i64>,
+}
+
+const SUBMISSIONS_PER_PAGE: i64 = 20;
+
 pub async fn view_form(
     State(state): State<AppState>,
     admin: AdminUser,
     Path(name): Path<String>,
+    Query(q): Query<ViewFormQuery>,
 ) -> Response {
     if let Err(r) = require_forms_cap(&admin) { return r; }
     let site_id = match require_site_id(&admin) { Ok(id) => id, Err(r) => return r };
@@ -99,11 +107,19 @@ pub async fn view_form(
     // Mark as read in the background (fire-and-forget; errors are non-fatal)
     let _ = form_submission::mark_all_read(&state.db, site_id, &name).await;
 
-    match form_submission::list_submissions(&state.db, site_id, &name, 500, 0).await {
-        Ok(subs) => {
-            // Derive column set from all JSONB keys in natural insertion order
-            let columns = collect_columns(&subs.iter().map(|s| &s.data).collect::<Vec<_>>());
+    let total: i64 = form_submission::count_for_form(&state.db, site_id, &name).await.unwrap_or(0);
+    let total_pages = ((total + SUBMISSIONS_PER_PAGE - 1) / SUBMISSIONS_PER_PAGE).max(1);
+    let page = q.page.unwrap_or(1).clamp(1, total_pages);
+    let offset = (page - 1) * SUBMISSIONS_PER_PAGE;
 
+    // Column set is derived from every submission ever made to this form,
+    // not just the current page — otherwise a field only present on an
+    // older page would silently disappear from the displayed rows.
+    let all_data = form_submission::list_all_data_for_form(&state.db, site_id, &name).await.unwrap_or_default();
+    let columns = collect_columns(&all_data.iter().collect::<Vec<_>>());
+
+    match form_submission::list_submissions(&state.db, site_id, &name, SUBMISSIONS_PER_PAGE, offset).await {
+        Ok(subs) => {
             let rows: Vec<SubmissionRow> = subs.into_iter().map(|s| SubmissionRow {
                 id: s.id.to_string(),
                 data: s.data,
@@ -112,11 +128,11 @@ pub async fn view_form(
                 submitted_at: s.submitted_at.format("%Y-%m-%d %H:%M UTC").to_string(),
             }).collect();
 
-            Html(admin::pages::forms::render_form_detail(&name, &rows, &columns, None, &ctx)).into_response()
+            Html(admin::pages::forms::render_form_detail(&name, &rows, &columns, page, total_pages, None, &ctx)).into_response()
         }
         Err(e) => {
             tracing::error!("view_form '{}' error: {:?}", name, e);
-            Html(admin::pages::forms::render_form_detail(&name, &[], &[], Some("Failed to load submissions."), &ctx)).into_response()
+            Html(admin::pages::forms::render_form_detail(&name, &[], &[], 1, 1, Some("Failed to load submissions."), &ctx)).into_response()
         }
     }
 }
