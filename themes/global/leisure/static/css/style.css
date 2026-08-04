@@ -1554,6 +1554,14 @@ img { max-width: 100%; height: auto; display: block; }
   max-width: 560px;
 }
 
+/* .themed-form's flex column stretches children full-width by default
+   (wanted for the field rows) — but the submit button should size to its
+   own text, not the 560px form column, so opt it out of the stretch. */
+.themed-form > .btn,
+.themed-form > button[type="submit"] {
+  align-self: flex-start;
+}
+
 .form-field {
   display: flex;
   flex-direction: column;
@@ -1571,6 +1579,9 @@ img { max-width: 100%; height: auto; display: block; }
 .form-field input[type="text"],
 .form-field input[type="email"],
 .form-field input[type="password"],
+.form-field input[type="tel"],
+.form-field input[type="number"],
+.form-field input[type="date"],
 .form-field textarea {
   padding: 0.65rem 0.9rem;
   font-size: 1rem;
@@ -1631,14 +1642,111 @@ img { max-width: 100%; height: auto; display: block; }
   gap: 0.6rem;
   margin-top: 1.5rem;
   padding: 1rem 1.25rem;
-  background: #f0fdf4;
-  border: 1.5px solid #86efac;
+  background: color-mix(in srgb, var(--blue) 10%, white);
+  border: 1.5px solid color-mix(in srgb, var(--blue) 40%, white);
   border-radius: var(--radius);
-  color: #166534;
+  color: color-mix(in srgb, var(--blue) 65%, black);
   font-weight: 500;
 }
 
-.form-success svg { flex-shrink: 0; color: #16a34a; }
+.form-success svg { flex-shrink: 0; color: var(--blue); }
+
+/* ── Form Designer field types not covered by hand-written forms above:
+   select, radio, toggle ── */
+.form-field select {
+  padding: 0.65rem 0.9rem;
+  font-size: 1rem;
+  font-family: var(--font-body);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--white);
+  color: var(--charcoal);
+  transition: border-color var(--transition), box-shadow var(--transition);
+  outline: none;
+  width: 100%;
+}
+
+.form-field select:focus {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px rgba(104,120,214,0.15);
+}
+
+.form-field-legend {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--navy);
+  margin-bottom: 0.4rem;
+}
+
+.form-radio-label {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.875rem;
+  color: var(--charcoal);
+  cursor: pointer;
+  margin-bottom: 0.5rem;
+}
+
+.form-radio-label input[type="radio"] {
+  width: 1rem;
+  height: 1rem;
+  accent-color: var(--blue);
+  cursor: pointer;
+}
+
+.form-field-toggle > label:first-child {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--navy);
+  margin-bottom: 0.4rem;
+}
+
+.form-toggle-label {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.875rem;
+  color: var(--charcoal);
+  cursor: pointer;
+}
+
+.form-toggle-input {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+}
+
+.form-toggle-slider {
+  position: relative;
+  display: inline-block;
+  width: 36px;
+  height: 20px;
+  flex-shrink: 0;
+  background: var(--border);
+  border-radius: 999px;
+  transition: background var(--transition);
+}
+
+.form-toggle-slider::before {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  background: var(--white);
+  border-radius: 50%;
+  transition: transform var(--transition);
+  box-shadow: 0 1px 2px rgba(0,0,0,.2);
+}
+
+.form-toggle-input:checked + .form-toggle-slider { background: var(--blue); }
+.form-toggle-input:checked + .form-toggle-slider::before { transform: translateX(16px); }
+.form-toggle-input:focus-visible + .form-toggle-slider { box-shadow: 0 0 0 3px rgba(104,120,214,0.25); }
 
 /* ── Screen-reader only utility ── */
 .sr-only {

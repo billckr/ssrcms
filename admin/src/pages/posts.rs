@@ -62,6 +62,9 @@ pub struct PostEdit {
     /// viewable by a logged-in staff session (see can_preview_site). None
     /// when published (use live_url instead) or trashed.
     pub preview_url: Option<String>,
+    /// (slug, name) pairs for every form defined in Form Designer — powers
+    /// the editor's "Insert Form" picker.
+    pub saved_forms: Vec<(String, String)>,
 }
 
 pub struct TermOption {
@@ -959,6 +962,27 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
   AudioBlot.value = function(node) {{ return node.getAttribute('src'); }};
   Quill.register('formats/audio', AudioBlot);
 
+  // Register a custom Quill format for saved-form embeds. A form built in
+  // Form Designer gets dropped into post/page content as an inert
+  // <ss-form data-slug="..." data-label="..."> placeholder (visible-in-editor
+  // only via CSS ::before, see below) — the real <form> HTML is swapped in
+  // server-side at render time by expanding this tag, the same way the
+  // theme never sees a raw Puck block.
+  class FormEmbedBlot extends BlockEmbed {{}}
+  FormEmbedBlot.blotName = 'form-embed';
+  FormEmbedBlot.tagName  = 'ss-form';
+  FormEmbedBlot.create   = function(value) {{
+    var node = document.createElement('ss-form');
+    node.setAttribute('data-slug', value.slug);
+    node.setAttribute('data-label', value.label || value.slug);
+    node.setAttribute('contenteditable', 'false');
+    return node;
+  }};
+  FormEmbedBlot.value = function(node) {{
+    return {{ slug: node.getAttribute('data-slug'), label: node.getAttribute('data-label') }};
+  }};
+  Quill.register('formats/form-embed', FormEmbedBlot);
+
   var quill = new Quill('#quill-editor', {{
     theme: 'snow',
     modules: {{
@@ -1146,6 +1170,56 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
     qlToolbar.appendChild(span);
   }})();
 
+  // Add "Insert Form" button to the Quill toolbar — drops a saved form
+  // (built in Form Designer) into the content as an embed placeholder.
+  (function() {{
+    var savedForms = {saved_forms_js};
+    var qlToolbar = document.querySelector('.ql-toolbar');
+    if (!qlToolbar) return;
+    var span = document.createElement('span');
+    span.className = 'ql-formats';
+    span.style.position = 'relative';
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.title = 'Insert form';
+    btn.style.cssText = 'width:auto;padding:0 4px';
+    btn.innerHTML = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><line x1="8" y1="8" x2="16" y2="8"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="16" x2="12" y2="16"/></svg>';
+
+    var menu = document.createElement('div');
+    menu.style.cssText = 'display:none;position:absolute;top:100%;left:0;z-index:20;min-width:180px;background:#fff;border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:.3rem;margin-top:2px';
+    if (savedForms.length === 0) {{
+      menu.innerHTML = '<div style="padding:.4rem .6rem;font-size:12px;color:var(--muted)">No forms yet — build one in <a href="/admin/form-designer" target="_blank">Form Designer</a>.</div>';
+    }} else {{
+      savedForms.forEach(function(f) {{
+        var item = document.createElement('button');
+        item.type = 'button';
+        item.textContent = f[1];
+        item.style.cssText = 'display:block;width:100%;text-align:left;padding:.4rem .6rem;font-size:13px;border:none;background:none;border-radius:4px;cursor:pointer';
+        item.addEventListener('mouseenter', function() {{ item.style.background = '#f1f5f9'; }});
+        item.addEventListener('mouseleave', function() {{ item.style.background = 'none'; }});
+        item.addEventListener('click', function() {{
+          var range = window._quillRange || quill.getSelection(true) || {{ index: quill.getLength() }};
+          quill.insertEmbed(range.index, 'form-embed', {{ slug: f[0], label: f[1] }}, 'user');
+          quill.setSelection(range.index + 1, 0, 'user');
+          menu.style.display = 'none';
+        }});
+        menu.appendChild(item);
+      }});
+    }}
+    span.appendChild(btn);
+    span.appendChild(menu);
+    qlToolbar.appendChild(span);
+
+    btn.addEventListener('click', function(e) {{
+      e.stopPropagation();
+      window._quillRange = quill.getSelection(true);
+      menu.style.display = menu.style.display === 'none' ? '' : 'none';
+    }});
+    document.addEventListener('click', function(e) {{
+      if (!span.contains(e.target)) menu.style.display = 'none';
+    }});
+  }})();
+
   // Remaining character counters for title and excerpt
   (function() {{
     function initCount(inputId, countId, max) {{
@@ -1223,6 +1297,7 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
         title_val = crate::html_escape(&post.title),
         slug = crate::html_escape(&post.slug),
         content_js = serde_json::to_string(&post.content).unwrap_or_else(|_| "\"\"".into()),
+        saved_forms_js = serde_json::to_string(&post.saved_forms).unwrap_or_else(|_| "[]".into()),
         post_id_js = serde_json::to_string(&post.id).unwrap_or_else(|_| "null".into()),
         excerpt = crate::html_escape(&post.excerpt),
         status_options = status_options,

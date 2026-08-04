@@ -894,3 +894,17 @@ legend {
    feels less spaced-out. The live page is unaffected — it uses theme CSS. */
 .ql-editor p { margin-bottom: 0.15rem; }
 
+/* Saved-form embed placeholder — see FormEmbedBlot in posts.rs. The
+   <ss-form> tag never reaches the live site; only visible here as an
+   editor placeholder, styled purely via CSS so the node stays empty
+   (nothing to strip out) and round-trips through Quill's HTML cleanly. */
+.ql-editor ss-form {
+  display: flex; align-items: center; gap: .5rem;
+  margin: .5rem 0; padding: .6rem .85rem;
+  border: 1px dashed #94a3b8; border-radius: var(--radius);
+  background: #f8fafc; color: #475569; font-size: 13px;
+}
+.ql-editor ss-form::before {
+  content: "\1F4CB  Form: " attr(data-label);
+}
+

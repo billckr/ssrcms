@@ -1,7 +1,7 @@
 //! Public form submission handler.
 //!
 //! `POST /form/{name}` — accepts any HTML form, stores fields as JSONB,
-//! and redirects back with `?submitted=1`.
+//! and redirects back with `?submitted={name}`.
 //!
 //! Fields whose name starts with `_` (e.g. `_honeypot`) are stripped before
 //! storage so they never persist.
@@ -69,7 +69,13 @@ pub async fn submit(
         }
     }
 
-    // Redirect back to the page that submitted the form, appending ?submitted=1.
+    // Redirect back to the page that submitted the form, appending
+    // ?submitted={name}. Using the form's own name (not just "1") lets a
+    // page with multiple embedded forms show the success message for only
+    // the one actually submitted — see FormDef::render_html's inline
+    // script. Existing hand-written themes checking `{% if
+    // request.query.submitted %}` still work unchanged since any non-empty
+    // value is truthy.
     // Fall back to "/" if the Referer header is missing or unparseable.
     let referer = headers
         .get(axum::http::header::REFERER)
@@ -78,5 +84,9 @@ pub async fn submit(
 
     // Strip any existing query string from the referer before appending ours.
     let base = referer.split('?').next().unwrap_or(referer);
-    Redirect::to(&format!("{}?submitted=1", base))
+    Redirect::to(&format!(
+        "{}?submitted={}",
+        base,
+        crate::handlers::admin::appearance::url_encode_param(&name)
+    ))
 }

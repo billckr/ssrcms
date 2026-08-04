@@ -213,3 +213,187 @@ pub async fn delete(pool: &PgPool, site_id: Uuid, id: Uuid) -> Result<()> {
         .await?;
     Ok(())
 }
+
+fn html_escape(s: &str) -> String {
+    s.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+}
+
+/// Render one field's markup. Class names deliberately match the
+/// hand-written-form convention already established across themes (see
+/// e.g. `themes/global/leisure/templates/contact-page.html` and its
+/// "Shared form styles" CSS block: `.form-field`, `.form-required`,
+/// `.form-checkbox-label`) rather than inventing a parallel `ss-form-*`
+/// scheme — that way a generated form picks up a theme's existing form
+/// styling for free, with zero new CSS required on themes that already
+/// follow it. `form-field-{type}` is added as a secondary hook for
+/// per-type styling (select/radio/toggle) that hand-written forms didn't
+/// previously need.
+fn render_field_html(f: &FormField, slug: &str) -> String {
+    let id = format!("ss-form-{}-{}", html_escape(slug), html_escape(&f.name));
+    let required_attr = if f.required { " required" } else { "" };
+    let required_mark = if f.required { r#" <span class="form-required" aria-hidden="true">*</span>"# } else { "" };
+    let label = html_escape(&f.label);
+    let name = html_escape(&f.name);
+
+    match f.field_type.as_str() {
+        "checkbox" => format!(
+            r#"<div class="form-field form-field-checkbox">
+  <label class="form-checkbox-label"><input type="checkbox" id="{id}" name="{name}" value="true"{required_attr}> <span>{label}{required_mark}</span></label>
+</div>
+"#
+        ),
+        "toggle" => {
+            let off_label = f.options.first().map(|(_, l)| l.as_str()).unwrap_or("Off");
+            let on_label = f.options.get(1).map(|(_, l)| l.as_str()).unwrap_or("On");
+            let on_value = f.options.get(1).map(|(v, _)| v.as_str()).unwrap_or("true");
+            format!(
+                r#"<div class="form-field form-field-toggle">
+  <label for="{id}">{label}{required_mark}</label>
+  <label class="form-toggle-label" for="{id}">
+    <span class="form-toggle-off">{off}</span>
+    <input type="checkbox" id="{id}" name="{name}" value="{on_value}" class="form-toggle-input"{required_attr}>
+    <span class="form-toggle-slider" aria-hidden="true"></span>
+    <span class="form-toggle-on">{on}</span>
+  </label>
+</div>
+"#,
+                off = html_escape(off_label),
+                on = html_escape(on_label),
+            )
+        }
+        "textarea" => format!(
+            r#"<div class="form-field form-field-textarea">
+  <label for="{id}">{label}{required_mark}</label>
+  <textarea id="{id}" name="{name}"{required_attr}></textarea>
+</div>
+"#
+        ),
+        "select" => {
+            let options: String = f.options.iter().map(|(v, l)| {
+                format!(r#"<option value="{}">{}</option>"#, html_escape(v), html_escape(l))
+            }).collect();
+            format!(
+                r#"<div class="form-field form-field-select">
+  <label for="{id}">{label}{required_mark}</label>
+  <select id="{id}" name="{name}"{required_attr}>{options}</select>
+</div>
+"#
+            )
+        }
+        "radio" => {
+            let options: String = f.options.iter().enumerate().map(|(i, (v, l))| {
+                let opt_id = format!("{id}-{i}");
+                format!(
+                    r#"<label class="form-radio-label" for="{opt_id}"><input type="radio" id="{opt_id}" name="{name}" value="{val}"{required_attr}> {opt_label}</label>"#,
+                    opt_id = opt_id, val = html_escape(v), opt_label = html_escape(l),
+                )
+            }).collect();
+            format!(
+                r#"<div class="form-field form-field-radio">
+  <span class="form-field-legend">{label}{required_mark}</span>
+  {options}
+</div>
+"#
+            )
+        }
+        other => {
+            let input_type = match other {
+                "email" => "email",
+                "number" => "number",
+                "phone" => "tel",
+                "date" => "date",
+                _ => "text",
+            };
+            format!(
+                r#"<div class="form-field form-field-{other}">
+  <label for="{id}">{label}{required_mark}</label>
+  <input type="{input_type}" id="{id}" name="{name}"{required_attr}>
+</div>
+"#
+            )
+        }
+    }
+}
+
+impl FormDef {
+    /// Render the public-facing `<form>` for this definition. Markup and
+    /// class names match the hand-written contact/newsletter/subscribe
+    /// forms already shipped in themes (`.themed-form`, `.form-field`,
+    /// `.honeypot-field`, `.form-success`, and the generic `.btn` button
+    /// component) so a theme that already styles those — Leisure does —
+    /// renders a fully-styled form with no new CSS. A tiny inline script
+    /// swaps in the success message when the page's query string shows
+    /// this exact form was just submitted (`?submitted={slug}`, set by
+    /// `form::submit`'s redirect), matching what the hand-written pages
+    /// do server-side via `{% if request.query.submitted %}` — this just
+    /// makes it automatic instead of something every theme has to write.
+    pub fn render_html(&self) -> String {
+        let slug = html_escape(&self.slug);
+        let mut html = format!(
+            r#"<form class="themed-form" id="ss-form-{slug}" method="POST" action="/form/{slug}">
+"#
+        );
+        if self.settings.include_honeypot {
+            html.push_str(&format!(
+                r#"<div class="honeypot-field" aria-hidden="true" tabindex="-1">
+  <label for="ss-form-{slug}-hp">Leave this blank</label>
+  <input type="text" id="ss-form-{slug}-hp" name="_honeypot" tabindex="-1" autocomplete="off">
+</div>
+"#
+            ));
+        }
+        for f in &self.fields {
+            html.push_str(&render_field_html(f, &self.slug));
+        }
+        html.push_str(&format!(
+            r#"<button type="submit" class="btn">{button_label}</button>
+</form>
+<div class="form-success" id="ss-form-success-{slug}" role="alert" style="display:none">
+  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+  <span>{success}</span>
+</div>
+<script>(function(){{var f=document.getElementById('ss-form-{slug}'),s=document.getElementById('ss-form-success-{slug}');if(!f||!s)return;if(new URLSearchParams(location.search).get('submitted')==={slug_js}){{f.style.display='none';s.style.display='';}}}})();</script>
+"#,
+            button_label = html_escape(&self.settings.button_label),
+            success = html_escape(&self.settings.success_message),
+            slug_js = serde_json::to_string(&self.slug).unwrap_or_else(|_| "\"\"".to_string()),
+        ));
+        html
+    }
+}
+
+/// Expand every `<ss-form data-slug="...">` embed in `content` (dropped in
+/// by the post/page editor's "Insert Form" button, see FormEmbedBlot in
+/// posts.rs) into the real rendered `<form>` for that saved definition.
+/// Cheap no-op (no DB hit) when the content has no embed at all — the
+/// overwhelming majority of posts/pages. Embeds referencing a deleted or
+/// missing form are silently dropped rather than left as raw markup.
+pub async fn expand_embeds(pool: &PgPool, site_id: Uuid, content: &str) -> String {
+    if !content.contains("<ss-form") {
+        return content.to_string();
+    }
+    let Ok(tag_re) = regex_lite::Regex::new(r#"<ss-form\b[^>]*data-slug="([^"]*)"[^>]*></ss-form>"#) else {
+        return content.to_string();
+    };
+
+    let mut slugs: Vec<String> = tag_re.captures_iter(content).map(|c| c[1].to_string()).collect();
+    slugs.sort();
+    slugs.dedup();
+
+    let mut result = content.to_string();
+    for slug in slugs {
+        let replacement = match get_by_slug(pool, site_id, &slug).await {
+            Ok(Some(form)) => form.render_html(),
+            _ => String::new(),
+        };
+        let escaped_slug = slug.replace('\\', "\\\\").replace('"', "\\\"");
+        let Ok(specific_re) = regex_lite::Regex::new(
+            &format!(r#"<ss-form\b[^>]*data-slug="{escaped_slug}"[^>]*></ss-form>"#),
+        ) else { continue };
+        result = specific_re.replace_all(&result, replacement.as_str()).to_string();
+    }
+    result
+}

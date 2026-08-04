@@ -276,10 +276,15 @@ pub fn sanitize_content(html: &str) -> String {
     //
     // <audio> and <source> are added beyond the default allowlist so that
     // audio players inserted via the Quill editor survive the save/reload cycle.
+    // <ss-form> is the saved-form embed placeholder (FormEmbedBlot in
+    // posts.rs) — expanded into real <form> HTML at render time by
+    // form_def::expand_embeds; it must survive sanitization untouched or
+    // every inserted form silently vanishes on save.
     ammonia::Builder::default()
-        .add_tags(&["audio", "source"])
+        .add_tags(&["audio", "source", "ss-form"])
         .add_tag_attributes("audio", &["src", "controls", "preload", "loop", "autoplay", "muted"])
         .add_tag_attributes("source", &["src", "type"])
+        .add_tag_attributes("ss-form", &["data-slug", "data-label"])
         .clean(html)
         .to_string()
 }

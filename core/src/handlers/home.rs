@@ -312,7 +312,7 @@ pub(crate) async fn build_post_context(
         (None, vec![])
     };
 
-    Ok(PostContext::build(
+    let mut ctx = PostContext::build(
         p,
         &author,
         category_ctxs,
@@ -323,7 +323,18 @@ pub(crate) async fn build_post_context(
         base_url,
         page_path,
         breadcrumbs,
-    ))
+    );
+
+    // Expand any saved-form embeds (dropped in via the editor's "Insert
+    // Form" button — see FormEmbedBlot in posts.rs) into their real <form>
+    // HTML. No-op, no DB hit, for the overwhelming majority of posts/pages
+    // that don't contain one. Excerpt/reading_time above were already
+    // computed from the raw (unexpanded) content, which is what we want.
+    if let Some(site_id) = p.site_id {
+        ctx.content = crate::models::form_def::expand_embeds(&state.db, site_id, &ctx.content).await;
+    }
+
+    Ok(ctx)
 }
 
 /// Fetch posts, categories, and tags for the current site and inject them into

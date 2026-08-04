@@ -149,46 +149,81 @@ pub fn render_form_detail(
     flash: Option<&str>,
     ctx: &PageContext,
 ) -> String {
-    let col_headers = columns.iter().map(|c| {
-        format!("<th>{}</th>", html_escape(c))
-    }).collect::<Vec<_>>().join("");
-
     let rows = if submissions.is_empty() {
-        let span = columns.len() + 3; // data cols + ip + submitted_at + actions
-        format!(r#"<tr><td colspan="{span}" class="empty-state">No submissions yet.</td></tr>"#)
+        r#"<p class="empty-state">No submissions yet.</p>"#.to_string()
     } else {
         submissions.iter().map(|s| {
-            let cells = columns.iter().map(|col| {
-                let val = s.data.get(col)
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("");
-                format!("<td class=\"cell-truncate\" title=\"{}\">{}</td>",
-                    html_escape(val), html_escape(val))
-            }).collect::<Vec<_>>().join("");
+            let fields = columns.iter().map(|col| {
+                let val = s.data.get(col).and_then(|v| v.as_str()).unwrap_or("");
+                format!(
+                    r#"<div class="submission-field">
+  <dt>{col}</dt>
+  <dd>{val}</dd>
+</div>"#,
+                    col = html_escape(col),
+                    val = if val.is_empty() { "—".to_string() } else { html_escape(val) },
+                )
+            }).collect::<Vec<_>>().join("\n");
 
             format!(
-                r#"<tr>
-  {cells}
-  <td>{ip}</td>
-  <td>{submitted}</td>
-  <td>
+                r#"<details class="card-boxed submission-row">
+  <summary class="card-boxed-header">
+    <span class="submission-summary-date">{submitted}</span>
+    <span class="submission-summary-ip">{ip}</span>
+  </summary>
+  <div class="card-boxed-body">
+    <dl class="submission-fields">
+      {fields}
+    </dl>
     <form method="POST" action="/admin/forms/{fname}/{id}/delete"
-          onsubmit="return confirm('Delete this submission?')">
+          onsubmit="return confirm('Delete this submission?')" style="margin-top:.75rem">
       <button class="btn btn-sm btn-danger" type="submit">Delete</button>
     </form>
-  </td>
-</tr>"#,
-                cells = cells,
-                ip = html_escape(s.ip_address.as_deref().unwrap_or("—")),
+  </div>
+</details>"#,
                 submitted = html_escape(&s.submitted_at),
+                fields = fields,
+                ip = html_escape(s.ip_address.as_deref().unwrap_or("—")),
                 fname = html_escape(form_name),
                 id = html_escape(&s.id),
             )
         }).collect::<Vec<_>>().join("\n")
     };
 
+    let has_submissions = !submissions.is_empty();
+    let search_box = if has_submissions {
+        r#"<div class="submission-search-wrap">
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+  <input type="search" id="submission-search" placeholder="Search responses…" autocomplete="off">
+</div>"#
+    } else {
+        ""
+    };
+
     let content = format!(
-        r#"<div class="page-actions" style="margin-bottom:1rem;display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center;">
+        r#"<style>
+.submission-list .card-boxed {{ margin-bottom: .6rem; }}
+.submission-summary-date {{
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  font-weight: 600;
+  font-size: .85rem;
+  padding-right: .9rem;
+  margin-right: .9rem;
+  border-right: 1px solid var(--border);
+}}
+.submission-summary-ip {{ flex: 1; color: var(--muted); font-weight: 400; font-size: .85rem; }}
+.submission-fields {{ display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: .75rem 1.5rem; }}
+.submission-field dt {{ font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .03em; color: var(--muted); margin-bottom: .15rem; }}
+.submission-field dd {{ font-size: 13px; color: var(--text); word-break: break-word; }}
+.submission-search-wrap {{ position: relative; max-width: 320px; margin-bottom: 1rem; }}
+.submission-search-wrap svg {{ position: absolute; left: .7rem; top: 50%; transform: translateY(-50%); color: var(--muted); pointer-events: none; }}
+.submission-search-wrap input {{ width: 100%; padding: .5rem .75rem .5rem 2.1rem; border: 1px solid var(--border); border-radius: var(--radius); font-size: 14px; background: var(--surface); color: var(--text); }}
+.submission-search-wrap input:focus {{ outline: none; border-color: var(--text); }}
+#submission-no-matches {{ display: none; color: var(--muted); font-size: .9rem; padding: 1rem 0; }}
+</style>
+<div class="page-actions" style="margin-bottom:1rem;display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center;">
   <a href="/admin/forms/{fname}/export" class="btn btn-secondary">Export CSV</a>
   <form method="POST" action="/admin/forms/{fname}/delete-all" style="display:inline"
         onsubmit="return confirm('Delete ALL submissions for this form?')">
@@ -196,23 +231,31 @@ pub fn render_form_detail(
   </form>
   <a href="/admin/forms" class="btn btn-secondary" style="margin-left:auto">← All Forms</a>
 </div>
-<div class="table-wrap">
-<table class="data-table">
-  <thead>
-    <tr>
-      {col_headers}
-      <th>IP</th>
-      <th>Submitted</th>
-      <th>Actions</th>
-    </tr>
-  </thead>
-  <tbody>
-    {rows}
-  </tbody>
-</table>
-</div>"#,
+{search_box}
+<div class="submission-list">
+{rows}
+</div>
+<p id="submission-no-matches">No responses match your search.</p>
+<script>
+(function() {{
+  var input = document.getElementById('submission-search');
+  if (!input) return;
+  var rows = document.querySelectorAll('.submission-row');
+  var noMatches = document.getElementById('submission-no-matches');
+  input.addEventListener('input', function() {{
+    var q = input.value.trim().toLowerCase();
+    var visible = 0;
+    rows.forEach(function(row) {{
+      var match = !q || row.textContent.toLowerCase().indexOf(q) !== -1;
+      row.style.display = match ? '' : 'none';
+      if (match) visible++;
+    }});
+    noMatches.style.display = (q && visible === 0) ? '' : 'none';
+  }});
+}})();
+</script>"#,
         fname = html_escape(form_name),
-        col_headers = col_headers,
+        search_box = search_box,
         rows = rows,
     );
 

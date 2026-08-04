@@ -285,6 +285,7 @@ async fn new_post_type(state: AppState, post_type: &str, site_id: Option<Uuid>, 
         sources_public: false,
         live_url: None,
         preview_url: None,
+        saved_forms: fetch_saved_forms(&state, site_id).await,
     };
     Html(admin::pages::posts::render_editor(&edit, None, &ctx))
 }
@@ -431,6 +432,7 @@ async fn edit_post_type(state: AppState, id: Uuid, site_id: Option<Uuid>, is_aut
         sources_public: post.sources_public,
         live_url,
         preview_url,
+        saved_forms: fetch_saved_forms(&state, site_id).await,
     };
 
     let flash = match success {
@@ -546,6 +548,7 @@ pub async fn save_new(
             sources_public: form.sources_public.as_deref() == Some("on"),
             live_url: None,
             preview_url: None,
+            saved_forms: fetch_saved_forms(&state, admin.site_id).await,
         };
         return Html(admin::pages::posts::render_editor(&edit, Some("Content is required before publishing."), &ctx)).into_response();
     }
@@ -622,6 +625,7 @@ pub async fn save_new(
                 sources_public: form.sources_public.as_deref() == Some("on"),
                 live_url: None,
                 preview_url: None,
+                saved_forms: fetch_saved_forms(&state, admin.site_id).await,
             };
             let msg = friendly_save_error(&e);
             Html(admin::pages::posts::render_editor(&edit, Some(&msg), &ctx)).into_response()
@@ -711,6 +715,7 @@ pub async fn save_edit(
             sources_public: form.sources_public.as_deref() == Some("on"),
             live_url: None,
             preview_url: None,
+            saved_forms: fetch_saved_forms(&state, admin.site_id).await,
         };
         return Html(admin::pages::posts::render_editor(&edit, Some("Content is required before publishing."), &ctx)).into_response();
     }
@@ -807,6 +812,7 @@ pub async fn save_edit(
                 sources_public: form.sources_public.as_deref() == Some("on"),
                 live_url: None,
                 preview_url: None,
+                saved_forms: fetch_saved_forms(&state, admin.site_id).await,
             };
             let msg = friendly_save_error(&e);
             Html(admin::pages::posts::render_editor(&edit, Some(&msg), &ctx)).into_response()
@@ -1008,6 +1014,21 @@ async fn fetch_term_options(state: &AppState, site_id: Option<Uuid>) -> (Vec<Ter
     let cat_opts = cats.iter().map(|t| TermOption { id: t.id.to_string(), name: t.name.clone() }).collect();
     let tag_opts = tags.iter().map(|t| TermOption { id: t.id.to_string(), name: t.name.clone() }).collect();
     (cat_opts, tag_opts)
+}
+
+/// (slug, name) pairs for every saved form on this site — powers the
+/// editor's "Insert Form" picker. Empty (not an error) for global/private
+/// theme contexts with no site_id, or sites with no forms defined yet.
+async fn fetch_saved_forms(state: &AppState, site_id: Option<Uuid>) -> Vec<(String, String)> {
+    let Some(site_id) = site_id else { return vec![] };
+    crate::models::form_def::list_for_site(&state.db, site_id).await
+        .unwrap_or_else(|e| {
+            tracing::warn!("failed to fetch saved forms: {:?}", e);
+            vec![]
+        })
+        .into_iter()
+        .map(|f| (f.slug, f.name))
+        .collect()
 }
 
 /// Scan the active theme's templates/ directory for available templates.
