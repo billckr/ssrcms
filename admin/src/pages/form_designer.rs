@@ -235,7 +235,7 @@ pub fn render_editor(data: &FormEditData, ctx: &PageContext, flash: Option<&str>
     // instead, same pattern as the post editor's delete button.
     let delete_btn = if let Some(id) = &data.id {
         format!(
-            r#"<button type="button" class="customizer-save-icon-btn icon-danger" title="Delete Form" aria-label="Delete Form"
+            r#"<button type="button" class="icon-btn icon-danger" title="Delete Form" aria-label="Delete Form"
         onclick="event.preventDefault();event.stopPropagation();deleteFormConfirm('{id}')">
     <img src="/admin/static/icons/delete.svg" alt="">
   </button>"#,
@@ -246,41 +246,19 @@ pub fn render_editor(data: &FormEditData, ctx: &PageContext, flash: Option<&str>
     };
 
     let content = format!(
-        r#"<style>.field-hint {{ font-size: 11px; color: var(--muted); font-weight: 400; }}</style>
+        r#"<style>
+.field-hint {{ font-size: 11px; color: var(--muted); font-weight: 400; }}
+.settings-box {{ border: 1px solid var(--border); border-radius: var(--radius); padding: .85rem 1rem; margin-bottom: .6rem; background: #f8fafc; }}
+.settings-box:last-child {{ margin-bottom: 0; }}
+.settings-box .form-group {{ margin: 0; }}
+</style>
 <form method="POST" action="{action}" id="form-designer-form">
   <div class="two-col">
     <div>
-      <details class="card-boxed"{settings_open}>
-        <summary class="card-boxed-header">
-          <span>Settings</span>
-          <button type="button" class="customizer-save-icon-btn" style="visibility:hidden" tabindex="-1" aria-hidden="true">
-            <img src="/admin/static/icons/save.svg" alt="">
-          </button>
-        </summary>
-        <div class="card-boxed-body">
-          <div class="form-group">
-            <label for="form-name">Form name</label>
-            <input type="text" id="form-name" name="name" required maxlength="120" value="{name}" placeholder="e.g. Contact Us">
-          </div>
-          <div class="form-group">
-            <label for="success-message">Success message</label>
-            <input type="text" id="success-message" name="success_message" maxlength="200" value="{success_message}">
-          </div>
-          <div class="form-group">
-            <label for="button-label">Submit button label</label>
-            <input type="text" id="button-label" name="button_label" maxlength="40" value="{button_label}">
-          </div>
-          <label class="switch-toggle" style="margin-top:.4rem">
-            <input type="checkbox" id="include-honeypot" name="include_honeypot" value="true"{honeypot_checked}>
-            <span class="switch-slider"></span>
-            <span>Include spam honeypot field</span>
-          </label>
-        </div>
-      </details>
-      <div class="card-boxed" style="margin-top:1rem">
+      <div class="card-boxed">
         <h2 class="card-boxed-header" style="display:flex;align-items:center;justify-content:space-between;gap:.5rem;">
           <span>Fields</span>
-          <button type="button" id="add-field-btn" class="customizer-save-icon-btn" title="Add Field" aria-label="Add Field">
+          <button type="button" id="add-field-btn" class="icon-btn" title="Add Field" aria-label="Add Field">
             <img src="/admin/static/icons/file-plus.svg" alt="">
           </button>
         </h2>
@@ -289,16 +267,13 @@ pub fn render_editor(data: &FormEditData, ctx: &PageContext, flash: Option<&str>
           <input type="hidden" name="fields_json" id="fields-json">
         </div>
       </div>
-      <div style="margin-top:1rem">
-        <a href="/admin/form-designer" class="btn">Cancel</a>
-      </div>
     </div>
     <div>
       <details class="card-boxed" style="position:sticky;top:1rem">
         <summary class="card-boxed-header" style="display:flex;align-items:center;gap:.5rem;">
           <span>Preview</span>
           <div class="customizer-header-actions" style="margin-left:auto">
-            <button type="button" id="save-form-btn" class="customizer-save-icon-btn" title="{save_label}" aria-label="{save_label}"
+            <button type="button" id="save-form-btn" class="icon-btn" title="{save_label}" aria-label="{save_label}"
                     onclick="event.preventDefault();event.stopPropagation();document.getElementById('form-designer-form').requestSubmit();">
               <img src="/admin/static/icons/save.svg" alt="">
             </button>
@@ -310,6 +285,47 @@ pub fn render_editor(data: &FormEditData, ctx: &PageContext, flash: Option<&str>
           <div id="form-preview"></div>
         </div>
       </details>
+      <details class="card-boxed" style="margin-top:1rem"{settings_open}>
+        <summary class="card-boxed-header">
+          <span>Settings</span>
+          <button type="button" class="icon-btn" style="visibility:hidden" tabindex="-1" aria-hidden="true">
+            <img src="/admin/static/icons/save.svg" alt="">
+          </button>
+        </summary>
+        <div class="card-boxed-body">
+          <div class="settings-box">
+            <div class="form-group">
+              <label for="form-name">Form name</label>
+              <input type="text" id="form-name" name="name" required maxlength="120" value="{name}" placeholder="e.g. Contact Us">
+            </div>
+          </div>
+          <div class="settings-box">
+            <div class="form-group">
+              <label for="success-message">Success message</label>
+              <input type="text" id="success-message" name="success_message" maxlength="200" value="{success_message}">
+            </div>
+          </div>
+          <div class="settings-box">
+            <div class="form-group">
+              <label for="button-label">Submit button label</label>
+              <input type="text" id="button-label" name="button_label" maxlength="40" value="{button_label}">
+            </div>
+          </div>
+          <div class="settings-box">
+            <label class="switch-toggle">
+              <input type="checkbox" id="include-honeypot" name="include_honeypot" value="true"{honeypot_checked}>
+              <span class="switch-slider"></span>
+              <span>Include spam honeypot field</span>
+            </label>
+          </div>
+        </div>
+      </details>
+      <div class="card-boxed" style="margin-top:1rem">
+        <h2 class="card-boxed-header">Email</h2>
+        <div class="card-boxed-body">
+          <p class="field-hint">Email notifications on new submissions are coming soon.</p>
+        </div>
+      </div>
     </div>
   </div>
 </form>

@@ -359,6 +359,8 @@ tr.muted td { opacity: .55; }
 .icon-btn img { width: 18px; height: 18px; display: block; }
 .icon-btn.icon-danger { color: var(--danger); }
 .icon-btn.icon-danger:hover { background: #fee2e2; border-color: var(--danger); }
+.icon-btn:disabled { opacity: .4; cursor: not-allowed; }
+.icon-btn:disabled:hover { background: none; border-color: var(--border); }
 
 /* Forms */
 .form-group { margin-bottom: 1rem; }

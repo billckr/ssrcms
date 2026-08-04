@@ -1147,4 +1147,174 @@ a:hover {
 .sidebar-nav-link--child {
   font-size: 0.85rem;
 }
+
+/* ── Shared form styles (Form Designer output, contact/newsletter/etc.) ──
+   Mirrors Leisure's .themed-form/.form-field/.form-success convention so
+   any form built in Form Designer picks up this theme's own look — same
+   class names, no per-theme HTML changes needed. */
+.btn {
+  display: inline-block;
+  padding: 0.75rem 1.75rem;
+  background: var(--color-primary);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-weight: 600;
+  font-size: 0.9375rem;
+  cursor: pointer;
+  transition: background 0.15s;
+  text-decoration: none;
+}
+.btn:hover { background: var(--color-primary-hover); color: #fff; }
+
+.honeypot-field {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.themed-form {
+  margin-top: 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  max-width: 560px;
+}
+.themed-form > .btn,
+.themed-form > button[type="submit"] {
+  align-self: flex-start;
+}
+
+.form-field { display: flex; flex-direction: column; gap: 0.4rem; }
+.form-field label { font-size: 0.875rem; font-weight: 600; color: var(--color-text); }
+.form-required { color: #dc2626; }
+
+.form-field input[type="text"],
+.form-field input[type="email"],
+.form-field input[type="password"],
+.form-field input[type="tel"],
+.form-field input[type="number"],
+.form-field input[type="date"],
+.form-field select,
+.form-field textarea {
+  padding: 0.65rem 0.9rem;
+  font-size: 1rem;
+  font-family: inherit;
+  border: 1.5px solid var(--color-border);
+  border-radius: 6px;
+  background: var(--color-page-background);
+  color: var(--color-text);
+  transition: border-color 0.15s, box-shadow 0.15s;
+  outline: none;
+  width: 100%;
+}
+.form-field input:focus,
+.form-field select:focus,
+.form-field textarea:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(255, 107, 53, 0.15);
+}
+.form-field textarea { resize: vertical; min-height: 8rem; }
+
+.form-hint { font-size: 0.75rem; color: var(--color-text-muted); }
+
+.form-checkbox-label {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  font-size: 0.875rem;
+  font-weight: 400;
+  color: var(--color-text);
+  cursor: pointer;
+  line-height: 1.5;
+}
+.form-checkbox-label input[type="checkbox"] {
+  margin-top: 0.2rem;
+  flex-shrink: 0;
+  width: 1rem;
+  height: 1rem;
+  accent-color: var(--color-primary);
+  cursor: pointer;
+}
+.form-checkbox-label a { color: var(--color-primary); text-decoration: underline; }
+
+.form-success {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-top: 1.5rem;
+  padding: 1rem 1.25rem;
+  background: color-mix(in srgb, var(--color-primary) 10%, white);
+  border: 1.5px solid color-mix(in srgb, var(--color-primary) 40%, white);
+  border-radius: 6px;
+  color: color-mix(in srgb, var(--color-primary) 65%, black);
+  font-weight: 500;
+}
+.form-success svg { flex-shrink: 0; color: var(--color-primary); }
+
+.form-field-legend { display: block; font-size: 0.875rem; font-weight: 600; color: var(--color-text); margin-bottom: 0.4rem; }
+.form-radio-label {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.875rem;
+  color: var(--color-text);
+  cursor: pointer;
+  margin-bottom: 0.5rem;
+}
+.form-radio-label input[type="radio"] { width: 1rem; height: 1rem; accent-color: var(--color-primary); cursor: pointer; }
+
+.form-field-toggle > label:first-child { display: block; font-size: 0.875rem; font-weight: 600; color: var(--color-text); margin-bottom: 0.4rem; }
+.form-toggle-label { display: flex; align-items: center; gap: 0.6rem; font-size: 0.875rem; color: var(--color-text); cursor: pointer; }
+.form-toggle-input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.form-toggle-slider {
+  position: relative;
+  display: inline-block;
+  width: 36px;
+  height: 20px;
+  flex-shrink: 0;
+  background: var(--color-border);
+  border-radius: 999px;
+  transition: background 0.15s;
+}
+.form-toggle-slider::before {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  background: #fff;
+  border-radius: 50%;
+  transition: transform 0.15s;
+  box-shadow: 0 1px 2px rgba(0,0,0,.2);
+}
+.form-toggle-input:checked + .form-toggle-slider { background: var(--color-primary); }
+.form-toggle-input:checked + .form-toggle-slider::before { transform: translateX(16px); }
+.form-toggle-input:focus-visible + .form-toggle-slider { box-shadow: 0 0 0 3px rgba(255, 107, 53, 0.25); }
+
+.form-field-separator { margin: 0.5rem 0; }
+.form-separator-title {
+  margin: 0 0 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-muted);
+}
+.form-separator { border: none; border-top: 1.5px solid var(--color-border); margin: 0; }
+
+.form-callout {
+  margin: 0;
+  padding: 0.85rem 1.1rem;
+  background: color-mix(in srgb, var(--color-primary) 8%, white);
+  border-left: 3px solid var(--color-primary);
+  border-radius: 6px;
+  color: var(--color-text);
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
 /* ── End Sidebar Menu Widget ─────────────────────────────────────────────── */
