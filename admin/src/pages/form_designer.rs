@@ -219,22 +219,26 @@ pub fn render_editor(data: &FormEditData, ctx: &PageContext, flash: Option<&str>
         None => "/admin/form-designer".to_string(),
     };
     let title = if is_edit { "Edit Form" } else { "New Form" };
+    // Expanded by default for a brand-new form (nothing to hide yet — the
+    // form name is the first thing you need to fill in); collapsed on
+    // an existing form, where Fields is what you're usually there for.
+    let settings_open = if is_edit { "" } else { " open" };
 
     let rows_html: String = data.fields.iter().enumerate()
         .map(|(i, f)| field_row_html(f, i))
         .collect::<Vec<_>>()
         .join("\n");
 
-    let delete_section = if let Some(id) = &data.id {
+    // Delete lives as an icon button in the Preview card header (see below)
+    // rather than a nested <form> — the whole editor is already one big
+    // <form>, and nested forms are invalid HTML, so it goes through fetch()
+    // instead, same pattern as the post editor's delete button.
+    let delete_btn = if let Some(id) = &data.id {
         format!(
-            r#"<div class="card-boxed" style="margin-top:1rem">
-  <div class="card-boxed-body">
-    <form method="POST" action="/admin/form-designer/{id}/delete"
-          onsubmit="return confirm('Delete this form? This does not delete any submissions already collected under it.')">
-      <button type="submit" class="btn" style="color:var(--danger);border-color:var(--danger)">Delete Form</button>
-    </form>
-  </div>
-</div>"#,
+            r#"<button type="button" class="customizer-save-icon-btn icon-danger" title="Delete Form" aria-label="Delete Form"
+        onclick="event.preventDefault();event.stopPropagation();deleteFormConfirm('{id}')">
+    <img src="/admin/static/icons/delete.svg" alt="">
+  </button>"#,
             id = html_escape(id)
         )
     } else {
@@ -242,25 +246,22 @@ pub fn render_editor(data: &FormEditData, ctx: &PageContext, flash: Option<&str>
     };
 
     let content = format!(
-        r#"<style>.btn-sm {{ font-size: 12px; padding: .2rem .6rem; }} .field-hint {{ font-size: 11px; color: var(--muted); font-weight: 400; }}</style>
+        r#"<style>.field-hint {{ font-size: 11px; color: var(--muted); font-weight: 400; }}</style>
 <form method="POST" action="{action}" id="form-designer-form">
   <div class="two-col">
     <div>
-      <div class="card-boxed">
-        <h2 class="card-boxed-header">Fields</h2>
+      <details class="card-boxed"{settings_open}>
+        <summary class="card-boxed-header">
+          <span>Settings</span>
+          <button type="button" class="customizer-save-icon-btn" style="visibility:hidden" tabindex="-1" aria-hidden="true">
+            <img src="/admin/static/icons/save.svg" alt="">
+          </button>
+        </summary>
         <div class="card-boxed-body">
           <div class="form-group">
             <label for="form-name">Form name</label>
             <input type="text" id="form-name" name="name" required maxlength="120" value="{name}" placeholder="e.g. Contact Us">
           </div>
-          <div id="field-rows">{rows_html}</div>
-          <button type="button" id="add-field-btn" class="btn btn-sm" style="margin-top:.4rem">+ Add Field</button>
-          <input type="hidden" name="fields_json" id="fields-json">
-        </div>
-      </div>
-      <div class="card-boxed" style="margin-top:1rem">
-        <h2 class="card-boxed-header">Settings</h2>
-        <div class="card-boxed-body">
           <div class="form-group">
             <label for="success-message">Success message</label>
             <input type="text" id="success-message" name="success_message" maxlength="200" value="{success_message}">
@@ -270,21 +271,40 @@ pub fn render_editor(data: &FormEditData, ctx: &PageContext, flash: Option<&str>
             <input type="text" id="button-label" name="button_label" maxlength="40" value="{button_label}">
           </div>
           <label class="switch-toggle" style="margin-top:.4rem">
-            <input type="checkbox" name="include_honeypot" value="true"{honeypot_checked}>
+            <input type="checkbox" id="include-honeypot" name="include_honeypot" value="true"{honeypot_checked}>
             <span class="switch-slider"></span>
             <span>Include spam honeypot field</span>
           </label>
         </div>
+      </details>
+      <div class="card-boxed" style="margin-top:1rem">
+        <h2 class="card-boxed-header" style="display:flex;align-items:center;justify-content:space-between;gap:.5rem;">
+          <span>Fields</span>
+          <button type="button" id="add-field-btn" class="customizer-save-icon-btn" title="Add Field" aria-label="Add Field">
+            <img src="/admin/static/icons/file-plus.svg" alt="">
+          </button>
+        </h2>
+        <div class="card-boxed-body">
+          <div id="field-rows">{rows_html}</div>
+          <input type="hidden" name="fields_json" id="fields-json">
+        </div>
       </div>
-      {delete_section}
       <div style="margin-top:1rem">
-        <button type="submit" class="btn btn-primary">{save_label}</button>
         <a href="/admin/form-designer" class="btn">Cancel</a>
       </div>
     </div>
     <div>
       <details class="card-boxed" style="position:sticky;top:1rem">
-        <summary class="card-boxed-header">Preview</summary>
+        <summary class="card-boxed-header" style="display:flex;align-items:center;gap:.5rem;">
+          <span>Preview</span>
+          <div class="customizer-header-actions" style="margin-left:auto">
+            <button type="button" id="save-form-btn" class="customizer-save-icon-btn" title="{save_label}" aria-label="{save_label}"
+                    onclick="event.preventDefault();event.stopPropagation();document.getElementById('form-designer-form').requestSubmit();">
+              <img src="/admin/static/icons/save.svg" alt="">
+            </button>
+            {delete_btn}
+          </div>
+        </summary>
         <div class="card-boxed-body">
           <p class="field-hint" style="margin-bottom:.85rem">A live mockup — this is what visitors will see. It isn't wired to submit anything from here.</p>
           <div id="form-preview"></div>
@@ -453,6 +473,10 @@ pub fn render_editor(data: &FormEditData, ctx: &PageContext, flash: Option<&str>
   // uses the admin panel's own --primary as a stand-in.
   var preview = document.getElementById('form-preview');
   var buttonLabelInput = document.getElementById('button-label');
+  var formNameInput = document.getElementById('form-name');
+  var successMessageInput = document.getElementById('success-message');
+  var honeypotInput = document.getElementById('include-honeypot');
+  var saveBtn = document.getElementById('save-form-btn');
 
   function esc(s) {{
     var div = document.createElement('div');
@@ -509,10 +533,37 @@ pub fn render_editor(data: &FormEditData, ctx: &PageContext, flash: Option<&str>
     var html = fields.map(renderPreviewField).join('');
     html += '<button type="button" disabled style="background:var(--primary);color:#fff;border:none;padding:10px 22px;border-radius:6px;font-weight:600;font-size:13px;cursor:default;opacity:.9">' + esc(buttonLabel) + '</button>';
     preview.innerHTML = html;
+    checkDirty();
+  }}
+
+  // Save stays disabled until something actually changes from what was
+  // loaded — same pattern the theme customizer's per-card Save buttons
+  // use. readFields() already captures every field/add/remove/reorder
+  // change, so the snapshot only needs to add the form-level settings
+  // that don't affect the live preview (and so wouldn't otherwise trigger
+  // a re-check).
+  function snapshot() {{
+    return JSON.stringify({{
+      name: formNameInput.value,
+      fields: readFields(),
+      success_message: successMessageInput.value,
+      button_label: buttonLabelInput.value,
+      include_honeypot: honeypotInput.checked
+    }});
+  }}
+  var initialSnapshot = null;
+  function checkDirty() {{
+    if (initialSnapshot === null) return;
+    saveBtn.disabled = (snapshot() === initialSnapshot);
   }}
 
   buttonLabelInput.addEventListener('input', updatePreview);
+  formNameInput.addEventListener('input', checkDirty);
+  successMessageInput.addEventListener('input', checkDirty);
+  honeypotInput.addEventListener('change', checkDirty);
   updatePreview();
+  initialSnapshot = snapshot();
+  saveBtn.disabled = true;
 
   form.addEventListener('submit', function(e) {{
     var fields = readFields();
@@ -523,16 +574,27 @@ pub fn render_editor(data: &FormEditData, ctx: &PageContext, flash: Option<&str>
     }}
     document.getElementById('fields-json').value = JSON.stringify(fields);
   }});
+
+  // Delete lives in the Preview card header — no nested <form> possible
+  // (the whole editor is already one big <form>), so it goes through
+  // fetch(), same pattern as the post editor's delete button.
+  window.deleteFormConfirm = function(id) {{
+    if (!confirm('Delete this form? This does not delete any submissions already collected under it.')) return;
+    fetch('/admin/form-designer/' + id + '/delete', {{ method: 'POST' }}).then(function(r) {{
+      window.location.href = r.url || '/admin/form-designer';
+    }});
+  }};
 }})();
 </script>"#,
         action = action,
         name = html_escape(&data.name),
         rows_html = rows_html,
-        delete_section = delete_section,
+        delete_btn = delete_btn,
         success_message = html_escape(&data.success_message),
         button_label = html_escape(&data.button_label),
         honeypot_checked = if data.include_honeypot { " checked" } else { "" },
         save_label = if is_edit { "Save Changes" } else { "Create Form" },
+        settings_open = settings_open,
         type_opts_js = format!("[{}]", FIELD_TYPES.iter().map(|(v, l)| format!("['{v}','{l}']")).collect::<Vec<_>>().join(",")),
     );
 
