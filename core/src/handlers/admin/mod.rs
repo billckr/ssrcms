@@ -87,6 +87,7 @@ pub mod comments;
 pub mod dashboard;
 pub mod dev_tools;
 pub mod documentation;
+pub mod form_designer;
 pub mod forms;
 pub mod media;
 pub mod menus;

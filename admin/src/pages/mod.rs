@@ -3,6 +3,7 @@ pub mod appearance;
 pub mod builder;
 pub mod dashboard;
 pub mod documentation;
+pub mod form_designer;
 pub mod forms;
 pub mod login;
 pub mod media;

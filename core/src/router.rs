@@ -13,7 +13,7 @@ use tower_sessions_sqlx_store::PostgresStore;
 
 use crate::app_state::AppState;
 use crate::handlers::{account, archive, auth, comment as comment_handler, form as form_handler, home, metrics as metrics_handler, page, plugin_route, post as post_handler, post_unlock, search, subscribe, theme_static, uploads};
-use crate::handlers::admin::{appearance, appearance_editor, appearance_publish, appearance_upload, builder as admin_builder, comments as admin_comments, dashboard, dev_tools, documentation as admin_documentation, forms as admin_forms, media, menus as admin_menus, posts, profile, settings, sites as admin_sites, taxonomy, upload, users};
+use crate::handlers::admin::{appearance, appearance_editor, appearance_publish, appearance_upload, builder as admin_builder, comments as admin_comments, dashboard, dev_tools, documentation as admin_documentation, form_designer as admin_form_designer, forms as admin_forms, media, menus as admin_menus, posts, profile, settings, sites as admin_sites, taxonomy, upload, users};
 
 /// Prevent browsers from caching admin and account pages.
 ///
@@ -242,6 +242,10 @@ pub fn build(
         .route("/admin/sites/{id}/delete", post(admin_sites::delete))
         .route("/admin/sites/{id}/provision-ssl", post(admin_sites::provision_ssl))
         // ── Admin forms ────────────────────────────────────────────────────
+        .route("/admin/form-designer", get(admin_form_designer::list).post(admin_form_designer::create))
+        .route("/admin/form-designer/new", get(admin_form_designer::new_form))
+        .route("/admin/form-designer/{id}", get(admin_form_designer::edit_form).post(admin_form_designer::update))
+        .route("/admin/form-designer/{id}/delete", post(admin_form_designer::delete))
         .route("/admin/forms", get(admin_forms::list_forms))
         .route("/admin/forms/{name}", get(admin_forms::view_form))
         .route("/admin/forms/{name}/{id}/delete", post(admin_forms::delete_submission))
