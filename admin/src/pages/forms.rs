@@ -8,6 +8,11 @@ pub struct FormSummaryRow {
     pub last_submitted_at: String,
     pub unread_count: i64,
     pub blocked: bool,
+    /// False when no Form Designer definition has this slug anymore — the
+    /// submissions are still here (they're independent, linked only by
+    /// name), but there's nothing to edit/re-embed. Surfaced as a badge
+    /// rather than hidden, since the data is still real and actionable.
+    pub definition_exists: bool,
 }
 
 pub struct SubmissionRow {
@@ -32,6 +37,11 @@ pub fn render_forms_list(
             let blocked_badge = if f.blocked {
                 r#" <span class="badge badge-danger" title="Not accepting submissions">Blocked</span>"#
             } else { "" };
+            let deleted_badge = if f.definition_exists {
+                ""
+            } else {
+                r#" <span class="badge" title="No form in Form Designer matches this name anymore — these are the submissions it collected before it was deleted.">Form deleted</span>"#
+            };
             let block_btn = if f.blocked {
                 format!(
                     r#"<form method="POST" action="/admin/form-data-analytics/{}/toggle-block" style="display:inline">
@@ -51,7 +61,7 @@ pub fn render_forms_list(
             let row_class = if f.blocked { " class=\"muted\"" } else { "" };
             format!(
                 r#"<tr{row_class}>
-  <td><a href="/admin/form-data-analytics/{name}">{name}</a>{blocked_badge}</td>
+  <td><a href="/admin/form-data-analytics/{name}">{name}</a>{blocked_badge}{deleted_badge}</td>
   <td>{count}</td>
   <td>{last}</td>
   <td>
@@ -64,6 +74,7 @@ pub fn render_forms_list(
                 count = f.submission_count,
                 last = html_escape(&f.last_submitted_at),
                 blocked_badge = blocked_badge,
+                deleted_badge = deleted_badge,
                 block_btn = block_btn,
             )
         }).collect::<Vec<_>>().join("\n")
@@ -247,7 +258,7 @@ pub fn render_form_detail(
   <a href="/admin/form-data-analytics/{fname}/export" class="btn btn-secondary">Export CSV</a>
   <form method="POST" action="/admin/form-data-analytics/{fname}/delete-all" style="display:inline"
         onsubmit="return confirm('Delete ALL submissions for this form?')">
-    <button class="btn btn-danger" type="submit">Delete All</button>
+    <button class="icon-btn icon-danger" type="submit" title="Delete All" aria-label="Delete All"><img src="/admin/static/icons/delete.svg" alt=""></button>
   </form>
   <a href="/admin/form-data-analytics" class="btn btn-secondary" style="margin-left:auto">← All Forms</a>
 </div>

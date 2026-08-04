@@ -9,7 +9,7 @@ use serde::Deserialize;
 
 use crate::app_state::AppState;
 use crate::middleware::admin_auth::AdminUser;
-use crate::models::form_submission;
+use crate::models::{form_def, form_submission};
 
 use admin::pages::forms::{FormSummaryRow, SubmissionRow};
 
@@ -44,14 +44,26 @@ pub async fn list_forms(
     match form_submission::list_forms(&state.db, site_id).await {
         Ok(summaries) => {
             let blocked = form_submission::blocked_names(&state.db, site_id).await;
+            // Submissions and definitions are linked only by name (no FK) —
+            // a form deleted in Form Designer leaves its collected data
+            // behind. Flag those rows rather than let them look identical
+            // to a form that's still editable/re-embeddable.
+            let defined_slugs: std::collections::HashSet<String> = form_def::list_for_site(&state.db, site_id)
+                .await
+                .unwrap_or_default()
+                .into_iter()
+                .map(|f| f.slug)
+                .collect();
             let rows: Vec<FormSummaryRow> = summaries.into_iter().map(|s| {
                 let is_blocked = blocked.contains(&s.form_name);
+                let definition_exists = defined_slugs.contains(&s.form_name);
                 FormSummaryRow {
                     form_name: s.form_name,
                     submission_count: s.submission_count,
                     last_submitted_at: s.last_submitted_at.format("%Y-%m-%d %H:%M UTC").to_string(),
                     unread_count: s.unread_count,
                     blocked: is_blocked,
+                    definition_exists,
                 }
             }).collect();
 
