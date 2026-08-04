@@ -572,7 +572,7 @@ img { max-width: 100%; height: auto; display: block; }
 }
 
 .post-card:hover {
-  box-shadow: 0 4px 10px rgba(30,41,59,0.14), 0 10px 28px rgba(104,120,214,0.22);
+  box-shadow: 0 3px 8px rgba(30,41,59,0.14), 0 8px 22px rgba(104,120,214,0.22);
   transform: translateY(-3px);
 }
 
