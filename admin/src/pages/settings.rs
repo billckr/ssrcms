@@ -99,41 +99,8 @@ pub fn render(
 }}
 
 /* ── Deploy Test Data ── */
-.dt-card {{
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 1rem 1.1rem;
-  margin-bottom: 1rem;
-}}
-
-.dt-card h4 {{
-  margin: 0 0 .75rem;
-  font-size: .9rem;
-}}
-
-.dt-card label {{
-  display: block;
-  font-size: .8rem;
-  color: var(--muted);
-  margin-bottom: .6rem;
-}}
-
-.dt-card input, .dt-card select {{
-  display: block;
-  margin-top: .2rem;
-}}
-
-.dt-card.dt-danger {{
-  border-color: #d9534f;
-}}
-
-.dt-card .btn-danger {{
-  background: #d9534f;
-  color: #fff;
-  border: none;
-  border-radius: 6px;
-  padding: .5rem 1rem;
-  cursor: pointer;
+.card-boxed-section.section-danger {{
+  border-color: var(--danger);
 }}
 
 .dt-spinner {{
@@ -156,7 +123,7 @@ pub fn render(
   to {{ transform: rotate(360deg); }}
 }}
 
-.dt-card pre {{
+.dt-result {{
   white-space: pre-wrap;
   font-size: .75rem;
   background: var(--bg-subtle, rgba(127,127,127,.08));
@@ -167,7 +134,7 @@ pub fn render(
   overflow-y: auto;
 }}
 
-.dt-card pre:empty {{
+.dt-result:empty {{
   display: none;
 }}
 </style>
@@ -187,10 +154,12 @@ pub fn render(
     <form method="post" action="/admin/settings" class="edit-form general-settings-form">
       <input type="hidden" name="tab" value="general">
 
-      <div class="form-group" style="max-width:360px">
-        <label for="sg-app-name">App Name</label>
-        <input type="text" id="sg-app-name" name="app_name" value="{app_name}">
-        <small>Shown in the admin sidebar top-left. Set to your agency or CMS brand name.</small>
+      <div class="card-boxed-section">
+        <div class="form-group" style="max-width:360px">
+          <label for="sg-app-name">App Name</label>
+          <input type="text" id="sg-app-name" name="app_name" value="{app_name}">
+          <small>Shown in the admin sidebar top-left. Set to your agency or CMS brand name.</small>
+        </div>
       </div>
       <div class="form-actions" style="margin-top:1.5rem">
         <button type="submit" class="btn btn-primary" id="general-save-btn" disabled>Save General</button>
@@ -205,12 +174,14 @@ pub fn render(
     <form method="post" action="/admin/settings" class="edit-form localisation-settings-form">
       <input type="hidden" name="tab" value="localisation">
 
-      <div class="form-group" style="max-width:360px">
-        <label for="sg-timezone">Timezone</label>
-        <select id="sg-timezone" name="timezone">
-          {tz_options}
-        </select>
-        <small>App-wide timezone — used for admin timestamps and scheduled publishing.</small>
+      <div class="card-boxed-section">
+        <div class="form-group" style="max-width:360px">
+          <label for="sg-timezone">Timezone</label>
+          <select id="sg-timezone" name="timezone">
+            {tz_options}
+          </select>
+          <small>App-wide timezone — used for admin timestamps and scheduled publishing.</small>
+        </div>
       </div>
 
       <div class="form-actions" style="margin-top:1.5rem">
@@ -222,11 +193,16 @@ pub fn render(
 </div>
 
 <!-- Security -->
-<div id="tab-security" class="settings-panel" role="tabpanel">
-  <p style="color:var(--muted);font-size:.875rem;font-style:italic;margin:0">
-    Security settings — coming soon. Session timeouts, login lockout, and password
-    policy configuration will be available here once the underlying features are built.
-  </p>
+<div id="tab-security" class="settings-panel" role="tabpanel" style="max-width:720px">
+  <div class="card-boxed">
+    <h2 class="card-boxed-header">Security</h2>
+    <div class="card-boxed-body">
+      <p style="color:var(--muted);font-size:.875rem;font-style:italic;margin:0">
+        Security settings — coming soon. Session timeouts, login lockout, and password
+        policy configuration will be available here once the underlying features are built.
+      </p>
+    </div>
+  </div>
 </div>
 
 <!-- Advanced -->
@@ -234,11 +210,13 @@ pub fn render(
   <div class="card-boxed">
     <h2 class="card-boxed-header">Uploads</h2>
     <div class="card-boxed-body">
-    <div class="form-group">
-      <label for="sa-max-upload">Max Upload Size (MB)</label>
-      <input type="number" id="sa-max-upload" value="{max_upload_mb}" readonly
-             style="width:100px;opacity:.7;cursor:not-allowed" title="Set via MAX_UPLOAD_MB in .env or synaptic.toml">
-      <small>Set via <code>MAX_UPLOAD_MB</code> in <code>.env</code> or <code>synaptic.toml</code>. Requires a restart to change. Applies to media and theme zip uploads.</small>
+    <div class="card-boxed-section">
+      <div class="form-group">
+        <label for="sa-max-upload">Max Upload Size (MB)</label>
+        <input type="number" id="sa-max-upload" value="{max_upload_mb}" readonly
+               style="width:100px;opacity:.7;cursor:not-allowed" title="Set via MAX_UPLOAD_MB in .env or synaptic.toml">
+        <small>Set via <code>MAX_UPLOAD_MB</code> in <code>.env</code> or <code>synaptic.toml</code>. Requires a restart to change. Applies to media and theme zip uploads.</small>
+      </div>
     </div>
     </div>
   </div>
@@ -246,34 +224,38 @@ pub fn render(
   <div class="card-boxed">
     <h2 class="card-boxed-header">Seed Users</h2>
     <div class="card-boxed-body">
-  <div class="dt-card">
-    <div class="form-group">
-      <label for="dt-site-users">Target site</label>
-      <select id="dt-site-users">
-        <option value="" selected disabled>Select site&hellip;</option>
-        {site_options}
-      </select>
+  <div class="card-boxed-section">
+    <div class="user-form-grid stacked">
+      <div class="form-group">
+        <label for="dt-site-users">Target site</label>
+        <select id="dt-site-users">
+          <option value="" selected disabled>Select site&hellip;</option>
+          {site_options}
+        </select>
+      </div>
+      <div class="form-group" style="max-width:280px">
+        <label for="dt-user-role">Role</label>
+        <select id="dt-user-role">
+          <option value="subscriber">Subscriber</option>
+          <option value="author">Author</option>
+          <option value="editor">Editor</option>
+          <option value="admin">Admin</option>
+        </select>
+      </div>
+      <div class="form-group" style="max-width:280px">
+        <label for="dt-user-count">Count</label>
+        <input type="number" id="dt-user-count" value="5" min="1" max="200">
+      </div>
+      <div class="form-group" style="max-width:280px">
+        <label for="dt-user-password">Password (optional)</label>
+        <input type="text" id="dt-user-password" placeholder="random per user">
+      </div>
     </div>
-    <div class="form-group" style="max-width:280px">
-      <label for="dt-user-role">Role</label>
-      <select id="dt-user-role">
-        <option value="subscriber">Subscriber</option>
-        <option value="author">Author</option>
-        <option value="editor">Editor</option>
-        <option value="admin">Admin</option>
-      </select>
+    <div style="margin-top:1rem">
+      <button type="button" class="btn btn-primary" onclick="seedUsers()" id="dtUserBtn" disabled>Seed Users</button>
+      <span class="dt-spinner" id="dtUserSpinner" hidden></span>
+      <pre id="dtUserResult" class="dt-result"></pre>
     </div>
-    <div class="form-group" style="max-width:280px">
-      <label for="dt-user-count">Count</label>
-      <input type="number" id="dt-user-count" value="5" min="1" max="200">
-    </div>
-    <div class="form-group" style="max-width:280px">
-      <label for="dt-user-password">Password (optional)</label>
-      <input type="text" id="dt-user-password" placeholder="random per user">
-    </div>
-    <button type="button" class="btn btn-primary" onclick="seedUsers()" id="dtUserBtn" disabled>Seed Users</button>
-    <span class="dt-spinner" id="dtUserSpinner" hidden></span>
-    <pre id="dtUserResult"></pre>
   </div>
     </div>
   </div>
@@ -281,44 +263,48 @@ pub fn render(
   <div class="card-boxed">
     <h2 class="card-boxed-header">Seed Posts / Pages</h2>
     <div class="card-boxed-body">
-  <div class="dt-card">
-    <div class="form-group">
-      <label for="dt-site-posts">Target site</label>
-      <select id="dt-site-posts">
-        <option value="" selected disabled>Select site&hellip;</option>
-        {site_options}
-      </select>
+  <div class="card-boxed-section">
+    <div class="user-form-grid stacked">
+      <div class="form-group">
+        <label for="dt-site-posts">Target site</label>
+        <select id="dt-site-posts">
+          <option value="" selected disabled>Select site&hellip;</option>
+          {site_options}
+        </select>
+      </div>
+      <div class="form-group" style="max-width:280px">
+        <label for="dt-post-author">Author email</label>
+        <input type="email" id="dt-post-author" placeholder="author@example.com">
+      </div>
+      <div class="form-group" style="max-width:280px">
+        <label for="dt-post-type">Type</label>
+        <select id="dt-post-type">
+          <option value="post">Post</option>
+          <option value="page">Page</option>
+        </select>
+      </div>
+      <div class="form-group" style="max-width:280px">
+        <label for="dt-post-count">Count</label>
+        <input type="number" id="dt-post-count" value="10" min="1" max="200">
+      </div>
+      <div class="form-group" style="max-width:280px">
+        <label for="dt-post-status">Status</label>
+        <select id="dt-post-status">
+          <option value="mixed">Mixed</option>
+          <option value="published">Published</option>
+          <option value="draft">Draft</option>
+          <option value="pending">Pending</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label style="display:inline;font-weight:400"><input type="checkbox" id="dt-post-extras" style="display:inline;width:auto;height:auto"> Create + assign categories/tags</label>
+      </div>
     </div>
-    <div class="form-group" style="max-width:280px">
-      <label for="dt-post-author">Author email</label>
-      <input type="email" id="dt-post-author" placeholder="author@example.com">
+    <div style="margin-top:1rem">
+      <button type="button" class="btn btn-primary" onclick="seedPosts()" id="dtPostBtn" disabled>Seed Posts</button>
+      <span class="dt-spinner" id="dtPostSpinner" hidden></span>
+      <pre id="dtPostResult" class="dt-result"></pre>
     </div>
-    <div class="form-group" style="max-width:280px">
-      <label for="dt-post-type">Type</label>
-      <select id="dt-post-type">
-        <option value="post">Post</option>
-        <option value="page">Page</option>
-      </select>
-    </div>
-    <div class="form-group" style="max-width:280px">
-      <label for="dt-post-count">Count</label>
-      <input type="number" id="dt-post-count" value="10" min="1" max="200">
-    </div>
-    <div class="form-group" style="max-width:280px">
-      <label for="dt-post-status">Status</label>
-      <select id="dt-post-status">
-        <option value="mixed">Mixed</option>
-        <option value="published">Published</option>
-        <option value="draft">Draft</option>
-        <option value="pending">Pending</option>
-      </select>
-    </div>
-    <div class="form-group">
-      <label style="display:inline;font-weight:400"><input type="checkbox" id="dt-post-extras" style="display:inline;width:auto;height:auto"> Create + assign categories/tags</label>
-    </div>
-    <button type="button" class="btn btn-primary" onclick="seedPosts()" id="dtPostBtn" disabled>Seed Posts</button>
-    <span class="dt-spinner" id="dtPostSpinner" hidden></span>
-    <pre id="dtPostResult"></pre>
   </div>
     </div>
   </div>
@@ -326,26 +312,30 @@ pub fn render(
   <div class="card-boxed">
     <h2 class="card-boxed-header">Clear Test Data</h2>
     <div class="card-boxed-body">
-  <div class="dt-card dt-danger">
-    <div class="form-group">
-      <label for="dt-site-clear">Target site</label>
-      <select id="dt-site-clear">
-        {site_options}
-      </select>
+  <div class="card-boxed-section section-danger">
+    <div class="user-form-grid stacked">
+      <div class="form-group">
+        <label for="dt-site-clear">Target site</label>
+        <select id="dt-site-clear">
+          {site_options}
+        </select>
+      </div>
+      <p style="font-size:.8rem;color:var(--muted);margin:0">
+        Deletes all posts, pages, comments, taxonomies, form submissions, media rows, and nav
+        menus for the selected site. Site settings are not affected. This cannot be undone.
+      </p>
+      <div class="form-group">
+        <label style="display:inline;font-weight:400">
+          <input type="checkbox" id="dt-clear-users" style="display:inline;width:auto;height:auto">
+          Also delete users created by seeding (never touches real/pre-existing users)
+        </label>
+      </div>
     </div>
-    <p style="font-size:.8rem;color:var(--muted);margin:0 0 .75rem">
-      Deletes all posts, pages, comments, taxonomies, form submissions, media rows, and nav
-      menus for the selected site. Site settings are not affected. This cannot be undone.
-    </p>
-    <div class="form-group">
-      <label style="display:inline;font-weight:400">
-        <input type="checkbox" id="dt-clear-users" style="display:inline;width:auto;height:auto">
-        Also delete users created by seeding (never touches real/pre-existing users)
-      </label>
+    <div style="margin-top:1rem">
+      <button type="button" class="btn btn-danger" onclick="clearTestData()" id="dtClearBtn">Clear Test Data</button>
+      <span class="dt-spinner" id="dtClearSpinner" hidden></span>
+      <pre id="dtClearResult" class="dt-result"></pre>
     </div>
-    <button type="button" class="btn-danger" onclick="clearTestData()" id="dtClearBtn">Clear Test Data</button>
-    <span class="dt-spinner" id="dtClearSpinner" hidden></span>
-    <pre id="dtClearResult"></pre>
   </div>
     </div>
   </div>
