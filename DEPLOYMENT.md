@@ -1,19 +1,29 @@
 # Synaptic Signals VPS Deployment Guide
 
 This guide covers deploying Synaptic Signals to a test VPS from your local dev
-machine, currently `178.156.176.60` with domain `bckr.dev`.
+machine, currently `178.156.176.60` with domain `bckr.dev`, using
+`scripts/install-vps.sh` — a guided installer wizard (welcome screen,
+defaults-vs-interactive choice, validated prompts, an upfront requirements
+check, per-step progress, and a final summary with the admin login details).
 
 ## Quick Start
 
 ```bash
 cd /home/ssrust26/synaptic-signals
-VPS_PASSWORD='...' ./scripts/deploy-vps.sh
+VPS_PASSWORD='...' ./scripts/install-vps.sh --defaults
 ```
 
-That's it. The script:
+`--defaults` skips the welcome menu/prompts entirely and uses the built-in
+defaults (below) — the fastest path for a routine deploy. Omit `--defaults`
+to get the welcome screen, which lets you choose interactive setup instead
+(walks through every setting with validation) — see `--help` for the full
+flag/example list.
 
-1. Checks the VPS's glibc version is >= your local machine's (aborts with a
-   clear message rather than shipping a binary that fails to run).
+The script:
+
+1. Checks requirements upfront (local toolchain, remote systemd/Caddy/
+   Postgres 13+/passwordless sudo/glibc compatibility) and shows a pass/fail
+   table before touching anything.
 2. Runs `cargo build --release` **fresh, every time** — the binary always
    embeds exactly your current `migrations/` directory (migrations are
    compiled in via `sqlx::migrate!`, not read from disk at runtime, so a
@@ -26,6 +36,8 @@ That's it. The script:
    Caddyfile + systemd unit.
 5. Installs the Caddy config and systemd service, restarts, and verifies
    the app responds with a 200.
+6. Prints a summary: site/admin URLs, admin username/email/password
+   (shown once), service status, migration count, HTTP check result.
 
 Re-run it any time you want to push local changes — it's idempotent and
 reuses the existing `.env`/DB credentials unless you pass `--clean`.
@@ -33,14 +45,13 @@ reuses the existing `.env`/DB credentials unless you pass `--clean`.
 ### First-time / full-reset install
 
 ```bash
-VPS_PASSWORD='...' ./scripts/deploy-vps.sh --clean
+VPS_PASSWORD='...' ./scripts/install-vps.sh --defaults --clean
 ```
 
-`--clean` additionally: stops any crash-looping leftover service, drops and
-recreates the `synaptic_signals` database from scratch, and removes any
-orphaned install directories from previous attempts. Use this if the VPS is
-in an unknown/broken state (which is exactly what happened before this
-script existed — see "Why this exists" below).
+`--clean` additionally: wipes `INSTALL_DIR` entirely and drops+recreates the
+`synaptic_signals` database from scratch (Postgres 13+ required — uses
+`DROP DATABASE ... WITH (FORCE)`). Use this if the VPS is in an unknown/
+broken state, or to remove orphaned leftovers from a previous attempt.
 
 ### Configuration
 
@@ -59,7 +70,14 @@ different target:
 | `APP_PORT` | `3000` | Port Axum listens on |
 | `ADMIN_EMAIL` | `bill.coker@gmail.com` | Admin login email (seeded on first install) |
 | `ADMIN_USERNAME` | `admin` | Admin username |
+| `ADMIN_PASSWORD` | *(unset)* | A compliant password is generated if omitted |
 | `APP_NAME` | `Synaptic Signals` | Admin panel brand name |
+| `DB_NAME` | `synaptic_signals` | Database name |
+| `DB_USER` | `synaptic` | Database role |
+
+In interactive mode (`--interactive`, or answering "no" to "use default
+settings?" at the welcome screen), the wizard prompts for every one of these
+with validation instead of reading them from env vars.
 
 ## Why this exists
 
@@ -69,24 +87,26 @@ An earlier pair of ad-hoc scripts (`deploy-vps-setup.sh` +
 migrations folder — which does nothing, since `sqlx::migrate!("../migrations")`
 bakes migration files into the binary **at compile time on whichever
 machine ran `cargo build`**. The fix is procedural: always rebuild
-immediately before shipping, which `deploy-vps.sh` now does automatically
+immediately before shipping, which `install-vps.sh` now does automatically
 every run.
 
 ## Two deploy modes
 
 ```bash
-VPS_PASSWORD='...' ./scripts/deploy-vps.sh              # auto-configures a site + admin (fast dev path)
-VPS_PASSWORD='...' ./scripts/deploy-vps.sh --no-install  # infra only: build, ship, migrate, start — no site/admin
+VPS_PASSWORD='...' ./scripts/install-vps.sh --defaults           # auto-configures a site + admin (fast dev path)
+VPS_PASSWORD='...' ./scripts/install-vps.sh --defaults --update  # infra only: build, ship, migrate, restart — no site/admin
 ```
 
-Use `--no-install` to mirror the intended post-release flow: get the binary
+Use `--update` to mirror the intended post-release flow: get the binary
 running as a service first, then configure the app yourself via
 `synap-cli install` (interactive prompts) once it's up. This is what the
 real `scripts/install.sh` (the GitHub-release-based production installer)
-is designed around — `deploy-vps.sh --no-install` gives you the same
-"infra up, configure by hand" shape for local test builds.
+is designed around — `install-vps.sh --update` gives you the same
+"infra up, configure by hand" shape for local test builds. `--update` is
+also the flag to reach for on an **already-running** install when you just
+want to push a code change — it never touches existing sites/admins/data.
 
-After a `--no-install` deploy, on the VPS:
+After an `--update` deploy with no site configured yet, on the VPS:
 
 ```bash
 sudo -u www-data bash -c 'cd /var/www/bckr.dev && ./synap-cli install'
@@ -104,9 +124,12 @@ cp /var/www/bckr.dev/Caddyfile /etc/caddy/Caddyfile && caddy reload --config /et
 cp /var/www/bckr.dev/synaptic-signals.service /etc/systemd/system/ && systemctl daemon-reload && systemctl restart synaptic-signals
 ```
 
+(The install script's own `--help` has a full EXAMPLES section covering
+every flag combination — `./scripts/install-vps.sh --help`.)
+
 ## Managing the app on the VPS
 
-`deploy-vps.sh` symlinks `synap-cli` into `/usr/local/bin`, so it's runnable
+`install-vps.sh` symlinks `synap-cli` into `/usr/local/bin`, so it's runnable
 from anywhere **when logged in directly** (not through `sudo -u`, see note
 above). It reads `DATABASE_URL` from the `.env` in the **current
 directory**, so `cd` into the install dir first:
@@ -157,7 +180,7 @@ tail -f /var/log/caddy/bckr.dev.log
 ### Full reset
 
 ```bash
-VPS_PASSWORD='...' ./scripts/deploy-vps.sh --clean
+VPS_PASSWORD='...' ./scripts/install-vps.sh --defaults --clean
 ```
 
 ## Security notes
@@ -168,9 +191,10 @@ text during setup.
 ⚠️ **The database password** is auto-generated by the script and stored only
 in `${INSTALL_DIR}/.env` on the VPS (`chmod 600`).
 
-⚠️ This VPS hosts other sites (`ioncode.com`, `servermesh.dev`) — `deploy-vps.sh`
-only ever touches the `synaptic_signals` DB/role and `bckr.dev`'s own
-Caddy/systemd entries, never the shared Caddy install or other sites' data.
+⚠️ This VPS hosts other sites (`ioncode.com`, `servermesh.dev`) —
+`install-vps.sh` only ever touches the `synaptic_signals` DB/role and
+`bckr.dev`'s own Caddy/systemd entries, never the shared Caddy install or
+other sites' data. `--clean` is scoped to `INSTALL_DIR`/`DB_NAME` only.
 
 ## Directory structure on VPS
 
