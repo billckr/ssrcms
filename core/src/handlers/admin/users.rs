@@ -386,13 +386,8 @@ pub async fn save_new(
         }
     };
 
-    // Validate username: lowercase letters, numbers and hyphens only.
-    let username_valid = {
-        let u = form.username.trim();
-        !u.is_empty() && u.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
-            && !u.starts_with('-') && !u.ends_with('-')
-    };
-    if !username_valid {
+    // Validate username: 8-15 chars, lowercase letters, numbers and hyphens only.
+    if let Err(msg) = crate::models::user::validate_username(form.username.trim()) {
         let sites = fetch_sites_for_admin(&state, &admin).await;
         let edit = UserEdit {
             id: None,
@@ -407,7 +402,7 @@ pub async fn save_new(
         };
         return Html(admin::pages::users::render_editor(
             &edit,
-            Some("Username may only contain lowercase letters, numbers and hyphens, and cannot start or end with a hyphen."),
+            Some(msg),
             &ctx,
         )).into_response();
     }
@@ -569,7 +564,7 @@ pub async fn save_new(
                             tracing::warn!("new user {} created but no hostname for new site", new_user.id);
                             None
                         } else {
-                            match crate::models::site::create_with_defaults(&state.db, &hostname, admin.user.id).await {
+                            match crate::models::site::create_with_defaults(&state.db, &hostname, Some(admin.user.id)).await {
                                 Ok(site) => {
                                     if let Err(e) = state.reload_site_cache().await {
                                         tracing::warn!("site cache reload failed: {:?}", e);

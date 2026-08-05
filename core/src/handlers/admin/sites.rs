@@ -340,14 +340,11 @@ pub async fn create(
             let display_name = form.new_display_name.clone().unwrap_or_default().trim().to_string();
             let password = form.new_password.clone().unwrap_or_default();
 
-            let username_valid = !username.is_empty()
-                && username.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
-                && !username.starts_with('-') && !username.ends_with('-');
-            if !username_valid {
+            if let Err(msg) = crate::models::user::validate_username(&username) {
                 let data = rebuild_new_site_data(&state, &form, &hostname).await;
                 return Html(admin::pages::sites::render_new(
                     &data,
-                    Some("Username may only contain lowercase letters, numbers and hyphens, and cannot start or end with a hyphen."),
+                    Some(msg),
                     &ctx,
                 )).into_response();
             }
@@ -385,8 +382,11 @@ pub async fn create(
 
     // When impersonating (super_admin visiting a foreign site), assign the new
     // site to that site's owner rather than to the super admin's own account.
-    let owner_id = if let Some(uid) = assignee_id {
-        uid
+    // A super_admin picking "assign later" gets no owner at all — leaving one
+    // unset until a real admin exists, rather than defaulting to themselves,
+    // avoids a super_admin ending up as a site's permanent, stale "admin".
+    let owner_id: Option<Uuid> = if let Some(uid) = assignee_id {
+        Some(uid)
     } else if admin.caps.is_impersonating {
         if let Some(sid) = admin.site_id {
             sqlx::query_scalar::<_, Option<uuid::Uuid>>(
@@ -398,12 +398,14 @@ pub async fn create(
             .ok()
             .flatten()
             .flatten()
-            .unwrap_or(admin.user.id)
         } else {
-            admin.user.id
+            None
         }
+    } else if !admin.caps.is_global_admin {
+        // site_admin creating their own site — they own what they create.
+        Some(admin.user.id)
     } else {
-        admin.user.id
+        None
     };
 
     let result = crate::models::site::create_with_defaults(&state.db, &hostname, owner_id)

@@ -81,6 +81,27 @@ pub fn validate_password(password: &str) -> std::result::Result<(), &'static str
     Ok(())
 }
 
+/// Validate a username against site-wide requirements.
+///
+/// Rules: 8–15 characters, lowercase letters/digits/hyphens only, and cannot
+/// start or end with a hyphen (the only symbol the character set allows).
+pub fn validate_username(username: &str) -> std::result::Result<(), &'static str> {
+    let len = username.len();
+    if len < 8 {
+        return Err("Username must be at least 8 characters");
+    }
+    if len > 15 {
+        return Err("Username must be no more than 15 characters");
+    }
+    if !username.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-') {
+        return Err("Username may only contain lowercase letters, numbers and hyphens");
+    }
+    if username.starts_with('-') || username.ends_with('-') {
+        return Err("Username cannot start or end with a symbol");
+    }
+    Ok(())
+}
+
 /// Full user record — never expose password_hash over the API or in templates.
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct User {

@@ -32,13 +32,14 @@ pub async fn create(pool: &PgPool, hostname: &str) -> Result<Site> {
     Ok(site)
 }
 
-/// Create a site owned by a site_admin, seed default site_settings, and register
-/// the owner as admin in site_users — all in a single transaction.
-/// Returns the new Site on success.
+/// Create a site, seed default site_settings, and — when an owner is given —
+/// register them as admin in site_users, all in a single transaction.
+/// `owner_user_id` is `None` for "assign later": the site gets no owner and no
+/// site_users row until someone is actually assigned. Returns the new Site.
 pub async fn create_with_defaults(
     pool: &PgPool,
     hostname: &str,
-    owner_user_id: Uuid,
+    owner_user_id: Option<Uuid>,
 ) -> Result<Site> {
     let mut tx = pool.begin().await?;
 
@@ -75,27 +76,29 @@ pub async fn create_with_defaults(
         .await?;
     }
 
-    // Register the owner as admin on their new site.
-    sqlx::query(
-        r#"
-        INSERT INTO site_users (site_id, user_id, role, invited_by)
-        VALUES ($1, $2, 'admin', NULL)
-        ON CONFLICT (site_id, user_id) DO UPDATE SET role = 'admin'
-        "#,
-    )
-    .bind(site.id)
-    .bind(owner_user_id)
-    .execute(&mut *tx)
-    .await?;
+    if let Some(owner_id) = owner_user_id {
+        // Register the owner as admin on their new site.
+        sqlx::query(
+            r#"
+            INSERT INTO site_users (site_id, user_id, role, invited_by)
+            VALUES ($1, $2, 'admin', NULL)
+            ON CONFLICT (site_id, user_id) DO UPDATE SET role = 'admin'
+            "#,
+        )
+        .bind(site.id)
+        .bind(owner_id)
+        .execute(&mut *tx)
+        .await?;
 
-    // Set owner's default_site_id if they don't have one yet.
-    sqlx::query(
-        "UPDATE users SET default_site_id = $1, updated_at = NOW() WHERE id = $2 AND default_site_id IS NULL",
-    )
-    .bind(site.id)
-    .bind(owner_user_id)
-    .execute(&mut *tx)
-    .await?;
+        // Set owner's default_site_id if they don't have one yet.
+        sqlx::query(
+            "UPDATE users SET default_site_id = $1, updated_at = NOW() WHERE id = $2 AND default_site_id IS NULL",
+        )
+        .bind(site.id)
+        .bind(owner_id)
+        .execute(&mut *tx)
+        .await?;
+    }
 
     tx.commit().await?;
     Ok(site)
@@ -230,6 +233,12 @@ pub async fn page_count(pool: &PgPool, site_id: Uuid) -> Result<i64> {
 }
 
 /// Email of the site owner (any role), if one is assigned.
+///
+/// Reads `sites.owner_user_id` directly. This is only correct because site
+/// creation ("assign later") no longer defaults `owner_user_id` to the acting
+/// super_admin (see `handlers::admin::sites::create`) — when it's set, it's
+/// always a real, intentional owner, including the legitimate case of the
+/// super_admin owning their own default/CLI-install site.
 pub async fn admin_email(pool: &PgPool, site_id: Uuid) -> Result<Option<String>> {
     let email: Option<String> = sqlx::query_scalar(
         r#"SELECT u.email

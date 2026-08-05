@@ -772,9 +772,10 @@ function toggleSiteFields() {{
     <div class="card-boxed-section">
     <div class="user-form-grid">
       <div class="form-group">
-        <label for="username">Username <span class="field-hint">(letters, numbers, hyphens only)</span></label>
+        <label for="username">Username</label>
         <input type="text" id="username" name="username" value="{username}" required autocomplete="off"
-               pattern="[a-z0-9][a-z0-9\-]*[a-z0-9]|[a-z0-9]" title="Lowercase letters, numbers and hyphens only"{autofocus}>
+               pattern="[a-z0-9][a-z0-9\-]{{6,13}}[a-z0-9]" minlength="8" maxlength="15"
+               title="8-15 characters: lowercase letters, numbers and hyphens only, cannot start or end with a hyphen"{autofocus}>
       </div>
       <div class="form-group">
         <label for="display_name">Display Name</label>
@@ -790,16 +791,22 @@ function toggleSiteFields() {{
         <input type="password" id="password" name="password" autocomplete="new-password">
         {password_hint}
       </div>
+    </div>
+    </div>
+    <div class="card-boxed-section">
+    <div class="user-form-grid">
       <div class="form-group">
         {role_field_inner}
       </div>
       {site_section}
     </div>
+    </div>
+    <div class="card-boxed-section">
     <div class="form-note" style="margin-bottom:.75rem">
       <p><strong>Username requirements:</strong></p>
       <ul style="list-style:none;padding-left:0;margin:0.25rem 0 0">
+        <li id="uname-req-len"><span class="pw-dot" style="display:inline-block;width:1.1rem;font-style:normal">·</span>8–15 characters</li>
         <li id="uname-req-chars"><span class="pw-dot" style="display:inline-block;width:1.1rem;font-style:normal">·</span>Lowercase letters, numbers, and hyphens only</li>
-        <li id="uname-req-hyphen"><span class="pw-dot" style="display:inline-block;width:1.1rem;font-style:normal">·</span>Doesn't start or end with a hyphen</li>
       </ul>
     </div>
     <div class="form-note" style="margin-bottom:.75rem">
@@ -854,8 +861,8 @@ function toggleSiteFields() {{
     ];
     // Username requirements checklist.
     var unameReqs = [
+      {{ id: 'uname-req-len',    test: function(u) {{ return u.length >= 8 && u.length <= 15; }} }},
       {{ id: 'uname-req-chars',  test: function(u) {{ return /^[a-z0-9-]+$/.test(u); }} }},
-      {{ id: 'uname-req-hyphen', test: function(u) {{ return !u.startsWith('-') && !u.endsWith('-'); }} }},
     ];
     var updateFeedback = function() {{
       // Update role requirement
@@ -918,16 +925,19 @@ function toggleSiteFields() {{
       return /^(?:[a-z0-9](?:[a-z0-9\-]*[a-z0-9])?\.)+[a-z]{{2,}}$/i.test(h);
     }}
 
-    // Slugify a string to lowercase letters, numbers and hyphens.
+    // Slugify a string to lowercase letters, numbers and hyphens, capped to
+    // the username max length (trailing hyphens re-stripped after the cut).
     function toSlug(s) {{
       return s.toLowerCase()
         .replace(/[^a-z0-9\s-]/g, '')
         .trim()
         .replace(/[\s]+/g, '-')
         .replace(/-{{2,}}/g, '-')
-        .replace(/^-|-$/g, '');
+        .replace(/^-|-$/g, '')
+        .slice(0, 15)
+        .replace(/-$/, '');
     }}
-    var slugPattern = /^[a-z0-9][a-z0-9\-]*[a-z0-9]$|^[a-z0-9]$/;
+    var slugPattern = /^[a-z0-9][a-z0-9\-]{{6,13}}[a-z0-9]$/;
     var unameEl = document.getElementById('username');
     var dnameEl = document.getElementById('display_name');
     var usernameTouched = false;

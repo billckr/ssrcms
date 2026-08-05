@@ -65,7 +65,9 @@ pub fn sites_list_fragment(sites: &[SiteRow], page: i64, total_pages: i64, searc
                 String::new()
             } else {
                 let confirm_msg = format!(
-                    "Delete site '{}'? This will permanently delete all its content, media records, settings, and user assignments. This cannot be undone.",
+                    "Delete site '{}'? This permanently deletes the site, its content, and its settings. \
+                     Any user account that exists only for this site is deleted too — users with roles on \
+                     other sites keep their accounts and just lose their role here. This cannot be undone.",
                     s.hostname.replace('\'', "\\'")
                 );
                 format!(
@@ -150,7 +152,7 @@ pub fn sites_list_fragment(sites: &[SiteRow], page: i64, total_pages: i64, searc
             hostname         = crate::html_escape(&s.hostname),
             site_url         = crate::html_escape(&site_url),
             default_badge    = if s.is_default {
-                r#" <span class="badge-visiting" title="Primary domain — cannot be deleted">system</span>"#
+                r#" <span class="badge-visiting" title="Default site — cannot be deleted">default</span>"#
             } else if s.is_primary_domain {
                 r#" <span class="badge-primary-domain" title="Primary domain for this account">primary</span>"#
             } else {
@@ -469,9 +471,14 @@ pub fn render_new(data: &NewSiteData, flash: Option<&str>, ctx: &crate::PageCont
         r#"<div class="card-boxed" style="max-width:560px">
   <h2 class="card-boxed-header" style="display:flex;align-items:center;justify-content:space-between;gap:.5rem;">
     <span>New Site</span>
-    <button type="submit" form="new-site-form" id="create-btn" class="icon-btn" title="Create Site" aria-label="Create Site" disabled>
-      <img src="/admin/static/icons/file-plus.svg" alt="">
-    </button>
+    <span style="display:flex;align-items:center;gap:.5rem;">
+      <button type="submit" form="new-site-form" id="create-btn" class="icon-btn" title="Create Site" aria-label="Create Site" disabled>
+        <img src="/admin/static/icons/file-plus.svg" alt="">
+      </button>
+      <a href="/admin/sites" class="icon-btn" title="Back to Sites" aria-label="Back to Sites">
+        <img src="/admin/static/icons/corner-down-left.svg" alt="">
+      </a>
+    </span>
   </h2>
   <div class="card-boxed-body">
   <form method="post" action="/admin/sites" class="edit-form" id="new-site-form" style="max-width:580px">
@@ -520,10 +527,10 @@ pub fn render_new(data: &NewSiteData, flash: Option<&str>, ctx: &crate::PageCont
     <div id="user-new" style="display:none">
       <div class="user-form-grid stacked">
         <div class="form-group">
-          <label for="new_username">Username <span class="field-hint">(letters, numbers, hyphens only)</span></label>
+          <label for="new_username">Username</label>
           <input type="text" id="new_username" name="new_username" value="{new_username}" autocomplete="off"
-                 pattern="[a-z0-9][a-z0-9\-]*[a-z0-9]|[a-z0-9]" title="Lowercase letters, numbers and hyphens only">
-          <span id="new-username-hint" class="field-error" style="display:none">Only lowercase letters, numbers and hyphens allowed.</span>
+                 pattern="[a-z0-9][a-z0-9\-]{{6,13}}[a-z0-9]" minlength="8" maxlength="15"
+                 title="8-15 characters: lowercase letters, numbers and hyphens only, cannot start or end with a hyphen">
         </div>
         <div class="form-group">
           <label for="new_display_name">Display Name</label>
@@ -539,8 +546,15 @@ pub fn render_new(data: &NewSiteData, flash: Option<&str>, ctx: &crate::PageCont
           <input type="password" id="new_password" name="new_password" autocomplete="new-password">
         </div>
       </div>
+      <div class="form-note" style="margin-bottom:.75rem">
+        <p><strong>Username requirements:</strong></p>
+        <ul style="list-style:none;padding-left:0;margin:0.25rem 0 0">
+          <li id="new-uname-req-len"><span class="pw-dot" style="display:inline-block;width:1.1rem;font-style:normal">·</span>8–15 characters</li>
+          <li id="new-uname-req-chars"><span class="pw-dot" style="display:inline-block;width:1.1rem;font-style:normal">·</span>Lowercase letters, numbers, and hyphens only</li>
+        </ul>
+      </div>
       <div class="form-note" style="margin-bottom:1.25rem">
-        <p><strong>New user requirements:</strong></p>
+        <p><strong>Password requirements:</strong></p>
         <ul style="list-style:none;padding-left:0;margin:0.25rem 0 0">
           <li id="new-pw-req-len"><span class="pw-dot" style="display:inline-block;width:1.1rem;font-style:normal">·</span>8–12 characters</li>
           <li id="new-pw-req-upper"><span class="pw-dot" style="display:inline-block;width:1.1rem;font-style:normal">·</span>At least one uppercase letter</li>
@@ -551,10 +565,6 @@ pub fn render_new(data: &NewSiteData, flash: Option<&str>, ctx: &crate::PageCont
       <small>A new account is created and assigned as this site's admin and owner.</small>
     </div>
   </div>
-  </div>
-
-  <div class="form-actions">
-    <a href="/admin/sites" class="btn btn-secondary">Cancel</a>
   </div>
   </form>
   </div>
@@ -573,7 +583,11 @@ pub fn render_new(data: &NewSiteData, flash: Option<&str>, ctx: &crate::PageCont
     {{ id: 'new-pw-req-num',   test: function(p) {{ return /[0-9]/.test(p); }} }},
     {{ id: 'new-pw-req-sym',   test: function(p) {{ return /[!@#$%&]/.test(p); }} }},
   ];
-  var slugPattern = /^[a-z0-9][a-z0-9\-]*[a-z0-9]$|^[a-z0-9]$/;
+  var unameReqs = [
+    {{ id: 'new-uname-req-len',    test: function(u) {{ return u.length >= 8 && u.length <= 15; }} }},
+    {{ id: 'new-uname-req-chars',  test: function(u) {{ return /^[a-z0-9-]+$/.test(u); }} }},
+  ];
+  var slugPattern = /^[a-z0-9][a-z0-9\-]{{6,13}}[a-z0-9]$/;
   var usernameTouched = false;
 
   function isValidHostname(h) {{
@@ -584,7 +598,8 @@ pub fn render_new(data: &NewSiteData, flash: Option<&str>, ctx: &crate::PageCont
   }}
   function toSlug(s) {{
     return s.toLowerCase().replace(/[^a-z0-9\s-]/g, '').trim()
-      .replace(/[\s]+/g, '-').replace(/-{{2,}}/g, '-').replace(/^-|-$/g, '');
+      .replace(/[\s]+/g, '-').replace(/-{{2,}}/g, '-').replace(/^-|-$/g, '')
+      .slice(0, 15).replace(/-$/, '');
   }}
 
   window.hnUpdate = function() {{
@@ -621,9 +636,19 @@ pub fn render_new(data: &NewSiteData, flash: Option<&str>, ctx: &crate::PageCont
         li.style.color = '#dc2626'; if (dot) dot.textContent = '✗';
       }}
     }});
-    var uname = document.getElementById('new_username');
-    var unameHint = document.getElementById('new-username-hint');
-    if (unameHint) unameHint.style.display = (uname.value && !slugPattern.test(uname.value)) ? '' : 'none';
+    var uname = document.getElementById('new_username').value;
+    unameReqs.forEach(function(req) {{
+      var li  = document.getElementById(req.id);
+      var dot = li ? li.querySelector('.pw-dot') : null;
+      if (!li) return;
+      if (!uname) {{
+        li.style.color = ''; if (dot) dot.textContent = '·';
+      }} else if (req.test(uname)) {{
+        li.style.color = '#16a34a'; if (dot) dot.textContent = '✓';
+      }} else {{
+        li.style.color = '#dc2626'; if (dot) dot.textContent = '✗';
+      }}
+    }});
     var email = document.getElementById('new_email').value.trim();
     var emailHint = document.getElementById('new-email-hint');
     if (emailHint) emailHint.style.display = (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) ? '' : 'none';
