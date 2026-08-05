@@ -22,6 +22,7 @@ a:hover { text-decoration: underline; }
 /* Login */
 .login-body { display: flex; align-items: center; justify-content: center; min-height: 100vh; }
 .login-box { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 2rem; width: 360px; box-shadow: var(--shadow); }
+.login-box.login-box--wide { width: 440px; }
 .login-brand { font-size: 1.5rem; font-weight: 700; margin-bottom: .5rem; color: var(--primary); }
 .login-box h2 { font-size: 1.1rem; color: var(--muted); margin-bottom: 1.5rem; }
 .login-box label { display: block; font-weight: 500; margin-bottom: .25rem; }
@@ -595,6 +596,7 @@ body.sidebar-open .sidebar-overlay {
 
   /* Login box: full width with padding */
   .login-box { width: calc(100% - 2rem); }
+  .login-box.login-box--wide { width: calc(100% - 2rem); }
 }
 
 @media (max-width: 480px) {

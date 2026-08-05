@@ -14,7 +14,7 @@ use uuid::Uuid;
 
 use crate::app_state::AppState;
 use crate::middleware::site::CurrentSite;
-use crate::models::user::{CreateUser, UserRole};
+use crate::models::user::{validate_display_name, validate_username, CreateUser, UserRole};
 
 #[derive(Deserialize)]
 pub struct SubscribeQuery {
@@ -83,6 +83,9 @@ pub async fn subscribe_post(
     // ── Validation ────────────────────────────────────────────────────────────
     if form.display_name.trim().is_empty() {
         err!("Name is required.");
+    }
+    if let Err(msg) = validate_display_name(form.display_name.trim()) {
+        err!(msg);
     }
     let email = form.email.trim().to_lowercase();
     if email.is_empty() || !email.contains('@') {
@@ -169,26 +172,52 @@ pub async fn subscribe_post(
     Redirect::to("/subscribe").into_response()
 }
 
-/// Derive a unique username from a display name.
-/// e.g. "Steve Miller" → "steve-miller", then "steve-miller2" if taken.
+/// Derive a unique username from a display name that also satisfies
+/// [`validate_username`] (8–15 chars, lowercase/digits/hyphens, no leading or
+/// trailing hyphen) — since this username is never shown to or confirmed by
+/// the user, it must be generated valid rather than relying on them to fix it.
+/// e.g. "Steve Miller" → "steve-miller", then "steve-miller2" if taken;
+/// "Bo" → too short alone, padded with hex to clear the 8-char minimum.
 async fn generate_username(pool: &sqlx::PgPool, display_name: &str) -> String {
-    let base = slug::slugify(display_name);
-    let base = if base.is_empty() { "user".to_string() } else { base };
+    const MIN: usize = 8;
+    const MAX: usize = 15;
 
-    if !username_taken(pool, &base).await {
+    // slug::slugify already lowercases and restricts to [a-z0-9-], collapsing
+    // repeats and trimming edges — matches validate_username's character
+    // rules directly; only length still needs enforcing.
+    let mut base = slug::slugify(display_name);
+    if base.len() > MAX {
+        base.truncate(MAX);
+        base = base.trim_end_matches('-').to_string();
+    }
+    if base.len() < MIN {
+        // Too short (or empty) to stand alone — pad with hex from a fresh
+        // UUID so the base itself clears the 8-char floor before any
+        // uniqueness suffix is appended below.
+        base.push_str(&Uuid::new_v4().simple().to_string());
+        base.truncate(MAX);
+        base = base.trim_end_matches('-').to_string();
+    }
+
+    if validate_username(&base).is_ok() && !username_taken(pool, &base).await {
         return base;
     }
 
-    // Try sequential suffixes: steve-miller2, steve-miller3, …
+    // Try sequential suffixes: steve-miller2, steve-miller3, … — trimming the
+    // base as needed so the total stays within MAX.
     for n in 2u32..=9999 {
-        let candidate = format!("{}{}", base, n);
-        if !username_taken(pool, &candidate).await {
+        let suffix = n.to_string();
+        let keep = MAX.saturating_sub(suffix.len());
+        let mut candidate: String = base.chars().take(keep).collect();
+        candidate = candidate.trim_end_matches('-').to_string();
+        candidate.push_str(&suffix);
+        if validate_username(&candidate).is_ok() && !username_taken(pool, &candidate).await {
             return candidate;
         }
     }
 
-    // Last resort: guaranteed-unique UUID suffix.
-    format!("{}{}", base, Uuid::new_v4().simple())
+    // Last resort: guaranteed-valid (4 + 11 = 15 chars), effectively-guaranteed-unique.
+    format!("user{}", &Uuid::new_v4().simple().to_string()[..11])
 }
 
 async fn username_taken(pool: &sqlx::PgPool, username: &str) -> bool {

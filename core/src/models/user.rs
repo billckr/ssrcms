@@ -102,6 +102,19 @@ pub fn validate_username(username: &str) -> std::result::Result<(), &'static str
     Ok(())
 }
 
+/// Validate a display name against a sane length ceiling. No character
+/// restrictions — legal names can contain spaces, apostrophes, non-ASCII,
+/// etc. — only length is bounded, since an unbounded name breaks layout in
+/// admin lists/author URLs/email templates (e.g. a 250-char string).
+/// Does not check emptiness — callers already handle that with their own
+/// "required" message.
+pub fn validate_display_name(display_name: &str) -> std::result::Result<(), &'static str> {
+    if display_name.chars().count() > 60 {
+        return Err("Display name must be no more than 60 characters");
+    }
+    Ok(())
+}
+
 /// Full user record — never expose password_hash over the API or in templates.
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct User {
