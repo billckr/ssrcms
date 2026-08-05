@@ -1,8 +1,8 @@
 //! CLI commands for managing Caddy file-write permissions and sudoers entries.
 //!
 //! Usage:
-//!   synap-cli caddy setup   --app-user <user> [--caddyfile <path>]
-//!   synap-cli caddy teardown --app-user <user> [--caddyfile <path>]
+//!   synap caddy setup   --app-user <user> [--caddyfile <path>]
+//!   synap caddy teardown --app-user <user> [--caddyfile <path>]
 
 use clap::Subcommand;
 use std::process::Command;

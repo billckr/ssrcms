@@ -5,7 +5,7 @@ use uuid::Uuid;
 #[derive(Subcommand)]
 pub enum ThemeAction {
     /// List themes — all sites overview, or scoped to one site with --site
-    #[command(after_help = "Examples:\n  synap-cli theme list\n  synap-cli theme list --site example.com")]
+    #[command(after_help = "Examples:\n  synap theme list\n  synap theme list --site example.com")]
     List {
         /// Filter to a specific site (hostname or UUID)
         #[arg(long)]
@@ -19,7 +19,7 @@ pub enum ThemeAction {
     /// If the site does not already have a local copy of the theme it is copied
     /// from themes/global/ first, then set as active — matching the behaviour
     /// of the 'Get Theme' button in the admin UI.
-    #[command(after_help = "Examples:\n  synap-cli theme activate default --site example.com\n  synap-cli theme activate testing --site example.com")]
+    #[command(after_help = "Examples:\n  synap theme activate default --site example.com\n  synap theme activate testing --site example.com")]
     Activate {
         /// Name of the theme to activate (directory name, e.g. default)
         #[arg(value_name = "THEME")]
@@ -37,7 +37,7 @@ pub enum ThemeAction {
     /// Remove a site's local copy of a theme (never touches the global original)
     ///
     /// The active theme cannot be removed — activate a different theme first.
-    #[command(after_help = "Examples:\n  synap-cli theme remove testing --site example.com")]
+    #[command(after_help = "Examples:\n  synap theme remove testing --site example.com")]
     Remove {
         /// Name of the theme to remove (directory name, e.g. testing)
         #[arg(value_name = "THEME")]
@@ -275,7 +275,7 @@ async fn resolve_site_id(pool: &sqlx::PgPool, site: &str) -> anyhow::Result<Uuid
         .await
         .map_err(|e| anyhow::anyhow!("DB error looking up site: {e}"))?
         .ok_or_else(|| anyhow::anyhow!(
-            "No site found with hostname '{}'. Run 'synap-cli site list' to see available sites.", site
+            "No site found with hostname '{}'. Run 'synap site list' to see available sites.", site
         ))
 }
 
@@ -413,7 +413,7 @@ async fn remove(
                 .unwrap_or_default();
             match rows.as_slice() {
                 [(id,)] => *id,
-                [] => anyhow::bail!("No sites found. Run 'synap-cli install' to set up the first site."),
+                [] => anyhow::bail!("No sites found. Run 'synap install' to set up the first site."),
                 _ => anyhow::bail!(
                     "Multiple sites found — use --site <hostname> to specify which one."
                 ),
@@ -459,7 +459,7 @@ async fn remove(
     if local_theme_count <= 1 {
         anyhow::bail!(
             "Cannot remove '{}' — it is the only theme installed for this site. \
-             Activate a different theme first (synap-cli theme activate <theme> --site <hostname>), \
+             Activate a different theme first (synap theme activate <theme> --site <hostname>), \
              then remove this one.",
             name
         );

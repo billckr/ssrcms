@@ -1,14 +1,14 @@
 //! CLI commands for multi-site management.
 //!
 //! Usage:
-//!   synap-cli site create --hostname <domain>  # add a new empty site
-//!   synap-cli site list                        # list all sites
-//!   synap-cli site delete --id <uuid>          # remove a site and all its content
-//!   synap-cli site maintenance on [--hostname <domain>] [--message <text>]
-//!   synap-cli site maintenance off [--hostname <domain>]
-//!   synap-cli site maintenance status [--hostname <domain>]
+//!   synap site create --hostname <domain>  # add a new empty site
+//!   synap site list                        # list all sites
+//!   synap site delete --id <uuid>          # remove a site and all its content
+//!   synap site maintenance on [--hostname <domain>] [--message <text>]
+//!   synap site maintenance off [--hostname <domain>]
+//!   synap site maintenance status [--hostname <domain>]
 //!
-//! IP allowlist/denylist commands live under `synap-cli security` — see
+//! IP allowlist/denylist commands live under `synap security` — see
 //! cli/src/commands/security.rs.
 
 use clap::Subcommand;
@@ -63,7 +63,7 @@ pub enum SiteAction {
         #[arg(long, default_value = "/etc/caddy/Caddyfile")]
         caddyfile: String,
         /// Install directory containing the uploads/ folder (for symlink update).
-        /// Defaults to the INSTALL_DIR environment variable set by synap-cli install.
+        /// Defaults to the INSTALL_DIR environment variable set by synap install.
         #[arg(long, env = "INSTALL_DIR")]
         install_dir: Option<String>,
         /// Database URL (overrides DATABASE_URL env var)
@@ -587,7 +587,7 @@ async fn list(database_url: Option<String>) -> anyhow::Result<()> {
     .map_err(|e| anyhow::anyhow!("Failed to list sites: {e}"))?;
 
     if rows.is_empty() {
-        println!("No sites found. Run 'synap-cli install' to set up the first site.");
+        println!("No sites found. Run 'synap install' to set up the first site.");
         return Ok(());
     }
 

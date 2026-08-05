@@ -1,7 +1,7 @@
 //! Native "seed test data" actions for /admin/settings → Advanced → Deploy Test Data.
 //!
 //! Reimplements what scripts/seed_users.sh and scripts/seed_posts.sh do locally via
-//! psql/synap-cli, but as in-process Rust calls so it works from any deployed instance
+//! psql/synap, but as in-process Rust calls so it works from any deployed instance
 //! (the deploy script never ships scripts/, bash, or a psql client to the target host).
 
 use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};

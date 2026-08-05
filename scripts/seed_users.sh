@@ -5,7 +5,7 @@
 #   ./scripts/seed_users.sh -domain example.com -role admin -number 5
 #
 # Reads DATABASE_URL from .env in the project root if not already set.
-# Password hashing is delegated to `synap-cli user hash-password` so the
+# Password hashing is delegated to `synap user hash-password` so the
 # stored hash matches exactly what the app produces (Argon2).
 
 set -euo pipefail
@@ -62,7 +62,7 @@ Notes:
   - Emails are generated as <username>@<domain>.
   - "admin" here means the site_users role; the underlying users.role is stored
     as "site_admin" to match how the admin UI creates site admins.
-  - Requires a built synap-cli binary (debug or release) — built automatically
+  - Requires a built synap binary (debug or release) — built automatically
     if missing.
 EOF
     exit 1
@@ -93,18 +93,18 @@ if ! [[ "$NUMBER" =~ ^[0-9]+$ ]] || [[ "$NUMBER" -lt 1 ]]; then
     exit 1
 fi
 
-# ── Resolve synap-cli binary (used only for Argon2 password hashing) ──────────
-CLI_BIN="$PROJECT_ROOT/target/release/synap-cli"
+# ── Resolve synap binary (used only for Argon2 password hashing) ──────────────
+CLI_BIN="$PROJECT_ROOT/target/release/synap"
 if [[ ! -x "$CLI_BIN" ]]; then
-    CLI_BIN="$PROJECT_ROOT/target/debug/synap-cli"
+    CLI_BIN="$PROJECT_ROOT/target/debug/synap"
 fi
 if [[ ! -x "$CLI_BIN" ]]; then
-    echo "synap-cli binary not found — building it (debug profile)..." >&2
+    echo "synap binary not found — building it (debug profile)..." >&2
     (cd "$PROJECT_ROOT" && cargo build -p synap-cli --quiet) || {
-        echo "ERROR: failed to build synap-cli" >&2
+        echo "ERROR: failed to build synap" >&2
         exit 1
     }
-    CLI_BIN="$PROJECT_ROOT/target/debug/synap-cli"
+    CLI_BIN="$PROJECT_ROOT/target/debug/synap"
 fi
 
 if [[ -n "$PASSWORD" ]]; then

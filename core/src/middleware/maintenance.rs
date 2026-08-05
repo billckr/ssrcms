@@ -1,7 +1,7 @@
 //! WordPress-style maintenance mode gate.
 //!
 //! Checked live (a single indexed query, no cache) on every public request so
-//! `synap-cli site maintenance on/off` takes effect immediately with no
+//! `synap site maintenance on/off` takes effect immediately with no
 //! restart and no reload signal. `/admin/*` is always exempt so an operator
 //! can still log in to turn it back off; static asset routes are exempt too
 //! since blocking them would break the maintenance page's own styling and

@@ -1,16 +1,16 @@
 //! CLI commands for site-level IP access control.
 //!
 //! Usage:
-//!   synap-cli security allow-ip on [--hostname <domain>] --ip <cidr> [--ip <cidr> ...]
-//!   synap-cli security allow-ip off [--hostname <domain>]
-//!   synap-cli security allow-ip add --hostname <domain> --ip <cidr>
-//!   synap-cli security allow-ip remove --hostname <domain> --ip <cidr>
-//!   synap-cli security allow-ip status [--hostname <domain>]
-//!   synap-cli security block-ip on [--hostname <domain>] --ip <cidr> [--ip <cidr> ...]
-//!   synap-cli security block-ip off [--hostname <domain>]
-//!   synap-cli security block-ip add --hostname <domain> --ip <cidr>
-//!   synap-cli security block-ip remove --hostname <domain> --ip <cidr>
-//!   synap-cli security block-ip status [--hostname <domain>]
+//!   synap security allow-ip on [--hostname <domain>] --ip <cidr> [--ip <cidr> ...]
+//!   synap security allow-ip off [--hostname <domain>]
+//!   synap security allow-ip add --hostname <domain> --ip <cidr>
+//!   synap security allow-ip remove --hostname <domain> --ip <cidr>
+//!   synap security allow-ip status [--hostname <domain>]
+//!   synap security block-ip on [--hostname <domain>] --ip <cidr> [--ip <cidr> ...]
+//!   synap security block-ip off [--hostname <domain>]
+//!   synap security block-ip add --hostname <domain> --ip <cidr>
+//!   synap security block-ip remove --hostname <domain> --ip <cidr>
+//!   synap security block-ip status [--hostname <domain>]
 
 use clap::Subcommand;
 use sqlx::PgPool;

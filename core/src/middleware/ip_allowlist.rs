@@ -2,7 +2,7 @@
 //! configured set of IPs/CIDRs.
 //!
 //! Checked live (no cache) on every request, same as maintenance mode, so
-//! `synap-cli security allow-ip on/off` takes effect immediately with no
+//! `synap security allow-ip on/off` takes effect immediately with no
 //! restart. Unlike maintenance mode, nothing is exempt: if this is on and
 //! the caller's IP isn't on the list, `/admin` is blocked too. This is meant
 //! for hard isolation during testing (e.g. a VPS test deploy nobody but you

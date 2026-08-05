@@ -31,7 +31,7 @@ Synaptic Signals supports running multiple client sites from a single database a
 ### Via CLI
 
 ```bash
-synap-cli site create --hostname client.example.com
+synap site create --hostname client.example.com
 ```
 
 Then add a user to the new site via the admin UI (`/admin/sites`) or add them manually:
@@ -99,7 +99,7 @@ of `site_users` entries.
 ### Protected accounts
 
 The install-time super admin account is automatically marked `is_protected = TRUE` by
-`synap-cli install`. Migration 0013 retroactively protects any pre-existing `admin`
+`synap install`. Migration 0013 retroactively protects any pre-existing `admin`
 accounts on upgrade. Protected accounts have no delete button in the admin UI and all
 server-side deletion attempts are rejected regardless of the requester's role.
 
@@ -122,13 +122,13 @@ Themes and plugins are stored on the filesystem and are available to all sites. 
 ## Site Management CLI Reference
 
 ```
-synap-cli site create --hostname <domain>
+synap site create --hostname <domain>
     Create a new empty site.
 
-synap-cli site list
+synap site list
     List all sites with post counts.
 
-synap-cli site delete --id <uuid>
+synap site delete --id <uuid>
     Delete a site and all its content (with confirmation prompt).
 ```
 
@@ -137,7 +137,7 @@ synap-cli site delete --id <uuid>
 ## Verification Checklist
 
 After setup:
-- [ ] `synap-cli site list` shows your sites
+- [ ] `synap site list` shows your sites
 - [ ] Admin `/admin/sites` shows the site switcher
 - [ ] DNS resolves both domains to your server
 - [ ] Caddy issues TLS certificates for both domains

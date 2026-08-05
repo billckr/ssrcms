@@ -59,7 +59,7 @@ FLAGS
                  does not create a site — use this for redeploying a code
                  change. On a brand-new install, this leaves the app
                  running with no site/admin yet; the summary screen prints
-                 the 'synap-cli install' command to run by hand afterward.
+                 the 'synap install' command to run by hand afterward.
   --clean        Also drop+recreate the database and role, and wipe
                  INSTALL_DIR, before deploying. DESTRUCTIVE to whatever is
                  currently at INSTALL_DIR/DB_NAME — never touches other
@@ -82,7 +82,7 @@ EXAMPLES
     VPS_PASSWORD='...' ./scripts/install-vps.sh --defaults --update
 
   Get the binary running as a service with no site/admin yet, then answer
-  'synap-cli install's prompts yourself on the VPS afterward (mirrors how
+  'synap install's prompts yourself on the VPS afterward (mirrors how
   the production installer, scripts/install.sh, is meant to be used):
     VPS_PASSWORD='...' ./scripts/install-vps.sh --interactive --update
 
@@ -561,9 +561,9 @@ gate_on_requirements() {
 
 do_build() {
   cd "$REPO_DIR"
-  cargo build --release --bin synaptic --bin synap-cli
+  cargo build --release --bin synaptic --bin synap
   BIN_SYNAPTIC="$REPO_DIR/target/release/synaptic"
-  BIN_CLI="$REPO_DIR/target/release/synap-cli"
+  BIN_CLI="$REPO_DIR/target/release/synap"
   [[ -f "$BIN_SYNAPTIC" && -f "$BIN_CLI" ]] || { echo "Build did not produce expected binaries." >&2; return 1; }
   MIGRATION_COUNT=$(find "$REPO_DIR/migrations" -name '*.sql' | wc -l | tr -d ' ')
   echo "Built. $MIGRATION_COUNT migrations embedded."
@@ -630,7 +630,7 @@ do_ship_files() {
   ssh_run "mkdir -p ${INSTALL_DIR}/uploads ${INSTALL_DIR}/search-index ${INSTALL_DIR}/themes/sites ${INSTALL_DIR}/plugins/sites"
 
   scp_run "$BIN_SYNAPTIC" "${VPS_USER}@${VPS_HOST}:${INSTALL_DIR}/synaptic"
-  scp_run "$BIN_CLI"      "${VPS_USER}@${VPS_HOST}:${INSTALL_DIR}/synap-cli"
+  scp_run "$BIN_CLI"      "${VPS_USER}@${VPS_HOST}:${INSTALL_DIR}/synap"
 
   ssh_run "mkdir -p ${INSTALL_DIR}/admin"
   local assets_tmp="/tmp/ss-install-assets-$$.tar.gz"
@@ -641,13 +641,13 @@ do_ship_files() {
            mkdir -p ${INSTALL_DIR}/admin && tar xzf /tmp/ss-install-assets.tar.gz -C ${INSTALL_DIR}/admin --overwrite static 2>/dev/null; \
            rm -f /tmp/ss-install-assets.tar.gz"
 
-  ssh_run "chmod +x ${INSTALL_DIR}/synaptic ${INSTALL_DIR}/synap-cli"
-  ssh_run "ln -sf ${INSTALL_DIR}/synap-cli /usr/local/bin/synap-cli"
+  ssh_run "chmod +x ${INSTALL_DIR}/synaptic ${INSTALL_DIR}/synap"
+  ssh_run "ln -sf ${INSTALL_DIR}/synap /usr/local/bin/synap"
   ssh_run "chown -R ${SYNAPTIC_USER}:${SYNAPTIC_USER} ${INSTALL_DIR}"
 
   # SELinux context (AlmaLinux) — matches install.sh behavior.
   ssh_run "command -v chcon >/dev/null && chcon -Rt var_t ${INSTALL_DIR} 2>/dev/null; \
-           command -v chcon >/dev/null && chcon -t bin_t ${INSTALL_DIR}/synaptic ${INSTALL_DIR}/synap-cli 2>/dev/null; true"
+           command -v chcon >/dev/null && chcon -t bin_t ${INSTALL_DIR}/synaptic ${INSTALL_DIR}/synap 2>/dev/null; true"
   echo "Files copied."
 }
 
@@ -733,8 +733,8 @@ check_migration_risk() {
 
 do_install_or_migrate() {
   if [[ "$UPDATE_ONLY" -eq 1 ]]; then
-    ssh_run "sudo -u ${SYNAPTIC_USER} DATABASE_URL='${DATABASE_URL}' ${INSTALL_DIR}/synap-cli migrate" \
-      || { echo "synap-cli migrate failed." >&2; return 1; }
+    ssh_run "sudo -u ${SYNAPTIC_USER} DATABASE_URL='${DATABASE_URL}' ${INSTALL_DIR}/synap migrate" \
+      || { echo "synap migrate failed." >&2; return 1; }
     echo "Migrations applied. No site/admin configured yet."
 
     local caddy_tmp svc_tmp
@@ -766,8 +766,8 @@ do_install_or_migrate() {
       ADMIN_EMAIL='${ADMIN_EMAIL}' \
       ADMIN_USERNAME='${ADMIN_USERNAME}' \
       ${admin_pw_env} \
-      ${INSTALL_DIR}/synap-cli install --non-interactive --output-dir ${INSTALL_DIR} 2>&1") \
-      || { echo "synap-cli install failed:"; echo "$cli_output"; return 1; }
+      ${INSTALL_DIR}/synap install --non-interactive --output-dir ${INSTALL_DIR} 2>&1") \
+      || { echo "synap install failed:"; echo "$cli_output"; return 1; }
     echo "$cli_output"
 
     if [[ -n "$ADMIN_PASSWORD" ]]; then
@@ -825,11 +825,11 @@ print_summary() {
   if [[ "$UPDATE_ONLY" -eq 1 ]]; then
     section "Next Steps"
     echo "  Site/admin were not configured. On the VPS, run (as ${SYNAPTIC_USER} —"
-    echo "  synap-cli checks that it owns \$INSTALL_DIR; use the full path, not the"
+    echo "  synap checks that it owns \$INSTALL_DIR; use the full path, not the"
     echo "  bare command, since sudo's secure_path on RHEL/AlmaLinux drops"
     echo "  /usr/local/bin):"
     echo ""
-    echo "    sudo -u ${SYNAPTIC_USER} bash -c 'cd ${INSTALL_DIR} && SITE_URL=https://${VPS_DOMAIN} ./synap-cli install'"
+    echo "    sudo -u ${SYNAPTIC_USER} bash -c 'cd ${INSTALL_DIR} && SITE_URL=https://${VPS_DOMAIN} ./synap install'"
     echo ""
     echo "  (SITE_URL matters if Caddy fronts this on 443 — without it, site_url"
     echo "   defaults to http://domain:${APP_PORT}, baking the internal port into"

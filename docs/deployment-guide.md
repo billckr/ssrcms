@@ -1,6 +1,6 @@
 # Synaptic Signals — Deployment Guide
 
-This guide covers installing Synaptic Signals on a Linux server using the `synap-cli` installer, Caddy as a reverse proxy, and systemd for process management.
+This guide covers installing Synaptic Signals on a Linux server using the `synap` installer, Caddy as a reverse proxy, and systemd for process management.
 
 ---
 
@@ -25,7 +25,7 @@ cargo build --release
 
 This produces two binaries in `target/release/`:
 - `synaptic` — the CMS server
-- `synap-cli` — the installer/manager
+- `synap` — the installer/manager
 
 ---
 
@@ -38,7 +38,7 @@ sudo chown -R www-data:www-data /opt/synaptic-signals
 
 # Copy binaries
 sudo cp target/release/synaptic /opt/synaptic-signals/
-sudo cp target/release/synap-cli /opt/synaptic-signals/
+sudo cp target/release/synap /opt/synaptic-signals/
 
 # Copy required runtime files
 sudo cp -r themes /opt/synaptic-signals/
@@ -80,7 +80,7 @@ The installer wizard handles database migration, admin user creation, and genera
 
 ```bash
 cd /opt/synaptic-signals
-./synap-cli install
+./synap install
 ```
 
 You will be prompted for:
@@ -96,7 +96,7 @@ The installer will:
 3. Write a `Caddyfile` in the current directory
 4. Write a `synaptic-signals.service` file in the current directory
 
-> **If you created the admin account manually** (e.g. via `synap-cli user create` before this
+> **If you created the admin account manually** (e.g. via `synap user create` before this
 > existed), mark it protected now:
 > ```sql
 > UPDATE users SET is_protected = TRUE WHERE username = 'your_username';
@@ -140,7 +140,7 @@ sudo chown caddy:caddy /var/log/caddy
 sudo chmod 755 /var/log/caddy
 ```
 
-This is handled automatically if you run `sudo synap-cli caddy setup --app-user www-data`.
+This is handled automatically if you run `sudo synap caddy setup --app-user www-data`.
 
 **What the Caddyfile does:**
 - Serves `/uploads/*` directly from the filesystem (bypasses Axum)
@@ -187,12 +187,12 @@ curl -I https://example.com/admin
 
 ## Multi-Site Setup
 
-Synaptic Signals can serve multiple client sites from a single binary and database. `synap-cli install` already creates the first site; see the full [Multi-Site Guide](multi-site-guide.md) for the complete walkthrough.
+Synaptic Signals can serve multiple client sites from a single binary and database. `synap install` already creates the first site; see the full [Multi-Site Guide](multi-site-guide.md) for the complete walkthrough.
 
 ### Adding a second site
 
 ```bash
-./synap-cli site create --hostname client.example.com
+./synap site create --hostname client.example.com
 ```
 
 Then add the new domain to Caddy — all domains proxy to the same port:
@@ -213,24 +213,24 @@ The server identifies each request's site from the `Host` header and serves the 
 
 ## CLI Reference
 
-### `synap-cli install`
+### `synap install`
 
 Interactive installer. Run from the install directory.
 
 ```
-synap-cli install [OPTIONS]
+synap install [OPTIONS]
 
 Options:
   --output-dir <DIR>    Directory to write Caddyfile and .service (default: .)
   --non-interactive     Use defaults/env vars without prompting
 ```
 
-### `synap-cli migrate`
+### `synap migrate`
 
 Applies any pending database migrations. Safe to run multiple times.
 
 ```
-synap-cli migrate [OPTIONS]
+synap migrate [OPTIONS]
 
 Options:
   --database-url <URL>  Overrides DATABASE_URL env var
@@ -238,81 +238,81 @@ Options:
 
 ```bash
 # Example
-DATABASE_URL=postgres://... ./synap-cli migrate
+DATABASE_URL=postgres://... ./synap migrate
 ```
 
-### `synap-cli user create`
+### `synap user create`
 
 Interactively creates a new user. Prompts for username, email, display name, password, and role.
 
 ```bash
-./synap-cli user create
+./synap user create
 ```
 
-### `synap-cli user list`
+### `synap user list`
 
 Lists all users in a tabular format.
 
 ```bash
-./synap-cli user list
+./synap user list
 ```
 
-### `synap-cli user reset-password`
+### `synap user reset-password`
 
 Resets a user's password. Prompts for the user's email address, then a new password.
 
 ```bash
-./synap-cli user reset-password
+./synap user reset-password
 ```
 
-### `synap-cli plugin list`
+### `synap plugin list`
 
 Lists installed plugins by reading `plugin.toml` manifests from `./plugins/`.
 
 ```bash
-./synap-cli plugin list
+./synap plugin list
 ```
 
-### `synap-cli theme list`
+### `synap theme list`
 
 Lists installed themes by reading `theme.toml` manifests from `./themes/`.
 
 ```bash
-./synap-cli theme list
+./synap theme list
 ```
 
-### `synap-cli site create`
+### `synap site create`
 
 Create a new empty site.
 
 ```bash
-./synap-cli site create --hostname client.example.com
+./synap site create --hostname client.example.com
 ```
 
-### `synap-cli site list`
+### `synap site list`
 
 List all sites with post counts.
 
 ```bash
-./synap-cli site list
+./synap site list
 ```
 
-### `synap-cli site delete`
+### `synap site delete`
 
 Delete a site and all its content (prompts for confirmation).
 
 ```bash
-./synap-cli site delete --id <uuid>
+./synap site delete --id <uuid>
 ```
 
 ---
 
-### `synap-cli theme activate`
+### `synap theme activate`
 
 Activates a theme by updating `active_theme` in the database, then sends `SIGUSR1` to the running server so the change takes effect immediately — no restart required.
 
 ```bash
-./synap-cli theme activate <name> [OPTIONS]
+./synap theme activate <name> [OPTIONS]
 
 Options:
   --database-url <URL>    Database URL (overrides DATABASE_URL env var)
@@ -321,7 +321,7 @@ Options:
 
 ```bash
 # Example
-./synap-cli theme activate claude
+./synap theme activate claude
 ```
 
 The CLI reads the server's PID from `synaptic.pid` (written to the working directory on startup) and sends `SIGUSR1`. The server reacts by re-reading `active_theme` from the database and hot-reloading the templates. If the server is not running the change is still persisted in the database and will take effect on next start.
@@ -337,7 +337,7 @@ Synaptic Signals supports switching the active theme without restarting the serv
 ### How it works
 
 1. **On startup** the server writes its process ID to `synaptic.pid` in the working directory.
-2. **`synap-cli theme activate <name>`** updates `active_theme` in the database, then reads `synaptic.pid` and sends `SIGUSR1` to the server process.
+2. **`synap theme activate <name>`** updates `active_theme` in the database, then reads `synaptic.pid` and sends `SIGUSR1` to the server process.
 3. **The running server** receives `SIGUSR1`, re-reads `active_theme` from the database, and calls `switch_theme()` — reloading all templates from disk into the Tera engine immediately.
 4. The next incoming HTTP request is served by the new theme. No downtime, no restart.
 
@@ -347,14 +347,14 @@ The same hot-reload is triggered when you switch themes through the admin UI at 
 
 ```bash
 # From the directory where the server is running
-./synap-cli theme activate claude
+./synap theme activate claude
 # Server (PID 12345) signalled — theme 'claude' is now live.
 ```
 
 If the server is not currently running, the database is still updated and the new theme will be active on next start:
 
 ```bash
-./synap-cli theme activate claude
+./synap theme activate claude
 # Theme 'claude' activated in database.
 # No PID file found at 'synaptic.pid' — start the server and it will use the new theme.
 ```
@@ -364,14 +364,14 @@ If the server is not currently running, the database is still updated and the ne
 If the server was started from a different directory, or `PID_FILE` is set to a custom path in the config, pass `--pid-file`:
 
 ```bash
-./synap-cli theme activate claude --pid-file /var/run/synaptic.pid
+./synap theme activate claude --pid-file /var/run/synaptic.pid
 ```
 
 ### What does NOT require a restart
 
 | Change | Method | Restart needed? |
 |--------|--------|----------------|
-| Switch active theme | Admin UI or `synap-cli theme activate` | No |
+| Switch active theme | Admin UI or `synap theme activate` | No |
 | Edit theme template files | Upload zip via admin UI | No |
 | Install a new theme | Upload zip via admin UI | No |
 | Change site settings | Admin UI | No |
@@ -395,11 +395,11 @@ cargo build --release
 # 2. Replace binaries (the service will be briefly down)
 sudo systemctl stop synaptic-signals
 sudo cp target/release/synaptic     /opt/synaptic-signals/synaptic
-sudo cp target/release/synap-cli /opt/synaptic-signals/synap-cli
+sudo cp target/release/synap /opt/synaptic-signals/synap
 sudo systemctl start synaptic-signals
 
 # 3. Apply any new migrations
-sudo /opt/synaptic-signals/synap-cli migrate
+sudo /opt/synaptic-signals/synap migrate
 ```
 
 ---
@@ -409,7 +409,7 @@ sudo /opt/synaptic-signals/synap-cli migrate
 ```
 /opt/synaptic-signals/
 ├── synaptic              # CMS binary
-├── synap-cli          # CLI binary
+├── synap          # CLI binary
 ├── .env                  # Environment variables (DATABASE_URL, SECRET_KEY, etc.)
 ├── themes/
 │   └── default/          # Default theme templates + static assets

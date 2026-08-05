@@ -4,8 +4,12 @@ use uuid::Uuid;
 
 #[derive(Subcommand)]
 pub enum UserAction {
-    /// Create a new user interactively
-    Create,
+    /// Create a new user interactively (requires the super-admin password)
+    Create {
+        /// Super-admin password (skips interactive prompt — use only in scripts).
+        #[arg(long)]
+        password: Option<String>,
+    },
     /// List all users
     List,
     /// Reset a user's password
@@ -20,7 +24,7 @@ pub enum UserAction {
 
 pub async fn run(action: UserAction) -> anyhow::Result<()> {
     match action {
-        UserAction::Create => create().await,
+        UserAction::Create { password } => create(password).await,
         UserAction::List => list().await,
         UserAction::ResetPassword => reset_password().await,
         UserAction::HashPassword { password } => {
@@ -30,21 +34,37 @@ pub async fn run(action: UserAction) -> anyhow::Result<()> {
     }
 }
 
-async fn create() -> anyhow::Result<()> {
+async fn create(admin_password: Option<String>) -> anyhow::Result<()> {
     let pool = super::connect_db().await?;
 
-    let username: String = Input::new()
-        .with_prompt("Username")
-        .interact_text()?;
+    // Gate behind the super-admin password before asking for any user
+    // details — DB/server access alone shouldn't be enough to mint accounts.
+    super::verify_super_admin_password(&pool, admin_password).await?;
+
+    let username: String = loop {
+        let candidate: String = Input::new()
+            .with_prompt("Username (8-15 chars, lowercase letters, numbers, hyphens)")
+            .interact_text()?;
+        match validate_username(&candidate) {
+            Ok(()) => break candidate,
+            Err(msg) => eprintln!("Username error: {msg}"),
+        }
+    };
 
     let email: String = Input::new()
         .with_prompt("Email")
         .interact_text()?;
 
-    let display_name: String = Input::new()
-        .with_prompt("Display name")
-        .default(username.clone())
-        .interact_text()?;
+    let display_name: String = loop {
+        let candidate: String = Input::new()
+            .with_prompt("Display name")
+            .default(username.clone())
+            .interact_text()?;
+        match validate_display_name(&candidate) {
+            Ok(()) => break candidate,
+            Err(msg) => eprintln!("Display name error: {msg}"),
+        }
+    };
 
     let password = loop {
         let pw = Password::new()
@@ -64,6 +84,36 @@ async fn create() -> anyhow::Result<()> {
         .default(0)
         .interact()?;
     let role = roles[role_idx];
+
+    // super_admin has global access and isn't scoped to a site via
+    // site_users, so only offer site assignment for the other roles.
+    let assigned_site: Option<(Uuid, String)> = if role == "super_admin" {
+        None
+    } else {
+        let sites: Vec<(Uuid, String)> = sqlx::query_as(
+            "SELECT id, hostname FROM sites ORDER BY created_at"
+        )
+        .fetch_all(&pool)
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to list sites: {e}"))?;
+
+        if sites.is_empty() {
+            None
+        } else {
+            let mut options: Vec<String> = vec!["(Unassigned)".to_string()];
+            options.extend(sites.iter().map(|(_, hostname)| hostname.clone()));
+            let choice_idx = Select::new()
+                .with_prompt("Assign to site")
+                .items(&options)
+                .default(0)
+                .interact()?;
+            if choice_idx == 0 {
+                None
+            } else {
+                Some(sites[choice_idx - 1].clone())
+            }
+        }
+    };
 
     // Hash password with Argon2
     let hash = hash_password(&password)?;
@@ -85,11 +135,28 @@ async fn create() -> anyhow::Result<()> {
     .await
     .map_err(|e| anyhow::anyhow!("Failed to create user: {e}"))?;
 
+    if let Some((site_id, _)) = &assigned_site {
+        // invited_by: NULL — CLI-seeded row, no attributable inviter (matches
+        // the convention documented on synaptic_core::models::site_user::add).
+        sqlx::query(
+            "INSERT INTO site_users (site_id, user_id, role, invited_by)
+             VALUES ($1, $2, $3, NULL)
+             ON CONFLICT (site_id, user_id) DO UPDATE SET role = EXCLUDED.role"
+        )
+        .bind(site_id)
+        .bind(id)
+        .bind(role)
+        .execute(&pool)
+        .await
+        .map_err(|e| anyhow::anyhow!("User created, but failed to assign site: {e}"))?;
+    }
+
     println!("\nUser created successfully.");
     println!("  ID:       {}", id);
     println!("  Username: {}", username);
     println!("  Email:    {}", email);
     println!("  Role:     {}", role);
+    println!("  Site:     {}", assigned_site.map(|(_, h)| h).unwrap_or_else(|| "Unassigned".to_string()));
 
     Ok(())
 }
@@ -187,6 +254,34 @@ fn validate_password(password: &str) -> Result<(), &'static str> {
     const ALLOWED_SYMBOLS: &[char] = &['!', '@', '#', '$', '%', '&'];
     if !password.chars().any(|c| ALLOWED_SYMBOLS.contains(&c)) {
         return Err("Password must contain at least one symbol: ! @ # $ % &");
+    }
+    Ok(())
+}
+
+/// Mirrors `synaptic_core::models::user::validate_username` — duplicated
+/// rather than imported (same reasoning as `validate_password` above: the
+/// CLI doesn't depend on the core crate). Keep in sync if the web rule changes.
+fn validate_username(username: &str) -> Result<(), &'static str> {
+    let len = username.len();
+    if len < 8 {
+        return Err("Username must be at least 8 characters");
+    }
+    if len > 15 {
+        return Err("Username must be no more than 15 characters");
+    }
+    if !username.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-') {
+        return Err("Username may only contain lowercase letters, numbers and hyphens");
+    }
+    if username.starts_with('-') || username.ends_with('-') {
+        return Err("Username cannot start or end with a symbol");
+    }
+    Ok(())
+}
+
+/// Mirrors `synaptic_core::models::user::validate_display_name`.
+fn validate_display_name(display_name: &str) -> Result<(), &'static str> {
+    if display_name.chars().count() > 60 {
+        return Err("Display name must be no more than 60 characters");
     }
     Ok(())
 }

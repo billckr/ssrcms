@@ -44,7 +44,7 @@ pub async fn run(args: MigrateArgs) -> anyhow::Result<()> {
              \n\
              ./app.sh update-cli\n\
              \n\
-             Then re-run: synap-cli migrate"
+             Then re-run: synap migrate"
         );
     }
 

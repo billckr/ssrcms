@@ -258,7 +258,7 @@ pub fn render_settings(data: &SiteSettingsData, flash: Option<&str>, ctx: &crate
   <p style="margin:0;padding:.65rem .85rem;background:#f8fafc;border:1px solid #e2e8f0;
             border-radius:6px;font-size:.875rem;color:#475569;line-height:1.6;">
     To rename the domain, use the CLI from the server:<br>
-    <code style="font-size:.8rem;background:#f1f5f9;padding:.15rem .4rem;border-radius:4px;">synap-cli site rename --id {id} --hostname &lt;new-domain&gt;</code>
+    <code style="font-size:.8rem;background:#f1f5f9;padding:.15rem .4rem;border-radius:4px;">synap site rename --id {id} --hostname &lt;new-domain&gt;</code>
   </p>
 </div>
 

@@ -461,7 +461,7 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
                 println!("  Warning: could not set up Caddy permissions ({e}).");
                 println!(
                     "  Re-run as root when ready:  \
-                     sudo synap-cli caddy setup --app-user {}",
+                     sudo synap caddy setup --app-user {}",
                     user
                 );
             }
@@ -572,7 +572,7 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
                 println!("  2. Copy {} to /etc/systemd/system/", generated_unit.display());
                 println!("  3. Copy {} to /etc/caddy/Caddyfile (or include it)", generated_caddy.display());
                 println!("     Then run: sudo caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile");
-                println!("  4. Run:  sudo synap-cli caddy setup --app-user {}", service_user);
+                println!("  4. Run:  sudo synap caddy setup --app-user {}", service_user);
                 println!("     Sets up Caddy write permissions + log directory for SSL provisioning.");
                 println!("  5. Ensure {install_dir}/.env contains DATABASE_URL and SECRET_KEY");
                 println!("     (INSTALL_DIR has been written automatically)");

@@ -29,9 +29,9 @@ The script:
    compiled in via `sqlx::migrate!`, not read from disk at runtime, so a
    stale binary is the classic way to get a "missing migration" error even
    though the `.sql` file is sitting right there on the VPS).
-3. Ships the binary, `synap-cli`, `themes/`, `plugins/`, and `admin/static/`
+3. Ships the binary, `synap`, `themes/`, `plugins/`, and `admin/static/`
    to the VPS.
-4. Runs `synap-cli install --non-interactive`, which handles DB sync,
+4. Runs `synap install --non-interactive`, which handles DB sync,
    running migrations, creating the admin user, and generating the
    Caddyfile + systemd unit.
 5. Installs the Caddy config and systemd service, restarts, and verifies
@@ -99,7 +99,7 @@ VPS_PASSWORD='...' ./scripts/install-vps.sh --defaults --update  # infra only: b
 
 Use `--update` to mirror the intended post-release flow: get the binary
 running as a service first, then configure the app yourself via
-`synap-cli install` (interactive prompts) once it's up. This is what the
+`synap install` (interactive prompts) once it's up. This is what the
 real `scripts/install.sh` (the GitHub-release-based production installer)
 is designed around — `install-vps.sh --update` gives you the same
 "infra up, configure by hand" shape for local test builds. `--update` is
@@ -109,11 +109,11 @@ want to push a code change — it never touches existing sites/admins/data.
 After an `--update` deploy with no site configured yet, on the VPS:
 
 ```bash
-sudo -u www-data bash -c 'cd /var/www/bckr.dev && ./synap-cli install'
+sudo -u www-data bash -c 'cd /var/www/bckr.dev && ./synap install'
 ```
 
-Must run as the service user (`synap-cli` checks it owns `$INSTALL_DIR`),
-and must use `./synap-cli` (the full/relative path) rather than the bare
+Must run as the service user (`synap` checks it owns `$INSTALL_DIR`),
+and must use `./synap` (the full/relative path) rather than the bare
 command — `sudo`'s `secure_path` on RHEL/AlmaLinux strips `/usr/local/bin`,
 so the global symlink isn't found under `sudo -u`. This regenerates the
 Caddyfile/systemd unit for whatever domain/admin you choose; reload/restart
@@ -129,18 +129,18 @@ every flag combination — `./scripts/install-vps.sh --help`.)
 
 ## Managing the app on the VPS
 
-`install-vps.sh` symlinks `synap-cli` into `/usr/local/bin`, so it's runnable
+`install-vps.sh` symlinks `synap` into `/usr/local/bin`, so it's runnable
 from anywhere **when logged in directly** (not through `sudo -u`, see note
 above). It reads `DATABASE_URL` from the `.env` in the **current
 directory**, so `cd` into the install dir first:
 
 ```bash
 cd /var/www/bckr.dev
-synap-cli site list
-synap-cli user list
-synap-cli plugin list
-synap-cli theme list
-synap-cli --help          # full command list
+synap site list
+synap user list
+synap plugin list
+synap theme list
+synap --help          # full command list
 ```
 
 ## Verification
@@ -201,7 +201,7 @@ other sites' data. `--clean` is scoped to `INSTALL_DIR`/`DB_NAME` only.
 ```
 /var/www/bckr.dev/
 ├── synaptic                  # Binary (deployed, rebuilt every deploy)
-├── synap-cli                 # CLI (deployed)
+├── synap                 # CLI (deployed)
 ├── .env                      # Environment config (generated once, preserved after)
 ├── themes/                   # Theme files (deployed)
 ├── admin/static/             # Admin UI static assets (deployed)

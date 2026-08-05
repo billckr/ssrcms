@@ -11,7 +11,7 @@
 #   logs           Tail live server logs (Ctrl+C to exit)
 #   build          Compile a debug build
 #   build-release  Compile an optimised release build
-#   update-cli     Reinstall synap-cli after CLI source changes
+#   update-cli     Reinstall synap after CLI source changes
 #   migrate        Run pending database migrations
 #   clean-index    Delete the Tantivy search index (rebuilt on next start)
 #   clean-build    Delete the Cargo target/ directory to force a full rebuild
@@ -207,10 +207,10 @@ cmd_restart() {
 cmd_rebuild() {
     cmd_stop
     if cli_is_stale; then
-        log "synap-cli — source changed, rebuilding..."
+        log "synap — source changed, rebuilding..."
         cmd_update_cli
     else
-        log "synap-cli — up to date"
+        log "synap — up to date"
     fi
     cmd_build
     sleep 1
@@ -252,16 +252,16 @@ cmd_build_release() {
 }
 
 cmd_update_cli() {
-    log "Reinstalling synap-cli..."
+    log "Reinstalling synap..."
     cd "$SCRIPT_DIR"
     cargo install --path cli --force
-    log "synap-cli updated: $(command -v synap-cli)"
+    log "synap updated: $(command -v synap)"
 }
 
-# Returns 0 (true) if synap-cli is missing or older than any CLI source or migration file.
+# Returns 0 (true) if synap is missing or older than any CLI source or migration file.
 cli_is_stale() {
     local cli_bin
-    cli_bin=$(command -v synap-cli 2>/dev/null) || return 0  # not installed = stale
+    cli_bin=$(command -v synap 2>/dev/null) || return 0  # not installed = stale
     local newer
     newer=$(find "$SCRIPT_DIR/cli/src" "$SCRIPT_DIR/migrations" \
         \( -name "*.rs" -o -name "*.sql" -o -name "Cargo.toml" \) \
@@ -270,30 +270,30 @@ cli_is_stale() {
 }
 
 cmd_dev_reset() {
-    if ! command -v synap-cli &>/dev/null; then
-        log "synap-cli not found — run './app.sh update-cli' first."
+    if ! command -v synap &>/dev/null; then
+        log "synap not found — run './app.sh update-cli' first."
         exit 1
     fi
     if cli_is_stale; then
-        log "CLI source has changed — rebuilding synap-cli..."
+        log "CLI source has changed — rebuilding synap..."
         cmd_update_cli
     fi
     cd "$SCRIPT_DIR"
-    synap-cli dev reset
+    synap dev reset
 }
 
 cmd_migrate() {
-    if ! command -v synap-cli &>/dev/null; then
-        log "synap-cli not found — run './app.sh update-cli' first."
+    if ! command -v synap &>/dev/null; then
+        log "synap not found — run './app.sh update-cli' first."
         exit 1
     fi
     if cli_is_stale; then
-        log "CLI source has changed — rebuilding synap-cli..."
+        log "CLI source has changed — rebuilding synap..."
         cmd_update_cli
     fi
     cd "$SCRIPT_DIR"
     log "Running database migrations..."
-    synap-cli migrate
+    synap migrate
 }
 
 cmd_clean_index() {
@@ -374,7 +374,7 @@ case "$COMMAND" in
         echo "Build:"
         echo "  build          Compile debug build"
         echo "  build-release  Compile optimised release build"
-        echo "  update-cli     Reinstall synap-cli after CLI source changes"
+        echo "  update-cli     Reinstall synap after CLI source changes"
         echo ""
         echo "Development:"
         echo "  dev-reset      Wipe all DB data (keeps schema/migrations) for a clean install run"
