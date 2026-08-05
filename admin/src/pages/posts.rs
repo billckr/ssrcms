@@ -760,7 +760,7 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
         String::new()
     } else {
         format!(
-            r#"<div class="settings-box">{password_section}{comments_section}</div>"#,
+            r#"<div class="card-boxed-section">{password_section}{comments_section}</div>"#,
             password_section = password_section,
             comments_section = comments_section,
         )
@@ -851,7 +851,7 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
       <div class="card-boxed">
         <h2 class="card-boxed-header">Content</h2>
         <div class="card-boxed-body">
-          <div class="settings-box">
+          <div class="card-boxed-section">
             <div style="display:grid;grid-template-columns:1fr auto;gap:.75rem;align-items:start">
               <div class="form-group" style="margin:0">
                 <label for="title">Title <span style="color:var(--danger);font-weight:700">*</span></label>
@@ -866,14 +866,14 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
               </div>
             </div>
           </div>
-          <div class="settings-box">
+          <div class="card-boxed-section">
             <div class="form-group">
               <label for="excerpt">Excerpt <span style="color:var(--danger);font-weight:700">*</span> <small style="font-weight:400;color:var(--muted)">Used as meta description — required for SEO</small></label>
               <textarea id="excerpt" name="excerpt" rows="3" required maxlength="500" style="resize:none">{excerpt}</textarea>
               <small id="excerpt-count" style="color:var(--muted)">500 remaining</small>
             </div>
           </div>
-          <div class="settings-box">
+          <div class="card-boxed-section">
             <div class="form-group">
               <label>Content <span style="color:var(--danger);font-weight:700">*</span></label>
               <div id="quill-editor" style="height:620px;background:#fff;font-size:1rem"></div>
@@ -889,7 +889,7 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
       {template_section}
       <div class="form-section">
         <h3>Publish</h3>
-        <div class="settings-box">
+        <div class="card-boxed-section">
           <div class="form-group">
             <label for="status">Status</label>
             <select id="status" name="status">{status_options}</select>
@@ -897,7 +897,7 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
             {live_url_link}
           </div>
         </div>
-        <div class="settings-box">
+        <div class="card-boxed-section">
           <div class="form-group">
             {datetime_field}
           </div>

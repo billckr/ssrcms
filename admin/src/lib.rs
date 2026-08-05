@@ -116,6 +116,7 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
       <div class="brand">{app_name}</div>
       <ul>
         {dash}
+        {sites}
         {posts}
         {pages}
         {media}
@@ -125,7 +126,6 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
         {forms}
         {form_designer}
         {users}
-        {sites}
         {plugins}
         {appearance}
         {builder}

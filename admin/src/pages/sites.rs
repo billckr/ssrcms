@@ -466,7 +466,7 @@ pub fn render_new(data: &NewSiteData, flash: Option<&str>, ctx: &crate::PageCont
     }).collect::<Vec<_>>().join("\n");
 
     let content = format!(
-        r#"<div class="card-boxed">
+        r#"<div class="card-boxed" style="max-width:560px">
   <h2 class="card-boxed-header" style="display:flex;align-items:center;justify-content:space-between;gap:.5rem;">
     <span>New Site</span>
     <button type="submit" form="new-site-form" id="create-btn" class="icon-btn" title="Create Site" aria-label="Create Site" disabled>
@@ -475,13 +475,14 @@ pub fn render_new(data: &NewSiteData, flash: Option<&str>, ctx: &crate::PageCont
   </h2>
   <div class="card-boxed-body">
   <form method="post" action="/admin/sites" class="edit-form" id="new-site-form" style="max-width:580px">
+  <div class="card-boxed-section">
   <div class="form-group">
     <label for="hostname">Domain Name</label>
     <input type="text" id="hostname" name="hostname" required placeholder="example.com" autofocus
            value="{hostname}" oninput="hnUpdate()">
     <small>The domain this site will respond to</small>
   </div>
-  <div class="form-note" style="margin-bottom:1.25rem">
+  <div class="form-note" style="margin-bottom:0">
     <p><strong>Domain requirements:</strong></p>
     <ul style="list-style:none;padding-left:0;margin:0.25rem 0 0">
       <li id="hn-req-dot"><span class="pw-dot" style="display:inline-block;width:1.1rem;font-style:normal">·</span>Contains at least one dot (e.g. example<strong>.com</strong>)</li>
@@ -490,7 +491,9 @@ pub fn render_new(data: &NewSiteData, flash: Option<&str>, ctx: &crate::PageCont
       <li id="hn-req-hyphen"><span class="pw-dot" style="display:inline-block;width:1.1rem;font-style:normal">·</span>No label starts or ends with a hyphen</li>
     </ul>
   </div>
+  </div>
 
+  <div class="card-boxed-section">
   <div class="form-group">
     <label>Site Admin</label>
     <div style="display:flex;gap:1.5rem;margin:0.4rem 0 0.75rem;flex-wrap:wrap">
@@ -547,6 +550,7 @@ pub fn render_new(data: &NewSiteData, flash: Option<&str>, ctx: &crate::PageCont
       </div>
       <small>A new account is created and assigned as this site's admin and owner.</small>
     </div>
+  </div>
   </div>
 
   <div class="form-actions">

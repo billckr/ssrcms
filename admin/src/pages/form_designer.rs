@@ -349,25 +349,25 @@ pub fn render_editor(data: &FormEditData, ctx: &PageContext, flash: Option<&str>
           </button>
         </summary>
         <div class="card-boxed-body">
-          <div class="settings-box">
+          <div class="card-boxed-section">
             <div class="form-group">
               <label for="form-name">Form name</label>
               <input type="text" id="form-name" name="name" required maxlength="120" value="{name}" placeholder="e.g. Contact Us">
             </div>
           </div>
-          <div class="settings-box">
+          <div class="card-boxed-section">
             <div class="form-group">
               <label for="success-message">Success message</label>
               <input type="text" id="success-message" name="success_message" maxlength="200" value="{success_message}">
             </div>
           </div>
-          <div class="settings-box">
+          <div class="card-boxed-section">
             <div class="form-group">
               <label for="button-label">Submit button label</label>
               <input type="text" id="button-label" name="button_label" maxlength="40" value="{button_label}">
             </div>
           </div>
-          <div class="settings-box">
+          <div class="card-boxed-section">
             <label class="switch-toggle">
               <input type="checkbox" id="include-honeypot" name="include_honeypot" value="true"{honeypot_checked}>
               <span class="switch-slider"></span>

@@ -723,10 +723,10 @@ pub fn render_editor(user: &UserEdit, flash: Option<&str>, ctx: &crate::PageCont
       <input type="radio" name="site_assignment" value="none" checked onchange="toggleSiteFields()"> None
     </label>
     <label class="radio-label">
-      <input type="radio" name="site_assignment" value="existing" onchange="toggleSiteFields()"> Existing site
+      <input type="radio" name="site_assignment" value="existing" onchange="toggleSiteFields()"> Existing
     </label>
     <label class="radio-label">
-      <input type="radio" name="site_assignment" value="new" onchange="toggleSiteFields()"> New site
+      <input type="radio" name="site_assignment" value="new" onchange="toggleSiteFields()"> New
     </label>
   </div>
   <div id="site-existing" style="display:none">
@@ -755,21 +755,26 @@ function toggleSiteFields() {{
     };
 
     let content = format!(
-        r#"<div class="card-boxed">
+        r#"<div class="card-boxed" style="max-width:560px">
   <h2 class="card-boxed-header" style="display:flex;align-items:center;justify-content:space-between;gap:.5rem;">
     <span>{form_title}</span>
-    <button type="submit" form="user-editor-form" id="save-btn" class="icon-btn" title="Save" aria-label="Save"{save_disabled}>
-      <img src="/admin/static/icons/save.svg" alt="">
-    </button>
+    <span style="display:flex;align-items:center;gap:.5rem;">
+      <button type="submit" form="user-editor-form" id="save-btn" class="icon-btn" title="Save" aria-label="Save"{save_disabled}>
+        <img src="/admin/static/icons/save.svg" alt="">
+      </button>
+      <a href="/admin/users" class="icon-btn" title="Back to Users" aria-label="Back to Users">
+        <img src="/admin/static/icons/corner-down-left.svg" alt="">
+      </a>
+    </span>
   </h2>
   <div class="card-boxed-body">
   <form method="POST" action="{action}" id="user-editor-form" style="max-width:580px">
+    <div class="card-boxed-section">
     <div class="user-form-grid">
       <div class="form-group">
         <label for="username">Username <span class="field-hint">(letters, numbers, hyphens only)</span></label>
         <input type="text" id="username" name="username" value="{username}" required autocomplete="off"
                pattern="[a-z0-9][a-z0-9\-]*[a-z0-9]|[a-z0-9]" title="Lowercase letters, numbers and hyphens only"{autofocus}>
-        <span id="username-hint" class="field-error" style="display:none">Only lowercase letters, numbers and hyphens allowed.</span>
       </div>
       <div class="form-group">
         <label for="display_name">Display Name</label>
@@ -790,18 +795,28 @@ function toggleSiteFields() {{
       </div>
       {site_section}
     </div>
-    <div class="form-note" style="margin-bottom:1.25rem">
-      <p><strong>New user requirements:</strong></p>
+    <div class="form-note" style="margin-bottom:.75rem">
+      <p><strong>Username requirements:</strong></p>
+      <ul style="list-style:none;padding-left:0;margin:0.25rem 0 0">
+        <li id="uname-req-chars"><span class="pw-dot" style="display:inline-block;width:1.1rem;font-style:normal">·</span>Lowercase letters, numbers, and hyphens only</li>
+        <li id="uname-req-hyphen"><span class="pw-dot" style="display:inline-block;width:1.1rem;font-style:normal">·</span>Doesn't start or end with a hyphen</li>
+      </ul>
+    </div>
+    <div class="form-note" style="margin-bottom:.75rem">
+      <p><strong>Password requirements:</strong></p>
       <ul style="list-style:none;padding-left:0;margin:0.25rem 0 0">
         <li id="pw-req-len"><span class="pw-dot" style="display:inline-block;width:1.1rem;font-style:normal">·</span>8–12 characters</li>
         <li id="pw-req-upper"><span class="pw-dot" style="display:inline-block;width:1.1rem;font-style:normal">·</span>At least one uppercase letter</li>
         <li id="pw-req-num"><span class="pw-dot" style="display:inline-block;width:1.1rem;font-style:normal">·</span>At least one number</li>
         <li id="pw-req-sym"><span class="pw-dot" style="display:inline-block;width:1.1rem;font-style:normal">·</span>At least one symbol: ! @ # $ % &amp;</li>
+      </ul>
+    </div>
+    <div class="form-note" style="margin-bottom:0">
+      <p><strong>Role requirements:</strong></p>
+      <ul style="list-style:none;padding-left:0;margin:0.25rem 0 0">
         <li id="role-req"><span class="pw-dot" style="display:inline-block;width:1.1rem;font-style:normal">·</span>Role selected</li>
       </ul>
     </div>
-    <div style="display:flex;gap:0.75rem">
-      <a href="/admin/users" class="btn btn-secondary">Cancel</a>
     </div>
   </form>
   </div>
@@ -837,6 +852,11 @@ function toggleSiteFields() {{
       {{ id: 'pw-req-num',   test: function(p) {{ return /[0-9]/.test(p); }} }},
       {{ id: 'pw-req-sym',   test: function(p) {{ return /[!@#$%&]/.test(p); }} }},
     ];
+    // Username requirements checklist.
+    var unameReqs = [
+      {{ id: 'uname-req-chars',  test: function(u) {{ return /^[a-z0-9-]+$/.test(u); }} }},
+      {{ id: 'uname-req-hyphen', test: function(u) {{ return !u.startsWith('-') && !u.endsWith('-'); }} }},
+    ];
     var updateFeedback = function() {{
       // Update role requirement
       var roleEl = document.getElementById('role');
@@ -850,6 +870,20 @@ function toggleSiteFields() {{
           roleLi.style.color = '#dc2626'; if (roleDot) roleDot.textContent = '✗';
         }}
       }}
+
+      var uname = unameEl ? unameEl.value : '';
+      unameReqs.forEach(function(req) {{
+        var li  = document.getElementById(req.id);
+        var dot = li ? li.querySelector('.pw-dot') : null;
+        if (!li) return;
+        if (!uname) {{
+          li.style.color = ''; if (dot) dot.textContent = '·';
+        }} else if (req.test(uname)) {{
+          li.style.color = '#16a34a'; if (dot) dot.textContent = '✓';
+        }} else {{
+          li.style.color = '#dc2626'; if (dot) dot.textContent = '✗';
+        }}
+      }});
 
       var pw = pwInput ? pwInput.value : '';
       pwReqs.forEach(function(req) {{
@@ -896,13 +930,10 @@ function toggleSiteFields() {{
     var slugPattern = /^[a-z0-9][a-z0-9\-]*[a-z0-9]$|^[a-z0-9]$/;
     var unameEl = document.getElementById('username');
     var dnameEl = document.getElementById('display_name');
-    var unameHint = document.getElementById('username-hint');
     var usernameTouched = false;
     if (unameEl) {{
       unameEl.addEventListener('input', function() {{
         usernameTouched = true;
-        var slug = toSlug(unameEl.value);
-        if (unameHint) unameHint.style.display = (unameEl.value && !slugPattern.test(unameEl.value)) ? '' : 'none';
         syncSaveBtn();
       }});
     }}
@@ -911,7 +942,6 @@ function toggleSiteFields() {{
       dnameEl.addEventListener('input', function() {{
         if (!usernameTouched) {{
           unameEl.value = toSlug(dnameEl.value);
-          if (unameHint) unameHint.style.display = 'none';
           syncSaveBtn();
         }}
       }});
