@@ -68,6 +68,10 @@ Generate a SECRET_KEY:
 openssl rand -hex 32
 ```
 
+To send transactional email (e.g. Form Designer's submission notifications),
+also set `MAILGUN_API_KEY` and `MAILGUN_DOMAIN` — see
+[mailgun-email-guide.md](mailgun-email-guide.md).
+
 ---
 
 ## 4. Run the Installer

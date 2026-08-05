@@ -1351,7 +1351,8 @@ Run your rendered output through the W3C HTML validator or a local equivalent. C
 
 > This is a brief note, not a full reference — a dedicated Form Designer
 > section will be written once the broader theme-authoring docs system is
-> built out.
+> built out. For the "notify on new submission" email feature (Mailgun),
+> see [mailgun-email-guide.md](mailgun-email-guide.md).
 
 Forms built in the admin's Form Designer and inserted into a post/page render
 as plain HTML using a shared class convention — `.themed-form`, `.form-field`,
