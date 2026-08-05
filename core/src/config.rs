@@ -106,6 +106,25 @@ pub struct AppConfig {
     /// Encryption mode: "starttls" (default), "tls", or "none"
     #[serde(default = "default_smtp_encryption")]
     pub smtp_encryption: String,
+
+    // ── Outbound mail (Mailgun API) ─────────────────────────────────────────
+    // Alternative to SMTP above — sends over Mailgun's HTTP API instead of a
+    // socket connection. If mailgun_api_key/mailgun_domain aren't set, this
+    // path is disabled and callers fall back to SMTP (or log a warning if
+    // neither is configured). Reuses smtp_from_name/smtp_from_email above for
+    // the From header rather than duplicating them.
+
+    /// Mailgun API key. Set via MAILGUN_API_KEY in .env or synaptic.toml.
+    pub mailgun_api_key: Option<String>,
+
+    /// Mailgun sending domain (e.g. mg.example.com, or the sandbox domain
+    /// Mailgun assigns on signup). Set via MAILGUN_DOMAIN.
+    pub mailgun_domain: Option<String>,
+
+    /// Mailgun API base URL — "https://api.mailgun.net/v3" (US, default) or
+    /// "https://api.eu.mailgun.net/v3" for EU-region accounts.
+    #[serde(default = "default_mailgun_base_url")]
+    pub mailgun_base_url: String,
 }
 
 fn default_host() -> String {
@@ -160,6 +179,7 @@ fn default_caddyfile_path() -> String {
 }
 fn default_smtp_encryption() -> String { "starttls".to_string() }
 fn default_max_upload_mb() -> u64 { 25 }
+fn default_mailgun_base_url() -> String { "https://api.mailgun.net/v3".to_string() }
 
 impl AppConfig {
     /// Load configuration from an optional TOML file and environment variables.
@@ -275,6 +295,9 @@ mod tests {
             smtp_from_name: None,
             smtp_from_email: None,
             smtp_encryption: default_smtp_encryption(),
+            mailgun_api_key: None,
+            mailgun_domain: None,
+            mailgun_base_url: default_mailgun_base_url(),
             max_upload_mb: default_max_upload_mb(),
             caddyfile_path: default_caddyfile_path(),
         }

@@ -199,6 +199,21 @@ pub async fn get_site_setting(
         .flatten()
 }
 
+/// Remove a key-value pair from the site_settings table for a specific site.
+/// A no-op if the key wasn't set.
+pub async fn delete_site_setting(
+    pool: &PgPool,
+    site_id: Uuid,
+    key: &str,
+) -> crate::errors::Result<()> {
+    sqlx::query("DELETE FROM site_settings WHERE site_id = $1 AND key = $2")
+        .bind(site_id)
+        .bind(key)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
 /// Hostname-keyed site cache: hostname → (Site, SiteSettings).
 pub type SiteCache = Arc<RwLock<HashMap<String, (Site, SiteSettings)>>>;
 

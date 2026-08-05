@@ -3,9 +3,11 @@
 
 pub mod app_state;
 pub mod config;
+pub mod crypto;
 pub mod db;
 pub mod errors;
 pub mod handlers;
+pub mod mail;
 pub mod middleware;
 pub mod models;
 pub mod plugins;

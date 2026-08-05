@@ -107,6 +107,7 @@ pub async fn edit_form(State(state): State<AppState>, admin: AdminUser, Path(id)
         success_message: form.settings.success_message,
         button_label: form.settings.button_label,
         include_honeypot: form.settings.include_honeypot,
+        notify_email: form.settings.notify_email.unwrap_or_default(),
     };
 
     Html(render_editor(&data, &ctx, None)).into_response()
@@ -121,6 +122,7 @@ pub struct SaveFormForm {
     pub success_message: String,
     pub button_label: String,
     pub include_honeypot: Option<String>,
+    pub notify_email: Option<String>,
 }
 
 /// Raw shape of one field as JSON-encoded by the editor's submit handler —
@@ -163,6 +165,10 @@ fn settings_from_form(form: &SaveFormForm) -> FormSettings {
             form.button_label.clone()
         },
         include_honeypot: form.include_honeypot.as_deref() == Some("true"),
+        notify_email: form.notify_email.as_deref()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(str::to_string),
     }
 }
 

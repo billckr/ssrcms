@@ -32,6 +32,9 @@ pub struct FormEditData {
     pub success_message: String,
     pub button_label: String,
     pub include_honeypot: bool,
+    /// Empty string means "no notification email" — matches how the input
+    /// field itself represents "unset".
+    pub notify_email: String,
 }
 
 impl Default for FormEditData {
@@ -49,6 +52,7 @@ impl Default for FormEditData {
             success_message: "Thank you for your submission!".to_string(),
             button_label: "Submit".to_string(),
             include_honeypot: true,
+            notify_email: String::new(),
         }
     }
 }
@@ -375,7 +379,11 @@ pub fn render_editor(data: &FormEditData, ctx: &PageContext, flash: Option<&str>
       <div class="card-boxed" style="margin-top:1rem">
         <h2 class="card-boxed-header">Email</h2>
         <div class="card-boxed-body">
-          <p class="field-hint">Email notifications on new submissions are coming soon.</p>
+          <div class="form-group">
+            <label for="notify-email">Notify on new submission</label>
+            <input type="email" id="notify-email" name="notify_email" maxlength="255" value="{notify_email}" placeholder="you@example.com">
+            <p class="field-hint">Leave blank to disable. Sent via the site's configured Mailgun account.</p>
+          </div>
         </div>
       </div>
     </div>
@@ -544,6 +552,7 @@ pub fn render_editor(data: &FormEditData, ctx: &PageContext, flash: Option<&str>
   var formNameInput = document.getElementById('form-name');
   var successMessageInput = document.getElementById('success-message');
   var honeypotInput = document.getElementById('include-honeypot');
+  var notifyEmailInput = document.getElementById('notify-email');
   var saveBtn = document.getElementById('save-form-btn');
 
   function esc(s) {{
@@ -616,7 +625,8 @@ pub fn render_editor(data: &FormEditData, ctx: &PageContext, flash: Option<&str>
       fields: readFields(),
       success_message: successMessageInput.value,
       button_label: buttonLabelInput.value,
-      include_honeypot: honeypotInput.checked
+      include_honeypot: honeypotInput.checked,
+      notify_email: notifyEmailInput.value
     }});
   }}
   var initialSnapshot = null;
@@ -629,6 +639,7 @@ pub fn render_editor(data: &FormEditData, ctx: &PageContext, flash: Option<&str>
   formNameInput.addEventListener('input', checkDirty);
   successMessageInput.addEventListener('input', checkDirty);
   honeypotInput.addEventListener('change', checkDirty);
+  notifyEmailInput.addEventListener('input', checkDirty);
   updatePreview();
   initialSnapshot = snapshot();
   saveBtn.disabled = true;
@@ -660,6 +671,7 @@ pub fn render_editor(data: &FormEditData, ctx: &PageContext, flash: Option<&str>
         delete_btn = delete_btn,
         success_message = html_escape(&data.success_message),
         button_label = html_escape(&data.button_label),
+        notify_email = html_escape(&data.notify_email),
         honeypot_checked = if data.include_honeypot { " checked" } else { "" },
         save_label = if is_edit { "Save Changes" } else { "Create Form" },
         settings_open = settings_open,

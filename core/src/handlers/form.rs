@@ -15,7 +15,9 @@ use axum::{
 };
 
 use crate::app_state::AppState;
+use crate::mail::{self, EmailMessage};
 use crate::middleware::site::CurrentSite;
+use crate::models::form_def;
 use crate::models::form_submission::{self, create, CreateFormSubmission};
 
 /// `POST /form/{name}` — store a form submission and redirect.
@@ -57,6 +59,13 @@ pub async fn submit(
             .map(|s| s.split(',').next().unwrap_or(s).trim().to_string())
             .or_else(|| Some(peer_addr.ip().to_string()));
 
+        // Built before `data` is moved into the submission record below —
+        // only used if the form has a notify_email set.
+        let notify_body = data.iter()
+            .map(|(k, v)| format!("{k}: {v}"))
+            .collect::<Vec<_>>()
+            .join("\n");
+
         let input = CreateFormSubmission {
             site_id: current_site.site.id,
             form_name: name.clone(),
@@ -66,6 +75,22 @@ pub async fn submit(
 
         if let Err(e) = create(&state.db, input).await {
             tracing::error!("form submit '{}' error: {:?}", name, e);
+        }
+
+        // Fire-and-forget: don't make the visitor's redirect wait on an
+        // outbound HTTP call to Mailgun.
+        if let Ok(Some(form)) = form_def::get_by_slug(&state.db, current_site.site.id, &name).await {
+            if let Some(to) = form.settings.notify_email {
+                let state = state.clone();
+                let subject = format!("New submission: {}", form.name);
+                let site_id = current_site.site.id;
+                tokio::spawn(async move {
+                    let msg = EmailMessage { to: &to, subject: &subject, text: &notify_body };
+                    if let Err(e) = mail::send_for_site(&state, site_id, msg).await {
+                        tracing::error!("form notify email failed: {e:?}");
+                    }
+                });
+            }
         }
     }
 

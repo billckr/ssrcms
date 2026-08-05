@@ -36,6 +36,10 @@ pub struct FormSettings {
     pub button_label: String,
     #[serde(default = "default_true")]
     pub include_honeypot: bool,
+    /// Email address to notify on each new submission, via Mailgun. `None`
+    /// (the default) means no notification is sent.
+    #[serde(default)]
+    pub notify_email: Option<String>,
 }
 
 fn default_success_message() -> String { "Thank you for your submission!".to_string() }
@@ -48,6 +52,7 @@ impl Default for FormSettings {
             success_message: default_success_message(),
             button_label: default_button_label(),
             include_honeypot: true,
+            notify_email: None,
         }
     }
 }
@@ -330,10 +335,18 @@ fn render_field_html(f: &FormField, slug: &str) -> String {
                 "date" => "date",
                 _ => "text",
             };
+            // The HTML5 spec's built-in type="email" validation doesn't
+            // require a dot in the domain part (e.g. "a@b" passes natively)
+            // — add a pattern to actually require one, e.g. "a@b.co".
+            let extra_attr = if other == "email" {
+                r#" pattern="[^\s@]+@[^\s@]+\.[^\s@]+" title="Enter a complete email address, e.g. name@example.com""#
+            } else {
+                ""
+            };
             format!(
                 r#"<div class="form-field form-field-{other}">
   <label for="{id}">{label}{required_mark}</label>
-  <input type="{input_type}" id="{id}" name="{name}"{required_attr}>
+  <input type="{input_type}" id="{id}" name="{name}"{required_attr}{extra_attr}>
 </div>
 "#
             )

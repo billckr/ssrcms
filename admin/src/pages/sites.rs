@@ -243,6 +243,10 @@ pub struct SiteSettingsData {
     pub date_format: String,
     pub maintenance_mode: bool,
     pub maintenance_message: String,
+    pub mailgun_domain: String,
+    /// True if this site already has its own Mailgun API key saved — the
+    /// key itself is never sent back to the browser once encrypted at rest.
+    pub mailgun_key_set: bool,
 }
 
 pub fn render_settings(data: &SiteSettingsData, flash: Option<&str>, ctx: &crate::PageContext) -> String {
@@ -340,6 +344,60 @@ pub fn render_settings(data: &SiteSettingsData, flash: Option<&str>, ctx: &crate
   form.addEventListener('change', checkChanged);
 }})();
 </script>
+
+<div class="profile-container">
+  <h2>Email (Mailgun)</h2>
+  <p style="margin:0 0 1rem;font-size:.875rem;color:var(--muted)">
+    Give this site its own Mailgun account for form notifications, instead of sharing the
+    install-wide one. Leave both fields blank to use the install-wide account.
+  </p>
+  <form method="post" action="/admin/sites/{id}/mail-config" class="edit-form" id="mail-config-form" data-key-set="{mailgun_key_set_js}">
+    <div class="form-group">
+      <label for="mailgun_domain">Mailgun domain</label>
+      <input type="text" id="mailgun_domain" name="mailgun_domain" value="{mailgun_domain}" placeholder="e.g. mg.example.com">
+    </div>
+    <div class="form-group">
+      <label for="mailgun_api_key">Mailgun API key</label>
+      <input type="password" id="mailgun_api_key" name="mailgun_api_key" autocomplete="off" placeholder="{mailgun_key_placeholder}">
+      <small>{mailgun_key_hint}</small>
+    </div>
+    <p class="field-hint" id="mail-config-error" style="color:#dc2626;display:none;margin:0 0 .75rem"></p>
+    <button type="submit" id="save-mail-config-btn" class="btn btn-primary" disabled>Save Email Settings</button>
+  </form>
+</div>
+<script>
+(function() {{
+  var form = document.getElementById('mail-config-form');
+  var btn  = document.getElementById('save-mail-config-btn');
+  var domainInput = document.getElementById('mailgun_domain');
+  var keyInput = document.getElementById('mailgun_api_key');
+  var errorEl = document.getElementById('mail-config-error');
+  var keyAlreadySet = form.dataset.keySet === 'true';
+
+  function snapshot() {{
+    return Array.from(new FormData(form).entries()).map(function (e) {{ return e[0] + '=' + e[1]; }}).join('&');
+  }}
+  var initialSnapshot = snapshot();
+  function checkChanged() {{
+    btn.disabled = snapshot() === initialSnapshot;
+  }}
+
+  form.addEventListener('submit', function(e) {{
+    var domain = domainInput.value.trim();
+    var key = keyInput.value.trim();
+    var error = '';
+    if (domain && !key && !keyAlreadySet) {{
+      error = 'Enter an API key too — a domain alone can\'t send anything.';
+    }} else if (!domain && key) {{
+      error = 'Enter a domain too, or clear the API key as well.';
+    }}
+    errorEl.style.display = error ? '' : 'none';
+    errorEl.textContent = error;
+    if (error) e.preventDefault();
+  }});
+  form.addEventListener('input', checkChanged);
+}})();
+</script>
 </div>"#,
         id = crate::html_escape(&data.id),
         site_name = crate::html_escape(&data.site_name),
@@ -349,6 +407,14 @@ pub fn render_settings(data: &SiteSettingsData, flash: Option<&str>, ctx: &crate
         date_format = crate::html_escape(&data.date_format),
         maintenance_checked = if data.maintenance_mode { " checked" } else { "" },
         maintenance_message = crate::html_escape(&data.maintenance_message),
+        mailgun_domain = crate::html_escape(&data.mailgun_domain),
+        mailgun_key_set_js = data.mailgun_key_set,
+        mailgun_key_placeholder = if data.mailgun_key_set { "•••••••• (saved)" } else { "e.g. key-xxxxxxxx" },
+        mailgun_key_hint = if data.mailgun_key_set {
+            "A key is already saved. Leave blank to keep it, or enter a new one to replace it."
+        } else {
+            "Not set."
+        },
     );
 
     crate::admin_page(&format!("Site Settings - {}", data.hostname), "/admin/sites", flash, &content, ctx)
