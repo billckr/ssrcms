@@ -120,8 +120,8 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
         {users}
         {posts}
         {pages}
-        {media}
         {menus}
+        {media}
         {cats}
         {tags}
         {forms}

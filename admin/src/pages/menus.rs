@@ -445,15 +445,17 @@ pub fn render_edit(
 <div class="card-boxed">
   <h2 class="card-boxed-header">Menu Settings</h2>
   <div class="card-boxed-body">
-    <div class="form-row">
-      <div class="form-group" style="margin:0">
-        <label for="menu-name">Menu Name</label>
-        <input id="menu-name" type="text" name="name" value="{menu_name}" required maxlength="25" style="width:200px" form="menu-settings-form">
-        <span class="form-hint char-count" id="menu-name-count">0/25</span>
-      </div>
-      <div class="form-group" style="margin:0">
-        <label for="menu-location">Assign to Location</label>
-        <select id="menu-location" name="location" form="menu-settings-form">{location_opts}</select>
+    <div class="card-boxed-section">
+      <div class="form-row">
+        <div class="form-group" style="margin:0">
+          <label for="menu-name">Menu Name</label>
+          <input id="menu-name" type="text" name="name" value="{menu_name}" required maxlength="25" style="width:200px" form="menu-settings-form">
+          <span class="form-hint char-count" id="menu-name-count">0/25</span>
+        </div>
+        <div class="form-group" style="margin:0">
+          <label for="menu-location">Assign to Location</label>
+          <select id="menu-location" name="location" form="menu-settings-form">{location_opts}</select>
+        </div>
       </div>
     </div>
     <div class="form-actions">
@@ -495,48 +497,54 @@ pub fn render_edit(
 <div class="card-boxed">
   <h2 class="card-boxed-header">Add Item</h2>
   <div class="card-boxed-body">
-    <p class="form-note">To create a dropdown parent (a menu heading that reveals sub-items), give it a Label and leave both Page and Custom URL blank — then add its sub-items with this one set as their Parent item.</p>
     <form method="POST" action="/admin/menus/{menu_id}/items/new" class="js-menu-item-form">
-      <div class="form-stack">
-        <div class="form-group" style="margin:0">
-          <label>Label</label>
-          <input type="text" name="label" required minlength="2" placeholder="e.g. Home" maxlength="25">
-          <span class="form-hint char-count item-label-count">0/25</span>
-        </div>
-        <div class="form-group" style="margin:0">
-          <label>Target</label>
-          <select name="target">
-            <option value="_self">Same tab</option>
-            <option value="_blank">New tab</option>
-          </select>
-        </div>
-      </div>
-      <div class="form-stack">
-        <div class="form-group" style="margin:0">
-          <label>Page</label>
-          <select name="page_id">{page_opts_add}</select>
-        </div>
-        <div class="form-group" style="margin:0">
-          <label>Custom URL</label>
-          <label class="switch-toggle" style="margin:.35rem 0 .5rem">
-            <input type="checkbox" class="label-only-toggle">
-            <span class="switch-slider"></span>
-            <span>Label only (no link)</span>
-          </label>
-          <input type="text" name="url" placeholder="/about or https://…" maxlength="500">
-          <span class="field-error field-error-url">Enter a path starting with / or a full http(s):// URL</span>
+      <div class="card-boxed-section">
+        <div class="form-stack">
+          <div class="form-group" style="margin:0">
+            <label>Label</label>
+            <input type="text" name="label" required minlength="2" placeholder="e.g. Home" maxlength="25">
+            <span class="form-hint char-count item-label-count">0/25</span>
+          </div>
+          <div class="form-group" style="margin:0">
+            <label>Target</label>
+            <select name="target">
+              <option value="_self">Same tab</option>
+              <option value="_blank">New tab</option>
+            </select>
+          </div>
         </div>
       </div>
-      <div class="form-row">
-        <div class="form-group" style="margin:0">
-          <label>Parent item</label>
-          <select name="parent_id">{parent_opts_add}</select>
-        </div>
-        <div class="form-group" style="margin:0">
-          <label>Sort order</label>
-          <input type="number" name="sort_order" value="0" style="width:100px">
+      <div class="card-boxed-section">
+        <div class="form-stack">
+          <div class="form-group" style="margin:0">
+            <label>Page</label>
+            <select name="page_id">{page_opts_add}</select>
+          </div>
+          <div class="form-group" style="margin:0">
+            <label>Custom URL</label>
+            <label class="switch-toggle" style="margin:.35rem 0 .5rem">
+              <input type="checkbox" class="label-only-toggle">
+              <span class="switch-slider"></span>
+              <span>Label only (no link)</span>
+            </label>
+            <input type="text" name="url" placeholder="/about or https://…" maxlength="500">
+            <span class="field-error field-error-url">Enter a path starting with / or a full http(s):// URL</span>
+          </div>
         </div>
       </div>
+      <div class="card-boxed-section">
+        <div class="form-row">
+          <div class="form-group" style="margin:0">
+            <label>Parent item</label>
+            <select name="parent_id">{parent_opts_add}</select>
+          </div>
+          <div class="form-group" style="margin:0">
+            <label>Sort order</label>
+            <input type="number" name="sort_order" value="0" style="width:100px">
+          </div>
+        </div>
+      </div>
+      <p class="form-note">To create a dropdown parent (a menu heading that reveals sub-items), give it a Label and leave both Page and Custom URL blank — then add its sub-items with this one set as their Parent item.</p>
       <div class="form-actions">
         <button type="submit" class="btn btn-primary">Save Item</button>
       </div>
