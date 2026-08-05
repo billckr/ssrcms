@@ -676,21 +676,23 @@ pub fn render_editor(user: &UserEdit, flash: Option<&str>, ctx: &crate::PageCont
         }
     };
 
-    // Separate "Role" card shown only on the edit form — current role (read-only
-    // here; changed via /site-access) plus the user's existing site assignments.
+    // "Role" section shown only on the edit form — current role (read-only
+    // here; changed via /site-access) plus the user's existing site
+    // assignments. Folded into the same card-boxed panel as the rest of the
+    // form (a 4th card-boxed-section, under Requirements) rather than a
+    // separate panel below — it's part of the same "editing this user" task.
     let role_section = if is_new {
         String::new()
     } else {
         format!(
-            r#"<div class="profile-container">
-  <h2>Role</h2>
-  <div class="form-group">
-    <label>Current Role</label>
-    <p style="margin:0 0 0.5rem">{current_label}</p>
-    <a href="/admin/users/{user_id}/site-access" class="btn btn-secondary">Change Role</a>
-  </div>
-  {site_roles_list}
-</div>"#,
+            r#"<div class="card-boxed-section">
+      <div class="form-group" style="margin:0">
+        <label>Current Role</label>
+        <p style="margin:0 0 0.5rem">{current_label}</p>
+        <a href="/admin/users/{user_id}/site-access" class="btn btn-secondary">Change Role</a>
+      </div>
+      {site_roles_list}
+    </div>"#,
             current_label = crate::html_escape(role_display(&user.role)),
             user_id = crate::html_escape(user.id.as_deref().unwrap_or("")),
             site_roles_list = site_roles_list,
@@ -772,14 +774,14 @@ function toggleSiteFields() {{
     <div class="card-boxed-section">
     <div class="user-form-grid">
       <div class="form-group">
+        <label for="display_name">Display Name</label>
+        <input type="text" id="display_name" name="display_name" value="{display_name}" required autocomplete="off" maxlength="60"{autofocus}>
+      </div>
+      <div class="form-group">
         <label for="username">Username</label>
         <input type="text" id="username" name="username" value="{username}" required autocomplete="off"
                pattern="[a-z0-9][a-z0-9\-]{{6,13}}[a-z0-9]" minlength="8" maxlength="15"
-               title="8-15 characters: lowercase letters, numbers and hyphens only, cannot start or end with a hyphen"{autofocus}>
-      </div>
-      <div class="form-group">
-        <label for="display_name">Display Name</label>
-        <input type="text" id="display_name" name="display_name" value="{display_name}" required autocomplete="off">
+               title="8-15 characters: lowercase letters, numbers and hyphens only, cannot start or end with a hyphen">
       </div>
       <div class="form-group">
         <label for="email">Email</label>
@@ -825,6 +827,7 @@ function toggleSiteFields() {{
       </ul>
     </div>
     </div>
+    {role_section}
   </form>
   </div>
 <script>
@@ -1001,8 +1004,7 @@ function toggleSiteFields() {{
   }}
 }}());
 </script>
-</div>
-{role_section}"#,
+</div>"#,
         form_title        = title,
         action            = action,
         username          = crate::html_escape(&user.username),

@@ -407,6 +407,29 @@ pub async fn save_new(
         )).into_response();
     }
 
+    // Validate display name length.
+    if let Err(msg) = crate::models::user::validate_display_name(
+        form.display_name.as_deref().unwrap_or("").trim(),
+    ) {
+        let sites = fetch_sites_for_admin(&state, &admin).await;
+        let edit = UserEdit {
+            id: None,
+            username: form.username.clone(),
+            email: form.email.clone(),
+            display_name: form.display_name.clone().unwrap_or_default(),
+            role: form.role.clone(),
+            bio: form.bio.clone().unwrap_or_default(),
+            sites,
+            is_super_admin_target: false,
+            site_roles: vec![],
+        };
+        return Html(admin::pages::users::render_editor(
+            &edit,
+            Some(msg),
+            &ctx,
+        )).into_response();
+    }
+
     // Validate hostname format when creating a new site.
     if form.site_assignment.as_deref() == Some("new") {
         let hostname = form.new_hostname.as_deref().unwrap_or("").trim().to_lowercase();
@@ -672,6 +695,24 @@ pub async fn save_edit(
     // Site admins may not edit super_admin accounts.
     if !admin.caps.is_global_admin && is_super_admin_target {
         return (axum::http::StatusCode::FORBIDDEN, "Forbidden").into_response();
+    }
+
+    // Validate display name length.
+    if let Err(msg) = crate::models::user::validate_display_name(
+        form.display_name.as_deref().unwrap_or("").trim(),
+    ) {
+        let edit = UserEdit {
+            id: Some(id.to_string()),
+            username: form.username.clone(),
+            email: form.email.clone(),
+            display_name: form.display_name.clone().unwrap_or_default(),
+            role: form.role.clone(),
+            bio: form.bio.clone().unwrap_or_default(),
+            sites: vec![],
+            is_super_admin_target,
+            site_roles: vec![],
+        };
+        return Html(admin::pages::users::render_editor(&edit, Some(msg), &ctx)).into_response();
     }
 
     // Validate password requirements if a new password was supplied.
