@@ -55,7 +55,7 @@ pub struct AppConfig {
     #[serde(default = "default_search_index_path")]
     pub search_index_path: String,
 
-    /// Path to the PID file written on startup (used by synap-cli for live reload)
+    /// Path to the PID file written on startup (used by synap for live reload)
     #[serde(default = "default_pid_file")]
     pub pid_file: String,
 
@@ -67,8 +67,13 @@ pub struct AppConfig {
     /// If unset, the endpoint is open (restrict access at the network/Caddy level instead).
     pub metrics_token: Option<String>,
 
-    /// Maximum file upload size in megabytes (applies to media and theme zip uploads).
-    /// Set via MAX_UPLOAD_MB in .env or synaptic.toml. Requires a restart to take effect.
+    /// Seed value for max upload size (MB), used only on first boot before an
+    /// `app_settings` DB row exists. Set via MAX_UPLOAD_MB in .env or
+    /// synaptic.toml. Once the admin saves a value on /admin/settings, the
+    /// DB-backed `AppState::app_settings.max_upload_mb` is authoritative and
+    /// this field is no longer consulted — actual enforcement is a fixed 1GB
+    /// safety-net body cap plus a dynamic check against the DB value (see
+    /// `router::build`'s `upload_limit` and `middleware::upload_limit::gate`).
     #[serde(default = "default_max_upload_mb")]
     pub max_upload_mb: u64,
 

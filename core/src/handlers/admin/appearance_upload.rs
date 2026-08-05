@@ -18,9 +18,6 @@ use admin::pages::appearance::render_create_theme_form;
 
 use super::appearance::{copy_dir_all, render_appearance_list, url_encode_param, REQUIRED_TEMPLATES};
 
-/// Fallback upload limit used only if config fails to load (should never happen at runtime).
-const DEFAULT_MAX_ZIP_BYTES: usize = 25 * 1024 * 1024;
-
 // ── Zip upload ─────────────────────────────────────────────────────────────────
 
 pub async fn upload_theme(
@@ -33,17 +30,18 @@ pub async fn upload_theme(
     }
     let cs = state.site_hostname(admin.site_id);
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
-    // Collect the zip bytes from the multipart field named "file".
-    let max_bytes = (state.config.max_upload_mb as usize)
-        .saturating_mul(1024 * 1024)
-        .max(DEFAULT_MAX_ZIP_BYTES);
+    // Collect the zip bytes from the multipart field named "file". Read from
+    // the DB-backed, hot-reloadable setting (not state.config) so admins can
+    // change this from /admin/settings without a restart.
+    let max_upload_mb = state.app_settings.read().unwrap().max_upload_mb;
+    let max_bytes = (max_upload_mb.max(1) as usize).saturating_mul(1024 * 1024);
     let mut zip_bytes: Option<Vec<u8>> = None;
     while let Ok(Some(field)) = multipart.next_field().await {
         if field.name().unwrap_or("") == "file" {
             match field.bytes().await {
                 Ok(b) if b.len() <= max_bytes => zip_bytes = Some(b.to_vec()),
                 Ok(_) => {
-                    let msg = format!("Upload too large. Maximum size is {} MB.", state.config.max_upload_mb);
+                    let msg = format!("Upload too large. Maximum size is {} MB.", max_upload_mb);
                     return render_appearance_list(&state, Some(&msg), &ctx, admin.site_id, "my")
                         .await
                         .into_response();

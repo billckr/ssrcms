@@ -126,7 +126,10 @@ impl Default for AppSettings {
 }
 
 impl AppSettings {
-    pub async fn load(pool: &PgPool) -> anyhow::Result<Self> {
+    /// `default_max_upload_mb` seeds the very first boot (no `app_settings` row
+    /// yet) from `MAX_UPLOAD_MB` in `.env`/`synaptic.toml`; once a row exists the
+    /// DB value is authoritative and `.env` is no longer consulted.
+    pub async fn load(pool: &PgPool, default_max_upload_mb: i64) -> anyhow::Result<Self> {
         let rows: Vec<(String, String)> = sqlx::query_as(
             "SELECT key, value FROM app_settings",
         )
@@ -141,7 +144,7 @@ impl AppSettings {
             max_upload_mb: map
                 .remove("max_upload_mb")
                 .and_then(|v| v.parse().ok())
-                .unwrap_or(25),
+                .unwrap_or(default_max_upload_mb),
         })
     }
 }
@@ -324,7 +327,7 @@ impl AppState {
     /// Reload app_settings from the database into the in-memory cache.
     /// Called after saving /admin/settings so changes take effect immediately.
     pub async fn reload_app_settings(&self) -> anyhow::Result<()> {
-        let fresh = AppSettings::load(&self.db).await?;
+        let fresh = AppSettings::load(&self.db, self.config.max_upload_mb as i64).await?;
         if let Ok(mut w) = self.app_settings.write() {
             *w = fresh;
         }

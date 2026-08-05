@@ -236,7 +236,7 @@ async fn main() -> anyhow::Result<()> {
     }
 
     // ── App-wide settings (from DB) ───────────────────────────────────────────
-    let app_settings = AppSettings::load(&pool).await.unwrap_or_default();
+    let app_settings = AppSettings::load(&pool, cfg.max_upload_mb as i64).await.unwrap_or_default();
     info!("app: {} | tz: {}", app_settings.app_name, app_settings.timezone);
 
     // ── Application state ─────────────────────────────────────────────────────

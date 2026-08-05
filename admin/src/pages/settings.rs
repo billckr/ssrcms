@@ -210,14 +210,19 @@ pub fn render(
   <div class="card-boxed">
     <h2 class="card-boxed-header">Uploads</h2>
     <div class="card-boxed-body">
-    <div class="card-boxed-section">
-      <div class="form-group">
-        <label for="sa-max-upload">Max Upload Size (MB)</label>
-        <input type="number" id="sa-max-upload" value="{max_upload_mb}" readonly
-               style="width:100px;opacity:.7;cursor:not-allowed" title="Set via MAX_UPLOAD_MB in .env or synaptic.toml">
-        <small>Set via <code>MAX_UPLOAD_MB</code> in <code>.env</code> or <code>synaptic.toml</code>. Requires a restart to change. Applies to media and theme zip uploads.</small>
+    <form method="post" action="/admin/settings" class="edit-form uploads-settings-form">
+      <input type="hidden" name="tab" value="uploads">
+      <div class="card-boxed-section">
+        <div class="form-group">
+          <label for="sa-max-upload">Max Upload Size (MB)</label>
+          <input type="number" id="sa-max-upload" name="max_upload_mb" value="{max_upload_mb}" min="1" max="1000" style="width:100px">
+          <small>Applies to media and theme zip uploads. Takes effect immediately, no restart needed.</small>
+        </div>
       </div>
-    </div>
+      <div class="form-actions" style="margin-top:1.5rem">
+        <button type="submit" class="btn btn-primary" id="uploads-save-btn" disabled>Save Uploads</button>
+      </div>
+    </form>
     </div>
   </div>
 
@@ -487,6 +492,7 @@ function dtEnableOnChange(formSelector, btnId) {{
 }}
 dtEnableOnChange('.general-settings-form', 'general-save-btn');
 dtEnableOnChange('.localisation-settings-form', 'localisation-save-btn');
+dtEnableOnChange('.uploads-settings-form', 'uploads-save-btn');
 </script>
 "#,
         app_name = app_name_escaped,

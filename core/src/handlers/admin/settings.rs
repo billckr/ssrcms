@@ -20,11 +20,10 @@ pub async fn settings(
     let flash = params.get("flash").map(|s| s.as_str());
     let cs = state.site_hostname(admin.site_id);
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
-    let (app_name, timezone) = {
+    let (app_name, timezone, max_upload_mb) = {
         let s = state.app_settings.read().unwrap();
-        (s.app_name.clone(), s.timezone.clone())
+        (s.app_name.clone(), s.timezone.clone(), s.max_upload_mb.max(0) as u64)
     };
-    let max_upload_mb = state.config.max_upload_mb;
     let sites: Vec<(uuid::Uuid, String)> = crate::models::site::list(&state.db)
         .await
         .unwrap_or_default()
@@ -80,6 +79,29 @@ pub async fn save_settings(
         }
 
         let flash = error.as_deref().unwrap_or("Localisation settings saved.");
+        return Redirect::to(&format!("/admin/settings?flash={}", flash.replace(' ', "+"))).into_response();
+    }
+
+    if tab == "uploads" {
+        let max_upload_mb: Option<i64> = form.get("max_upload_mb").and_then(|s| s.trim().parse().ok());
+
+        let flash = match max_upload_mb {
+            Some(mb) if mb >= 1 && mb <= 1000 => {
+                match set_app_setting(&state.db, "max_upload_mb", &mb.to_string()).await {
+                    Ok(()) => {
+                        if let Err(e) = state.reload_app_settings().await {
+                            tracing::warn!("failed to reload app_settings cache: {}", e);
+                        }
+                        "Upload settings saved."
+                    }
+                    Err(e) => {
+                        tracing::error!("failed to save max_upload_mb: {}", e);
+                        "Failed to save settings. Please try again."
+                    }
+                }
+            }
+            _ => "Max upload size must be between 1 and 1000 MB.",
+        };
         return Redirect::to(&format!("/admin/settings?flash={}", flash.replace(' ', "+"))).into_response();
     }
 

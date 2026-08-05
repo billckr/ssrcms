@@ -34,6 +34,7 @@ pub struct LoginForm {
 #[derive(Deserialize)]
 pub struct RedirectQuery {
     pub redirect: Option<String>,
+    pub flash: Option<String>,
 }
 
 /// GET /admin/login — render login page.
@@ -136,7 +137,7 @@ pub async fn public_login_form(
     Query(q): Query<RedirectQuery>,
 ) -> impl IntoResponse {
     let redirect = q.redirect.as_deref();
-    Html(admin::pages::login::render_public(None, redirect))
+    Html(admin::pages::login::render_public(None, q.flash.as_deref(), redirect))
 }
 
 /// POST /login — subscriber login only.
@@ -152,20 +153,24 @@ pub async fn public_login_post(
 
     let user = match crate::models::user::get_by_email(&state.db, &form.email).await {
         Ok(u) => u,
-        Err(_) => return Html(admin::pages::login::render_public(Some("Invalid email or password."), redirect_val)).into_response(),
+        Err(_) => return Html(admin::pages::login::render_public(Some("Invalid email or password."), None, redirect_val)).into_response(),
     };
     if !user.verify_password(&form.password) {
-        return Html(admin::pages::login::render_public(Some("Invalid email or password."), redirect_val)).into_response();
+        return Html(admin::pages::login::render_public(Some("Invalid email or password."), None, redirect_val)).into_response();
     }
     match user.role.as_str() {
         "subscriber" => {}
+        // Deliberately the same generic message as a wrong password/unknown
+        // email below, not "Staff accounts sign in at /admin/login." — this
+        // branch only runs after a *correct* password match, so a distinct
+        // message here would confirm to anyone testing credentials (e.g.
+        // credential stuffing) that a given email/password pair belongs to a
+        // staff account, which is useful targeting information even though
+        // they already have valid creds for it.
         "super_admin" | "site_admin" | "editor" | "author" => {
-            return Html(admin::pages::login::render_public(
-                Some("Staff accounts sign in at /admin/login."),
-                redirect_val,
-            )).into_response();
+            return Html(admin::pages::login::render_public(Some("Invalid email or password."), None, redirect_val)).into_response();
         }
-        _ => return Html(admin::pages::login::render_public(Some("Invalid email or password."), redirect_val)).into_response(),
+        _ => return Html(admin::pages::login::render_public(Some("Invalid email or password."), None, redirect_val)).into_response(),
     }
 
     let raw_host = headers
@@ -182,19 +187,19 @@ pub async fn public_login_post(
                 Ok(Some(_)) => {}
                 _ => return Html(admin::pages::login::render_public(
                     Some("Your account does not have access to this site."),
-                    redirect_val,
+                    None, redirect_val,
                 )).into_response(),
             }
         }
         None => return Html(admin::pages::login::render_public(
             Some("No site found for this domain."),
-            redirect_val,
+            None, redirect_val,
         )).into_response(),
     }
 
     if let Err(e) = session.insert(SESSION_ACCOUNT_USER_ID_KEY, user.id.to_string()).await {
         tracing::error!("account login session insert error: {}", e);
-        return Html(admin::pages::login::render_public(Some("Session error. Please try again."), redirect_val)).into_response();
+        return Html(admin::pages::login::render_public(Some("Session error. Please try again."), None, redirect_val)).into_response();
     }
 
     // Redirect back to the page that sent the user to login, or fall back to /account.

@@ -12,7 +12,7 @@ use tower_sessions::SessionManagerLayer;
 use tower_sessions_sqlx_store::PostgresStore;
 
 use crate::app_state::AppState;
-use crate::handlers::{account, archive, auth, comment as comment_handler, form as form_handler, home, metrics as metrics_handler, page, plugin_route, post as post_handler, post_unlock, search, subscribe, theme_static, uploads};
+use crate::handlers::{account, archive, auth, comment as comment_handler, form as form_handler, home, metrics as metrics_handler, page, plugin_route, post as post_handler, post_unlock, recover, search, subscribe, theme_static, uploads};
 use crate::handlers::admin::{appearance, appearance_editor, appearance_publish, appearance_upload, builder as admin_builder, comments as admin_comments, dashboard, dev_tools, documentation as admin_documentation, form_designer as admin_form_designer, forms as admin_forms, media, menus as admin_menus, posts, profile, settings, sites as admin_sites, taxonomy, upload, users};
 
 /// Prevent browsers from caching admin and account pages.
@@ -61,9 +61,13 @@ pub fn build(
     admin_session_layer: SessionManagerLayer<PostgresStore>,
     account_session_layer: SessionManagerLayer<PostgresStore>,
 ) -> Router {
-    let upload_limit = DefaultBodyLimit::max(
-        (state.config.max_upload_mb as usize).saturating_mul(1024 * 1024),
-    );
+    // Absolute safety net against unbounded/chunked bodies — fixed at startup,
+    // deliberately generous. The real, admin-configurable ceiling is enforced
+    // dynamically below by `upload_limit_layer` so it can change without a
+    // restart.
+    let upload_limit = tower::ServiceBuilder::new()
+        .layer(DefaultBodyLimit::max(1024 * 1024 * 1024))
+        .layer(middleware::from_fn_with_state(state.clone(), crate::middleware::upload_limit::gate));
 
     // Collect plugin route paths so we can register each one individually.
     // Axum requires routes to be registered at build time; we add a dedicated
@@ -97,6 +101,9 @@ pub fn build(
         .route("/subscribe", get(subscribe::subscribe_form).post(subscribe::subscribe_post))
         // ── Public login (subscriber-facing) ───────────────────────────────
         .route("/login", get(auth::public_login_form).post(auth::public_login_post))
+        // ── Password recovery (subscriber-facing) ───────────────────────────
+        .route("/recover", get(recover::request_form).post(recover::request_post))
+        .route("/recover/{token}", get(recover::reset_form).post(recover::reset_post))
         // ── Account area (any authenticated user) ───────────────────────────
         .route("/account",                        get(account::dashboard))
         .route("/account/profile",                get(account::profile_view))
