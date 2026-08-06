@@ -56,6 +56,8 @@ pub struct UserRow {
     pub site_ids: Vec<String>,
     /// The user's default/primary site UUID. Used to highlight the primary domain badge.
     pub default_site_id: Option<String>,
+    /// False when the account is suspended — login is blocked, but content/data is untouched.
+    pub is_active: bool,
 }
 
 pub struct UserEdit {
@@ -72,6 +74,10 @@ pub struct UserEdit {
     /// Current (hostname, role) site assignments for this user — display-only,
     /// shown in the Role section of the edit form. Empty on the new-user form.
     pub site_roles: Vec<(String, String)>,
+    /// False when suspended (login blocked). Always true for the new-user form.
+    pub is_active: bool,
+    /// Protected accounts can't be suspended or deleted. Always false for the new-user form.
+    pub is_protected: bool,
 }
 
 /// Render the `<tr>` rows for the Site Users (staff) table.
@@ -84,6 +90,32 @@ fn build_staff_rows(staff: &[UserRow], current_user_id: &str, can_manage_access:
                 </a>"#,
                 id = crate::html_escape(&u.id),
             )
+        } else {
+            String::new()
+        };
+        let suspend_btn = if u.id != current_user_id && !u.is_protected {
+            if u.is_active {
+                format!(
+                    r#"<form method="POST" action="/admin/users/{id}/suspend" style="display:inline" onsubmit="return confirm('Suspend {name}? They will be immediately unable to log in until reactivated.')">
+                  <input type="hidden" name="tab" value="site-users">
+                  <button class="icon-btn" title="Suspend login" type="submit">
+                    <img src="/admin/static/icons/user-x.svg" alt="Suspend">
+                  </button>
+                </form>"#,
+                    id = crate::html_escape(&u.id),
+                    name = u.display_name.replace('\'', "\\'"),
+                )
+            } else {
+                format!(
+                    r#"<form method="POST" action="/admin/users/{id}/reactivate" style="display:inline">
+                  <input type="hidden" name="tab" value="site-users">
+                  <button class="icon-btn" title="Reactivate login" type="submit">
+                    <img src="/admin/static/icons/user-check.svg" alt="Reactivate">
+                  </button>
+                </form>"#,
+                    id = crate::html_escape(&u.id),
+                )
+            }
         } else {
             String::new()
         };
@@ -142,10 +174,15 @@ fn build_staff_rows(staff: &[UserRow], current_user_id: &str, can_manage_access:
                 )
             }).collect::<Vec<_>>().join("")
         };
+        let suspended_badge = if !u.is_active {
+            r#" <span class="badge" style="background:#fee2e2;color:#991b1b" title="Login blocked until reactivated">Suspended</span>"#
+        } else {
+            ""
+        };
         format!(
-            r#"<tr>
+            r#"<tr{row_style}>
               <td style="width:2rem;text-align:center">{cb}</td>
-              <td><a href="/admin/users/{id}/edit">{display_name}</a></td>
+              <td><a href="/admin/users/{id}/edit">{display_name}</a>{suspended_badge}</td>
               <td>{username}</td>
               <td><button type="button" class="copy-email-btn" data-email="{email_raw}" title="Click to copy email">{email}</button></td>
               <td>{domain_badges}</td>
@@ -155,12 +192,15 @@ fn build_staff_rows(staff: &[UserRow], current_user_id: &str, can_manage_access:
                   <img src="/admin/static/icons/edit.svg" alt="Edit">
                 </a>
                 {site_access_btn}
+                {suspend_btn}
                 {delete_btn}
               </td>
             </tr>"#,
+            row_style = if !u.is_active { r#" style="opacity:.65""# } else { "" },
             cb = cb,
             id = crate::html_escape(&u.id),
             display_name = crate::html_escape(&u.display_name),
+            suspended_badge = suspended_badge,
             username = crate::html_escape(&u.username),
             email = crate::html_escape(&u.email),
             email_raw = crate::html_escape(&u.email),
@@ -168,6 +208,7 @@ fn build_staff_rows(staff: &[UserRow], current_user_id: &str, can_manage_access:
             role = crate::html_escape(role_display(&u.role)),
             badge_class = role_badge_class(&u.role),
             site_access_btn = site_access_btn,
+            suspend_btn = suspend_btn,
             delete_btn = delete_btn,
         )
     }).collect::<Vec<_>>().join("\n")
@@ -176,6 +217,32 @@ fn build_staff_rows(staff: &[UserRow], current_user_id: &str, can_manage_access:
 /// Render the `<tr>` rows for the Subscribers table.
 fn build_sub_rows(subscribers: &[UserRow], current_user_id: &str) -> String {
     subscribers.iter().map(|u| {
+        let suspend_btn = if u.id != current_user_id && !u.is_protected {
+            if u.is_active {
+                format!(
+                    r#"<form method="POST" action="/admin/users/{id}/suspend" style="display:inline" onsubmit="return confirm('Suspend {name}? They will be immediately unable to log in until reactivated.')">
+                  <input type="hidden" name="tab" value="subscribers">
+                  <button class="icon-btn" title="Suspend login" type="submit">
+                    <img src="/admin/static/icons/user-x.svg" alt="Suspend">
+                  </button>
+                </form>"#,
+                    id = crate::html_escape(&u.id),
+                    name = u.display_name.replace('\'', "\\'"),
+                )
+            } else {
+                format!(
+                    r#"<form method="POST" action="/admin/users/{id}/reactivate" style="display:inline">
+                  <input type="hidden" name="tab" value="subscribers">
+                  <button class="icon-btn" title="Reactivate login" type="submit">
+                    <img src="/admin/static/icons/user-check.svg" alt="Reactivate">
+                  </button>
+                </form>"#,
+                    id = crate::html_escape(&u.id),
+                )
+            }
+        } else {
+            String::new()
+        };
         let delete_btn = if u.id != current_user_id && !u.is_protected {
             let warn_msg = format!(
                 "Delete subscriber \\u2018{}\\u2019? This cannot be undone.",
@@ -212,10 +279,15 @@ fn build_sub_rows(subscribers: &[UserRow], current_user_id: &str) -> String {
         } else {
             String::new()
         };
+        let suspended_badge = if !u.is_active {
+            r#" <span class="badge" style="background:#fee2e2;color:#991b1b" title="Login blocked until reactivated">Suspended</span>"#
+        } else {
+            ""
+        };
         format!(
-            r#"<tr>
+            r#"<tr{row_style}>
               <td style="width:2rem;text-align:center">{cb}</td>
-              <td><a href="/admin/users/{id}/edit">{display_name}</a></td>
+              <td><a href="/admin/users/{id}/edit">{display_name}</a>{suspended_badge}</td>
               <td>{username}</td>
               <td><button type="button" class="copy-email-btn" data-email="{email_raw}" title="Click to copy email">{email}</button></td>
               <td>{domain_badges}</td>
@@ -223,16 +295,20 @@ fn build_sub_rows(subscribers: &[UserRow], current_user_id: &str) -> String {
                 <a href="/admin/users/{id}/edit" class="icon-btn" title="Edit">
                   <img src="/admin/static/icons/edit.svg" alt="Edit">
                 </a>
+                {suspend_btn}
                 {delete_btn}
               </td>
             </tr>"#,
+            row_style = if !u.is_active { r#" style="opacity:.65""# } else { "" },
             cb = cb,
             id = crate::html_escape(&u.id),
             display_name = crate::html_escape(&u.display_name),
+            suspended_badge = suspended_badge,
             username = crate::html_escape(&u.username),
             email = crate::html_escape(&u.email),
             email_raw = crate::html_escape(&u.email),
             domain_badges = domain_badges,
+            suspend_btn = suspend_btn,
             delete_btn = delete_btn,
         )
     }).collect::<Vec<_>>().join("\n")
@@ -699,6 +775,74 @@ pub fn render_editor(user: &UserEdit, flash: Option<&str>, ctx: &crate::PageCont
         )
     };
 
+    // Suspend/Reactivate toggle — edit form only, same visibility rules as
+    // the list-page icon buttons (no self-suspend, protected accounts exempt).
+    //
+    // The actual submission <form> (suspend_form below) is rendered *outside*
+    // the surrounding #user-editor-form rather than nested inside it — nested
+    // <form> elements are invalid HTML, and browsers close the outer form as
+    // soon as they hit the inner form's closing tag (the form-pointer rule in
+    // the HTML parsing spec), silently truncating and reflowing everything
+    // that follows. That's what was causing the missing gap below this
+    // section: the outer form was closing mid-page and the DOM after it was
+    // being rebuilt without the expected margins.
+    let (suspend_toggle, suspend_form) = if !is_new && user.email != ctx.user_email && !user.is_protected {
+        let user_id = crate::html_escape(user.id.as_deref().unwrap_or(""));
+        let (action, checked, status_label) = if user.is_active {
+            ("suspend", " checked", "Active")
+        } else {
+            ("reactivate", "", "Suspended")
+        };
+        let toggle = format!(
+            r#"<div class="card-boxed-section">
+    <div class="form-group" style="margin:0">
+      <label>Account Status</label>
+      <div style="margin:.35rem 0 0">
+        <label class="switch-toggle" style="cursor:pointer">
+          <input type="checkbox" id="suspend-toggle"{checked}>
+          <span class="switch-slider"></span>
+          <span id="suspend-toggle-label">{status_label}</span>
+        </label>
+      </div>
+    </div>
+    </div>"#,
+            checked = checked,
+            status_label = status_label,
+        );
+        let form = format!(
+            r#"<form method="POST" action="/admin/users/{user_id}/{action}" id="suspend-toggle-form" style="display:none">
+    <input type="hidden" name="tab" value="site-users">
+  </form>
+  <script>
+  (function() {{
+    var checkbox = document.getElementById('suspend-toggle');
+    var form = document.getElementById('suspend-toggle-form');
+    var label = document.getElementById('suspend-toggle-label');
+    checkbox.addEventListener('change', function() {{
+      if (this.checked) {{
+        form.action = '/admin/users/{user_id}/reactivate';
+        label.textContent = 'Active';
+        form.submit();
+      }} else {{
+        if (!confirm('Suspend this user? They will be immediately unable to log in until reactivated.')) {{
+          this.checked = true;
+          return;
+        }}
+        form.action = '/admin/users/{user_id}/suspend';
+        label.textContent = 'Suspended';
+        form.submit();
+      }}
+    }});
+  }})();
+  </script>"#,
+            user_id = user_id,
+            action = action,
+        );
+        (toggle, form)
+    } else {
+        (String::new(), String::new())
+    };
+
     let password_hint = if user.id.is_some() {
         r#"<small>Leave blank to keep the current password.</small>"#
     } else {
@@ -756,6 +900,29 @@ function toggleSiteFields() {{
         String::new()
     };
 
+    // Role + site-assignment box — only has visible content on the new-user
+    // form (an editable role dropdown + site picker). On edit, role_field is
+    // just a hidden input (role is read-only here, changed via /site-access)
+    // and site_section is empty, so wrapping it in a visible bordered box
+    // left a pointless empty section — keep the hidden input (still needed
+    // for form submission) but drop the box on edit.
+    let role_and_site_section = if is_new {
+        format!(
+            r#"<div class="card-boxed-section">
+    <div class="user-form-grid">
+      <div class="form-group">
+        {role_field_inner}
+      </div>
+      {site_section}
+    </div>
+    </div>"#,
+            role_field_inner = role_field,
+            site_section = site_section,
+        )
+    } else {
+        role_field.clone()
+    };
+
     let content = format!(
         r#"<div class="card-boxed" style="max-width:560px">
   <h2 class="card-boxed-header" style="display:flex;align-items:center;justify-content:space-between;gap:.5rem;">
@@ -795,14 +962,7 @@ function toggleSiteFields() {{
       </div>
     </div>
     </div>
-    <div class="card-boxed-section">
-    <div class="user-form-grid">
-      <div class="form-group">
-        {role_field_inner}
-      </div>
-      {site_section}
-    </div>
-    </div>
+    {suspend_toggle}
     <div class="card-boxed-section">
     <div class="form-note" style="margin-bottom:.75rem">
       <p><strong>Username requirements:</strong></p>
@@ -827,8 +987,10 @@ function toggleSiteFields() {{
       </ul>
     </div>
     </div>
+    {role_and_site_section}
     {role_section}
   </form>
+  {suspend_form}
   </div>
 <script>
 (function () {{
@@ -1010,8 +1172,9 @@ function toggleSiteFields() {{
         username          = crate::html_escape(&user.username),
         display_name      = crate::html_escape(&user.display_name),
         email             = crate::html_escape(&user.email),
-        role_field_inner  = role_field,
-        site_section      = site_section,
+        role_and_site_section = role_and_site_section,
+        suspend_toggle    = suspend_toggle,
+        suspend_form      = suspend_form,
         password_hint     = password_hint,
         is_new_js         = if is_new { "true" } else { "false" },
         autofocus         = if is_new { " autofocus" } else { "" },

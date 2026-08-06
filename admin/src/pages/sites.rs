@@ -138,19 +138,26 @@ pub fn sites_list_fragment(sites: &[SiteRow], page: i64, total_pages: i64, searc
               <td><span style="display:inline-block;background:#f3f4f6;color:#374151;border-radius:4px;padding:.15rem .5rem;font-size:.78rem;font-weight:500">{post_count}</span></td>
               <td><span style="display:inline-block;background:#f3f4f6;color:#374151;border-radius:4px;padding:.15rem .5rem;font-size:.78rem;font-weight:500">{page_count}</span></td>
               <td class="actions">
-                <form method="post" action="/admin/sites/switch" style="display:inline">
-                  <input type="hidden" name="site_id" value="{id}">
-                  <button type="submit" class="icon-btn" title="Switch to this site">
-                    <img src="/admin/static/icons/log-in.svg" alt="Switch">
-                  </button>
-                </form>
+                {switch_btn}
                 {users_link}
                 {manage}
               </td>
             </tr>"#,
-            id               = crate::html_escape(&s.id),
             hostname         = crate::html_escape(&s.hostname),
             site_url         = crate::html_escape(&site_url),
+            switch_btn       = if s.hostname == ctx.current_site {
+                String::new()
+            } else {
+                format!(
+                    r#"<form method="post" action="/admin/sites/switch" style="display:inline">
+                  <input type="hidden" name="site_id" value="{id}">
+                  <button type="submit" class="icon-btn" title="Switch to this site">
+                    <img src="/admin/static/icons/log-in.svg" alt="Switch">
+                  </button>
+                </form>"#,
+                    id = crate::html_escape(&s.id),
+                )
+            },
             default_badge    = if s.is_default {
                 r#" <span class="badge-visiting" title="Default site — cannot be deleted">default</span>"#
             } else if s.is_primary_domain {

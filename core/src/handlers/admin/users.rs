@@ -97,6 +97,7 @@ pub async fn list(
                     role: site_role,
                     display_name: u.display_name.clone(),
                     is_protected: u.is_protected,
+                    is_active: u.is_active,
                     is_super_admin: u.role == "super_admin",
                     site_hostnames: vec![],
                     site_ids: vec![],
@@ -105,7 +106,7 @@ pub async fn list(
                 .collect()
         } else {
             // All sites: show every user, with site-context role when available.
-            let users = crate::models::user::list(&state.db).await.unwrap_or_else(|e| {
+            let users = crate::models::user::list_all(&state.db).await.unwrap_or_else(|e| {
                 tracing::warn!("failed to list users: {:?}", e);
                 vec![]
             });
@@ -127,6 +128,7 @@ pub async fn list(
                 role: site_role_map.get(&u.id).cloned().unwrap_or_else(|| u.role.clone()),
                 display_name: u.display_name.clone(),
                 is_protected: u.is_protected,
+                    is_active: u.is_active,
                 is_super_admin: u.role == "super_admin",
                 site_hostnames: vec![],
                 site_ids: vec![],
@@ -144,6 +146,7 @@ pub async fn list(
             role: site_role.clone(),
             display_name: u.display_name.clone(),
             is_protected: u.is_protected,
+                    is_active: u.is_active,
             is_super_admin: false,
             site_hostnames: vec![],
             site_ids: vec![],
@@ -265,6 +268,8 @@ pub async fn new_user(
         sites,
         is_super_admin_target: false,
         site_roles: vec![],
+        is_active: true,
+        is_protected: false,
     };
     Html(admin::pages::users::render_editor(&edit, None, &ctx)).into_response()
 }
@@ -289,7 +294,7 @@ pub async fn edit_user(
         }
     }
 
-    let user = match crate::models::user::get_by_id(&state.db, id).await {
+    let user = match crate::models::user::get_by_id_include_inactive(&state.db, id).await {
         Ok(u) => u,
         Err(e) => {
             tracing::warn!("user {} not found for editing: {:?}", id, e);
@@ -335,6 +340,8 @@ pub async fn edit_user(
         sites: vec![],
         is_super_admin_target,
         site_roles,
+        is_active: user.is_active,
+        is_protected: user.is_protected,
     };
     Html(admin::pages::users::render_editor(&edit, None, &ctx)).into_response()
 }
@@ -377,6 +384,8 @@ pub async fn save_new(
                 sites,
                 is_super_admin_target: false,
                 site_roles: vec![],
+                is_active: true,
+                is_protected: false,
             };
             return Html(admin::pages::users::render_editor(
                 &edit,
@@ -399,6 +408,8 @@ pub async fn save_new(
             sites,
             is_super_admin_target: false,
             site_roles: vec![],
+            is_active: true,
+            is_protected: false,
         };
         return Html(admin::pages::users::render_editor(
             &edit,
@@ -422,6 +433,8 @@ pub async fn save_new(
             sites,
             is_super_admin_target: false,
             site_roles: vec![],
+            is_active: true,
+            is_protected: false,
         };
         return Html(admin::pages::users::render_editor(
             &edit,
@@ -445,6 +458,8 @@ pub async fn save_new(
                 sites,
                 is_super_admin_target: false,
                 site_roles: vec![],
+                is_active: true,
+                is_protected: false,
             };
             return Html(admin::pages::users::render_editor(
                 &edit,
@@ -467,6 +482,8 @@ pub async fn save_new(
             sites,
             is_super_admin_target: false,
             site_roles: vec![],
+            is_active: true,
+            is_protected: false,
         };
         return Html(admin::pages::users::render_editor(&edit, Some(msg), &ctx)).into_response();
     }
@@ -656,6 +673,8 @@ pub async fn save_new(
                 sites,
                 is_super_admin_target: false,
                 site_roles: vec![],
+                is_active: true,
+                is_protected: false,
             };
             let msg = friendly_user_error(&e);
             Html(admin::pages::users::render_editor(&edit, Some(&msg), &ctx)).into_response()
@@ -687,10 +706,13 @@ pub async fn save_edit(
         }
     }
 
-    // Fetch target to know their current role (preserve super_admin, update site_users.role).
-    let target_role = crate::models::user::get_by_id(&state.db, id).await
-        .map(|u| u.role.clone()).unwrap_or_default();
+    // Fetch target to know their current role (preserve super_admin, update site_users.role)
+    // and current suspend state (for re-rendering the edit form on a validation error).
+    let target = crate::models::user::get_by_id_include_inactive(&state.db, id).await.ok();
+    let target_role = target.as_ref().map(|u| u.role.clone()).unwrap_or_default();
     let is_super_admin_target = target_role == "super_admin";
+    let target_is_active = target.as_ref().map(|u| u.is_active).unwrap_or(true);
+    let target_is_protected = target.as_ref().map(|u| u.is_protected).unwrap_or(false);
 
     // Site admins may not edit super_admin accounts.
     if !admin.caps.is_global_admin && is_super_admin_target {
@@ -711,6 +733,8 @@ pub async fn save_edit(
             sites: vec![],
             is_super_admin_target,
             site_roles: vec![],
+            is_active: target_is_active,
+            is_protected: target_is_protected,
         };
         return Html(admin::pages::users::render_editor(&edit, Some(msg), &ctx)).into_response();
     }
@@ -728,6 +752,8 @@ pub async fn save_edit(
                 sites: vec![],
                 is_super_admin_target,
                 site_roles: vec![],
+                is_active: target_is_active,
+                is_protected: target_is_protected,
             };
             return Html(admin::pages::users::render_editor(&edit, Some(msg), &ctx)).into_response();
         }
@@ -748,6 +774,8 @@ pub async fn save_edit(
                     sites: vec![],
                     is_super_admin_target,
                     site_roles: vec![],
+                    is_active: target_is_active,
+                    is_protected: target_is_protected,
                 };
                 return Html(admin::pages::users::render_editor(
                     &edit,
@@ -790,6 +818,8 @@ pub async fn save_edit(
                 sites: vec![],
                 is_super_admin_target,
                 site_roles: vec![],
+                is_active: target_is_active,
+                is_protected: target_is_protected,
             };
             let msg = friendly_user_error(&e);
             Html(admin::pages::users::render_editor(&edit, Some(&msg), &ctx)).into_response()
@@ -813,7 +843,7 @@ pub async fn delete_user(
         ($msg:expr) => {{
             tracing::warn!("delete_user denied for target={} actor={}: {}", id, admin.user.id, $msg);
             let rows: Vec<UserRow> = if admin.caps.is_global_admin {
-                crate::models::user::list(&state.db).await.unwrap_or_default()
+                crate::models::user::list_all(&state.db).await.unwrap_or_default()
                     .iter().map(|u| UserRow {
                         id: u.id.to_string(),
                         username: u.username.clone(),
@@ -821,6 +851,7 @@ pub async fn delete_user(
                         role: u.role.clone(),
                         display_name: u.display_name.clone(),
                         is_protected: u.is_protected,
+                    is_active: u.is_active,
                         is_super_admin: u.role == "super_admin",
                         site_hostnames: vec![],
                         site_ids: vec![],
@@ -835,6 +866,7 @@ pub async fn delete_user(
                         role: site_role,
                         display_name: u.display_name.clone(),
                         is_protected: u.is_protected,
+                    is_active: u.is_active,
                         is_super_admin: false,
                         site_hostnames: vec![],
                         site_ids: vec![],
@@ -903,6 +935,74 @@ pub async fn delete_user(
     if let Err(e) = crate::models::user::delete_and_reassign(&state.db, id, admin.user.id).await {
         tracing::error!("delete user {} error: {:?}", id, e);
         deny!("Failed to delete user. Please try again.");
+    }
+    Redirect::to(&redirect_url).into_response()
+}
+
+/// POST /admin/users/:id/suspend — block login without touching the
+/// account's content, unlike delete. Guards mirror `delete_user`'s: no
+/// self-suspend, no suspending a protected account, only a global admin may
+/// suspend another global admin, and the last global admin can never be
+/// suspended (same lockout risk as deleting them).
+pub async fn suspend_user(
+    State(state): State<AppState>,
+    admin: AdminUser,
+    Path(id): Path<Uuid>,
+    Form(form): Form<std::collections::HashMap<String, String>>,
+) -> impl IntoResponse {
+    if !admin.caps.can_manage_users {
+        return (axum::http::StatusCode::FORBIDDEN, "Forbidden").into_response();
+    }
+    let tab = form.get("tab").map(|s| s.as_str()).unwrap_or("site-users");
+    let redirect_url = format!("/admin/users?tab={}", tab);
+
+    if id == admin.user.id {
+        tracing::warn!("suspend_user denied: actor {} tried to suspend self", admin.user.id);
+        return Redirect::to(&redirect_url).into_response();
+    }
+
+    let target = match crate::models::user::get_by_id_include_inactive(&state.db, id).await {
+        Ok(t) => t,
+        Err(_) => return Redirect::to(&redirect_url).into_response(),
+    };
+
+    if target.is_protected {
+        tracing::warn!("suspend_user denied: target {} is protected", id);
+        return Redirect::to(&redirect_url).into_response();
+    }
+    if target.role == "super_admin" {
+        if !admin.caps.is_global_admin {
+            tracing::warn!("suspend_user denied: actor {} is not a global admin", admin.user.id);
+            return Redirect::to(&redirect_url).into_response();
+        }
+        let remaining = crate::models::user::count_global_admins(&state.db).await.unwrap_or(2);
+        if remaining <= 1 {
+            tracing::warn!("suspend_user denied: {} is the last global admin", id);
+            return Redirect::to(&redirect_url).into_response();
+        }
+    }
+
+    if let Err(e) = crate::models::user::deactivate(&state.db, id).await {
+        tracing::error!("suspend user {} error: {:?}", id, e);
+    }
+    Redirect::to(&redirect_url).into_response()
+}
+
+/// POST /admin/users/:id/reactivate — restore login access.
+pub async fn reactivate_user(
+    State(state): State<AppState>,
+    admin: AdminUser,
+    Path(id): Path<Uuid>,
+    Form(form): Form<std::collections::HashMap<String, String>>,
+) -> impl IntoResponse {
+    if !admin.caps.can_manage_users {
+        return (axum::http::StatusCode::FORBIDDEN, "Forbidden").into_response();
+    }
+    let tab = form.get("tab").map(|s| s.as_str()).unwrap_or("site-users");
+    let redirect_url = format!("/admin/users?tab={}", tab);
+
+    if let Err(e) = crate::models::user::reactivate(&state.db, id).await {
+        tracing::error!("reactivate user {} error: {:?}", id, e);
     }
     Redirect::to(&redirect_url).into_response()
 }

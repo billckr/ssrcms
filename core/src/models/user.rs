@@ -238,6 +238,17 @@ pub async fn get_by_id(pool: &PgPool, id: Uuid) -> Result<User> {
         .ok_or_else(|| AppError::NotFound(format!("user {id}")))
 }
 
+/// Like `get_by_id`, but also finds suspended (`is_active = FALSE`) accounts —
+/// needed anywhere a suspended user must still be reachable by ID: viewing/
+/// editing their admin profile, or the suspend/reactivate guard checks below.
+pub async fn get_by_id_include_inactive(pool: &PgPool, id: Uuid) -> Result<User> {
+    sqlx::query_as::<_, User>("SELECT * FROM users WHERE id = $1 AND deleted_at IS NULL")
+        .bind(id)
+        .fetch_optional(pool)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("user {id}")))
+}
+
 pub async fn get_by_username(pool: &PgPool, username: &str) -> Result<User> {
     sqlx::query_as::<_, User>(
         "SELECT * FROM users WHERE username = $1 AND is_active = TRUE AND deleted_at IS NULL",
@@ -275,10 +286,22 @@ pub async fn update_role(pool: &PgPool, id: Uuid, role: &UserRole) -> Result<()>
     Ok(())
 }
 
-#[allow(dead_code)]
+/// Suspend a user — blocks login (every login lookup filters `is_active = TRUE`)
+/// without touching their content, unlike `soft_delete`.
 pub async fn deactivate(pool: &PgPool, id: Uuid) -> Result<()> {
     sqlx::query(
         "UPDATE users SET is_active = FALSE, updated_at = NOW() WHERE id = $1",
+    )
+    .bind(id)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+/// Reverse `deactivate` — restores login access.
+pub async fn reactivate(pool: &PgPool, id: Uuid) -> Result<()> {
+    sqlx::query(
+        "UPDATE users SET is_active = TRUE, updated_at = NOW() WHERE id = $1",
     )
     .bind(id)
     .execute(pool)
@@ -341,6 +364,20 @@ pub async fn delete_and_reassign(pool: &PgPool, user_id: Uuid, reassign_to: Uuid
 pub async fn list(pool: &PgPool) -> Result<Vec<User>> {
     sqlx::query_as::<_, User>(
         "SELECT * FROM users WHERE is_active = TRUE AND deleted_at IS NULL ORDER BY username",
+    )
+    .fetch_all(pool)
+    .await
+    .map_err(Into::into)
+}
+
+/// Like `list`, but includes suspended (`is_active = FALSE`) accounts — for
+/// the admin Users page, where a suspended user must still be visible so an
+/// admin can reactivate them. `list` (active-only) stays the right choice
+/// for contexts like assignable-user dropdowns, where a suspended account
+/// shouldn't be selectable.
+pub async fn list_all(pool: &PgPool) -> Result<Vec<User>> {
+    sqlx::query_as::<_, User>(
+        "SELECT * FROM users WHERE deleted_at IS NULL ORDER BY username",
     )
     .fetch_all(pool)
     .await
