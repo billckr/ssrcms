@@ -948,13 +948,13 @@ pub async fn suspend_user(
     State(state): State<AppState>,
     admin: AdminUser,
     Path(id): Path<Uuid>,
-    Form(form): Form<std::collections::HashMap<String, String>>,
+    _form: Form<std::collections::HashMap<String, String>>,
 ) -> impl IntoResponse {
     if !admin.caps.can_manage_users {
         return (axum::http::StatusCode::FORBIDDEN, "Forbidden").into_response();
     }
-    let tab = form.get("tab").map(|s| s.as_str()).unwrap_or("site-users");
-    let redirect_url = format!("/admin/users?tab={}", tab);
+    // Only caller is the toggle on the Edit User page — stay there after the action.
+    let redirect_url = format!("/admin/users/{}/edit", id);
 
     if id == admin.user.id {
         tracing::warn!("suspend_user denied: actor {} tried to suspend self", admin.user.id);
@@ -993,13 +993,13 @@ pub async fn reactivate_user(
     State(state): State<AppState>,
     admin: AdminUser,
     Path(id): Path<Uuid>,
-    Form(form): Form<std::collections::HashMap<String, String>>,
+    _form: Form<std::collections::HashMap<String, String>>,
 ) -> impl IntoResponse {
     if !admin.caps.can_manage_users {
         return (axum::http::StatusCode::FORBIDDEN, "Forbidden").into_response();
     }
-    let tab = form.get("tab").map(|s| s.as_str()).unwrap_or("site-users");
-    let redirect_url = format!("/admin/users?tab={}", tab);
+    // Only caller is the toggle on the Edit User page — stay there after the action.
+    let redirect_url = format!("/admin/users/{}/edit", id);
 
     if let Err(e) = crate::models::user::reactivate(&state.db, id).await {
         tracing::error!("reactivate user {} error: {:?}", id, e);
@@ -1213,7 +1213,7 @@ pub async fn site_access_page(
     let cs = state.site_hostname(admin.site_id);
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
 
-    let target_user = match crate::models::user::get_by_id(&state.db, user_id).await {
+    let target_user = match crate::models::user::get_by_id_include_inactive(&state.db, user_id).await {
         Ok(u) => u,
         Err(_) => return Html("<h1>User not found</h1>".to_string()).into_response(),
     };

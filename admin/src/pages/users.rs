@@ -93,32 +93,6 @@ fn build_staff_rows(staff: &[UserRow], current_user_id: &str, can_manage_access:
         } else {
             String::new()
         };
-        let suspend_btn = if u.id != current_user_id && !u.is_protected {
-            if u.is_active {
-                format!(
-                    r#"<form method="POST" action="/admin/users/{id}/suspend" style="display:inline" onsubmit="return confirm('Suspend {name}? They will be immediately unable to log in until reactivated.')">
-                  <input type="hidden" name="tab" value="site-users">
-                  <button class="icon-btn" title="Suspend login" type="submit">
-                    <img src="/admin/static/icons/user-x.svg" alt="Suspend">
-                  </button>
-                </form>"#,
-                    id = crate::html_escape(&u.id),
-                    name = u.display_name.replace('\'', "\\'"),
-                )
-            } else {
-                format!(
-                    r#"<form method="POST" action="/admin/users/{id}/reactivate" style="display:inline">
-                  <input type="hidden" name="tab" value="site-users">
-                  <button class="icon-btn" title="Reactivate login" type="submit">
-                    <img src="/admin/static/icons/user-check.svg" alt="Reactivate">
-                  </button>
-                </form>"#,
-                    id = crate::html_escape(&u.id),
-                )
-            }
-        } else {
-            String::new()
-        };
         let delete_btn = if u.id != current_user_id && !u.is_protected {
             let warn_msg = format!(
                 "Delete user \\u2018{}\\u2019? This will permanently delete all their posts and pages. This cannot be undone.",
@@ -192,7 +166,6 @@ fn build_staff_rows(staff: &[UserRow], current_user_id: &str, can_manage_access:
                   <img src="/admin/static/icons/edit.svg" alt="Edit">
                 </a>
                 {site_access_btn}
-                {suspend_btn}
                 {delete_btn}
               </td>
             </tr>"#,
@@ -208,7 +181,6 @@ fn build_staff_rows(staff: &[UserRow], current_user_id: &str, can_manage_access:
             role = crate::html_escape(role_display(&u.role)),
             badge_class = role_badge_class(&u.role),
             site_access_btn = site_access_btn,
-            suspend_btn = suspend_btn,
             delete_btn = delete_btn,
         )
     }).collect::<Vec<_>>().join("\n")
@@ -217,32 +189,6 @@ fn build_staff_rows(staff: &[UserRow], current_user_id: &str, can_manage_access:
 /// Render the `<tr>` rows for the Subscribers table.
 fn build_sub_rows(subscribers: &[UserRow], current_user_id: &str) -> String {
     subscribers.iter().map(|u| {
-        let suspend_btn = if u.id != current_user_id && !u.is_protected {
-            if u.is_active {
-                format!(
-                    r#"<form method="POST" action="/admin/users/{id}/suspend" style="display:inline" onsubmit="return confirm('Suspend {name}? They will be immediately unable to log in until reactivated.')">
-                  <input type="hidden" name="tab" value="subscribers">
-                  <button class="icon-btn" title="Suspend login" type="submit">
-                    <img src="/admin/static/icons/user-x.svg" alt="Suspend">
-                  </button>
-                </form>"#,
-                    id = crate::html_escape(&u.id),
-                    name = u.display_name.replace('\'', "\\'"),
-                )
-            } else {
-                format!(
-                    r#"<form method="POST" action="/admin/users/{id}/reactivate" style="display:inline">
-                  <input type="hidden" name="tab" value="subscribers">
-                  <button class="icon-btn" title="Reactivate login" type="submit">
-                    <img src="/admin/static/icons/user-check.svg" alt="Reactivate">
-                  </button>
-                </form>"#,
-                    id = crate::html_escape(&u.id),
-                )
-            }
-        } else {
-            String::new()
-        };
         let delete_btn = if u.id != current_user_id && !u.is_protected {
             let warn_msg = format!(
                 "Delete subscriber \\u2018{}\\u2019? This cannot be undone.",
@@ -295,7 +241,6 @@ fn build_sub_rows(subscribers: &[UserRow], current_user_id: &str) -> String {
                 <a href="/admin/users/{id}/edit" class="icon-btn" title="Edit">
                   <img src="/admin/static/icons/edit.svg" alt="Edit">
                 </a>
-                {suspend_btn}
                 {delete_btn}
               </td>
             </tr>"#,
@@ -308,7 +253,6 @@ fn build_sub_rows(subscribers: &[UserRow], current_user_id: &str) -> String {
             email = crate::html_escape(&u.email),
             email_raw = crate::html_escape(&u.email),
             domain_badges = domain_badges,
-            suspend_btn = suspend_btn,
             delete_btn = delete_btn,
         )
     }).collect::<Vec<_>>().join("\n")
@@ -775,10 +719,12 @@ pub fn render_editor(user: &UserEdit, flash: Option<&str>, ctx: &crate::PageCont
         )
     };
 
-    // Suspend/Reactivate toggle — edit form only, same visibility rules as
-    // the list-page icon buttons (no self-suspend, protected accounts exempt).
+    // Suspend/Reactivate button — edit form only, same visibility rules as
+    // the list-page icon buttons used to have (no self-suspend, protected
+    // accounts exempt). The button's own text and color reflect current
+    // state, so there's no separate status label to keep in sync.
     //
-    // The actual submission <form> (suspend_form below) is rendered *outside*
+    // The submission <form> (suspend_form below) is rendered *outside*
     // the surrounding #user-editor-form rather than nested inside it — nested
     // <form> elements are invalid HTML, and browsers close the outer form as
     // soon as they hit the inner form's closing tag (the form-pointer rule in
@@ -788,55 +734,39 @@ pub fn render_editor(user: &UserEdit, flash: Option<&str>, ctx: &crate::PageCont
     // being rebuilt without the expected margins.
     let (suspend_toggle, suspend_form) = if !is_new && user.email != ctx.user_email && !user.is_protected {
         let user_id = crate::html_escape(user.id.as_deref().unwrap_or(""));
-        let (action, checked, status_label) = if user.is_active {
-            ("suspend", " checked", "Active")
+        let (action, btn_label, btn_style, confirm_msg) = if user.is_active {
+            (
+                "suspend",
+                "Active",
+                "background:#16a34a;color:#fff;border:none",
+                "Suspend this user? They will be immediately unable to log in until reactivated.",
+            )
         } else {
-            ("reactivate", "", "Suspended")
+            (
+                "reactivate",
+                "Suspended",
+                "background:#dc2626;color:#fff;border:none",
+                "Reactivate this user? They will immediately be able to log in again.",
+            )
         };
         let toggle = format!(
             r#"<div class="card-boxed-section">
     <div class="form-group" style="margin:0">
       <label>Account Status</label>
       <div style="margin:.35rem 0 0">
-        <label class="switch-toggle" style="cursor:pointer">
-          <input type="checkbox" id="suspend-toggle"{checked}>
-          <span class="switch-slider"></span>
-          <span id="suspend-toggle-label">{status_label}</span>
-        </label>
+        <button type="submit" form="suspend-toggle-form" class="btn" style="{btn_style}">{btn_label}</button>
       </div>
     </div>
     </div>"#,
-            checked = checked,
-            status_label = status_label,
+            btn_style = btn_style,
+            btn_label = btn_label,
         );
         let form = format!(
-            r#"<form method="POST" action="/admin/users/{user_id}/{action}" id="suspend-toggle-form" style="display:none">
-    <input type="hidden" name="tab" value="site-users">
-  </form>
-  <script>
-  (function() {{
-    var checkbox = document.getElementById('suspend-toggle');
-    var form = document.getElementById('suspend-toggle-form');
-    var label = document.getElementById('suspend-toggle-label');
-    checkbox.addEventListener('change', function() {{
-      if (this.checked) {{
-        form.action = '/admin/users/{user_id}/reactivate';
-        label.textContent = 'Active';
-        form.submit();
-      }} else {{
-        if (!confirm('Suspend this user? They will be immediately unable to log in until reactivated.')) {{
-          this.checked = true;
-          return;
-        }}
-        form.action = '/admin/users/{user_id}/suspend';
-        label.textContent = 'Suspended';
-        form.submit();
-      }}
-    }});
-  }})();
-  </script>"#,
+            r#"<form method="POST" action="/admin/users/{user_id}/{action}" id="suspend-toggle-form" onsubmit="return confirm('{confirm_msg}')">
+  </form>"#,
             user_id = user_id,
             action = action,
+            confirm_msg = confirm_msg,
         );
         (toggle, form)
     } else {
