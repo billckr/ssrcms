@@ -239,6 +239,13 @@ async fn main() -> anyhow::Result<()> {
     let app_settings = AppSettings::load(&pool, cfg.max_upload_mb as i64).await.unwrap_or_default();
     info!("app: {} | tz: {}", app_settings.app_name, app_settings.timezone);
 
+    // ── Admin sidebar logo (convention-based, checked once) ──────────────────
+    let logo_url = synaptic_core::app_state::detect_admin_logo();
+    match &logo_url {
+        Some(url) => info!("branding: custom admin logo found at '{}'", url),
+        None => info!("branding: no custom admin logo found, using app_name text"),
+    }
+
     // ── Application state ─────────────────────────────────────────────────────
     let active_theme = Arc::new(std::sync::RwLock::new(startup_theme));
     let cookie_key = axum_extra::extract::cookie::Key::generate();
@@ -263,6 +270,7 @@ async fn main() -> anyhow::Result<()> {
         metrics_token: cfg.metrics_token.clone(),
         app_settings: Arc::new(std::sync::RwLock::new(app_settings)),
         view_buffer: view_buffer.clone(),
+        logo_url,
     };
 
     // ── Scheduled post publisher ─────────────────────────────────────────────

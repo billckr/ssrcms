@@ -36,6 +36,7 @@ pub fn page_ctx(state: &AppState, admin: &AdminUser, current_site: &str) -> admi
         can_manage_pages: admin.caps.can_manage_pages,
         unread_forms_count: 0,
         app_name,
+        logo_url: state.logo_url.clone(),
     }
 }
 

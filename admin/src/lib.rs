@@ -37,6 +37,9 @@ pub struct PageContext {
     pub unread_forms_count: i64,
     /// Admin chrome brand label — from app_settings.app_name.
     pub app_name: String,
+    /// Public URL of a custom admin sidebar logo, if one was found at startup.
+    /// `None` falls back to rendering `app_name` as text.
+    pub logo_url: Option<String>,
 }
 
 /// Wrap a rendered content HTML string in the full admin page shell.
@@ -100,6 +103,15 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
         format!(r#"<li><a href="{}"{}>{}</a></li>"#, href, active, label)
     };
 
+    let brand_html = match &ctx.logo_url {
+        Some(url) => format!(
+            r#"<img class="brand-logo" src="{}" alt="{}">"#,
+            html_escape(url),
+            html_escape(&ctx.app_name)
+        ),
+        None => html_escape(&ctx.app_name),
+    };
+
     format!(
         r#"<!DOCTYPE html>
 <html lang="en">
@@ -113,7 +125,7 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
   <div class="sidebar-overlay" onclick="closeSidebar()"></div>
   <div class="admin-wrap">
     <nav class="admin-sidebar">
-      <div class="brand">{app_name}</div>
+      <div class="brand">{brand_html}</div>
       <ul>
         {dash}
         {sites}
@@ -124,10 +136,10 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
         {media}
         {cats}
         {tags}
-        {forms}
         {form_designer}
         {plugins}
         {appearance}
+        {forms}
         {builder}
         {documentation}
         {settings}
@@ -204,7 +216,7 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
 </html>"#,
         title = html_escape(title),
         css = ADMIN_CSS,
-        app_name = html_escape(&ctx.app_name),
+        brand_html = brand_html,
         dash = nav_link("/admin", "Dashboard"),
         posts = nav_link("/admin/posts", "Posts"),
         pages = if ctx.can_manage_pages { nav_link("/admin/pages", "Pages") } else { String::new() },

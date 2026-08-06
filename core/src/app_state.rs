@@ -269,6 +269,23 @@ pub struct AppState {
     pub app_settings: Arc<RwLock<AppSettings>>,
     /// Channel sender for view tracking — see `ViewBuffer` type alias for full rationale.
     pub view_buffer: ViewBuffer,
+    /// Public URL of a custom admin sidebar logo, if `admin/static/branding/logo.*`
+    /// existed at startup. `None` means the admin chrome falls back to the
+    /// `app_name` text. Convention-based, not a DB setting — swap the file and
+    /// restart to change it; there's nothing to configure.
+    pub logo_url: Option<String>,
+}
+
+/// Look for `admin/static/branding/logo.{svg,png,jpg,webp}` (checked in that
+/// priority order) and return its public URL if found. Called once at startup —
+/// there is no hot-reload for this; it's a rarely-changed branding asset, not a
+/// runtime setting.
+pub fn detect_admin_logo() -> Option<String> {
+    const CANDIDATES: &[&str] = &["logo.svg", "logo.png", "logo.jpg", "logo.webp"];
+    CANDIDATES.iter().find_map(|name| {
+        let path = std::path::Path::new("admin/static/branding").join(name);
+        path.is_file().then(|| format!("/admin/static/branding/{name}"))
+    })
 }
 
 impl axum::extract::FromRef<AppState> for axum_extra::extract::cookie::Key {
