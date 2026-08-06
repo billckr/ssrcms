@@ -86,7 +86,7 @@ fn build_staff_rows(staff: &[UserRow], current_user_id: &str, can_manage_access:
         let site_access_btn = if can_manage_access && !u.is_super_admin {
             format!(
                 r#"<a href="/admin/users/{id}/site-access" class="icon-btn" title="Manage site access">
-                  <img src="/admin/static/icons/users.svg" alt="Site Access">
+                  <img src="/admin/static/icons/key.svg" alt="Site Access">
                 </a>"#,
                 id = crate::html_escape(&u.id),
             )
@@ -853,6 +853,41 @@ function toggleSiteFields() {{
         role_field.clone()
     };
 
+    // Requirements checklist — new-user form only. Admins editing an existing
+    // user already know the rules; the checklist's live green/red feedback is
+    // wired up for the new-user form only anyway (see `isNew` guard below),
+    // so on edit it was just inert text. The actual validation (pattern/
+    // minlength/maxlength attributes, and the submit-time JS checks further
+    // down) applies regardless of whether this checklist is shown.
+    let requirements_section = if is_new {
+        r#"<div class="card-boxed-section">
+    <div class="form-note" style="margin-bottom:.75rem">
+      <p><strong>Username requirements:</strong></p>
+      <ul style="list-style:none;padding-left:0;margin:0.25rem 0 0">
+        <li id="uname-req-len"><span class="pw-dot" style="display:inline-block;width:1.1rem;font-style:normal">·</span>8–15 characters</li>
+        <li id="uname-req-chars"><span class="pw-dot" style="display:inline-block;width:1.1rem;font-style:normal">·</span>Lowercase letters, numbers, and hyphens only</li>
+      </ul>
+    </div>
+    <div class="form-note" style="margin-bottom:.75rem">
+      <p><strong>Password requirements:</strong></p>
+      <ul style="list-style:none;padding-left:0;margin:0.25rem 0 0">
+        <li id="pw-req-len"><span class="pw-dot" style="display:inline-block;width:1.1rem;font-style:normal">·</span>8–12 characters</li>
+        <li id="pw-req-upper"><span class="pw-dot" style="display:inline-block;width:1.1rem;font-style:normal">·</span>At least one uppercase letter</li>
+        <li id="pw-req-num"><span class="pw-dot" style="display:inline-block;width:1.1rem;font-style:normal">·</span>At least one number</li>
+        <li id="pw-req-sym"><span class="pw-dot" style="display:inline-block;width:1.1rem;font-style:normal">·</span>At least one symbol: ! @ # $ % &amp;</li>
+      </ul>
+    </div>
+    <div class="form-note" style="margin-bottom:0">
+      <p><strong>Role requirements:</strong></p>
+      <ul style="list-style:none;padding-left:0;margin:0.25rem 0 0">
+        <li id="role-req"><span class="pw-dot" style="display:inline-block;width:1.1rem;font-style:normal">·</span>Role selected</li>
+      </ul>
+    </div>
+    </div>"#
+    } else {
+        ""
+    };
+
     let content = format!(
         r#"<div class="card-boxed" style="max-width:560px">
   <h2 class="card-boxed-header" style="display:flex;align-items:center;justify-content:space-between;gap:.5rem;">
@@ -893,30 +928,7 @@ function toggleSiteFields() {{
     </div>
     </div>
     {suspend_toggle}
-    <div class="card-boxed-section">
-    <div class="form-note" style="margin-bottom:.75rem">
-      <p><strong>Username requirements:</strong></p>
-      <ul style="list-style:none;padding-left:0;margin:0.25rem 0 0">
-        <li id="uname-req-len"><span class="pw-dot" style="display:inline-block;width:1.1rem;font-style:normal">·</span>8–15 characters</li>
-        <li id="uname-req-chars"><span class="pw-dot" style="display:inline-block;width:1.1rem;font-style:normal">·</span>Lowercase letters, numbers, and hyphens only</li>
-      </ul>
-    </div>
-    <div class="form-note" style="margin-bottom:.75rem">
-      <p><strong>Password requirements:</strong></p>
-      <ul style="list-style:none;padding-left:0;margin:0.25rem 0 0">
-        <li id="pw-req-len"><span class="pw-dot" style="display:inline-block;width:1.1rem;font-style:normal">·</span>8–12 characters</li>
-        <li id="pw-req-upper"><span class="pw-dot" style="display:inline-block;width:1.1rem;font-style:normal">·</span>At least one uppercase letter</li>
-        <li id="pw-req-num"><span class="pw-dot" style="display:inline-block;width:1.1rem;font-style:normal">·</span>At least one number</li>
-        <li id="pw-req-sym"><span class="pw-dot" style="display:inline-block;width:1.1rem;font-style:normal">·</span>At least one symbol: ! @ # $ % &amp;</li>
-      </ul>
-    </div>
-    <div class="form-note" style="margin-bottom:0">
-      <p><strong>Role requirements:</strong></p>
-      <ul style="list-style:none;padding-left:0;margin:0.25rem 0 0">
-        <li id="role-req"><span class="pw-dot" style="display:inline-block;width:1.1rem;font-style:normal">·</span>Role selected</li>
-      </ul>
-    </div>
-    </div>
+    {requirements_section}
     {role_and_site_section}
     {role_section}
   </form>
@@ -1103,6 +1115,7 @@ function toggleSiteFields() {{
         display_name      = crate::html_escape(&user.display_name),
         email             = crate::html_escape(&user.email),
         role_and_site_section = role_and_site_section,
+        requirements_section = requirements_section,
         suspend_toggle    = suspend_toggle,
         suspend_form      = suspend_form,
         password_hint     = password_hint,
