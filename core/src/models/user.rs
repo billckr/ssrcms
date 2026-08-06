@@ -259,6 +259,16 @@ pub async fn get_by_username(pool: &PgPool, username: &str) -> Result<User> {
     .ok_or_else(|| AppError::NotFound(format!("user '{username}'")))
 }
 
+/// Like `get_by_username`, but also finds suspended (`is_active = FALSE`) accounts —
+/// needed for public author pages, where suspension should not hide already-published content.
+pub async fn get_by_username_include_inactive(pool: &PgPool, username: &str) -> Result<User> {
+    sqlx::query_as::<_, User>("SELECT * FROM users WHERE username = $1 AND deleted_at IS NULL")
+        .bind(username)
+        .fetch_optional(pool)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("user '{username}'")))
+}
+
 pub async fn get_by_email(pool: &PgPool, email: &str) -> Result<User> {
     sqlx::query_as::<_, User>(
         "SELECT * FROM users WHERE email = $1 AND is_active = TRUE AND deleted_at IS NULL",

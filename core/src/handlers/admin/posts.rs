@@ -170,7 +170,7 @@ async fn list_type(state: AppState, post_type: &str, page: Option<i64>, status_f
     let mut rows: Vec<PostRow> = Vec::new();
 
     for p in raw.iter() {
-        let author_name = crate::models::user::get_by_id(&state.db, p.author_id)
+        let author_name = crate::models::user::get_by_id_include_inactive(&state.db, p.author_id)
             .await
             .map(|u| u.display_name)
             .unwrap_or_else(|e| {
@@ -254,6 +254,7 @@ async fn new_post_type(state: AppState, post_type: &str, site_id: Option<Uuid>, 
         comments_enabled: false,
         comment_count: 0,
         author_name: String::new(),
+        author_is_active: true,
         author_id: String::new(),
         site_name: String::new(),
         parent_id: None,
@@ -347,10 +348,10 @@ async fn edit_post_type(state: AppState, id: Uuid, site_id: Option<Uuid>, is_aut
         None
     };
 
-    let author_name = crate::models::user::get_by_id(&state.db, post.author_id)
+    let (author_name, author_is_active) = crate::models::user::get_by_id_include_inactive(&state.db, post.author_id)
         .await
-        .map(|u| u.display_name)
-        .unwrap_or_else(|_| "Unknown".to_string());
+        .map(|u| (u.display_name, u.is_active))
+        .unwrap_or_else(|_| ("Unknown".to_string(), true));
 
     let site_name = post.site_id
         .and_then(|sid| {
@@ -401,6 +402,7 @@ async fn edit_post_type(state: AppState, id: Uuid, site_id: Option<Uuid>, is_aut
         featured_image_url,
         post_password_set: post.post_password.is_some(),
         author_name,
+        author_is_active,
         author_id: post.author_id.to_string(),
         site_name,
         parent_id: post.parent_id.map(|id| id.to_string()),
@@ -517,6 +519,7 @@ pub async fn save_new(
             comments_enabled: form_comments_enabled,
             comment_count: 0,
             author_name: String::new(),
+            author_is_active: true,
             author_id: String::new(),
             site_name: String::new(),
             parent_id: form.parent_id.clone().filter(|s| !s.is_empty()),
@@ -594,6 +597,7 @@ pub async fn save_new(
                 comments_enabled: form_comments_enabled,
                 comment_count: 0,
                 author_name: String::new(),
+                author_is_active: true,
                 author_id: String::new(),
                 site_name: String::new(),
                 parent_id: form_parent_id.map(|id| id.to_string()),
@@ -684,6 +688,7 @@ pub async fn save_edit(
             comments_enabled: form_comments_enabled,
             comment_count: 0,
             author_name: String::new(),
+            author_is_active: true,
             author_id: String::new(),
             site_name: String::new(),
             parent_id: form.parent_id.clone().filter(|s| !s.is_empty()),
@@ -781,6 +786,7 @@ pub async fn save_edit(
                 comments_enabled: form_comments_enabled,
                 comment_count: 0,
                 author_name: String::new(),
+                author_is_active: true,
                 author_id: String::new(),
                 site_name: String::new(),
                 parent_id: form_parent_id.map(|id| id.to_string()),

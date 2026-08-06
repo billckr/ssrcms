@@ -181,7 +181,7 @@ async fn fetch_posts_for_function(
         .await?
     } else if let Some(username) = &author {
         let author_row = sqlx::query_as::<_, user::User>(
-            "SELECT * FROM users WHERE username = $1 AND is_active = TRUE",
+            "SELECT * FROM users WHERE username = $1 AND deleted_at IS NULL",
         )
         .bind(username)
         .fetch_optional(pool)
@@ -218,7 +218,7 @@ async fn fetch_posts_for_function(
 
     let mut result = Vec::with_capacity(posts_raw.len());
     for p in &posts_raw {
-        let author_rec = user::get_by_id(pool, p.author_id).await?;
+        let author_rec = user::get_by_id_include_inactive(pool, p.author_id).await?;
         let all_terms = taxonomy::for_post(pool, p.id).await?;
 
         let categories = all_terms

@@ -41,6 +41,8 @@ pub struct PostEdit {
     pub comment_count: u64,
     /// Display name of the post author (empty string for new posts).
     pub author_name: String,
+    /// Whether the author's account is currently active (false = suspended).
+    pub author_is_active: bool,
     /// UUID of the post author (empty string for new posts), used to link the
     /// Author card to their user edit page.
     pub author_id: String,
@@ -776,13 +778,19 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
         } else {
             String::new()
         };
+        let suspended_badge = if !post.author_is_active {
+            r#" <span class="badge" style="background:#fee2e2;color:#991b1b" title="Login blocked until reactivated">Suspended</span>"#
+        } else {
+            ""
+        };
         let name_html = if post.author_id.is_empty() {
-            format!(r#"<div class="author-card-name">{}</div>"#, crate::html_escape(&post.author_name))
+            format!(r#"<div class="author-card-name">{}{}</div>"#, crate::html_escape(&post.author_name), suspended_badge)
         } else {
             format!(
-                r#"<a class="author-card-name" href="/admin/users/{id}/edit">{name}</a>"#,
+                r#"<a class="author-card-name" href="/admin/users/{id}/edit">{name}</a>{suspended_badge}"#,
                 id = crate::html_escape(&post.author_id),
                 name = crate::html_escape(&post.author_name),
+                suspended_badge = suspended_badge,
             )
         };
         format!(

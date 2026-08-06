@@ -260,7 +260,7 @@ pub(crate) async fn build_post_context(
 ) -> Result<PostContext> {
     use crate::models::{media, post as post_model, taxonomy, user};
 
-    let author = user::get_by_id(&state.db, p.author_id).await?;
+    let author = user::get_by_id_include_inactive(&state.db, p.author_id).await?;
     let all_terms = taxonomy::for_post(&state.db, p.id).await?;
 
     let categories: Vec<_> = all_terms

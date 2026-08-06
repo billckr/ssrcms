@@ -199,7 +199,7 @@ async fn render_author_archive(
 ) -> crate::errors::Result<String> {
     use crate::models::user;
 
-    let author = user::get_by_username(&state.db, &username).await?;
+    let author = user::get_by_username_include_inactive(&state.db, &username).await?;
 
     let per_page = state.settings.posts_per_page;
     let offset = (page - 1) * per_page;
