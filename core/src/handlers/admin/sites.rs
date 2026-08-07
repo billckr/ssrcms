@@ -230,21 +230,27 @@ pub async fn list(
     Html(admin::pages::sites::render_list(page_rows, flash, can_create, page, total_pages, search, &ctx))
 }
 
-/// Assignable users for the "existing user" dropdown on the new-site form —
-/// staff roles only (site_admin, editor, author). Excludes super_admins, who
-/// have global access and can't be scoped to a single site, and subscribers,
-/// who aren't staff and can't be assigned as a site admin.
-async fn fetch_assignable_users(state: &AppState) -> Vec<admin::pages::sites::UserOption> {
-    crate::models::user::list(&state.db)
+/// Assignable users for the site-owner dropdown on the new-site form: the
+/// acting admin themselves (as "You", pinned first) plus every site_admin-role
+/// user, since only site_admin accounts (or the super_admin creating them)
+/// can own a site. Editors, authors, and subscribers are never site owners.
+async fn fetch_assignable_users(state: &AppState, current_user_id: Uuid) -> Vec<admin::pages::sites::UserOption> {
+    let mut opts = vec![admin::pages::sites::UserOption {
+        id: current_user_id.to_string(),
+        label: "You".to_string(),
+    }];
+    let mut others: Vec<_> = crate::models::user::list(&state.db)
         .await
         .unwrap_or_default()
         .into_iter()
-        .filter(|u| u.role != "super_admin" && u.role != "subscriber")
+        .filter(|u| u.role == "site_admin" && u.id != current_user_id)
         .map(|u| admin::pages::sites::UserOption {
             id: u.id.to_string(),
             label: format!("{} ({})", u.display_name, u.email),
         })
-        .collect()
+        .collect();
+    opts.append(&mut others);
+    opts
 }
 
 /// GET /admin/sites/new — new site form.
@@ -259,7 +265,8 @@ pub async fn new_site(
     let cs = state.site_hostname(admin.site_id);
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
     let data = admin::pages::sites::NewSiteData {
-        existing_users: fetch_assignable_users(&state).await,
+        existing_user_id: admin.user.id.to_string(),
+        existing_users: fetch_assignable_users(&state, admin.user.id).await,
         ..Default::default()
     };
     Html(admin::pages::sites::render_new(&data, None, &ctx))
@@ -268,7 +275,7 @@ pub async fn new_site(
 #[derive(Deserialize, Default)]
 pub struct NewSiteForm {
     pub hostname: String,
-    /// "none" | "existing" | "new" — which Site Admin sub-form was submitted.
+    /// "existing" | "new" — which Site Admin sub-form was submitted.
     pub user_assignment: Option<String>,
     pub existing_user_id: Option<String>,
     pub new_username: Option<String>,
@@ -280,15 +287,15 @@ pub struct NewSiteForm {
 /// Rebuild the new-site form's prefill data after a validation failure, so the
 /// admin doesn't have to retype the hostname or re-enter the new-user fields
 /// (password excluded — never echo it back).
-async fn rebuild_new_site_data(state: &AppState, form: &NewSiteForm, hostname: &str) -> admin::pages::sites::NewSiteData {
+async fn rebuild_new_site_data(state: &AppState, admin: &AdminUser, form: &NewSiteForm, hostname: &str) -> admin::pages::sites::NewSiteData {
     admin::pages::sites::NewSiteData {
         hostname: hostname.to_string(),
-        user_assignment: form.user_assignment.clone().unwrap_or_else(|| "none".to_string()),
+        user_assignment: form.user_assignment.clone().unwrap_or_else(|| "existing".to_string()),
         existing_user_id: form.existing_user_id.clone().unwrap_or_default(),
         new_username: form.new_username.clone().unwrap_or_default(),
         new_email: form.new_email.clone().unwrap_or_default(),
         new_display_name: form.new_display_name.clone().unwrap_or_default(),
-        existing_users: fetch_assignable_users(state).await,
+        existing_users: fetch_assignable_users(state, admin.user.id).await,
     }
 }
 
@@ -307,11 +314,11 @@ pub async fn create(
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
     let hostname = form.hostname.trim().to_lowercase();
     if hostname.is_empty() {
-        let data = rebuild_new_site_data(&state, &form, &hostname).await;
+        let data = rebuild_new_site_data(&state, &admin, &form, &hostname).await;
         return Html(admin::pages::sites::render_new(&data, Some("Hostname cannot be empty."), &ctx)).into_response();
     }
     if !is_valid_hostname(&hostname) {
-        let data = rebuild_new_site_data(&state, &form, &hostname).await;
+        let data = rebuild_new_site_data(&state, &admin, &form, &hostname).await;
         return Html(admin::pages::sites::render_new(
             &data,
             Some("Must be a valid domain (e.g. example.com, my-site.com, sub.example.com)."),
@@ -319,20 +326,27 @@ pub async fn create(
         )).into_response();
     }
 
-    // Resolve who should own/admin the new site, per the Site Admin sub-form.
-    let assignee_id: Option<Uuid> = match form.user_assignment.as_deref() {
+    // Resolve who owns/admins the new site, per the Site Admin sub-form. Every
+    // site must have an owner from creation onward — "assign later" no longer
+    // exists — so this always resolves to a concrete user or bails with a
+    // validation error.
+    let owner_id: Uuid = match form.user_assignment.as_deref() {
         Some("existing") => {
             let Some(uid) = form.existing_user_id.as_deref().and_then(|s| s.parse::<Uuid>().ok()) else {
-                let data = rebuild_new_site_data(&state, &form, &hostname).await;
+                let data = rebuild_new_site_data(&state, &admin, &form, &hostname).await;
                 return Html(admin::pages::sites::render_new(&data, Some("Please select a user."), &ctx)).into_response();
             };
-            match crate::models::user::get_by_id(&state.db, uid).await {
-                Ok(u) if u.role != "super_admin" => Some(uid),
-                _ => {
-                    let data = rebuild_new_site_data(&state, &form, &hostname).await;
-                    return Html(admin::pages::sites::render_new(&data, Some("Selected user not found."), &ctx)).into_response();
-                }
+            // "You" (the acting admin) is always a valid choice, even for a
+            // super_admin who wouldn't otherwise show up in the site_admin list.
+            let valid = uid == admin.user.id || matches!(
+                crate::models::user::get_by_id(&state.db, uid).await,
+                Ok(u) if u.role == "site_admin"
+            );
+            if !valid {
+                let data = rebuild_new_site_data(&state, &admin, &form, &hostname).await;
+                return Html(admin::pages::sites::render_new(&data, Some("Selected user not found."), &ctx)).into_response();
             }
+            uid
         }
         Some("new") => {
             let username = form.new_username.clone().unwrap_or_default().trim().to_lowercase();
@@ -341,7 +355,7 @@ pub async fn create(
             let password = form.new_password.clone().unwrap_or_default();
 
             if let Err(msg) = crate::models::user::validate_username(&username) {
-                let data = rebuild_new_site_data(&state, &form, &hostname).await;
+                let data = rebuild_new_site_data(&state, &admin, &form, &hostname).await;
                 return Html(admin::pages::sites::render_new(
                     &data,
                     Some(msg),
@@ -349,11 +363,11 @@ pub async fn create(
                 )).into_response();
             }
             if email.is_empty() {
-                let data = rebuild_new_site_data(&state, &form, &hostname).await;
+                let data = rebuild_new_site_data(&state, &admin, &form, &hostname).await;
                 return Html(admin::pages::sites::render_new(&data, Some("Email cannot be empty."), &ctx)).into_response();
             }
             if let Err(msg) = crate::models::user::validate_password(&password) {
-                let data = rebuild_new_site_data(&state, &form, &hostname).await;
+                let data = rebuild_new_site_data(&state, &admin, &form, &hostname).await;
                 return Html(admin::pages::sites::render_new(&data, Some(msg), &ctx)).into_response();
             }
 
@@ -365,50 +379,25 @@ pub async fn create(
                 role: crate::models::user::UserRole::SiteAdmin,
             };
             match crate::models::user::create(&state.db, &create_user).await {
-                Ok(new_user) => Some(new_user.id),
+                Ok(new_user) => new_user.id,
                 Err(e) => {
                     let msg = if e.to_string().contains("duplicate") || e.to_string().contains("unique") {
                         "A user with that username or email already exists.".to_string()
                     } else {
                         format!("Failed to create user: {e}")
                     };
-                    let data = rebuild_new_site_data(&state, &form, &hostname).await;
+                    let data = rebuild_new_site_data(&state, &admin, &form, &hostname).await;
                     return Html(admin::pages::sites::render_new(&data, Some(&msg), &ctx)).into_response();
                 }
             }
         }
-        _ => None,
-    };
-
-    // When impersonating (super_admin visiting a foreign site), assign the new
-    // site to that site's owner rather than to the super admin's own account.
-    // A super_admin picking "assign later" gets no owner at all — leaving one
-    // unset until a real admin exists, rather than defaulting to themselves,
-    // avoids a super_admin ending up as a site's permanent, stale "admin".
-    let owner_id: Option<Uuid> = if let Some(uid) = assignee_id {
-        Some(uid)
-    } else if admin.caps.is_impersonating {
-        if let Some(sid) = admin.site_id {
-            sqlx::query_scalar::<_, Option<uuid::Uuid>>(
-                "SELECT owner_user_id FROM sites WHERE id = $1",
-            )
-            .bind(sid)
-            .fetch_optional(&state.db)
-            .await
-            .ok()
-            .flatten()
-            .flatten()
-        } else {
-            None
+        _ => {
+            let data = rebuild_new_site_data(&state, &admin, &form, &hostname).await;
+            return Html(admin::pages::sites::render_new(&data, Some("Please select a site admin."), &ctx)).into_response();
         }
-    } else if !admin.caps.is_global_admin {
-        // site_admin creating their own site — they own what they create.
-        Some(admin.user.id)
-    } else {
-        None
     };
 
-    let result = crate::models::site::create_with_defaults(&state.db, &hostname, owner_id)
+    let result = crate::models::site::create_with_defaults(&state.db, &hostname, Some(owner_id))
         .await;
 
     match result {
@@ -465,7 +454,7 @@ pub async fn create(
             } else {
                 format!("Failed to create site: {e}")
             };
-            let data = rebuild_new_site_data(&state, &form, &hostname).await;
+            let data = rebuild_new_site_data(&state, &admin, &form, &hostname).await;
             Html(admin::pages::sites::render_new(&data, Some(&msg), &ctx)).into_response()
         }
     }

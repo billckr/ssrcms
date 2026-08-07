@@ -11,8 +11,11 @@ use crate::errors::{AppError, Result};
 pub struct Site {
     pub id: Uuid,
     pub hostname: String,
-    /// Immutable creator of this site. NULL = installed by CLI / super_admin.
-    /// Use site_users WHERE role='admin' AND site_id=X to find the current admin.
+    /// Creator/owner of this site, always set at creation time through the
+    /// admin UI. Can still end up NULL later if a site's last admin is
+    /// removed without a replacement being assigned, or for sites installed
+    /// directly via the CLI. Use site_users WHERE role='admin' AND site_id=X
+    /// to find the current admin.
     pub owner_user_id: Option<Uuid>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -33,9 +36,10 @@ pub async fn create(pool: &PgPool, hostname: &str) -> Result<Site> {
 }
 
 /// Create a site, seed default site_settings, and — when an owner is given —
-/// register them as admin in site_users, all in a single transaction.
-/// `owner_user_id` is `None` for "assign later": the site gets no owner and no
-/// site_users row until someone is actually assigned. Returns the new Site.
+/// register them as admin in site_users, all in a single transaction. The
+/// admin UI always supplies an owner; `owner_user_id` is only `None` for
+/// sites created outside that flow (e.g. the CLI installer), which get no
+/// site_users row until an admin is assigned. Returns the new Site.
 pub async fn create_with_defaults(
     pool: &PgPool,
     hostname: &str,
@@ -235,10 +239,10 @@ pub async fn page_count(pool: &PgPool, site_id: Uuid) -> Result<i64> {
 /// Email of the site owner (any role), if one is assigned.
 ///
 /// Reads `sites.owner_user_id` directly. This is only correct because site
-/// creation ("assign later") no longer defaults `owner_user_id` to the acting
-/// super_admin (see `handlers::admin::sites::create`) — when it's set, it's
-/// always a real, intentional owner, including the legitimate case of the
-/// super_admin owning their own default/CLI-install site.
+/// creation (`handlers::admin::sites::create`) never defaults `owner_user_id`
+/// to the acting super_admin implicitly — when it's set, it's always a real,
+/// intentional owner, including the legitimate case of the super_admin
+/// owning their own default/CLI-install site.
 pub async fn admin_email(pool: &PgPool, site_id: Uuid) -> Result<Option<String>> {
     let email: Option<String> = sqlx::query_scalar(
         r#"SELECT u.email

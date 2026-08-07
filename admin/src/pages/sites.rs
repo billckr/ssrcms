@@ -438,13 +438,14 @@ pub struct UserOption {
 pub struct NewSiteData {
     /// Preserved on validation failure so the admin doesn't have to retype it.
     pub hostname: String,
-    /// "none" | "existing" | "new" — which Site Admin sub-form was active.
+    /// "existing" | "new" — which Site Admin sub-form was active.
     pub user_assignment: String,
     pub existing_user_id: String,
     pub new_username: String,
     pub new_email: String,
     pub new_display_name: String,
-    /// Assignable users (excludes super_admins, who can't be scoped to a site).
+    /// Assignable users: "You" (the acting admin) plus every site_admin-role
+    /// user. Every site must have an owner, so this list is never empty.
     pub existing_users: Vec<UserOption>,
 }
 
@@ -452,7 +453,7 @@ impl Default for NewSiteData {
     fn default() -> Self {
         Self {
             hostname: String::new(),
-            user_assignment: "none".to_string(),
+            user_assignment: "existing".to_string(),
             existing_user_id: String::new(),
             new_username: String::new(),
             new_email: String::new(),
@@ -512,17 +513,11 @@ pub fn render_new(data: &NewSiteData, flash: Option<&str>, ctx: &crate::PageCont
     <label>Site Admin</label>
     <div style="display:flex;gap:1.5rem;margin:0.4rem 0 0.75rem;flex-wrap:wrap">
       <label class="radio-label">
-        <input type="radio" name="user_assignment" value="none"{none_checked} onchange="toggleUserFields()"> Assign later
-      </label>
-      <label class="radio-label">
         <input type="radio" name="user_assignment" value="existing"{existing_checked} onchange="toggleUserFields()"> Existing user
       </label>
       <label class="radio-label">
         <input type="radio" name="user_assignment" value="new"{new_checked} onchange="toggleUserFields()"> New user
       </label>
-    </div>
-    <div id="user-none">
-      <small>You will be this site's admin and owner until you assign someone else.</small>
     </div>
     <div id="user-existing" style="display:none">
       <select name="existing_user_id" id="user-existing-select">
@@ -675,7 +670,7 @@ pub fn render_new(data: &NewSiteData, flash: Option<&str>, ctx: &crate::PageCont
 
   function syncCreateBtn(hostnameOk) {{
     var assign = document.querySelector('input[name="user_assignment"]:checked').value;
-    var userOk = true;
+    var userOk = false;
     if (assign === 'existing') {{
       userOk = !!document.getElementById('user-existing-select').value;
     }} else if (assign === 'new') {{
@@ -687,7 +682,6 @@ pub fn render_new(data: &NewSiteData, flash: Option<&str>, ctx: &crate::PageCont
 
   window.toggleUserFields = function() {{
     var val = document.querySelector('input[name="user_assignment"]:checked').value;
-    document.getElementById('user-none').style.display     = val === 'none'     ? '' : 'none';
     document.getElementById('user-existing').style.display = val === 'existing' ? '' : 'none';
     document.getElementById('user-new').style.display      = val === 'new'      ? '' : 'none';
     hnUpdate();
@@ -709,7 +703,6 @@ pub fn render_new(data: &NewSiteData, flash: Option<&str>, ctx: &crate::PageCont
 }})();
 </script>"#,
         hostname            = crate::html_escape(&data.hostname),
-        none_checked        = checked("none"),
         existing_checked    = checked("existing"),
         new_checked         = checked("new"),
         existing_opts       = existing_opts,
