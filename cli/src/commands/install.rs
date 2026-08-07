@@ -67,6 +67,43 @@ pub struct InstallArgs {
     /// Requires root. Env: APP_USER
     #[arg(long, env = "APP_USER")]
     pub app_user: Option<String>,
+
+    /// Create a local Postgres role/database before connecting, instead of
+    /// requiring an already-working DATABASE_URL. Off by default — only
+    /// relevant when no DATABASE_URL is already usable. Env: SYNAP_BOOTSTRAP_DB
+    #[arg(long, env = "SYNAP_BOOTSTRAP_DB")]
+    pub bootstrap_db: bool,
+
+    /// Postgres role to create/use when bootstrapping a local database. Env: DB_USER
+    #[arg(long, env = "DB_USER", default_value = "synaptic")]
+    pub db_user: String,
+
+    /// Postgres database name to create/use when bootstrapping a local database. Env: DB_NAME
+    #[arg(long, env = "DB_NAME", default_value = "synaptic_signals")]
+    pub db_name: String,
+
+    /// Postgres password for db_user. Env: DB_PASSWORD
+    /// If omitted, a random password is generated when bootstrapping.
+    #[arg(long, env = "DB_PASSWORD")]
+    pub db_password: Option<String>,
+
+    /// Copy the generated Caddyfile/systemd unit into place and enable the
+    /// service locally (requires sudo). Off by default — this touches
+    /// system-wide Caddy/systemd config and can conflict with an
+    /// already-running dev instance on the same port. Env: SYNAP_SETUP_SERVICE
+    #[arg(long, env = "SYNAP_SETUP_SERVICE")]
+    pub setup_service: bool,
+
+    /// Path to the built `synaptic` binary to install as {install_dir}/synaptic
+    /// when --setup-service is used. Defaults to target/release/synaptic (then
+    /// target/debug/synaptic) relative to the current directory.
+    #[arg(long)]
+    pub synaptic_bin: Option<String>,
+
+    /// Path to the built `synap` CLI binary to install as {install_dir}/synap
+    /// when --setup-service is used. Defaults similarly to synaptic_bin.
+    #[arg(long)]
+    pub synap_bin: Option<String>,
 }
 
 /// Returns the current effective UID.
@@ -158,18 +195,43 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
         }
     }
 
+    // Check for an already-working DATABASE_URL — the process env (today's
+    // only source) or install_dir/.env (covers a dev machine where the URL
+    // lives only in a project .env, not the shell environment). If found,
+    // never offer/require bootstrap — just use it (or let it be edited).
+    let existing_db_url = std::env::var("DATABASE_URL").ok()
+        .or_else(|| read_env_key(&std::path::Path::new(&install_dir).join(".env"), "DATABASE_URL"));
+
     let database_url: String = if ni {
-        std::env::var("DATABASE_URL").map_err(|_| {
-            anyhow::anyhow!("DATABASE_URL env var is required in --non-interactive mode")
-        })?
-    } else {
+        match (existing_db_url, args.bootstrap_db) {
+            (Some(url), _) => url,
+            (None, true) => bootstrap_local_db(&args.db_user, &args.db_name, args.db_password.clone())?,
+            (None, false) => return Err(anyhow::anyhow!(
+                "DATABASE_URL env var is required in --non-interactive mode \
+                 (or pass --bootstrap-db to create a local database)."
+            )),
+        }
+    } else if let Some(url) = existing_db_url {
         Input::new()
             .with_prompt("Database URL")
-            .default(
-                std::env::var("DATABASE_URL")
-                    .unwrap_or_else(|_| "postgres://synaptic:password@localhost:5432/synaptic_signals".to_string()),
-            )
+            .default(url)
             .interact_text()?
+    } else {
+        let want_bootstrap = Confirm::new()
+            .with_prompt(
+                "No DATABASE_URL found. Create a local Postgres role/database now? \
+                 (requires sudo access to run commands as the 'postgres' user)"
+            )
+            .default(false)
+            .interact()?;
+        if want_bootstrap {
+            bootstrap_local_db(&args.db_user, &args.db_name, args.db_password.clone())?
+        } else {
+            Input::new()
+                .with_prompt("Database URL")
+                .default("postgres://synaptic:password@localhost:5432/synaptic_signals".to_string())
+                .interact_text()?
+        }
     };
 
     println!("\n── Database ─────────────────────────────────────────────");
@@ -340,7 +402,7 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
         ("site_url",         &site_url),
         ("site_language",    "en-US"),
         ("active_theme",     "default"),
-        ("posts_per_page",   "10"),
+        ("posts_per_page",   "9"),
         ("date_format",      "%B %-d, %Y"),
     ];
     for (key, value) in settings_defaults {
@@ -434,6 +496,28 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
     write_caddyfile(output_dir, &domain, port, &uploads_dir, &theme_dir)?;
     write_systemd_service(output_dir, &install_dir, &service_user)?;
 
+    // ── Local service setup (opt-in) ────────────────────────────────────────
+    // Decided here (needs `port` for the warning text) but actually performed
+    // further down, after .env is finalized — the systemd unit reads
+    // {install_dir}/.env on start, so it must be complete first.
+    let do_setup_service = if args.setup_service {
+        true
+    } else if ni {
+        false // non-interactive without the explicit flag: never touch system state
+    } else {
+        println!();
+        println!("Optional: install this as a local systemd service fronted by Caddy.");
+        println!("  This copies files into /etc/caddy/ and /etc/systemd/system/, reloads");
+        println!("  Caddy, and enables+starts a synaptic-signals.service. It requires sudo,");
+        println!("  and if a dev instance is already running (e.g. via ./app.sh on port");
+        println!("  {port}), a systemd-managed instance could try to bind the same port");
+        println!("  and conflict with it.");
+        Confirm::new()
+            .with_prompt("Set up Caddy + systemd service now?")
+            .default(false)
+            .interact()?
+    };
+
     // ── Caddy permissions (SSL provisioning from admin panel) ──────────────
     // Resolve app_user: flag → env → interactive prompt (skippable).
     let app_user: Option<String> = if let Some(u) = args.app_user {
@@ -476,6 +560,21 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
         write_env_key(&env_path, "ADMIN_EMAIL", ae);
     }
 
+    // These must never clobber an existing working .env, but a from-scratch
+    // install run alone (no wrapper script) needs them written at least once,
+    // or the app has no DATABASE_URL / falls back to the insecure default
+    // SECRET_KEY. No-ops when the key already exists (e.g. install-vps.sh
+    // already wrote a complete .env before invoking --non-interactive).
+    write_env_key_if_absent(&env_path, "DATABASE_URL", &database_url);
+    write_env_key_if_absent(&env_path, "SECRET_KEY", &generate_secret_key());
+    write_env_key_if_absent(&env_path, "HOST", "0.0.0.0");
+    write_env_key_if_absent(&env_path, "PORT", &port.to_string());
+    write_env_key_if_absent(&env_path, "LOG_LEVEL", "info");
+
+    if do_setup_service {
+        setup_local_service(&install_dir, output_dir, args.synaptic_bin.as_deref(), args.synap_bin.as_deref())?;
+    }
+
     // ── Install Summary ────────────────────────────────────────────────────
     println!("\n── Installation Summary ─────────────────────────────────");
     println!("  App name    : {}", app_name);
@@ -487,6 +586,9 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
         println!("  Admin user  : seeded (see credentials you entered above)");
     }
     println!("  Site URL    : {}", site_url);
+    if do_setup_service {
+        println!("  Local service: enabled and started (systemctl status synaptic-signals)");
+    }
 
     // The running server (if any) loaded its site cache at startup and does not
     // watch the database for new sites — a restart is required to pick this one
@@ -606,6 +708,242 @@ where
     interactive()
 }
 
+/// Create (idempotently) a local Postgres role + database via
+/// `sudo -u postgres psql`, mirroring install-vps.sh's do_db_bootstrap but
+/// run directly on this machine (no ssh). Returns the resulting DATABASE_URL.
+fn bootstrap_local_db(db_user: &str, db_name: &str, db_password: Option<String>) -> anyhow::Result<String> {
+    println!("\n── Local Database Bootstrap ─────────────────────────────");
+    let password = db_password.unwrap_or_else(generate_db_password);
+
+    let sql = format!(
+        r#"DO $$ BEGIN
+  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = '{db_user}') THEN
+    EXECUTE format('CREATE ROLE {db_user} LOGIN PASSWORD %L', '{password}');
+  ELSE
+    EXECUTE format('ALTER ROLE {db_user} WITH LOGIN PASSWORD %L', '{password}');
+  END IF;
+END $$;
+SELECT 'CREATE DATABASE {db_name} OWNER {db_user}'
+  WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = '{db_name}') \gexec
+GRANT ALL PRIVILEGES ON DATABASE {db_name} TO {db_user};
+"#
+    );
+
+    // Validate/cache the sudo timestamp first, with inherited stdio, so any
+    // password prompt goes to the real tty. The actual psql call below pipes
+    // the SQL over stdin, which would otherwise fight with sudo's own prompt.
+    println!("You may be prompted for your sudo password...");
+    let sudo_ok = std::process::Command::new("sudo")
+        .arg("-v")
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false);
+    if !sudo_ok {
+        anyhow::bail!(
+            "sudo access is required to bootstrap a local database (sudo -v failed). \
+             Bootstrap the database manually and re-run with DATABASE_URL set, or omit --bootstrap-db."
+        );
+    }
+
+    let status = std::process::Command::new("sudo")
+        .args(["-u", "postgres", "psql", "-v", "ON_ERROR_STOP=1"])
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::inherit())
+        .stderr(std::process::Stdio::inherit())
+        .spawn()
+        .and_then(|mut child| {
+            use std::io::Write;
+            child.stdin.take().unwrap().write_all(sql.as_bytes())?;
+            child.wait()
+        });
+
+    match status {
+        Ok(s) if s.success() => println!("Database role/database ready."),
+        Ok(s) => anyhow::bail!(
+            "sudo -u postgres psql exited with {s}. Common causes: PostgreSQL not \
+             installed locally, or the 'postgres' OS user not present. Bootstrap the \
+             database manually and re-run with DATABASE_URL set, or omit --bootstrap-db."
+        ),
+        Err(e) => anyhow::bail!(
+            "Failed to run `sudo -u postgres psql`: {e}. Is sudo installed and is \
+             PostgreSQL installed locally? Bootstrap manually and re-run with \
+             DATABASE_URL set."
+        ),
+    }
+
+    Ok(format!("postgres://{db_user}:{password}@localhost:5432/{db_name}"))
+}
+
+/// Generate a random hex password for a bootstrapped Postgres role.
+fn generate_db_password() -> String {
+    use rand::RngCore;
+    let mut bytes = [0u8; 16];
+    rand::thread_rng().fill_bytes(&mut bytes);
+    bytes.iter().map(|b| format!("{:02x}", b)).collect()
+}
+
+/// Verify systemd/Caddy are actually present locally before attempting to
+/// install a service — fail fast with a clear message rather than partway
+/// through copying files into /etc/.
+fn check_local_service_requirements() -> anyhow::Result<()> {
+    let mut problems = Vec::new();
+    if std::process::Command::new("systemctl").arg("--version").output().is_err() {
+        problems.push("systemctl not found on PATH — systemd is required".to_string());
+    }
+    if std::process::Command::new("caddy").arg("version").output().is_err() {
+        problems.push("caddy not found on PATH".to_string());
+    }
+    if !std::path::Path::new("/etc/systemd/system").is_dir() {
+        problems.push("/etc/systemd/system does not exist".to_string());
+    }
+    if !problems.is_empty() {
+        anyhow::bail!(
+            "Cannot set up local service — missing requirements:\n  - {}\n\
+             Install systemd/Caddy first, or skip --setup-service.",
+            problems.join("\n  - ")
+        );
+    }
+    Ok(())
+}
+
+/// Resolve a built binary's path: explicit override, else
+/// target/release/{name}, else target/debug/{name}, relative to cwd.
+fn resolve_binary(explicit: Option<&str>, name: &str) -> anyhow::Result<std::path::PathBuf> {
+    if let Some(p) = explicit {
+        let path = std::path::PathBuf::from(p);
+        if path.is_file() { return Ok(path); }
+        anyhow::bail!("--{name}-bin path '{p}' does not exist or is not a file");
+    }
+    for candidate in ["target/release", "target/debug"] {
+        let path = std::path::PathBuf::from(candidate).join(name);
+        if path.is_file() { return Ok(path); }
+    }
+    anyhow::bail!(
+        "Could not find a built '{name}' binary (looked in target/release/{name} \
+         and target/debug/{name} relative to the current directory). Run \
+         `cargo build --release` first, or pass --{name}-bin <path> explicitly."
+    );
+}
+
+/// Run `sudo <args>` with inherited stdio (so any password prompt goes to
+/// the real tty), bailing with a clear error on failure.
+fn run_sudo(args: &[&str]) -> anyhow::Result<()> {
+    let status = std::process::Command::new("sudo")
+        .args(args)
+        .status()
+        .map_err(|e| anyhow::anyhow!("Failed to run `sudo {}`: {e}", args.join(" ")))?;
+    if !status.success() {
+        anyhow::bail!("`sudo {}` failed ({status})", args.join(" "));
+    }
+    Ok(())
+}
+
+/// If `live_path` already exists, copy it to `{backup_dir}/{label}.bak.<timestamp>`
+/// (via sudo, since e.g. /etc/systemd/system/*.service may not be
+/// user-readable) before it gets overwritten, and hand ownership of the
+/// backup to the invoking user. Returns the backup path if one was made.
+/// This machine may already be running a live Caddy/systemd setup fronting
+/// other sites — setup_local_service must never clobber that without a
+/// way back.
+fn backup_if_exists(live_path: &str, backup_dir: &std::path::Path, label: &str) -> anyhow::Result<Option<std::path::PathBuf>> {
+    if !std::path::Path::new(live_path).exists() {
+        return Ok(None);
+    }
+    std::fs::create_dir_all(backup_dir)
+        .map_err(|e| anyhow::anyhow!("Failed to create backup dir {}: {e}", backup_dir.display()))?;
+    let timestamp = chrono::Utc::now().format("%Y%m%d_%H%M%S");
+    let backup_path = backup_dir.join(format!("{label}.bak.{timestamp}"));
+    let backup_path_str = backup_path.to_str()
+        .ok_or_else(|| anyhow::anyhow!("backup path is not valid UTF-8"))?;
+    run_sudo(&["cp", live_path, backup_path_str])?;
+    let user = current_username();
+    let _ = run_sudo(&["chown", &format!("{user}:{user}"), backup_path_str]);
+    println!("  Backed up existing {} -> {}", live_path, backup_path.display());
+    Ok(Some(backup_path))
+}
+
+/// Local equivalent of install-vps.sh's do_ship_files (binary placement only)
+/// + do_caddy_systemd: places the built binaries at {install_dir}/{synaptic,synap},
+/// copies the already-generated Caddyfile/service files into place, and
+/// enables/starts both Caddy and the synaptic-signals service. No ssh/scp —
+/// everything runs directly on this machine, gated by an explicit opt-in.
+/// Any live Caddyfile/systemd unit this would overwrite is backed up first
+/// (see `backup_if_exists`) — this machine may already be running a
+/// different site through the same files.
+fn setup_local_service(
+    install_dir: &str,
+    output_dir: &std::path::Path,
+    synaptic_bin_arg: Option<&str>,
+    synap_bin_arg: Option<&str>,
+) -> anyhow::Result<()> {
+    println!("\n── Local Service Setup ──────────────────────────────────");
+    check_local_service_requirements()?;
+
+    let synaptic_src = resolve_binary(synaptic_bin_arg, "synaptic")?;
+    let synap_src    = resolve_binary(synap_bin_arg, "synap")?;
+    let synaptic_dst = std::path::Path::new(install_dir).join("synaptic");
+    let synap_dst    = std::path::Path::new(install_dir).join("synap");
+    std::fs::copy(&synaptic_src, &synaptic_dst)
+        .map_err(|e| anyhow::anyhow!("Failed to copy {} -> {}: {e}", synaptic_src.display(), synaptic_dst.display()))?;
+    std::fs::copy(&synap_src, &synap_dst)
+        .map_err(|e| anyhow::anyhow!("Failed to copy {} -> {}: {e}", synap_src.display(), synap_dst.display()))?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        for p in [&synaptic_dst, &synap_dst] {
+            let _ = std::fs::set_permissions(p, std::fs::Permissions::from_mode(0o755));
+        }
+    }
+    println!("  Installed binaries to {}/{{synaptic,synap}}", install_dir);
+
+    let generated_caddy = output_dir.join("Caddyfile");
+    let generated_unit  = output_dir.join("synaptic-signals.service");
+    let generated_caddy_str = generated_caddy.to_str()
+        .ok_or_else(|| anyhow::anyhow!("Caddyfile path is not valid UTF-8"))?;
+    let generated_unit_str = generated_unit.to_str()
+        .ok_or_else(|| anyhow::anyhow!("service file path is not valid UTF-8"))?;
+
+    let backup_dir = std::path::Path::new(install_dir).join("backups");
+    let mut backups_made: Vec<std::path::PathBuf> = Vec::new();
+
+    if let Some(b) = backup_if_exists("/etc/caddy/Caddyfile", &backup_dir, "Caddyfile")? {
+        backups_made.push(b);
+    }
+    run_sudo(&["cp", generated_caddy_str, "/etc/caddy/Caddyfile"])?;
+    let caddy_active = std::process::Command::new("systemctl")
+        .args(["is-active", "--quiet", "caddy"])
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false);
+    if caddy_active {
+        run_sudo(&["caddy", "reload", "--config", "/etc/caddy/Caddyfile"])?;
+    } else {
+        run_sudo(&["systemctl", "enable", "--now", "caddy"])?;
+    }
+
+    if let Some(b) = backup_if_exists("/etc/systemd/system/synaptic-signals.service", &backup_dir, "synaptic-signals.service")? {
+        backups_made.push(b);
+    }
+    run_sudo(&["cp", generated_unit_str, "/etc/systemd/system/synaptic-signals.service"])?;
+    run_sudo(&["systemctl", "daemon-reload"])?;
+    run_sudo(&["systemctl", "enable", "--now", "synaptic-signals"])?;
+
+    println!("  Caddy + systemd service configured and started.");
+    if !backups_made.is_empty() {
+        println!("\n  Pre-existing files were replaced. To roll back:");
+        for b in &backups_made {
+            let target = if b.file_name().and_then(|n| n.to_str()).is_some_and(|n| n.starts_with("Caddyfile")) {
+                "/etc/caddy/Caddyfile"
+            } else {
+                "/etc/systemd/system/synaptic-signals.service"
+            };
+            println!("    sudo cp {} {}", b.display(), target);
+        }
+        println!("    sudo systemctl daemon-reload && sudo caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile");
+    }
+    Ok(())
+}
+
 /// Generate a password that satisfies validate_password():
 /// 8-12 chars, ≥1 uppercase, ≥1 digit, ≥1 symbol from !@#$%&
 fn generate_password() -> String {
@@ -717,6 +1055,36 @@ fn hash_password(password: &str) -> anyhow::Result<String> {
         .hash_password(password.as_bytes(), &salt)
         .map(|h| h.to_string())
         .map_err(|e| anyhow::anyhow!("Password hashing failed: {e}"))
+}
+
+/// Read a single key's value out of a .env-style file, if present.
+fn read_env_key(path: &std::path::Path, key: &str) -> Option<String> {
+    let content = std::fs::read_to_string(path).ok()?;
+    let prefix = format!("{}=", key);
+    content.lines()
+        .find(|l| l.starts_with(&prefix))
+        .map(|l| l[prefix.len()..].to_string())
+}
+
+/// Write a `KEY=value` line only if that key is not already present in the
+/// file. Used for values that must never clobber an existing working .env
+/// (e.g. a dev machine's DATABASE_URL/SECRET_KEY) but should still be filled
+/// in on a genuinely fresh or partially-configured install.
+fn write_env_key_if_absent(path: &std::path::Path, key: &str, value: &str) {
+    let existing = std::fs::read_to_string(path).unwrap_or_default();
+    let prefix = format!("{}=", key);
+    if existing.lines().any(|l| l.starts_with(&prefix)) {
+        return;
+    }
+    write_env_key(path, key, value);
+}
+
+/// 32 random bytes, hex-encoded (64 chars) — same entropy as `openssl rand -hex 32`.
+fn generate_secret_key() -> String {
+    use rand::RngCore;
+    let mut bytes = [0u8; 32];
+    rand::thread_rng().fill_bytes(&mut bytes);
+    bytes.iter().map(|b| format!("{:02x}", b)).collect()
 }
 
 /// Write (or update) a single `KEY=value` line in a .env file.

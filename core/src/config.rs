@@ -32,9 +32,10 @@ pub struct AppConfig {
     #[serde(default = "default_uploads_dir")]
     pub uploads_dir: String,
 
-    /// Path to the per-site data directory (custom themes and uploads for each site).
-    /// Each site gets a subdirectory named by its UUID: `{sites_dir}/{uuid}/themes/` and
-    /// `{sites_dir}/{uuid}/uploads/`. Defaults to "sites".
+    /// Path to the per-site themes directory (custom themes for each site).
+    /// Each site gets a subdirectory named by its UUID: `{sites_dir}/{uuid}/themes/`.
+    /// Per-site uploads live separately, at `{uploads_dir}/{uuid}/` (see
+    /// `uploads_dir` above), not under `sites_dir`. Defaults to "sites".
     #[serde(default = "default_sites_dir")]
     pub sites_dir: String,
 

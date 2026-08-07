@@ -54,3 +54,4 @@ search-index/
 
 # Compiled WASM (Phase 4)
 pkg/
+backups/
