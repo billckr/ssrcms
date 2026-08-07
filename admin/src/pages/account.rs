@@ -65,7 +65,7 @@ pub fn account_page(
   <div class="sidebar-overlay" onclick="closeSidebar()"></div>
   <div class="admin-wrap">
     <nav class="admin-sidebar">
-      <div class="brand">{site_name}</div>
+      <a class="brand" href="/account">{site_name}</a>
       <ul>
         {dashboard_link}
         {saved_link}

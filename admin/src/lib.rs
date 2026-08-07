@@ -125,7 +125,7 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
   <div class="sidebar-overlay" onclick="closeSidebar()"></div>
   <div class="admin-wrap">
     <nav class="admin-sidebar">
-      <div class="brand">{brand_html}</div>
+      <a class="brand" href="/admin">{brand_html}</a>
       <ul>
         {dash}
         {sites}
