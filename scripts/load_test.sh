@@ -107,7 +107,7 @@ if [[ "$URL_COUNT" -eq 0 ]]; then
 fi
 
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "  Synaptic Signals — Load Test"
+echo "  SynapCMS — Load Test"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 printf "  Site     : %s\n"    "$DOMAIN:$PORT"
 printf "  URLs     : %s\n"    "$URL_COUNT (sampled from DB)"

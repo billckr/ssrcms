@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# app.sh — Synaptic Signals CMS management script
+# app.sh — SynapCMS management script
 # Usage: ./app.sh <command>
 #
 # Commands:
@@ -24,7 +24,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PID_FILE="$SCRIPT_DIR/.synaptic.pid"
-LOG_FILE="$SCRIPT_DIR/logs/synaptic.log"
+LOG_FILE="$SCRIPT_DIR/logs/synapcms.log"
 BINARY="$SCRIPT_DIR/target/debug/synaptic"
 SEARCH_INDEX="$SCRIPT_DIR/search-index"
 
@@ -150,7 +150,7 @@ cmd_start() {
     fi
 
     check_caddy
-    log "Starting Synaptic Signals..."
+    log "Starting SynapCMS..."
     cd "$SCRIPT_DIR"
     nohup "$BINARY" >> "$LOG_FILE" 2>&1 &
     echo $! > "$PID_FILE"

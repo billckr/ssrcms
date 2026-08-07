@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Synaptic Signals — one-liner installer
+# SynapCMS — one-liner installer
 #
 # Usage:
 #   curl -sSL https://get.synaptic.rs | bash
@@ -13,7 +13,7 @@
 #   ADMIN_EMAIL        — admin login email (prompted if not set)
 #   ADMIN_USERNAME     — admin username (default: admin)
 #   ADMIN_PASSWORD     — admin password (generated if not set)
-#   APP_NAME           — admin panel brand name (default: Synaptic Signals)
+#   APP_NAME           — admin panel brand name (default: SynapCMS)
 #   NOTIFICATION_EMAIL — reply-to for system emails (default: ADMIN_EMAIL)
 #
 # Fully non-interactive example:
@@ -26,7 +26,7 @@ set -euo pipefail
 usage() {
   cat <<EOF
 
-Synaptic Signals — Installer
+SynapCMS — Installer
 
 USAGE
   sudo bash install.sh [--help]
@@ -41,7 +41,7 @@ ENVIRONMENT VARIABLES
   ADMIN_EMAIL          Admin login email address                            [required if non-interactive]
   ADMIN_USERNAME       Admin username                                       (default: admin)
   ADMIN_PASSWORD       Admin password — generated and printed if not set    (default: auto-generated)
-  APP_NAME             Admin panel brand name                               (default: Synaptic Signals)
+  APP_NAME             Admin panel brand name                               (default: SynapCMS)
   NOTIFICATION_EMAIL   Reply-to address for system emails                   (default: ADMIN_EMAIL)
 
   SYNAPTIC_USER        OS user to run the service — must not be root        (default: www-data)
@@ -203,7 +203,7 @@ prompt_field ADMIN_EMAIL "Admin email address"
 [[ -n "$ADMIN_EMAIL" ]] || die "Admin email is required."
 
 prompt_field ADMIN_USERNAME "Admin username" "admin"
-prompt_field APP_NAME "Site/app name" "Synaptic Signals"
+prompt_field APP_NAME "Site/app name" "SynapCMS"
 
 export SYNAPTIC_DOMAIN ADMIN_EMAIL ADMIN_USERNAME APP_NAME
 export NOTIFICATION_EMAIL="${NOTIFICATION_EMAIL:-$ADMIN_EMAIL}"
@@ -324,7 +324,7 @@ fi
 
 # ── Download release tarball ───────────────────────────────────────────────────
 echo ""
-info "── Synaptic Signals ──────────────────────────────────────"
+info "── SynapCMS ──────────────────────────────────────"
 
 if [[ "$SYNAPTIC_VERSION" == "latest" ]]; then
   info "Fetching latest release version..."
@@ -342,7 +342,7 @@ if [[ "$SYNAPTIC_VERSION" == "latest" ]]; then
   fi
 fi
 
-info "Installing Synaptic Signals ${SYNAPTIC_VERSION}..."
+info "Installing SynapCMS ${SYNAPTIC_VERSION}..."
 
 TARBALL="synaptic-signals-${SYNAPTIC_VERSION}-${ARCH_SLUG}-linux.tar.gz"
 
@@ -551,7 +551,7 @@ fi
 # ── Summary ────────────────────────────────────────────────────────────────────
 echo ""
 echo -e "${GREEN}${BOLD}══════════════════════════════════════════════════${RESET}"
-echo -e "${GREEN}${BOLD}  Synaptic Signals installed successfully         ${RESET}"
+echo -e "${GREEN}${BOLD}  SynapCMS installed successfully         ${RESET}"
 echo -e "${GREEN}${BOLD}══════════════════════════════════════════════════${RESET}"
 echo ""
 echo -e "  Install directory : ${INSTALL_DIR}"

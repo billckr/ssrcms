@@ -181,7 +181,7 @@ fn extract_and_install_theme(zip_bytes: &[u8], target_dir: &str) -> Result<Strin
     // Validate: theme.toml must be present and parseable.
     let toml_path = PathBuf::from(&tmp_path).join("theme.toml");
     let toml_content = fs::read_to_string(&toml_path)
-        .map_err(|_| "theme.toml not found in zip. Is this a valid Synaptic Signals theme?".to_string())?;
+        .map_err(|_| "theme.toml not found in zip. Is this a valid SynapCMS theme?".to_string())?;
 
     let parsed: toml::Table = toml::from_str(&toml_content)
         .map_err(|_| "theme.toml is not valid TOML.".to_string())?;
@@ -246,7 +246,7 @@ fn find_theme_prefix(archive: &mut zip::ZipArchive<std::io::Cursor<&[u8]>>) -> R
             nested = Some(prefix);
         }
     }
-    nested.ok_or("theme.toml not found in zip. Is this a valid Synaptic Signals theme?".to_string())
+    nested.ok_or("theme.toml not found in zip. Is this a valid SynapCMS theme?".to_string())
 }
 
 /// Create a uniquely-named temporary directory inside themes_dir.

@@ -558,7 +558,7 @@ fn extract_and_install_plugin(zip_bytes: &[u8], target_dir: &str) -> Result<Stri
     // Validate plugin.toml.
     let toml_path = PathBuf::from(&tmp_path).join("plugin.toml");
     let toml_content = fs::read_to_string(&toml_path)
-        .map_err(|_| "plugin.toml not found. Is this a valid Synaptic Signals plugin?".to_string())?;
+        .map_err(|_| "plugin.toml not found. Is this a valid SynapCMS plugin?".to_string())?;
     let parsed: toml::Table = toml::from_str(&toml_content)
         .map_err(|_| "plugin.toml is not valid TOML.".to_string())?;
 
@@ -627,7 +627,7 @@ fn find_plugin_prefix(archive: &mut zip::ZipArchive<std::io::Cursor<&[u8]>>) -> 
             nested = Some(prefix);
         }
     }
-    nested.ok_or("plugin.toml not found in zip. Is this a valid Synaptic Signals plugin?".to_string())
+    nested.ok_or("plugin.toml not found in zip. Is this a valid SynapCMS plugin?".to_string())
 }
 
 fn tempdir_in(dir: &str) -> Result<String, String> {

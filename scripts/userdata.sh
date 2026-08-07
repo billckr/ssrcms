@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# userdata.sh — Query all content associated with a Synaptic Signals user or domain.
+# userdata.sh — Query all content associated with a SynapCMS user or domain.
 # Usage:
 #   ./userdata.sh beth@beth.com
 #   ./userdata.sh fec4c81b-8475-4195-8814-7030f6cf95bb

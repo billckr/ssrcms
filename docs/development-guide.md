@@ -118,14 +118,14 @@ Use `app.sh` — it handles everything automatically:
 ./app.sh stop     # graceful stop with force-kill fallback
 ./app.sh restart  # stop + start in one command
 ./app.sh status   # is it running? which PID?
-./app.sh logs     # tail logs/synaptic.log live (Ctrl+C to exit)
+./app.sh logs     # tail logs/synapcms.log live (Ctrl+C to exit)
 ```
 
 The server starts on `http://0.0.0.0:3000` by default.
 - Public site: `http://localhost:3000`
 - Admin panel: `http://localhost:3000/admin`
 
-Logs are written to `logs/synaptic.log` in the workspace root.
+Logs are written to `logs/synapcms.log` in the workspace root.
 
 ### What app.sh handles automatically on start
 - Frees port 3000 if a previous process didn't exit cleanly

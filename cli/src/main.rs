@@ -5,7 +5,7 @@ use clap::{Parser, Subcommand};
 #[derive(Parser)]
 #[command(
     name = "synap",
-    about = "Synaptic Signals CMS — installer & manager",
+    about = "SynapCMS — installer & manager",
     version
 )]
 struct Cli {

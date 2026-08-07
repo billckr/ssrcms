@@ -339,7 +339,7 @@ pub fn render_editor(
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Page Builder — Synaptic Signals</title>
+  <title>Page Builder — SynapCMS</title>
   <link rel="stylesheet" href="/admin/static/builder/builder.css">
   <style>
     *, *::before, *::after {{ box-sizing: border-box; margin: 0; padding: 0; }}

@@ -31,7 +31,7 @@ async fn main() -> anyhow::Result<()> {
         _ => registry.with(tracing_subscriber::fmt::layer()).init(),
     }
 
-    info!("Synaptic Signals CMS starting...");
+    info!("SynapCMS starting...");
 
     // ── Uploads directory ─────────────────────────────────────────────────────
     std::fs::create_dir_all(&cfg.uploads_dir)?;

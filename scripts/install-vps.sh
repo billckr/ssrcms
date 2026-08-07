@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# install-vps.sh — Interactive installer/deploy wizard for Synaptic Signals
+# install-vps.sh — Interactive installer/deploy wizard for SynapCMS
 # on a VPS: builds locally, ships to the VPS over ssh/scp, and configures it.
 #
 # Welcome screen, a defaults-vs-interactive mode choice, validated field
@@ -28,7 +28,7 @@ APP_PORT="${APP_PORT:-3000}"
 ADMIN_EMAIL="${ADMIN_EMAIL:-bill.coker@gmail.com}"
 ADMIN_USERNAME="${ADMIN_USERNAME:-admin}"
 ADMIN_PASSWORD="${ADMIN_PASSWORD:-}"
-APP_NAME="${APP_NAME:-Synaptic Signals}"
+APP_NAME="${APP_NAME:-SynapCMS}"
 DB_NAME="${DB_NAME:-synaptic_signals}"
 DB_USER="${DB_USER:-synaptic}"
 
@@ -38,7 +38,7 @@ MODE=""
 
 print_help() {
   cat <<EOF
-install-vps.sh — Interactive installer/deploy wizard for Synaptic Signals.
+install-vps.sh — Interactive installer/deploy wizard for SynapCMS.
 
 Builds locally, ships to a VPS over ssh/scp, and configures it. Welcome
 screen, defaults-vs-interactive mode choice, validated field prompts, an
@@ -360,7 +360,7 @@ valid_nonempty_password() { [[ -n "$1" ]] || echo "Password cannot be empty."; }
 welcome_screen() {
   echo -e "${C_CYAN}"
   cat <<'BANNER'
-   Synaptic Signals — VPS Installer
+   SynapCMS — VPS Installer
 BANNER
   echo -e "${C_RESET}"
   echo "  Welcome. Let's get the app deployed."
@@ -817,7 +817,7 @@ do_verify() {
 
 # ── Summary ──────────────────────────────────────────────────────────────────
 print_summary() {
-  box_header "Synaptic Signals — Installation Complete"
+  box_header "SynapCMS — Installation Complete"
   echo ""
   echo "  Site:        https://${VPS_DOMAIN}"
   echo "  Admin panel: https://${VPS_DOMAIN}/admin"

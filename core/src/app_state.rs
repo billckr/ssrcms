@@ -32,7 +32,7 @@ pub struct SiteSettings {
 impl Default for SiteSettings {
     fn default() -> Self {
         SiteSettings {
-            site_name: "Synaptic Signals".to_string(),
+            site_name: "SynapCMS".to_string(),
             site_description: "Fast by default, secure by design".to_string(),
             base_url: "http://localhost:3000".to_string(),
             language: "en-US".to_string(),
@@ -55,7 +55,7 @@ impl SiteSettings {
 
         let mut map: HashMap<String, String> = rows.into_iter().collect();
         Ok(SiteSettings {
-            site_name: map.remove("site_name").unwrap_or_else(|| "Synaptic Signals".into()),
+            site_name: map.remove("site_name").unwrap_or_else(|| "SynapCMS".into()),
             site_description: map
                 .remove("site_description")
                 .unwrap_or_else(|| "Fast by default, secure by design".into()),
@@ -87,7 +87,7 @@ impl SiteSettings {
 
         let mut map: HashMap<String, String> = rows.into_iter().collect();
         Ok(SiteSettings {
-            site_name: map.remove("site_name").unwrap_or_else(|| "Synaptic Signals".into()),
+            site_name: map.remove("site_name").unwrap_or_else(|| "SynapCMS".into()),
             site_description: map
                 .remove("site_description")
                 .unwrap_or_else(|| "Fast by default, secure by design".into()),

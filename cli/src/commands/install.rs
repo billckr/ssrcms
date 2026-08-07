@@ -129,7 +129,7 @@ fn current_username() -> String {
 }
 
 pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
-    println!("\nWelcome to Synaptic Signals CMS Installer");
+    println!("\nWelcome to the SynapCMS Installer");
     println!("==========================================\n");
 
     let ni = args.non_interactive;

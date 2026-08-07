@@ -547,7 +547,7 @@ async fn rename(
     }
 
     println!();
-    println!("Rename complete. Restart Synaptic Signals to apply the new hostname.");
+    println!("Rename complete. Restart SynapCMS to apply the new hostname.");
     println!();
     println!("Note: hostname text manually typed into post body content was not");
     println!("automatically updated. Review posts for any references to '{}'.", old_hostname);
