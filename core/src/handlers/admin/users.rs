@@ -102,6 +102,7 @@ pub async fn list(
                     site_hostnames: vec![],
                     site_ids: vec![],
                     default_site_id: None,
+                    sole_admin_hostnames: vec![],
                 })
                 .collect()
         } else {
@@ -133,6 +134,7 @@ pub async fn list(
                 site_hostnames: vec![],
                 site_ids: vec![],
                     default_site_id: None,
+                sole_admin_hostnames: vec![],
             }).collect()
         }
     } else if let Some(site_id) = admin.site_id {
@@ -151,6 +153,7 @@ pub async fn list(
             site_hostnames: vec![],
             site_ids: vec![],
                     default_site_id: None,
+            sole_admin_hostnames: vec![],
         }).collect()
     } else {
         vec![]
@@ -224,12 +227,22 @@ pub async fn list(
         for (uid, site_id, hostname) in membership_rows {
             membership_map.entry(uid.to_string()).or_default().push((site_id.to_string(), hostname));
         }
+
+        // Preflight which of these users are a site's sole admin, so Delete
+        // can be disabled up front instead of round-tripping to find out.
+        let sole_admin_map = crate::models::site_user::sole_admin_hostnames_batch(&state.db, &all_ids)
+            .await
+            .unwrap_or_default();
+
         for u in staff.iter_mut().chain(subscribers.iter_mut()) {
             if let Some(memberships) = membership_map.get(&u.id) {
                 u.site_hostnames = memberships.iter().map(|(_, h)| h.clone()).collect();
                 u.site_ids       = memberships.iter().map(|(id, _)| id.clone()).collect();
             }
             u.default_site_id = default_site_map.get(&u.id).and_then(|v| v.clone());
+            if let Ok(uid) = u.id.parse::<Uuid>() {
+                u.sole_admin_hostnames = sole_admin_map.get(&uid).cloned().unwrap_or_default();
+            }
         }
     }
 
@@ -856,6 +869,7 @@ pub async fn delete_user(
                         site_hostnames: vec![],
                         site_ids: vec![],
                     default_site_id: None,
+                    sole_admin_hostnames: vec![],
                     }).collect()
             } else if let Some(site_id) = admin.site_id {
                 crate::models::site_user::list_for_site(&state.db, site_id).await.unwrap_or_default()
@@ -871,6 +885,7 @@ pub async fn delete_user(
                         site_hostnames: vec![],
                         site_ids: vec![],
                     default_site_id: None,
+                    sole_admin_hostnames: vec![],
                     }).collect()
             } else {
                 vec![]
@@ -930,6 +945,16 @@ pub async fn delete_user(
                 deny!("Cannot delete the last global admin account.");
             }
         }
+    }
+
+    // Guard 5: never delete a user who is the sole admin of a site — every
+    // site must always have an admin. Reassign ownership first.
+    let sole_admin_of = crate::models::site_user::sole_admin_hostnames(&state.db, id).await.unwrap_or_default();
+    if !sole_admin_of.is_empty() {
+        deny!(&format!(
+            "Cannot delete: this user is the only Site Admin for {}. Assign a new Site Admin first.",
+            sole_admin_of.join(", ")
+        ));
     }
 
     if let Err(e) = crate::models::user::delete_and_reassign(&state.db, id, admin.user.id).await {
@@ -1045,6 +1070,9 @@ pub async fn bulk_delete_users(
             let remaining = crate::models::user::count_global_admins(&state.db).await.unwrap_or(2);
             if remaining <= 1 { continue; }
         }
+        // Never delete a user who is the sole admin of a site.
+        let sole_admin_of = crate::models::site_user::sole_admin_hostnames(&state.db, id).await.unwrap_or_default();
+        if !sole_admin_of.is_empty() { continue; }
         if let Err(e) = crate::models::user::delete_and_reassign(&state.db, id, admin.user.id).await {
             tracing::error!("bulk delete users: failed to delete {}: {:?}", id, e);
         }
@@ -1287,6 +1315,7 @@ pub async fn site_access_page(
         Some("site_admin_exists") => Some("Please choose what to do about the site's existing Site Admin."),
         Some("db_error") => Some("Failed to update site access. Please try again."),
         Some("invalid_role") => Some("Please select a role before assigning this user to a site."),
+        Some("sole_admin") => Some("This user is the site's only Site Admin. Assign a new Site Admin before removing or demoting them."),
         _ => match query.success.as_deref() {
             Some("assigned") => Some("User added to site successfully."),
             _ => None,
@@ -1408,6 +1437,14 @@ pub async fn add_site_access(
             "admin" // site_users role for a site_admin is 'admin'
         }
         "editor" | "author" | "subscriber" => {
+            // Never demote a site's sole admin away from 'admin' — every site
+            // must always have one.
+            if crate::models::site_user::sole_admin(&state.db, site_uuid).await.ok().flatten() == Some(user_id) {
+                return Redirect::to(&format!(
+                    "/admin/users/{}/site-access?error=sole_admin", user_id
+                )).into_response();
+            }
+
             // If this user currently owns the site, demoting them away from
             // 'admin' must clear ownership too. Otherwise sites.owner_user_id
             // keeps pointing at them while site_users.role no longer says
@@ -1472,6 +1509,13 @@ pub async fn remove_site_access(
         if !owned {
             return (axum::http::StatusCode::FORBIDDEN, "You do not own that site.").into_response();
         }
+    }
+
+    // Never remove a site's sole admin — every site must always have one.
+    if crate::models::site_user::sole_admin(&state.db, site_uuid).await.ok().flatten() == Some(user_id) {
+        return Redirect::to(&format!(
+            "/admin/users/{}/site-access?error=sole_admin", user_id
+        )).into_response();
     }
 
     if let Err(e) = crate::models::site_user::remove(&state.db, site_uuid, user_id).await {

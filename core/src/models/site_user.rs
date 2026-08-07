@@ -83,6 +83,56 @@ pub async fn sole_admin(pool: &PgPool, site_id: Uuid) -> Result<Option<Uuid>> {
     Ok(if ids.len() == 1 { Some(ids[0]) } else { None })
 }
 
+/// Hostnames of sites where `user_id` is currently the sole 'admin' — used to
+/// block deleting/demoting a user when doing so would leave a site with no
+/// admin at all (site ownership is required from creation onward, so it must
+/// not be possible to remove the last admin either).
+pub async fn sole_admin_hostnames(pool: &PgPool, user_id: Uuid) -> Result<Vec<String>> {
+    let hostnames: Vec<String> = sqlx::query_scalar(
+        r#"
+        SELECT s.hostname
+        FROM site_users su
+        JOIN sites s ON s.id = su.site_id
+        WHERE su.user_id = $1
+          AND su.role = 'admin'
+          AND (SELECT COUNT(*) FROM site_users su2 WHERE su2.site_id = su.site_id AND su2.role = 'admin') = 1
+        ORDER BY s.hostname ASC
+        "#,
+    )
+    .bind(user_id)
+    .fetch_all(pool)
+    .await?;
+    Ok(hostnames)
+}
+
+/// Batch version of `sole_admin_hostnames` for rendering a user list — one
+/// query for every user in `user_ids` instead of one per row, so the Users
+/// page can preflight-disable Delete for anyone who's a site's only admin.
+pub async fn sole_admin_hostnames_batch(
+    pool: &PgPool,
+    user_ids: &[Uuid],
+) -> Result<std::collections::HashMap<Uuid, Vec<String>>> {
+    let rows: Vec<(Uuid, String)> = sqlx::query_as(
+        r#"
+        SELECT su.user_id, s.hostname
+        FROM site_users su
+        JOIN sites s ON s.id = su.site_id
+        WHERE su.user_id = ANY($1)
+          AND su.role = 'admin'
+          AND (SELECT COUNT(*) FROM site_users su2 WHERE su2.site_id = su.site_id AND su2.role = 'admin') = 1
+        ORDER BY s.hostname ASC
+        "#,
+    )
+    .bind(user_ids)
+    .fetch_all(pool)
+    .await?;
+    let mut map: std::collections::HashMap<Uuid, Vec<String>> = std::collections::HashMap::new();
+    for (uid, hostname) in rows {
+        map.entry(uid).or_default().push(hostname);
+    }
+    Ok(map)
+}
+
 pub async fn get_role(pool: &PgPool, site_id: Uuid, user_id: Uuid) -> Result<Option<String>> {
     let role: Option<String> = sqlx::query_scalar(
         "SELECT role FROM site_users WHERE site_id = $1 AND user_id = $2",

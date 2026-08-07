@@ -58,6 +58,9 @@ pub struct UserRow {
     pub default_site_id: Option<String>,
     /// False when the account is suspended — login is blocked, but content/data is untouched.
     pub is_active: bool,
+    /// Sites where this user is the sole 'admin' — deleting them would leave
+    /// these sites with no admin, so Delete is disabled when non-empty.
+    pub sole_admin_hostnames: Vec<String>,
 }
 
 pub struct UserEdit {
@@ -93,7 +96,20 @@ fn build_staff_rows(staff: &[UserRow], current_user_id: &str, can_manage_access:
         } else {
             String::new()
         };
-        let delete_btn = if u.id != current_user_id && !u.is_protected {
+        let is_sole_admin = !u.sole_admin_hostnames.is_empty();
+        let delete_btn = if u.id != current_user_id && !u.is_protected && is_sole_admin {
+            let msg = format!(
+                "{name} is the only Site Admin for {sites}. Assign a new Site Admin before deleting this account.",
+                name  = u.display_name,
+                sites = u.sole_admin_hostnames.join(", "),
+            );
+            format!(
+                r#"<button type="button" class="icon-btn icon-danger sole-admin-delete-btn" title="Delete user" data-msg="{msg}">
+                  <img src="/admin/static/icons/trash.svg" alt="Delete">
+                </button>"#,
+                msg = crate::html_escape(&msg),
+            )
+        } else if u.id != current_user_id && !u.is_protected {
             let warn_msg = format!(
                 "Delete user \\u2018{}\\u2019? This will permanently delete all their posts and pages. This cannot be undone.",
                 u.display_name.replace('\'', "\\'"),
@@ -111,7 +127,7 @@ fn build_staff_rows(staff: &[UserRow], current_user_id: &str, can_manage_access:
         } else {
             String::new()
         };
-        let cb = if u.id != current_user_id && !u.is_protected {
+        let cb = if u.id != current_user_id && !u.is_protected && !is_sole_admin {
             format!(
                 r#"<input type="checkbox" class="bulk-cb-staff" value="{}" aria-label="Select">"#,
                 crate::html_escape(&u.id),
@@ -534,7 +550,38 @@ function bulkDeleteUsers(tab) {
   document.body.appendChild(f);
   f.submit();
 }
+
+// Sole-admin delete blocked — show an explanatory modal instead of a tooltip.
+// Delegated so it keeps working after live-search swaps the table rows.
+document.addEventListener('click', function(e) {
+  var btn = e.target.closest('.sole-admin-delete-btn');
+  if (!btn) return;
+  var modal = document.getElementById('sole-admin-modal');
+  var msgEl = document.getElementById('sole-admin-modal-msg');
+  if (!modal || !msgEl) return;
+  msgEl.textContent = btn.getAttribute('data-msg') || '';
+  modal.style.display = 'flex';
+});
+document.addEventListener('click', function(e) {
+  var modal = document.getElementById('sole-admin-modal');
+  if (!modal) return;
+  if (e.target === modal || e.target.id === 'sole-admin-modal-close') {
+    modal.style.display = 'none';
+  }
+});
 </script>"#;
+
+    let sole_admin_modal = r#"<div id="sole-admin-modal" style="display:none;position:fixed;inset:0;z-index:1000;background:rgba(0,0,0,.5);align-items:center;justify-content:center">
+  <div class="modal-card" style="max-width:440px;width:90%">
+    <h3 class="modal-card-header">Can't delete this user</h3>
+    <div class="modal-card-body">
+      <p id="sole-admin-modal-msg" style="font-size:14px;color:var(--muted);margin-bottom:1rem"></p>
+      <div style="text-align:right">
+        <button type="button" id="sole-admin-modal-close" class="btn btn-primary">OK</button>
+      </div>
+    </div>
+  </div>
+</div>"#;
 
     // ── Live search ──────────────────────────────────────────────────────────
     let search_input = format!(
@@ -569,11 +616,13 @@ function bulkDeleteUsers(tab) {
   </div>
 </div>
 <div id="users-list">{fragment}</div>
+{sole_admin_modal}
 {bulk_script}
 {live_search}"#,
             tabs = tabs,
             site_filter_staff = site_filter_staff,
             fragment = fragment,
+            sole_admin_modal = sole_admin_modal,
             bulk_script = bulk_script,
             search_input = search_input,
             live_search = live_search,
@@ -590,11 +639,13 @@ function bulkDeleteUsers(tab) {
   </div>
 </div>
 <div id="users-list">{fragment}</div>
+{sole_admin_modal}
 {bulk_script}
 {live_search}"#,
             tabs = tabs,
             site_filter_subs = site_filter_subs,
             fragment = fragment,
+            sole_admin_modal = sole_admin_modal,
             bulk_script = bulk_script,
             search_input = search_input,
             live_search = live_search,
@@ -1162,34 +1213,38 @@ pub fn render_site_access(
         "<tr><td colspan=\"3\"><em>No site assignments yet.</em></td></tr>".to_string()
     } else {
         data.assignments.iter().map(|a| {
-            let confirm_msg = if a.is_last_admin {
+            let remove_action = if a.is_last_admin {
                 format!(
-                    "{hostname} has no other Site Admin. Removing this access will leave the site \
-                     with no one able to manage it (other than a super admin). Continue?",
-                    hostname = a.hostname,
+                    r#"<button type="button" class="icon-btn icon-danger" disabled
+                               title="{hostname} is this site's only Site Admin. Assign a new Site Admin before removing this access.">
+                      <img src="/admin/static/icons/trash.svg" alt="Remove">
+                    </button>"#,
+                    hostname = crate::html_escape(&a.hostname),
                 )
             } else {
-                format!("Remove {hostname} from site access?", hostname = a.hostname)
-            };
-            format!(
-                r#"<tr>
-                  <td>{hostname}</td>
-                  <td><span class="badge">{role}</span></td>
-                  <td class="actions">
-                    <form method="post" action="/admin/users/{user_id}/site-access/remove" style="display:inline"
+                let confirm_msg = format!("Remove {hostname} from site access?", hostname = a.hostname);
+                format!(
+                    r#"<form method="post" action="/admin/users/{user_id}/site-access/remove" style="display:inline"
                           data-confirm="{confirm_msg}" onsubmit="return confirm(this.dataset.confirm)">
                       <input type="hidden" name="site_id" value="{site_id}">
                       <button type="submit" class="icon-btn icon-danger" title="Remove from site">
                         <img src="/admin/static/icons/trash.svg" alt="Remove">
                       </button>
-                    </form>
-                  </td>
+                    </form>"#,
+                    user_id     = crate::html_escape(&data.user_id),
+                    site_id     = crate::html_escape(&a.site_id),
+                    confirm_msg = crate::html_escape(&confirm_msg),
+                )
+            };
+            format!(
+                r#"<tr>
+                  <td>{hostname}</td>
+                  <td><span class="badge">{role}</span></td>
+                  <td class="actions">{remove_action}</td>
                 </tr>"#,
-                user_id     = crate::html_escape(&data.user_id),
-                site_id     = crate::html_escape(&a.site_id),
-                hostname    = crate::html_escape(&a.hostname),
-                role        = crate::html_escape(role_display(&a.role)),
-                confirm_msg = crate::html_escape(&confirm_msg),
+                hostname      = crate::html_escape(&a.hostname),
+                role          = crate::html_escape(role_display(&a.role)),
+                remove_action = remove_action,
             )
         }).collect::<Vec<_>>().join("\n")
     };
@@ -1315,12 +1370,12 @@ pub fn render_site_access(
         return;
       }}
       // They aren't the recorded owner, but are the only Site Admin this site
-      // has — demoting them leaves no one (other than a super admin) able to
-      // manage it.
+      // has — demoting them would leave the site with no admin, which isn't
+      // allowed. Block it client-side instead of round-tripping to the server.
       if (soleAdminId && soleAdminId === targetUserId) {{
-        var ok2 = confirm(escHtml(soleAdminName) + ' is the only Site Admin for ' + opt.text +
-          '. Changing their role will leave the site with no Site Admin. Continue?');
-        if (!ok2) {{ e.preventDefault(); }}
+        alert(escHtml(soleAdminName) + ' is the only Site Admin for ' + opt.text +
+          '. Assign a new Site Admin before changing their role.');
+        e.preventDefault();
       }}
       return;
     }}
