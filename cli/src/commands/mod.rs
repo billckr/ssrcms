@@ -7,6 +7,7 @@ pub mod plugin;
 pub mod security;
 pub mod site;
 pub mod theme;
+pub mod update_cli;
 pub mod user;
 
 use sqlx::postgres::PgPoolOptions;

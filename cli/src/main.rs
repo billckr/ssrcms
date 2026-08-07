@@ -25,6 +25,9 @@ enum Commands {
         #[command(subcommand)]
         action: commands::app::AppAction,
     },
+    /// Rebuild and reinstall synap itself (cargo install --path cli --force).
+    /// Run from the project root after changing CLI source.
+    UpdateCli,
     /// Development utilities (destructive — do not use in production)
     Dev {
         #[command(subcommand)]
@@ -73,6 +76,7 @@ async fn main() -> anyhow::Result<()> {
         Commands::Install(args) => commands::install::run(args).await?,
         Commands::Migrate(args) => commands::migrate::run(args).await?,
         Commands::App { action } => commands::app::run(action).await?,
+        Commands::UpdateCli => commands::update_cli::run()?,
         Commands::Dev { action } => commands::dev::run(action).await?,
         Commands::User { action } => commands::user::run(action).await?,
         Commands::Plugin { action } => commands::plugin::run(action).await?,
