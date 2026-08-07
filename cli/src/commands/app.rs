@@ -37,12 +37,34 @@ pub enum AppAction {
     Logs,
 }
 
+/// Verify the current directory actually is the project root before touching
+/// any PID/log/binary paths (all resolved relative to cwd below) — running
+/// from the wrong directory previously failed silently: it would write/read
+/// PID and log files in the wrong place, report "Not running" for an
+/// instance that was actually up, and (via `restart`/`free_port`) kill a
+/// real running server before discovering the replacement couldn't even
+/// find its binary.
+fn require_project_root() -> anyhow::Result<()> {
+    let looks_right = Path::new("Cargo.toml").is_file()
+        && Path::new("core").is_dir()
+        && Path::new("cli").is_dir();
+    if !looks_right {
+        let cwd = std::env::current_dir().map(|p| p.display().to_string()).unwrap_or_default();
+        anyhow::bail!(
+            "synap app must be run from the project root (expected to find Cargo.toml, \
+             core/, and cli/ in the current directory — got '{cwd}').\n\
+             cd to the project root and try again."
+        );
+    }
+    Ok(())
+}
+
 fn pid_file() -> PathBuf {
     PathBuf::from(".synaptic.pid")
 }
 
 fn log_file() -> PathBuf {
-    PathBuf::from("logs/synaptic.log")
+    PathBuf::from("logs/synapcms.log")
 }
 
 fn binary_path(release: bool) -> PathBuf {
@@ -170,14 +192,14 @@ async fn cmd_start(release: bool) -> anyhow::Result<()> {
     }
 
     check_caddy();
-    println!("Starting Synaptic Signals...");
+    println!("Starting SynapCMS...");
 
     let log = fs::OpenOptions::new().create(true).append(true).open(log_file())?;
     let log_err = log.try_clone()?;
 
     // nohup execs into the target binary in place, so its PID is the actual server PID —
     // matching what `nohup "$BINARY" & ; echo $!` captures in app.sh.
-    let child = Command::new("nohup")
+    let mut child = Command::new("nohup")
         .arg(
             binary
                 .canonicalize()
@@ -189,18 +211,27 @@ async fn cmd_start(release: bool) -> anyhow::Result<()> {
         .spawn()?;
 
     let pid = child.id();
-    fs::write(pid_file(), pid.to_string())?;
-    std::mem::forget(child); // detach — we track it via the PID file, not a Rust handle
 
     std::thread::sleep(Duration::from_secs(2));
-    if is_alive(pid) {
-        println!("Started (PID {pid}) — listening on port {}", port());
-        println!("Logs: {}", log_file().display());
-    } else {
-        println!("ERROR: Server failed to start. Check logs:");
-        print_tail(&log_file(), 20);
-        let _ = fs::remove_file(pid_file());
-        anyhow::bail!("Server failed to start.");
+
+    // Check via the owned Child handle (try_wait), not a bare `kill -0 <pid>`
+    // re-check — if nohup fails to exec (e.g. binary missing) it exits almost
+    // immediately, and on a busy system (e.g. mid `cargo build`) the kernel
+    // can recycle that PID for an unrelated process within the sleep window,
+    // making a raw PID liveness check falsely report success. try_wait()
+    // tracks our exact child via the OS process table entry, immune to that.
+    match child.try_wait()? {
+        Some(status) => {
+            println!("ERROR: Server failed to start (exited: {status}). Check logs:");
+            print_tail(&log_file(), 20);
+            anyhow::bail!("Server failed to start.");
+        }
+        None => {
+            fs::write(pid_file(), pid.to_string())?;
+            std::mem::forget(child); // detach — tracked via the PID file from here on
+            println!("Started (PID {pid}) — listening on port {}", port());
+            println!("Logs: {}", log_file().display());
+        }
     }
     Ok(())
 }
@@ -269,6 +300,7 @@ fn print_tail(path: &Path, n: usize) {
 }
 
 pub async fn run(action: AppAction) -> anyhow::Result<()> {
+    require_project_root()?;
     match action {
         AppAction::Start { release } => cmd_start(release).await,
         AppAction::Stop => cmd_stop(),
