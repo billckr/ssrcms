@@ -436,6 +436,6 @@ synaptic-signals/
 ├── migrations/           — SQLx migration files (0001–0007)
 ├── themes/default/       — default theme templates + CSS
 ├── plugins/seo/          — SEO plugin (meta tags, sitemap)
-├── deployment/           — Caddyfile.template, synaptic-signals.service
+├── deployment/           — Caddyfile.template, synapcms.service
 └── docs/                 — this file and other guides
 ```

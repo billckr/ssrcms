@@ -121,7 +121,7 @@ afterwards:
 
 ```bash
 cp /var/www/bckr.dev/Caddyfile /etc/caddy/Caddyfile && caddy reload --config /etc/caddy/Caddyfile
-cp /var/www/bckr.dev/synaptic-signals.service /etc/systemd/system/ && systemctl daemon-reload && systemctl restart synaptic-signals
+cp /var/www/bckr.dev/synapcms.service /etc/systemd/system/ && systemctl daemon-reload && systemctl restart synapcms
 ```
 
 (The install script's own `--help` has a full EXAMPLES section covering
@@ -146,8 +146,8 @@ synap --help          # full command list
 ## Verification
 
 ```bash
-ssh root@178.156.176.60 systemctl status synaptic-signals
-ssh root@178.156.176.60 journalctl -u synaptic-signals -n 50
+ssh root@178.156.176.60 systemctl status synapcms
+ssh root@178.156.176.60 journalctl -u synapcms -n 50
 curl -I https://bckr.dev
 ```
 
@@ -156,7 +156,7 @@ curl -I https://bckr.dev
 ### Service won't start
 
 ```bash
-journalctl -u synaptic-signals -n 100
+journalctl -u synapcms -n 100
 ```
 
 Common causes: `.env` missing/wrong `DATABASE_URL`, Postgres not running

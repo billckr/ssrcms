@@ -97,13 +97,13 @@ fn free_port() {
 
     println!("Port {port} is in use — clearing...");
     let systemd_active = Command::new("systemctl")
-        .args(["is-active", "--quiet", "synaptic-signals"])
+        .args(["is-active", "--quiet", "synapcms"])
         .status()
         .map(|s| s.success())
         .unwrap_or(false);
     if systemd_active {
-        println!("Stopping systemd synaptic-signals service...");
-        let _ = Command::new("systemctl").args(["stop", "synaptic-signals"]).status();
+        println!("Stopping systemd synapcms service...");
+        let _ = Command::new("systemctl").args(["stop", "synapcms"]).status();
     }
     let _ = Command::new("fuser").args(["-k", &format!("{port}/tcp")]).status();
     std::thread::sleep(Duration::from_secs(1));

@@ -626,7 +626,7 @@ SQL
 }
 
 do_ship_files() {
-  ssh_run "systemctl stop synaptic-signals 2>/dev/null; systemctl disable synaptic-signals 2>/dev/null; true"
+  ssh_run "systemctl stop synapcms 2>/dev/null; systemctl disable synapcms 2>/dev/null; true"
   ssh_run "mkdir -p ${INSTALL_DIR}/uploads ${INSTALL_DIR}/search-index ${INSTALL_DIR}/themes/sites ${INSTALL_DIR}/plugins/sites"
 
   scp_run "$BIN_SYNAPTIC" "${VPS_USER}@${VPS_HOST}:${INSTALL_DIR}/synaptic"
@@ -747,9 +747,9 @@ do_install_or_migrate() {
         "$REPO_DIR/deployment/Caddyfile.template" > "$caddy_tmp"
     sed -e "s#{INSTALL_DIR}#${INSTALL_DIR}#g" \
         -e "s#{SERVICE_USER}#${SYNAPTIC_USER}#g" \
-        "$REPO_DIR/deployment/synaptic-signals.service" > "$svc_tmp"
+        "$REPO_DIR/deployment/synapcms.service" > "$svc_tmp"
     scp_run "$caddy_tmp" "${VPS_USER}@${VPS_HOST}:${INSTALL_DIR}/Caddyfile"
-    scp_run "$svc_tmp"   "${VPS_USER}@${VPS_HOST}:${INSTALL_DIR}/synaptic-signals.service"
+    scp_run "$svc_tmp"   "${VPS_USER}@${VPS_HOST}:${INSTALL_DIR}/synapcms.service"
     rm -f "$caddy_tmp" "$svc_tmp"
     echo "Templates generated."
   else
@@ -786,17 +786,17 @@ do_caddy_systemd() {
   ssh_run "test -f ${INSTALL_DIR}/Caddyfile && cp ${INSTALL_DIR}/Caddyfile /etc/caddy/Caddyfile"
   ssh_run "systemctl is-active --quiet caddy && caddy reload --config /etc/caddy/Caddyfile || systemctl enable --now caddy"
 
-  ssh_run "test -f ${INSTALL_DIR}/synaptic-signals.service && cp ${INSTALL_DIR}/synaptic-signals.service /etc/systemd/system/synaptic-signals.service"
-  ssh_run "systemctl daemon-reload && systemctl enable synaptic-signals && systemctl restart synaptic-signals"
+  ssh_run "test -f ${INSTALL_DIR}/synapcms.service && cp ${INSTALL_DIR}/synapcms.service /etc/systemd/system/synapcms.service"
+  ssh_run "systemctl daemon-reload && systemctl enable synapcms && systemctl restart synapcms"
   sleep 3
   echo "Web server and service configured."
 }
 
 do_verify() {
-  SUMMARY_SERVICE_STATUS=$(ssh_run "systemctl is-active synaptic-signals" || true)
+  SUMMARY_SERVICE_STATUS=$(ssh_run "systemctl is-active synapcms" || true)
   if [[ "$SUMMARY_SERVICE_STATUS" != "active" ]]; then
-    echo "synaptic-signals is '${SUMMARY_SERVICE_STATUS}' — recent logs:"
-    ssh_run "journalctl -u synaptic-signals -n 30 --no-pager"
+    echo "synapcms is '${SUMMARY_SERVICE_STATUS}' — recent logs:"
+    ssh_run "journalctl -u synapcms -n 30 --no-pager"
     return 1
   fi
 
@@ -836,7 +836,7 @@ print_summary() {
     echo "   permalinks. Answer the prompts for domain, admin email/username/"
     echo "   password, etc. This also regenerates the Caddyfile/systemd unit for"
     echo "   the values you choose — re-run this script, or 'systemctl reload"
-    echo "   caddy' + 'systemctl restart synaptic-signals', afterwards to pick"
+    echo "   caddy' + 'systemctl restart synapcms', afterwards to pick"
     echo "   them up.)"
   else
     section "Admin Login"

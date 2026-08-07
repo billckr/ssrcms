@@ -74,8 +74,8 @@ POST-INSTALL
     sudo synap caddy setup --app-user <SYNAPTIC_USER>
 
   To uninstall:
-    systemctl disable --now synaptic-signals caddy
-    rm -rf \$INSTALL_DIR /etc/caddy/Caddyfile /etc/systemd/system/synaptic-signals.service
+    systemctl disable --now synapcms caddy
+    rm -rf \$INSTALL_DIR /etc/caddy/Caddyfile /etc/systemd/system/synapcms.service
     sudo -u postgres psql -c "DROP DATABASE synaptic_signals; DROP ROLE synaptic;"
 
 EOF
@@ -529,20 +529,20 @@ fi
 echo ""
 info "── Configuring systemd service ──────────────────────────"
 
-if [[ -f "${INSTALL_DIR}/synaptic-signals.service" ]]; then
-  cp "${INSTALL_DIR}/synaptic-signals.service" /etc/systemd/system/
+if [[ -f "${INSTALL_DIR}/synapcms.service" ]]; then
+  cp "${INSTALL_DIR}/synapcms.service" /etc/systemd/system/
   # Ensure the service runs as the correct user — older binaries hardcode www-data.
-  sed -i "s/^User=.*/User=${SYNAPTIC_USER}/" /etc/systemd/system/synaptic-signals.service
-  sed -i "s/^Group=.*/Group=${SYNAPTIC_USER}/" /etc/systemd/system/synaptic-signals.service
+  sed -i "s/^User=.*/User=${SYNAPTIC_USER}/" /etc/systemd/system/synapcms.service
+  sed -i "s/^Group=.*/Group=${SYNAPTIC_USER}/" /etc/systemd/system/synapcms.service
   systemctl daemon-reload
-  systemctl enable synaptic-signals
-  systemctl restart synaptic-signals
+  systemctl enable synapcms
+  systemctl restart synapcms
 
   sleep 3
-  if systemctl is-active --quiet synaptic-signals; then
-    success "synaptic-signals service is running."
+  if systemctl is-active --quiet synapcms; then
+    success "synapcms service is running."
   else
-    warn "Service failed to start. Check logs: journalctl -u synaptic-signals -f"
+    warn "Service failed to start. Check logs: journalctl -u synapcms -f"
   fi
 else
   warn "Service file not found — configure systemd manually."
@@ -560,10 +560,10 @@ echo -e "  Site URL          : https://${SYNAPTIC_DOMAIN}"
 echo -e "  Admin panel       : https://${SYNAPTIC_DOMAIN}/admin"
 echo -e "  Admin email       : ${ADMIN_EMAIL}"
 echo ""
-echo -e "  Service status    : $(systemctl is-active synaptic-signals 2>/dev/null || echo 'unknown')"
+echo -e "  Service status    : $(systemctl is-active synapcms 2>/dev/null || echo 'unknown')"
 echo -e "  Caddy status      : $(systemctl is-active caddy 2>/dev/null || echo 'unknown')"
 echo ""
 echo -e "  DB credentials    : ${INSTALL_DIR}/.env"
 echo ""
-echo -e "  View logs: journalctl -u synaptic-signals -f"
+echo -e "  View logs: journalctl -u synapcms -f"
 echo ""

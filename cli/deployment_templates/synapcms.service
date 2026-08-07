@@ -1,5 +1,5 @@
 [Unit]
-Description=Synaptic Signals CMS
+Description=SynapCMS
 After=network.target postgresql.service
 Wants=postgresql.service
 
@@ -14,7 +14,7 @@ Restart=always
 RestartSec=5
 StandardOutput=journal
 StandardError=journal
-SyslogIdentifier=synaptic-signals
+SyslogIdentifier=synapcms
 
 # Hardening
 NoNewPrivileges=true

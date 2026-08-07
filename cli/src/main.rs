@@ -34,7 +34,7 @@ Examples:
 
   # Local install that also copies the generated Caddyfile/systemd unit into
   # place and starts the service on this machine (requires sudo; any live
-  # /etc/caddy/Caddyfile or synaptic-signals.service unit is backed up first)
+  # /etc/caddy/Caddyfile or synapcms.service unit is backed up first)
   synap install --setup-service
 
   # Fully non-interactive local install: bootstrap the DB, seed the admin/site,

@@ -508,7 +508,7 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
         println!();
         println!("Optional: install this as a local systemd service fronted by Caddy.");
         println!("  This copies files into /etc/caddy/ and /etc/systemd/system/, reloads");
-        println!("  Caddy, and enables+starts a synaptic-signals.service. It requires sudo,");
+        println!("  Caddy, and enables+starts a synapcms.service. It requires sudo,");
         println!("  and if a dev instance is already running (e.g. via ./app.sh on port");
         println!("  {port}), a systemd-managed instance could try to bind the same port");
         println!("  and conflict with it.");
@@ -587,7 +587,7 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
     }
     println!("  Site URL    : {}", site_url);
     if do_setup_service {
-        println!("  Local service: enabled and started (systemctl status synaptic-signals)");
+        println!("  Local service: enabled and started (systemctl status synapcms)");
     }
 
     // The running server (if any) loaded its site cache at startup and does not
@@ -597,10 +597,10 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
     // miss otherwise: no errors are shown, but the homepage 404s with
     // "No site found for hostname" until the service is restarted.
     println!();
-    println!("  IMPORTANT: if synaptic-signals is already running, restart it now");
+    println!("  IMPORTANT: if synapcms is already running, restart it now");
     println!("  so it picks up this site — the DB write above does not take effect");
     println!("  on a running server until it restarts:");
-    println!("    systemctl restart synaptic-signals");
+    println!("    systemctl restart synapcms");
 
     // In non-interactive mode the install script handles deployment — skip the manual steps.
     if !ni {
@@ -645,9 +645,9 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
             // required steps even when everything is already in place and the
             // only real action needed is restarting to pick up this run's
             // database changes (see the restart notice above).
-            let live_unit_path = std::path::Path::new("/etc/systemd/system/synaptic-signals.service");
+            let live_unit_path = std::path::Path::new("/etc/systemd/system/synapcms.service");
             let live_caddy_path = std::path::Path::new("/etc/caddy/Caddyfile");
-            let generated_unit = output_dir.join("synaptic-signals.service");
+            let generated_unit = output_dir.join("synapcms.service");
             let generated_caddy = output_dir.join("Caddyfile");
 
             if live_unit_path.exists() {
@@ -678,7 +678,7 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
                 println!("     Sets up Caddy write permissions + log directory for SSL provisioning.");
                 println!("  5. Ensure {install_dir}/.env contains DATABASE_URL and SECRET_KEY");
                 println!("     (INSTALL_DIR has been written automatically)");
-                println!("  6. Run:  systemctl daemon-reload && systemctl enable --now synaptic-signals");
+                println!("  6. Run:  systemctl daemon-reload && systemctl enable --now synapcms");
             }
         }
 
@@ -865,7 +865,7 @@ fn backup_if_exists(live_path: &str, backup_dir: &std::path::Path, label: &str) 
 /// Local equivalent of install-vps.sh's do_ship_files (binary placement only)
 /// + do_caddy_systemd: places the built binaries at {install_dir}/{synaptic,synap},
 /// copies the already-generated Caddyfile/service files into place, and
-/// enables/starts both Caddy and the synaptic-signals service. No ssh/scp —
+/// enables/starts both Caddy and the synapcms service. No ssh/scp —
 /// everything runs directly on this machine, gated by an explicit opt-in.
 /// Any live Caddyfile/systemd unit this would overwrite is backed up first
 /// (see `backup_if_exists`) — this machine may already be running a
@@ -897,7 +897,7 @@ fn setup_local_service(
     println!("  Installed binaries to {}/{{synaptic,synap}}", install_dir);
 
     let generated_caddy = output_dir.join("Caddyfile");
-    let generated_unit  = output_dir.join("synaptic-signals.service");
+    let generated_unit  = output_dir.join("synapcms.service");
     let generated_caddy_str = generated_caddy.to_str()
         .ok_or_else(|| anyhow::anyhow!("Caddyfile path is not valid UTF-8"))?;
     let generated_unit_str = generated_unit.to_str()
@@ -921,12 +921,12 @@ fn setup_local_service(
         run_sudo(&["systemctl", "enable", "--now", "caddy"])?;
     }
 
-    if let Some(b) = backup_if_exists("/etc/systemd/system/synaptic-signals.service", &backup_dir, "synaptic-signals.service")? {
+    if let Some(b) = backup_if_exists("/etc/systemd/system/synapcms.service", &backup_dir, "synapcms.service")? {
         backups_made.push(b);
     }
-    run_sudo(&["cp", generated_unit_str, "/etc/systemd/system/synaptic-signals.service"])?;
+    run_sudo(&["cp", generated_unit_str, "/etc/systemd/system/synapcms.service"])?;
     run_sudo(&["systemctl", "daemon-reload"])?;
-    run_sudo(&["systemctl", "enable", "--now", "synaptic-signals"])?;
+    run_sudo(&["systemctl", "enable", "--now", "synapcms"])?;
 
     println!("  Caddy + systemd service configured and started.");
     if !backups_made.is_empty() {
@@ -935,7 +935,7 @@ fn setup_local_service(
             let target = if b.file_name().and_then(|n| n.to_str()).is_some_and(|n| n.starts_with("Caddyfile")) {
                 "/etc/caddy/Caddyfile"
             } else {
-                "/etc/systemd/system/synaptic-signals.service"
+                "/etc/systemd/system/synapcms.service"
             };
             println!("    sudo cp {} {}", b.display(), target);
         }
@@ -994,14 +994,14 @@ fn write_caddyfile(
 }
 
 fn write_systemd_service(output_dir: &std::path::Path, install_dir: &str, service_user: &str) -> anyhow::Result<()> {
-    let template = find_template("deployment/synaptic-signals.service")
-        .unwrap_or_else(|| include_str!("../../deployment_templates/synaptic-signals.service").to_string());
+    let template = find_template("deployment/synapcms.service")
+        .unwrap_or_else(|| include_str!("../../deployment_templates/synapcms.service").to_string());
 
     let content = template
         .replace("{INSTALL_DIR}", install_dir)
         .replace("{SERVICE_USER}", service_user);
 
-    let path = output_dir.join("synaptic-signals.service");
+    let path = output_dir.join("synapcms.service");
     std::fs::write(&path, content)
         .map_err(|e| anyhow::anyhow!("Failed to write service file: {e}"))?;
     println!("Written: {}", path.display());

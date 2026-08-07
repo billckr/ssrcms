@@ -94,7 +94,7 @@ The installer will:
 1. Connect to the database and apply all migrations
 2. Create the admin user with `is_protected = TRUE` (cannot be deleted by other admins)
 3. Write a `Caddyfile` in the current directory
-4. Write a `synaptic-signals.service` file in the current directory
+4. Write a `synapcms.service` file in the current directory
 
 > **If you created the admin account manually** (e.g. via `synap user create` before this
 > existed), mark it protected now:
@@ -155,15 +155,15 @@ This is handled automatically if you run `sudo synap caddy setup --app-user www-
 ## 6. Enable the Systemd Service
 
 ```bash
-sudo cp synaptic-signals.service /etc/systemd/system/
+sudo cp synapcms.service /etc/systemd/system/
 
 sudo systemctl daemon-reload
-sudo systemctl enable synaptic-signals
-sudo systemctl start synaptic-signals
+sudo systemctl enable synapcms
+sudo systemctl start synapcms
 
 # Check it started cleanly
-sudo systemctl status synaptic-signals
-sudo journalctl -u synaptic-signals -f
+sudo systemctl status synapcms
+sudo journalctl -u synapcms -f
 ```
 
 The service runs as `www-data`, restarts automatically on failure, and reads environment variables from `/opt/synaptic-signals/.env`.
@@ -393,10 +393,10 @@ If the server was started from a different directory, or `PID_FILE` is set to a 
 cargo build --release
 
 # 2. Replace binaries (the service will be briefly down)
-sudo systemctl stop synaptic-signals
+sudo systemctl stop synapcms
 sudo cp target/release/synaptic     /opt/synaptic-signals/synaptic
 sudo cp target/release/synap /opt/synaptic-signals/synap
-sudo systemctl start synaptic-signals
+sudo systemctl start synapcms
 
 # 3. Apply any new migrations
 sudo /opt/synaptic-signals/synap migrate
