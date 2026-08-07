@@ -19,6 +19,12 @@ enum Commands {
     Install(commands::install::InstallArgs),
     /// Run pending database migrations
     Migrate(commands::migrate::MigrateArgs),
+    /// Local dev process management (start/stop/restart/status/logs) — a synap-native
+    /// alternative to ./app.sh for the server lifecycle commands. Run from the project root.
+    App {
+        #[command(subcommand)]
+        action: commands::app::AppAction,
+    },
     /// Development utilities (destructive — do not use in production)
     Dev {
         #[command(subcommand)]
@@ -66,6 +72,7 @@ async fn main() -> anyhow::Result<()> {
     match cli.command {
         Commands::Install(args) => commands::install::run(args).await?,
         Commands::Migrate(args) => commands::migrate::run(args).await?,
+        Commands::App { action } => commands::app::run(action).await?,
         Commands::Dev { action } => commands::dev::run(action).await?,
         Commands::User { action } => commands::user::run(action).await?,
         Commands::Plugin { action } => commands::plugin::run(action).await?,
