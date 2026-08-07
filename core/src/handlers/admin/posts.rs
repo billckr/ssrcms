@@ -204,13 +204,26 @@ async fn list_type(state: AppState, post_type: &str, page: Option<i64>, status_f
     }
 }
 
+/// Look up an existing post's author for the Author card, tolerating both
+/// a missing post and a missing/suspended author rather than failing the
+/// whole form re-render (used on validation-failure paths in `save_edit`).
+async fn resolve_post_author(state: &AppState, post_id: Uuid) -> (String, bool, String) {
+    let Ok(post) = crate::models::post::get_by_id(&state.db, post_id).await else {
+        return (String::new(), true, String::new());
+    };
+    crate::models::user::get_by_id_include_inactive(&state.db, post.author_id)
+        .await
+        .map(|u| (u.display_name, u.is_active, u.id.to_string()))
+        .unwrap_or_else(|_| ("Unknown".to_string(), true, post.author_id.to_string()))
+}
+
 pub async fn new_post(
     State(state): State<AppState>,
     admin: AdminUser,
 ) -> Html<String> {
     let cs = state.site_hostname(admin.site_id);
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
-    new_post_type(state, "post", admin.site_id, ctx).await
+    new_post_type(state, "post", admin.site_id, &admin, &cs, ctx).await
 }
 
 pub async fn new_page(
@@ -222,10 +235,10 @@ pub async fn new_page(
     }
     let cs = state.site_hostname(admin.site_id);
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
-    new_post_type(state, "page", admin.site_id, ctx).await.into_response()
+    new_post_type(state, "page", admin.site_id, &admin, &cs, ctx).await.into_response()
 }
 
-async fn new_post_type(state: AppState, post_type: &str, site_id: Option<Uuid>, ctx: admin::PageContext) -> Html<String> {
+async fn new_post_type(state: AppState, post_type: &str, site_id: Option<Uuid>, admin: &AdminUser, site_hostname: &str, ctx: admin::PageContext) -> Html<String> {
     let (categories, tags) = fetch_term_options(&state, site_id).await;
     let available_templates = if post_type == "page" { scan_templates(&state, site_id) } else { vec![] };
     let available_parents = if post_type == "page" {
@@ -253,10 +266,10 @@ async fn new_post_type(state: AppState, post_type: &str, site_id: Option<Uuid>, 
         post_password_set: false,
         comments_enabled: false,
         comment_count: 0,
-        author_name: String::new(),
-        author_is_active: true,
-        author_id: String::new(),
-        site_name: String::new(),
+        author_name: admin.user.display_name.clone(),
+        author_is_active: admin.user.is_active,
+        author_id: admin.user.id.to_string(),
+        site_name: site_hostname.to_string(),
         parent_id: None,
         available_parents,
         sources: vec![],
@@ -667,6 +680,7 @@ pub async fn save_edit(
         let ctx = super::page_ctx_full(&state, &admin, &cs).await;
         let (categories, tags) = fetch_term_options(&state, admin.site_id).await;
         let available_parents = if form.post_type == "page" { fetch_parent_options(&state, admin.site_id, Some(id)).await } else { vec![] };
+        let (author_name, author_is_active, author_id) = resolve_post_author(&state, id).await;
         let edit = PostEdit {
             id: Some(id.to_string()),
             title: form.title,
@@ -687,10 +701,10 @@ pub async fn save_edit(
             post_password_set: false,
             comments_enabled: form_comments_enabled,
             comment_count: 0,
-            author_name: String::new(),
-            author_is_active: true,
-            author_id: String::new(),
-            site_name: String::new(),
+            author_name,
+            author_is_active,
+            author_id,
+            site_name: cs.clone(),
             parent_id: form.parent_id.clone().filter(|s| !s.is_empty()),
             available_parents,
             sources: parse_sources(form.sources_json.as_deref()),
@@ -765,6 +779,7 @@ pub async fn save_edit(
                 .map(|t| t.id.to_string())
                 .collect();
             let available_parents = if form.post_type == "page" { fetch_parent_options(&state, admin.site_id, Some(id)).await } else { vec![] };
+            let (author_name, author_is_active, author_id) = resolve_post_author(&state, id).await;
             let edit = PostEdit {
                 id: Some(id.to_string()),
                 title: form.title,
@@ -785,10 +800,10 @@ pub async fn save_edit(
                 post_password_set: form.post_protected.as_deref() == Some("on"),
                 comments_enabled: form_comments_enabled,
                 comment_count: 0,
-                author_name: String::new(),
-                author_is_active: true,
-                author_id: String::new(),
-                site_name: String::new(),
+                author_name,
+                author_is_active,
+                author_id,
+                site_name: cs.clone(),
                 parent_id: form_parent_id.map(|id| id.to_string()),
                 available_parents,
                 sources: parse_sources(form.sources_json.as_deref()),
