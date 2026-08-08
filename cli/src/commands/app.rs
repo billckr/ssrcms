@@ -59,8 +59,12 @@ fn require_project_root() -> anyhow::Result<()> {
     Ok(())
 }
 
+fn pid_file_in(dir: &Path) -> PathBuf {
+    dir.join(".synaptic.pid")
+}
+
 fn pid_file() -> PathBuf {
-    PathBuf::from(".synaptic.pid")
+    pid_file_in(Path::new("."))
 }
 
 fn log_file() -> PathBuf {
@@ -79,8 +83,8 @@ fn port() -> String {
     std::env::var("PORT").unwrap_or_else(|_| "3000".to_string())
 }
 
-fn read_pid() -> Option<u32> {
-    fs::read_to_string(pid_file()).ok()?.trim().parse().ok()
+fn read_pid_in(dir: &Path) -> Option<u32> {
+    fs::read_to_string(pid_file_in(dir)).ok()?.trim().parse().ok()
 }
 
 fn is_alive(pid: u32) -> bool {
@@ -93,15 +97,23 @@ fn is_alive(pid: u32) -> bool {
         .unwrap_or(false)
 }
 
-/// Returns the running PID, cleaning up a stale PID file if the process is gone.
-fn running_pid() -> Option<u32> {
-    let pid = read_pid()?;
+/// Returns the running PID for the synap-app-managed process rooted at
+/// `dir`, cleaning up a stale PID file if the process is gone. Used by
+/// `synap app` itself (via `running_pid()`, cwd-relative) and by
+/// `synap install`'s preflight/Fresh logic (dir-explicit, since the
+/// installer's target directory may differ from cwd).
+pub(crate) fn running_pid_in(dir: &Path) -> Option<u32> {
+    let pid = read_pid_in(dir)?;
     if is_alive(pid) {
         Some(pid)
     } else {
-        let _ = fs::remove_file(pid_file());
+        let _ = fs::remove_file(pid_file_in(dir));
         None
     }
+}
+
+fn running_pid() -> Option<u32> {
+    running_pid_in(Path::new("."))
 }
 
 fn free_port() {
@@ -236,14 +248,20 @@ async fn cmd_start(release: bool) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn cmd_stop() -> anyhow::Result<()> {
-    let Some(pid) = running_pid() else {
-        println!("Not running.");
-        let _ = fs::remove_file(pid_file());
+/// Stop the synap-app-managed process rooted at `dir`, if any — waits for a
+/// graceful exit, force-killing after ~5s. Silent-if-not-running (returns
+/// Ok either way). Deliberately does NOT call `free_port()` — freeing the
+/// port is a separate concern the caller sequences explicitly (e.g. `synap
+/// install`'s Fresh path also needs to stop a conflicting systemd service
+/// before the port is truly free, which this function knows nothing about).
+pub(crate) fn stop_in(dir: &Path) -> anyhow::Result<()> {
+    let Some(pid) = running_pid_in(dir) else {
+        println!("  (no synap-app-managed process running under {})", dir.display());
+        let _ = fs::remove_file(pid_file_in(dir));
         return Ok(());
     };
 
-    println!("Stopping server (PID {pid})...");
+    println!("  Stopping server (PID {pid})...");
     let _ = Command::new("kill").arg(pid.to_string()).status();
 
     for _ in 0..10 {
@@ -254,13 +272,23 @@ fn cmd_stop() -> anyhow::Result<()> {
     }
 
     if is_alive(pid) {
-        println!("Force killing...");
+        println!("  Force killing...");
         let _ = Command::new("kill").args(["-9", &pid.to_string()]).status();
     }
 
-    let _ = fs::remove_file(pid_file());
+    let _ = fs::remove_file(pid_file_in(dir));
+    println!("  Stopped.");
+    Ok(())
+}
+
+fn cmd_stop() -> anyhow::Result<()> {
+    if running_pid().is_none() {
+        println!("Not running.");
+        let _ = fs::remove_file(pid_file());
+        return Ok(());
+    }
+    stop_in(Path::new("."))?;
     free_port();
-    println!("Stopped.");
     Ok(())
 }
 

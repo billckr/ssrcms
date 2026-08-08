@@ -2,6 +2,22 @@ use clap::Args;
 use dialoguer::{Confirm, Input, Password};
 use uuid::Uuid;
 
+/// What to do when preflight detects a conflicting existing install
+/// (running dev process, active systemd service, an unrelated Caddy block
+/// for this domain, or existing DB data). Only consulted when a conflict is
+/// actually found — ignored entirely on a clean preflight.
+#[derive(clap::ValueEnum, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum OnConflict {
+    /// Take over completely: stop what's running, wipe existing data, install clean.
+    Fresh,
+    /// Add this site to the already-running install; nothing existing is touched or wiped.
+    Coexist,
+    /// Make no changes and exit. The safe default — a script that hits an
+    /// unanticipated conflict should fail loudly, never silently destroy or
+    /// silently duplicate data.
+    Bail,
+}
+
 #[derive(Args)]
 pub struct InstallArgs {
     /// Skip interactive prompts — reads all values from flags or env vars.
@@ -104,6 +120,13 @@ pub struct InstallArgs {
     /// when --setup-service is used. Defaults similarly to synaptic_bin.
     #[arg(long)]
     pub synap_bin: Option<String>,
+
+    /// What to do when an existing install is detected (running process,
+    /// active systemd service, occupied Caddy domain, or existing DB data).
+    /// Only relevant in --non-interactive mode — interactively you're always
+    /// asked. Env: SYNAP_ON_CONFLICT
+    #[arg(long, env = "SYNAP_ON_CONFLICT", value_enum, default_value_t = OnConflict::Bail)]
+    pub on_conflict: OnConflict,
 }
 
 /// Returns the current effective UID.
@@ -126,6 +149,256 @@ fn current_uid() -> u32 {
 /// Returns the current username from the USER env var.
 fn current_username() -> String {
     std::env::var("USER").unwrap_or_else(|_| "unknown".to_string())
+}
+
+// ── Preflight (existing-install detection) ──────────────────────────────────
+
+struct DevProcessFinding { pid: u32 }
+struct SystemdFinding { service_name: String }
+struct CaddyForeignFinding { domain: String }
+struct DbFinding { site_count: i64, user_count: i64, sites: Vec<(String, String)> }
+
+#[derive(Default)]
+struct PreflightFindings {
+    dev_process: Option<DevProcessFinding>,
+    systemd_active: Option<SystemdFinding>,
+    caddy_foreign: Option<CaddyForeignFinding>,
+    db_data: Option<DbFinding>,
+}
+
+impl PreflightFindings {
+    fn is_clean(&self) -> bool {
+        self.dev_process.is_none() && self.systemd_active.is_none()
+            && self.caddy_foreign.is_none() && self.db_data.is_none()
+    }
+}
+
+/// Non-DB half of preflight: cheap, read-only, no sudo required. Run before
+/// ever touching the database — a fresh Postgres bootstrap can't have
+/// conflicting data by construction, so there's no reason to connect first.
+fn preflight_system(domain: &str, install_dir: &str) -> PreflightFindings {
+    PreflightFindings {
+        dev_process: super::app::running_pid_in(std::path::Path::new(install_dir))
+            .map(|pid| DevProcessFinding { pid }),
+        systemd_active: {
+            let active = std::process::Command::new("systemctl")
+                .args(["is-active", "--quiet", "synapcms"])
+                .status().map(|s| s.success()).unwrap_or(false);
+            active.then(|| SystemdFinding { service_name: "synapcms".to_string() })
+        },
+        caddy_foreign: caddy_foreign_block(domain),
+        db_data: None,
+    }
+}
+
+/// Does the live Caddyfile already have a site-address block for `domain`
+/// that ISN'T one of our own managed blocks? A hand-written or otherwise
+/// foreign block for the exact same domain can't be safely merged into —
+/// merging would produce a duplicate/conflicting Caddy site definition.
+/// A small line-oriented scan (brace depth + line-prefix match), not a full
+/// Caddyfile parser — good enough for the single-address-per-block pattern
+/// this tool itself always generates; documented limitation for anything
+/// more exotic a human might hand-write.
+fn caddy_foreign_block(domain: &str) -> Option<CaddyForeignFinding> {
+    let content = std::fs::read_to_string("/etc/caddy/Caddyfile").ok()?;
+    let begin = format!("# >>> SynapCMS managed block: {domain} >>>");
+    if content.contains(&begin) {
+        return None; // already ours — merge handles re-installing the same domain
+    }
+    let mut depth: i32 = 0;
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if depth == 0 {
+            let header = trimmed.split('{').next().unwrap_or("").trim();
+            if !header.is_empty() {
+                let is_match = header.split(',').map(|s| s.trim()).any(|a| a == domain);
+                if is_match {
+                    return Some(CaddyForeignFinding { domain: domain.to_string() });
+                }
+            }
+        }
+        depth += trimmed.matches('{').count() as i32;
+        depth -= trimmed.matches('}').count() as i32;
+    }
+    None
+}
+
+/// DB half of preflight. Only call this against a URL about to be *reused*
+/// (never one about to be freshly bootstrapped). Read-only: counts only.
+async fn preflight_db(pool: &sqlx::PgPool) -> Option<DbFinding> {
+    let site_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM sites")
+        .fetch_one(pool).await.unwrap_or(0);
+    let user_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM users")
+        .fetch_one(pool).await.unwrap_or(0);
+    if site_count == 0 && user_count == 0 {
+        return None;
+    }
+    let sites: Vec<(String, String)> = sqlx::query_as(
+        "SELECT id::text, hostname FROM sites ORDER BY created_at"
+    ).fetch_all(pool).await.unwrap_or_default();
+    Some(DbFinding { site_count, user_count, sites })
+}
+
+/// Print the consolidated "what was found" report shared by the three-way
+/// prompt, the non-interactive bail path, and Bail's own output.
+fn print_findings(findings: &PreflightFindings) {
+    println!("\n── Existing Install Detected ────────────────────────────");
+    if let Some(p) = &findings.dev_process {
+        println!("  [process]   synap-app-managed server is running (PID {})", p.pid);
+    }
+    if let Some(s) = &findings.systemd_active {
+        println!("  [systemd]   service '{}' is active", s.service_name);
+    }
+    if let Some(c) = &findings.caddy_foreign {
+        println!("  [caddy]     /etc/caddy/Caddyfile already has an unrelated block for '{}'", c.domain);
+    }
+    if let Some(d) = &findings.db_data {
+        if d.sites.is_empty() {
+            println!("  [database]  {} site(s), {} user(s) already exist", d.site_count, d.user_count);
+        } else {
+            println!("  [database]  {} site(s), {} user(s) already exist:", d.site_count, d.user_count);
+            for (id, hostname) in &d.sites {
+                println!("                - {} ({})", hostname, id);
+            }
+        }
+    }
+    println!();
+}
+
+enum ConflictChoice { Fresh, Coexist, Bail }
+
+/// Present the consolidated findings and get an explicit Fresh/Coexist/Bail
+/// choice. Never defaults to anything destructive — the user must actively
+/// pick. If a foreign (unmanaged) Caddy block was found for this domain,
+/// Coexist is dropped from the menu entirely: merging into someone else's
+/// block isn't safe, so the only way forward is Fresh (which claims the
+/// domain outright) or Bail.
+fn resolve_conflict_interactive(findings: &PreflightFindings) -> anyhow::Result<ConflictChoice> {
+    print_findings(findings);
+    let coexist_possible = findings.caddy_foreign.is_none();
+    if !coexist_possible {
+        if let Some(c) = &findings.caddy_foreign {
+            println!(
+                "Note: '{}' already has a Caddy block SynapCMS doesn't manage — Coexist\n\
+                 isn't possible for this domain (merging would create a conflicting site\n\
+                 definition). Choose Fresh to take it over, or Bail to resolve it manually first.\n",
+                c.domain
+            );
+        }
+    }
+    let items: Vec<&str> = if coexist_possible {
+        vec![
+            "Fresh   — stop what's running, wipe existing data, install clean (destructive)",
+            "Coexist — add this site to the install above; nothing existing is touched or wiped",
+            "Bail    — make no changes and exit",
+        ]
+    } else {
+        vec![
+            "Fresh — take over completely, claiming this domain (destructive)",
+            "Bail  — make no changes and exit",
+        ]
+    };
+    let idx = dialoguer::Select::new()
+        .with_prompt("What would you like to do?")
+        .items(&items)
+        .interact()?;
+    Ok(if coexist_possible {
+        match idx { 0 => ConflictChoice::Fresh, 1 => ConflictChoice::Coexist, _ => ConflictChoice::Bail }
+    } else {
+        if idx == 0 { ConflictChoice::Fresh } else { ConflictChoice::Bail }
+    })
+}
+
+/// Non-interactive counterpart — no prompting (would hang), so the choice
+/// must already be declared via `--on-conflict`, defaulting to `bail` for
+/// safety. `coexist` additionally requires no foreign Caddy block, since
+/// there's no one to ask about that here either.
+fn resolve_conflict_non_interactive(findings: &PreflightFindings, on_conflict: OnConflict) -> anyhow::Result<ConflictChoice> {
+    print_findings(findings);
+    match on_conflict {
+        OnConflict::Bail => anyhow::bail!(
+            "Conflicting existing install detected (see above). Re-run with \
+             --on-conflict=fresh or --on-conflict=coexist once you've decided."
+        ),
+        OnConflict::Fresh => Ok(ConflictChoice::Fresh),
+        OnConflict::Coexist => {
+            if let Some(c) = &findings.caddy_foreign {
+                anyhow::bail!(
+                    "--on-conflict=coexist can't proceed: '{}' already has a Caddy block \
+                     SynapCMS doesn't manage. Use --on-conflict=fresh, or resolve it manually first.",
+                    c.domain
+                );
+            }
+            Ok(ConflictChoice::Coexist)
+        }
+    }
+}
+
+/// Take over completely: if the DB already has data, gate the wipe behind
+/// the same password-verification ceremony `dev reset` uses (install-
+/// flavored wording), only *then* stop whatever's running and wipe — so a
+/// decline leaves the running process/service completely untouched. If
+/// there's no DB data (only a running process/service was found), just
+/// stop it — nothing destructive to confirm.
+async fn do_fresh(
+    findings: &PreflightFindings,
+    database_url: &str,
+    install_dir: &str,
+    ni: bool,
+    admin_password: Option<String>,
+) -> anyhow::Result<()> {
+    println!("\n── Fresh Takeover ───────────────────────────────────────");
+
+    let pool = sqlx::postgres::PgPoolOptions::new()
+        .max_connections(1)
+        .connect(database_url)
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to connect for takeover: {e}"))?;
+
+    if let Some(d) = &findings.db_data {
+        println!("  The following will be wiped to take over cleanly:");
+        println!("  Sites : {}", d.site_count);
+        println!("  Users : {}", d.user_count);
+        for (id, hostname) in &d.sites {
+            println!("    - {} ({})", hostname, id);
+        }
+        println!();
+
+        if ni && admin_password.is_none() {
+            anyhow::bail!(
+                "--on-conflict=fresh requires --admin-password (or ADMIN_PASSWORD) to \
+                 authorize wiping existing data in non-interactive mode."
+            );
+        }
+        super::verify_super_admin_password(&pool, admin_password).await?;
+
+        if !ni {
+            print!("  Type 'yes' to wipe existing data and take over, or 'cancel' to abort: ");
+            use std::io::Write as _;
+            std::io::stdout().flush().ok();
+            let mut input = String::new();
+            std::io::stdin().read_line(&mut input).ok();
+            if input.trim() != "yes" {
+                println!("Aborted. No changes made.");
+                std::process::exit(0);
+            }
+        }
+    }
+
+    // Only now — after any confirmation above has succeeded — actually stop
+    // what's running and wipe. A decline above leaves everything untouched.
+    if let Some(p) = &findings.dev_process {
+        println!("  Stopping synap-app-managed process (PID {})...", p.pid);
+        super::app::stop_in(std::path::Path::new(install_dir))?;
+    }
+    if let Some(s) = &findings.systemd_active {
+        println!("  Stopping systemd service '{}'...", s.service_name);
+        run_sudo(&["systemctl", "stop", &s.service_name])?;
+    }
+    if findings.db_data.is_some() {
+        super::dev::wipe_data(&pool, Some(install_dir.to_string())).await?;
+    }
+    Ok(())
 }
 
 pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
@@ -195,6 +468,11 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
         }
     }
 
+    // ── Preflight: is there already something here? ────────────────────────
+    // Non-DB checks first — no reason to touch a database at all before
+    // knowing whether the operator even wants to proceed.
+    let mut findings = preflight_system(&domain, &install_dir);
+
     // Check for an already-working DATABASE_URL — the process env (today's
     // only source) or install_dir/.env (covers a dev machine where the URL
     // lives only in a project .env, not the shell environment). If found,
@@ -233,6 +511,40 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
                 .interact_text()?
         }
     };
+
+    // DB half of preflight: a short-lived precheck connection, before the
+    // real connect/migrate below — a freshly bootstrapped DB naturally has
+    // no tables yet, so this just finds nothing there, no special-casing
+    // needed. Best-effort: if this precheck can't connect, proceed normally
+    // and let the real connect below surface any actual problem.
+    if let Ok(precheck_pool) = sqlx::postgres::PgPoolOptions::new()
+        .max_connections(1)
+        .connect(&database_url)
+        .await
+    {
+        findings.db_data = preflight_db(&precheck_pool).await;
+    }
+
+    let mut auto_restart_systemd = false;
+    if !findings.is_clean() {
+        let choice = if ni {
+            resolve_conflict_non_interactive(&findings, args.on_conflict)?
+        } else {
+            resolve_conflict_interactive(&findings)?
+        };
+        match choice {
+            ConflictChoice::Bail => {
+                println!("No changes made. Resolve the above, or re-run and choose Fresh/Coexist, when ready.");
+                return Ok(());
+            }
+            ConflictChoice::Fresh => {
+                do_fresh(&findings, &database_url, &install_dir, ni, args.admin_password.clone()).await?;
+            }
+            ConflictChoice::Coexist => {
+                auto_restart_systemd = findings.systemd_active.is_some();
+            }
+        }
+    }
 
     println!("\n── Database ─────────────────────────────────────────────");
     println!("Connecting to database...");
@@ -572,7 +884,7 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
     write_env_key_if_absent(&env_path, "LOG_LEVEL", "info");
 
     if do_setup_service {
-        setup_local_service(&install_dir, output_dir, args.synaptic_bin.as_deref(), args.synap_bin.as_deref())?;
+        setup_local_service(&install_dir, output_dir, &domain, args.synaptic_bin.as_deref(), args.synap_bin.as_deref())?;
     }
 
     // ── Install Summary ────────────────────────────────────────────────────
@@ -592,15 +904,29 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
 
     // The running server (if any) loaded its site cache at startup and does not
     // watch the database for new sites — a restart is required to pick this one
-    // up, even though the DB write above already succeeded. Print this
-    // unconditionally (interactive and --non-interactive) since it's easy to
-    // miss otherwise: no errors are shown, but the homepage 404s with
-    // "No site found for hostname" until the service is restarted.
+    // up, even though the DB write above already succeeded.
     println!();
-    println!("  IMPORTANT: if synapcms is already running, restart it now");
-    println!("  so it picks up this site — the DB write above does not take effect");
-    println!("  on a running server until it restarts:");
-    println!("    systemctl restart synapcms");
+    if auto_restart_systemd {
+        // Coexist found systemd already active for a prior site on this
+        // install — restart it automatically so the new site goes live
+        // without the operator needing to know to do this themselves.
+        println!("  Restarting synapcms to pick up this site...");
+        match run_sudo(&["systemctl", "restart", "synapcms"]) {
+            Ok(()) => println!("  Done."),
+            Err(e) => {
+                println!("  Warning: could not restart synapcms automatically ({e}).");
+                println!("  Run manually:  sudo systemctl restart synapcms");
+            }
+        }
+    } else {
+        // Print unconditionally (interactive and --non-interactive) since it's
+        // easy to miss otherwise: no errors are shown, but the homepage 404s
+        // with "No site found for hostname" until the service is restarted.
+        println!("  IMPORTANT: if synapcms is already running, restart it now");
+        println!("  so it picks up this site — the DB write above does not take effect");
+        println!("  on a running server until it restarts:");
+        println!("    systemctl restart synapcms");
+    }
 
     // In non-interactive mode the install script handles deployment — skip the manual steps.
     if !ni {
@@ -838,6 +1164,67 @@ fn run_sudo(args: &[&str]) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Write `content` to `live_path` via `sudo tee`, since paths like
+/// /etc/caddy/Caddyfile aren't user-writable. Unlike `run_sudo(&["cp", ...])`
+/// this writes in-process-generated content (a merge result) rather than
+/// copying an existing file verbatim.
+fn write_via_sudo_tee(live_path: &str, content: &str) -> anyhow::Result<()> {
+    use std::io::Write;
+    let mut child = std::process::Command::new("sudo")
+        .args(["tee", live_path])
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::null())
+        .spawn()
+        .map_err(|e| anyhow::anyhow!("Failed to run `sudo tee {live_path}`: {e}"))?;
+    child.stdin.take().unwrap().write_all(content.as_bytes())
+        .map_err(|e| anyhow::anyhow!("Failed to write to `sudo tee {live_path}`: {e}"))?;
+    let status = child.wait()
+        .map_err(|e| anyhow::anyhow!("Failed waiting on `sudo tee {live_path}`: {e}"))?;
+    if !status.success() {
+        anyhow::bail!("`sudo tee {live_path}` failed ({status})");
+    }
+    Ok(())
+}
+
+/// Remove the exact `[begin_line ..= end_line]` span (inclusive) from
+/// `content` if present, swallowing one trailing newline so repeated merges
+/// don't accumulate blank lines; otherwise returns `content` unchanged.
+fn strip_marked_block(content: &str, begin: &str, end: &str) -> String {
+    let Some(start_idx) = content.find(begin) else { return content.to_string(); };
+    let Some(end_rel) = content[start_idx..].find(end) else { return content.to_string(); };
+    let end_idx = start_idx + end_rel + end.len();
+    let after = content[end_idx..].strip_prefix('\n').unwrap_or(&content[end_idx..]);
+    format!("{}{}", &content[..start_idx], after)
+}
+
+/// Merge a freshly generated, marker-wrapped single-domain Caddy block into
+/// the live Caddyfile at `live_path`, leaving every other block — SynapCMS-
+/// managed or hand-written — completely untouched. If `live_path` doesn't
+/// exist yet, the result is just `generated_block` verbatim.
+///
+/// Any existing block already delimited by this exact domain's markers is
+/// stripped first — idempotent re-install of the same domain, replacing
+/// only its own prior block rather than the whole file.
+///
+/// Must not be called when preflight found a *foreign* (unmarked) block for
+/// this domain — that's a distinct, unresolvable-by-merge conflict that the
+/// three-way choice must catch and route to Fresh or Bail before this is
+/// ever reached (see `caddy_foreign_block`).
+fn merge_caddyfile(live_path: &str, domain: &str, generated_block: &str) -> anyhow::Result<String> {
+    let begin = format!("# >>> SynapCMS managed block: {domain} >>>");
+    let end   = format!("# <<< SynapCMS managed block: {domain} <<<");
+
+    let existing = std::fs::read_to_string(live_path).unwrap_or_default();
+    let stripped = strip_marked_block(&existing, &begin, &end);
+
+    let merged = if stripped.trim().is_empty() {
+        generated_block.to_string()
+    } else {
+        format!("{}\n\n{}\n", stripped.trim_end(), generated_block.trim_end())
+    };
+    Ok(merged)
+}
+
 /// If `live_path` already exists, copy it to `{backup_dir}/{label}.bak.<timestamp>`
 /// (via sudo, since e.g. /etc/systemd/system/*.service may not be
 /// user-readable) before it gets overwritten, and hand ownership of the
@@ -873,6 +1260,7 @@ fn backup_if_exists(live_path: &str, backup_dir: &std::path::Path, label: &str) 
 fn setup_local_service(
     install_dir: &str,
     output_dir: &std::path::Path,
+    domain: &str,
     synaptic_bin_arg: Option<&str>,
     synap_bin_arg: Option<&str>,
 ) -> anyhow::Result<()> {
@@ -906,10 +1294,12 @@ fn setup_local_service(
     let backup_dir = std::path::Path::new(install_dir).join("backups");
     let mut backups_made: Vec<std::path::PathBuf> = Vec::new();
 
-    if let Some(b) = backup_if_exists("/etc/caddy/Caddyfile", &backup_dir, "Caddyfile")? {
-        backups_made.push(b);
-    }
-    run_sudo(&["cp", generated_caddy_str, "/etc/caddy/Caddyfile"])?;
+    // Merge (not overwrite) — every other domain's block, SynapCMS-managed
+    // or hand-written, is left untouched. See merge_caddyfile's doc comment.
+    let generated_block = std::fs::read_to_string(&generated_caddy)
+        .map_err(|e| anyhow::anyhow!("Failed to read generated Caddyfile at {generated_caddy_str}: {e}"))?;
+    let merged = merge_caddyfile("/etc/caddy/Caddyfile", domain, &generated_block)?;
+    write_via_sudo_tee("/etc/caddy/Caddyfile", &merged)?;
     let caddy_active = std::process::Command::new("systemctl")
         .args(["is-active", "--quiet", "caddy"])
         .status()

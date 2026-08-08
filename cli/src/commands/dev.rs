@@ -166,7 +166,23 @@ async fn reset(
         }
     }
 
-    // ── Truncate database ─────────────────────────────────────────────────────
+    wipe_data(&pool, install_dir).await?;
+
+    println!();
+    println!("Reset complete. Next: synap install");
+
+    Ok(())
+}
+
+/// Truncate all content tables (RESTART IDENTITY CASCADE) and remove
+/// per-site filesystem artefacts (sites/, themes/private/, uploads/
+/// subdirs) under `install_dir` if given. Does NO prompting/confirmation
+/// itself — shared by the standalone `synap dev reset` command (which owns
+/// its own summary/password/typed-confirm ceremony above) and `synap
+/// install`'s Fresh conflict-resolution path (which owns its own,
+/// differently-worded ceremony) — both call this only after their own gate
+/// has already been satisfied.
+pub(crate) async fn wipe_data(pool: &sqlx::PgPool, install_dir: Option<String>) -> anyhow::Result<()> {
     // _sqlx_migrations is intentionally kept so install doesn't re-run migrations.
     // `documentation` is intentionally kept — it holds skill-generated docs that
     // are not site data and should survive dev resets.
@@ -187,13 +203,11 @@ async fn reset(
             users
          RESTART IDENTITY CASCADE"
     )
-    .execute(&pool)
+    .execute(pool)
     .await
     .map_err(|e| anyhow::anyhow!("Truncate failed: {e}"))?;
 
     println!("Database cleared.");
-
-    // ── Filesystem cleanup ────────────────────────────────────────────────────
 
     if let Some(ref dir) = install_dir {
         let base = std::path::Path::new(dir);
@@ -203,9 +217,6 @@ async fn reset(
         // Uploads are organised into per-site UUID subdirs — remove them as dirs.
         remove_subdirs(&base.join("uploads"), "uploads/");
     }
-
-    println!();
-    println!("Reset complete. Next: synap install");
 
     Ok(())
 }

@@ -1,3 +1,4 @@
+# >>> SynapCMS managed block: {DOMAIN} >>>
 {DOMAIN} {
     # Serve uploads directly — bypass Axum. Safe because Caddy serves via the
     # uploads/{hostname}/ -> uploads/{site-uuid}/ symlink the app maintains,
@@ -36,3 +37,4 @@
         format json
     }
 }
+# <<< SynapCMS managed block: {DOMAIN} <<<

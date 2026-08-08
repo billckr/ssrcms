@@ -38,7 +38,9 @@ logs/
 *.sql
 !migrations/*.sql
 Caddyfile
-synaptic-signals.service
+synapcms.service
+/synap
+/synaptic
 
 # Uploads directory (populated at runtime)
 uploads/

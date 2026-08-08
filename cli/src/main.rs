@@ -32,9 +32,10 @@ Examples:
   # (requires sudo access to run commands as the 'postgres' user)
   synap install --bootstrap-db --db-user synaptic --db-name synaptic_signals
 
-  # Local install that also copies the generated Caddyfile/systemd unit into
-  # place and starts the service on this machine (requires sudo; any live
-  # /etc/caddy/Caddyfile or synapcms.service unit is backed up first)
+  # Local install that also merges this domain's block into the generated
+  # Caddyfile/systemd unit and starts the service on this machine (requires
+  # sudo; other domains' Caddy blocks are left untouched, the systemd unit
+  # file is backed up first)
   synap install --setup-service
 
   # Fully non-interactive local install: bootstrap the DB, seed the admin/site,
@@ -46,6 +47,17 @@ Examples:
   # target/debug autodetect — useful if you built somewhere else)
   synap install --setup-service \\
     --synaptic-bin target/release/synaptic --synap-bin target/release/synap
+
+  # If preflight detects an existing install (running process, active
+  # service, or existing DB data) you're asked Fresh/Coexist/Bail
+  # interactively; non-interactively, declare it up front:
+  synap install --non-interactive --on-conflict=coexist \\
+    --domain second.example.com --admin-email admin@example.com --admin-username admin
+
+  # Take over completely (stop what's running, wipe existing data) with
+  # no prompts — requires an admin password to authorize the wipe
+  synap install --non-interactive --on-conflict=fresh --admin-password 'Str0ng!Pw' \\
+    --domain example.com --admin-email admin@example.com --admin-username admin
 ")]
     Install(commands::install::InstallArgs),
     /// Run pending database migrations
