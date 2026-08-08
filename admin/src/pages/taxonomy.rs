@@ -11,35 +11,16 @@ pub fn render(terms: &[TermItem], taxonomy: &str, flash: Option<&str>, ctx: &cra
     let title = if taxonomy == "category" { "Categories" } else { "Tags" };
     let path = if taxonomy == "category" { "/admin/categories" } else { "/admin/tags" };
 
-    let rows = terms.iter().map(|t| {
-        format!(
-            r#"<tr>
-              <td>{name}</td>
-              <td>{slug}</td>
-              <td>{count}</td>
-              <td class="actions">
-                <form method="POST" action="{path}/{id}/delete" style="display:inline" onsubmit="return confirm('Delete?')">
-                  <button class="icon-btn icon-danger" title="Delete" type="submit">
-                    <img src="/admin/static/icons/trash.svg" alt="Delete">
-                  </button>
-                </form>
-              </td>
-            </tr>"#,
-            name = crate::html_escape(&t.name),
-            slug = crate::html_escape(&t.slug),
-            count = t.post_count,
-            path = path,
-            id = crate::html_escape(&t.id),
-        )
-    }).collect::<Vec<_>>().join("\n");
+    let list_html = if terms.is_empty() {
+        format!(r#"<p class="muted">No {} found.</p>"#, title.to_lowercase())
+    } else {
+        render_table(terms, path)
+    };
 
     let content = format!(
         r#"<div class="two-col">
   <div>
-    <table class="data-table">
-      <thead><tr><th>Name</th><th>Slug</th><th>Posts</th><th>Actions</th></tr></thead>
-      <tbody>{rows}</tbody>
-    </table>
+    {list_html}
   </div>
   <div>
     <div class="card-boxed">
@@ -81,11 +62,43 @@ pub fn render(terms: &[TermItem], taxonomy: &str, flash: Option<&str>, ctx: &cra
     </div>
   </div>
 </div>"#,
-        rows = rows,
+        list_html = list_html,
         path = path,
         taxonomy = taxonomy,
         title_s = if taxonomy == "category" { "Category" } else { "Tag" },
     );
 
     crate::admin_page(title, path, flash, &content, ctx)
+}
+
+fn render_table(terms: &[TermItem], path: &str) -> String {
+    let rows = terms.iter().map(|t| {
+        format!(
+            r#"<tr>
+              <td>{name}</td>
+              <td>{slug}</td>
+              <td>{count}</td>
+              <td class="actions">
+                <form method="POST" action="{path}/{id}/delete" style="display:inline" onsubmit="return confirm('Delete?')">
+                  <button class="icon-btn icon-danger" title="Delete" type="submit">
+                    <img src="/admin/static/icons/trash.svg" alt="Delete">
+                  </button>
+                </form>
+              </td>
+            </tr>"#,
+            name = crate::html_escape(&t.name),
+            slug = crate::html_escape(&t.slug),
+            count = t.post_count,
+            path = path,
+            id = crate::html_escape(&t.id),
+        )
+    }).collect::<Vec<_>>().join("\n");
+
+    format!(
+        r#"<table class="data-table">
+      <thead><tr><th>Name</th><th>Slug</th><th>Posts</th><th>Actions</th></tr></thead>
+      <tbody>{rows}</tbody>
+    </table>"#,
+        rows = rows,
+    )
 }

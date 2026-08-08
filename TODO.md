@@ -11,6 +11,7 @@ done.
 - [ ] theme images take about 0.25 or higher secs to fully load. admin/appearance  explore possible options to load load them in mem or startup for quick load or optimize in some other way
 - [ ] allow site admins to either upload via ui or web their owns logo for their account simlar to how the super admin has for the main app.
 - [ ] work on synap install flow.
+- [ ] review dark mode and make small tweaks to button, icon and text colors. Documetnation bold also needs changing.
 
 ## Done
 

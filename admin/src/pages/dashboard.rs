@@ -258,23 +258,23 @@ fn recent_posts_widget(
 /// content, scoped to what the current role is allowed to create.
 fn quick_tools_widget(ctx: &crate::PageContext) -> String {
     let mut items = vec![
-        r#"<a href="/admin/posts/new" class="btn btn-primary">New Post</a>"#.to_string(),
+        r#"<a href="/admin/posts/new">New Post</a>"#.to_string(),
     ];
     if ctx.can_manage_pages {
-        items.push(r#"<a href="/admin/pages/new" class="btn btn-primary">New Page</a>"#.to_string());
+        items.push(r#"<a href="/admin/pages/new">New Page</a>"#.to_string());
     }
     if ctx.can_manage_sites {
-        items.push(r#"<a href="/admin/sites/new" class="btn btn-primary">New Site</a>"#.to_string());
+        items.push(r#"<a href="/admin/sites/new">New Site</a>"#.to_string());
     }
     if ctx.can_manage_users {
-        items.push(r#"<a href="/admin/users/new" class="btn btn-primary">New User</a>"#.to_string());
+        items.push(r#"<a href="/admin/users/new">New User</a>"#.to_string());
     }
 
-    let buttons: String = items.join("\n  ");
+    let links: String = items.join("\n  ");
 
     format!(
-        r#"<div style="display:flex;flex-wrap:wrap;gap:.5rem">
-  {buttons}
+        r#"<div style="display:flex;flex-direction:column;gap:.5rem">
+  {links}
 </div>"#,
     )
 }
