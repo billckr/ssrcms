@@ -661,7 +661,7 @@ body.sidebar-open .admin-sidebar {{
 .mm-detail-field textarea {{
   width: 100%; padding: .4rem .6rem; border: 1px solid var(--border);
   border-radius: var(--radius); font-size: 13px; font-family: inherit;
-  background: var(--surface); color: var(--text);
+  background: var(--field-bg); color: var(--field-text);
 }}
 .mm-detail-field textarea {{ resize: vertical; min-height: 64px; }}
 .mm-detail-field input:focus,
@@ -913,7 +913,7 @@ body.sidebar-open .admin-sidebar {{
       <h3 class="modal-card-header">Move to folder</h3>
       <div class="modal-card-body">
         <div class="form-group" style="margin-bottom:1rem">
-          <select id="mmMoveSelect" style="width:100%;padding:.45rem .75rem;border:1px solid var(--border);border-radius:var(--radius);font-size:14px;background:var(--surface);color:var(--text)">
+          <select id="mmMoveSelect" style="width:100%;padding:.45rem .75rem;border:1px solid var(--border);border-radius:var(--radius);font-size:14px;background:var(--field-bg);color:var(--field-text)">
             <option value="">— No folder (All media) —</option>
           </select>
         </div>
@@ -947,7 +947,7 @@ body.sidebar-open .admin-sidebar {{
       <div class="modal-card-body">
         <div class="form-group" style="margin-bottom:.35rem">
           <input type="text" id="mmNewFolderInput" placeholder="Folder name" maxlength="25"
-                 style="width:100%;padding:.45rem .75rem;border:1px solid var(--border);border-radius:var(--radius);font-size:14px;background:var(--surface);color:var(--text);box-sizing:border-box"
+                 style="width:100%;padding:.45rem .75rem;border:1px solid var(--border);border-radius:var(--radius);font-size:14px;background:var(--field-bg);color:var(--field-text);box-sizing:border-box"
                  oninput="validateNewFolderName()" onkeydown="if(event.key==='Enter'){{event.preventDefault();submitNewFolder();}}">
         </div>
         <p id="mmNewFolderHint" style="font-size:12px;color:var(--muted);margin:0 0 1rem">

@@ -614,7 +614,7 @@ fn widgets_section(
   .widget-card-boxed {{ flex-direction: column; align-items: stretch; padding: 0; overflow: hidden; }}
   .widget-card-header {{
     display: flex; align-items: center; gap: .5rem;
-    background: #f8fafc; padding: .48rem .8rem; border-bottom: 1px solid var(--border);
+    background: var(--tint); padding: .48rem .8rem; border-bottom: 1px solid var(--border);
   }}
   .widget-card-boxed .widget-body {{ padding: .72rem 1rem 1rem; }}
   .widget-card.dragging .widget-drag-handle {{ cursor: grabbing; }}

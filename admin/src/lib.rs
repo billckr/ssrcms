@@ -119,6 +119,17 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{title} — Synaptic Admin</title>
+  <script>
+    // Applies the saved theme before first paint so there's no flash of the
+    // wrong theme — must run synchronously in <head>, ahead of <style>.
+    (function() {{
+      try {{
+        if (localStorage.getItem('admin-theme') === 'dark') {{
+          document.documentElement.setAttribute('data-theme', 'dark');
+        }}
+      }} catch (e) {{}}
+    }})();
+  </script>
   <style>{css}</style>
 </head>
 <body>
@@ -156,6 +167,10 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
         <h1>{title}</h1>
         {visiting_badge}
         {site_indicator}
+        <button type="button" class="icon-btn theme-toggle" onclick="toggleTheme()" title="Toggle dark mode" aria-label="Toggle dark mode">
+          <img class="theme-icon-light" src="/admin/static/icons/moon.svg" alt="">
+          <img class="theme-icon-dark" src="/admin/static/icons/sun.svg" alt="">
+        </button>
         <a href="/admin/logout" class="icon-btn" title="Log out">
           <img src="/admin/static/icons/log-out.svg" alt="Log out">
         </a>
@@ -173,6 +188,11 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
     }}
     function closeSidebar() {{
       document.body.classList.remove('sidebar-open');
+    }}
+    function toggleTheme() {{
+      var next = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+      document.documentElement.setAttribute('data-theme', next);
+      try {{ localStorage.setItem('admin-theme', next); }} catch (e) {{}}
     }}
     document.querySelectorAll('.admin-sidebar a').forEach(function(a) {{
       a.addEventListener('click', function(e) {{
