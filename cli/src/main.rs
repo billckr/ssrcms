@@ -1,6 +1,6 @@
 mod commands;
 
-use clap::{Parser, Subcommand};
+use clap::{CommandFactory, FromArgMatches, Parser, Subcommand};
 
 #[derive(Parser)]
 #[command(
@@ -62,14 +62,12 @@ Examples:
     Install(commands::install::InstallArgs),
     /// Run pending database migrations
     Migrate(commands::migrate::MigrateArgs),
-    /// Local dev process management (start/stop/restart/status/logs) — a synap-native
-    /// alternative to ./app.sh for the server lifecycle commands. Run from the project root.
+    /// Local dev process management (start/stop/restart/status/logs)
     App {
         #[command(subcommand)]
         action: commands::app::AppAction,
     },
-    /// Rebuild and reinstall synap itself (cargo install --path cli --force).
-    /// Run from the project root after changing CLI source.
+    /// Rebuild and reinstall synap itself
     UpdateCli,
     /// Development utilities (destructive — do not use in production)
     Dev {
@@ -91,7 +89,7 @@ Examples:
         #[command(subcommand)]
         action: commands::theme::ThemeAction,
     },
-    /// Site management (multi-site support)
+    /// Manage sites
     Site {
         #[command(subcommand)]
         action: commands::site::SiteAction,
@@ -113,7 +111,12 @@ async fn main() -> anyhow::Result<()> {
     // Load .env if present (non-fatal if missing)
     let _ = dotenvy::dotenv();
 
-    let cli = Cli::parse();
+    let mut command = Cli::command();
+    command.build();
+    let matches = command
+        .mut_subcommand("help", |cmd| cmd.about("Get help with commands subcommands"))
+        .get_matches();
+    let cli = Cli::from_arg_matches(&matches)?;
 
     match cli.command {
         Commands::Install(args) => commands::install::run(args).await?,

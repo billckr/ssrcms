@@ -250,7 +250,7 @@ fn slugify_group(group: &str) -> String {
 /// order groups first appear. No card names, color roles, or option keys are
 /// hardcoded here — a theme author adds a new panel just by declaring a new
 /// `group` value in theme.toml.
-fn render_customizer_landing(theme_name: &str, source: &str, data: &CustomizerData) -> String {
+fn render_customizer_landing(theme_name: &str, source: &str, data: &CustomizerData, files_section: &str) -> String {
     let theme_esc = crate::html_escape(theme_name);
     let source_esc = crate::html_escape(source);
 
@@ -661,22 +661,7 @@ fn render_customizer_landing(theme_name: &str, source: &str, data: &CustomizerDa
 </script>"#.to_string()
     };
 
-    let details_card = format!(
-        r#"<details class="card-boxed customizer-details-panel">
-  <summary class="card-boxed-header">Theme Details</summary>
-  <div class="card-boxed-body">
-    <p style="margin-bottom:.6rem;"><strong>Name:</strong> {name}</p>
-    <p style="margin-bottom:.6rem;"><strong>Version:</strong> {version}</p>
-    <p style="margin-bottom:.6rem;"><strong>Author:</strong> {author}</p>
-    <p style="margin-bottom:0;"><strong>Description:</strong> {description}</p>
-    <p class="muted" style="font-size:.8rem;margin-top:1.25rem;">News and update checks are coming soon.</p>
-  </div>
-</details>"#,
-        name = crate::html_escape(&data.manifest.name),
-        version = crate::html_escape(&data.manifest.version),
-        author = crate::html_escape(&data.manifest.author),
-        description = crate::html_escape(&data.manifest.description),
-    );
+    let details_card = render_theme_details_card(&data.manifest, theme_name, source);
 
     let media_picker = if data.images.is_empty() { String::new() } else { crate::media_picker_modal_html() };
 
@@ -685,6 +670,7 @@ fn render_customizer_landing(theme_name: &str, source: &str, data: &CustomizerDa
   <div class="editor-main-col">{cards}{order_script}</div>
   <div class="customizer-sidebar-col">
     {details_card}
+    {files_section}
     {sidebar_cards}
   </div>
 </div>
@@ -692,8 +678,36 @@ fn render_customizer_landing(theme_name: &str, source: &str, data: &CustomizerDa
         cards = cards,
         order_script = order_script,
         details_card = details_card,
+        files_section = files_section,
         sidebar_cards = sidebar_cards,
         media_picker = media_picker,
+    )
+}
+
+/// The "Theme Details" `<details>` panel — name/version/author/description
+/// read from theme.toml. Shared by the customizer landing page and the file
+/// editor's sidebar (when a file is selected) so it renders identically, and
+/// always directly above the Files section, in both places. Open by default
+/// (unlike Files, this doesn't gate an action the user needs immediately,
+/// but it's the page's own identity card, so it shouldn't start collapsed).
+fn render_theme_details_card(manifest: &ThemeManifestInfo, theme_name: &str, source: &str) -> String {
+    format!(
+        r#"<details class="card-boxed customizer-details-panel" open>
+  <summary class="card-boxed-header">Theme Details</summary>
+  <div class="card-boxed-body">
+    <p style="margin-bottom:.6rem;"><strong>Name:</strong> <a href="/admin/appearance/editor/{theme}?source={source}">{name}</a></p>
+    <p style="margin-bottom:.6rem;"><strong>Version:</strong> {version}</p>
+    <p style="margin-bottom:.6rem;"><strong>Author:</strong> {author}</p>
+    <p style="margin-bottom:0;"><strong>Description:</strong> {description}</p>
+    <p class="muted" style="font-size:.8rem;margin-top:1.25rem;">News and update checks are coming soon.</p>
+  </div>
+</details>"#,
+        theme = crate::html_escape(theme_name),
+        source = crate::html_escape(source),
+        name = crate::html_escape(&manifest.name),
+        version = crate::html_escape(&manifest.version),
+        author = crate::html_escape(&manifest.author),
+        description = crate::html_escape(&manifest.description),
     )
 }
 
@@ -718,17 +732,22 @@ pub fn render_theme_editor(
     let theme_esc = crate::html_escape(theme_name);
     let source_esc = crate::html_escape(source);
 
-    // Build <select> options — files with a backup get a ★ marker
+    // Build <select> options — files with a backup get a ★ marker. The
+    // visible label is just the basename (e.g. "templates/404.html" ->
+    // "404.html", "static/css/style.css" -> "style.css") to keep the
+    // dropdown narrow; the submitted value keeps the full relative path so
+    // navigation is unaffected.
     let options: String = {
         let mut o = format!(r#"<option value="">— select a file —</option>"#);
         for f in files {
             let sel = if f.is_selected { " selected" } else { "" };
             let marker = if f.has_backup { " ★" } else { "" };
+            let basename = f.rel_path.rsplit('/').next().unwrap_or(&f.rel_path);
             o.push_str(&format!(
                 r#"<option value="{val}"{sel}>{label}</option>"#,
                 val   = crate::html_escape(&f.rel_path),
                 sel   = sel,
-                label = crate::html_escape(&format!("{}{}", &f.rel_path, marker)),
+                label = crate::html_escape(&format!("{}{}", basename, marker)),
             ));
         }
         o
@@ -747,11 +766,20 @@ pub fn render_theme_editor(
         options = options,
     );
 
-    let new_file_form = if ctx.can_manage_appearance && !is_readonly {
+    // New-file control: a compact Feather file-plus icon button (rather than
+    // a text button) sits directly next to the file <select> — the same
+    // icon-btn pattern used elsewhere (e.g. restore icons in the
+    // customizer). It toggles the same hidden filename/extension form below.
+    let new_file_icon_btn = if ctx.can_manage_appearance && !is_readonly {
+        r#"<button type="button" class="icon-btn" title="New file" aria-label="New file"
+        onclick="document.getElementById('new-file-form').style.display='flex'"><img src="/admin/static/icons/file-plus.svg" alt=""></button>"#.to_string()
+    } else {
+        String::new()
+    };
+
+    let new_file_panel = if ctx.can_manage_appearance && !is_readonly {
         format!(
-            r#"<button type="button" class="btn btn-sm btn-primary"
-        onclick="document.getElementById('new-file-form').style.display='flex'">+ New file</button>
-<div id="new-file-form" style="display:none;align-items:center;gap:.5rem;flex-wrap:wrap;margin-top:.5rem;">
+            r#"<div id="new-file-form" style="display:none;align-items:center;gap:.5rem;flex-wrap:wrap;margin-top:.5rem;">
   <form method="POST" action="/admin/appearance/editor/{theme}/new-file"
         style="display:contents">
     <input type="hidden" name="source" value="{source}">
@@ -775,15 +803,44 @@ pub fn render_theme_editor(
         String::new()
     };
 
-    // Top toolbar — always visible
-    let toolbar = format!(
-        r#"<div class="editor-topbar">
-  {picker}
-  {new_file_form}
-</div>"#,
+    // Files section: dropdown + new-file icon button, in their own
+    // <details> card. For customizer-enabled themes this renders in the
+    // sidebar directly under Theme Details (both on the landing page and
+    // while editing a file) so the two stay adjacent regardless of
+    // viewport; other themes keep the plain top toolbar below.
+    let files_section = format!(
+        r#"<details class="card-boxed customizer-details-panel" open>
+  <summary class="card-boxed-header">Files</summary>
+  <div class="card-boxed-body">
+    <div style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;">
+      {picker}
+      {new_file_icon_btn}
+    </div>
+    {new_file_panel}
+  </div>
+</details>"#,
         picker = file_picker,
-        new_file_form = new_file_form,
+        new_file_icon_btn = new_file_icon_btn,
+        new_file_panel = new_file_panel,
     );
+
+    // Top toolbar — only for themes without the customizer, which have no
+    // Theme Details sidebar to nest the Files section under. Customizer
+    // themes render `files_section` in the sidebar instead (see below).
+    let toolbar = if customizer.is_some() {
+        String::new()
+    } else {
+        format!(
+            r#"<div class="editor-topbar">
+  {picker}
+  {new_file_icon_btn}
+  {new_file_panel}
+</div>"#,
+            picker = file_picker,
+            new_file_icon_btn = new_file_icon_btn,
+            new_file_panel = new_file_panel,
+        )
+    };
 
     // Read-only notice shown when a site admin views a global theme.
     let readonly_notice = if is_readonly {
@@ -939,6 +996,24 @@ pub fn render_theme_editor(
             String::new()
         };
 
+        // Customizer themes keep Theme Details + Files together in the
+        // sidebar even while a file is open, so the two never separate
+        // depending on which file (or none) is selected.
+        let sidebar_col = if let Some(data) = customizer {
+            format!(
+                r#"<div class="customizer-sidebar-col">
+    {details_card}
+    {files_section}
+    {color_sidebar}
+  </div>"#,
+                details_card = render_theme_details_card(&data.manifest, theme_name, source),
+                files_section = files_section,
+                color_sidebar = color_sidebar,
+            )
+        } else {
+            color_sidebar.clone()
+        };
+
         format!(
             r#"<div class="editor-body-row">
   <div class="editor-main-col">
@@ -965,7 +1040,7 @@ pub fn render_theme_editor(
       CSS/HTML comments (<code>&lt;!-- --&gt;</code>, <code>/* */</code>) outside of blocks will also break parsing.
     </div>
   </div>
-  {color_sidebar}
+  {sidebar_col}
 </div>
 <script>
 (function() {{
@@ -999,11 +1074,11 @@ pub fn render_theme_editor(
             source   = source_esc,
             restore  = restore_btn.clone(),
             restore2 = restore_btn,
-            color_sidebar = color_sidebar,
+            sidebar_col = sidebar_col,
             color_script  = color_script,
         )
     } else if let Some(data) = customizer {
-        render_customizer_landing(theme_name, source, data)
+        render_customizer_landing(theme_name, source, data, &files_section)
     } else {
         r#"<div class="card" style="padding:1.5rem;color:var(--muted)">Select a file above to start editing.</div>"#.to_string()
     };
