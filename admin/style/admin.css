@@ -207,7 +207,7 @@ a.stat-cell-link:hover { background: #f8f9fd; }
    type=search input. Shared across list pages (form submissions, posts). */
 .icon-search-box { position: relative; max-width: 320px; margin-bottom: 1rem; }
 .icon-search-box svg { position: absolute; left: .7rem; top: 50%; transform: translateY(-50%); color: var(--muted); pointer-events: none; }
-.icon-search-box input[type=search] { width: 100%; padding: .5rem .75rem .5rem 2.1rem; border: 1px solid var(--border); border-radius: var(--radius); font-size: 14px; background: var(--field-bg); color: var(--field-text); }
+.icon-search-box input[type=search] { width: 100%; padding: .35rem .6rem .35rem 2.1rem; border: 1px solid var(--border); border-radius: var(--radius); font-size: 14px; background: var(--field-bg); color: var(--field-text); }
 .icon-search-box input[type=search]:focus { outline: none; border-color: var(--text); }
 
 /* Tinted box separating one distinct field/option from its neighbors within
@@ -451,7 +451,7 @@ tr.muted td { opacity: .55; }
 .form-group input[type=datetime-local],
 .form-group select,
 .form-group textarea,
-.source-url-input { width: 100%; padding: .45rem .75rem; border: 1px solid var(--border); border-radius: var(--radius); font-size: 14px; box-sizing: border-box; background: var(--field-bg); color: var(--field-text); }
+.source-url-input { width: 100%; padding: .35rem .6rem; border: 1px solid var(--border); border-radius: var(--radius); font-size: 14px; box-sizing: border-box; background: var(--field-bg); color: var(--field-text); }
 .form-group input[type=text],
 .form-group input[type=email],
 .form-group input[type=url],
@@ -459,7 +459,7 @@ tr.muted td { opacity: .55; }
 .form-group input[type=number],
 .form-group input[type=datetime-local],
 .form-group select,
-.source-url-input { height: 2.25rem; line-height: 1.4; }
+.source-url-input { height: 2rem; line-height: 1.4; }
 .form-group input[type=text]:focus,
 .form-group input[type=email]:focus,
 .form-group input[type=url]:focus,
@@ -839,7 +839,7 @@ legend {
 
 /* Theme list */
 .appearance-toolbar { display: flex; align-items: center; gap: .75rem; margin-bottom: 1.25rem; }
-.appearance-filter-select { padding: .4rem .75rem; font-size: .875rem; font-family: inherit; border: 1px solid var(--border); border-radius: var(--radius); background: var(--field-bg); color: var(--field-text); cursor: pointer; }
+.appearance-filter-select { padding: .35rem .6rem; font-size: .875rem; font-family: inherit; border: 1px solid var(--border); border-radius: var(--radius); background: var(--field-bg); color: var(--field-text); cursor: pointer; }
 .theme-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 1.5rem; margin-top: 1rem; }
 .theme-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.25rem 1.5rem; box-shadow: var(--shadow); transition: box-shadow .2s; }
 .theme-card.active { border: 2px solid var(--primary); box-shadow: 0 0 0 3px rgba(79,70,229,.1); }
@@ -997,7 +997,7 @@ legend {
 .mpicker-detail-img { margin-bottom: .75rem; }
 .mpicker-detail-img img { width: 100%; border-radius: var(--radius); display: block; }
 .mpicker-detail input[type=text],
-.mpicker-detail textarea { width: 100%; padding: .45rem .75rem; border: 1px solid var(--border); border-radius: var(--radius); font-size: 14px; background: var(--field-bg); color: var(--field-text); }
+.mpicker-detail textarea { width: 100%; padding: .35rem .6rem; border: 1px solid var(--border); border-radius: var(--radius); font-size: 14px; background: var(--field-bg); color: var(--field-text); }
 .mpicker-detail textarea { resize: vertical; }
 @media (max-width: 640px) {
   .mpicker-body { flex-direction: column; }

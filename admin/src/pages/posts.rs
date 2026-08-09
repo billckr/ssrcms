@@ -216,7 +216,7 @@ pub fn posts_list_fragment(
             if h.is_empty() {
                 r#"<td><span style="color:var(--muted);font-size:0.8rem">—</span></td>"#.to_string()
             } else {
-                format!(r#"<td><span style="display:inline-block;background:#e2e8f0;color:#64748b;border-radius:4px;padding:.15rem .5rem;font-size:.78rem;font-weight:500;white-space:nowrap">{h}</span></td>"#)
+                format!(r#"<td><span style="display:inline-block;background:var(--tint);color:var(--text);border-radius:4px;padding:.15rem .5rem;font-size:.78rem;font-weight:500;white-space:nowrap">{h}</span></td>"#)
             }
         };
         // Column order varies by tab:

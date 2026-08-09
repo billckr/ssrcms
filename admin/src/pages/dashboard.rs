@@ -208,7 +208,7 @@ fn recent_posts_widget(
                 r#"<span style="color:var(--muted);font-size:0.8rem">&mdash;</span>"#.to_string()
             } else {
                 format!(
-                    r#"<span style="display:inline-block;background:#e2e8f0;color:#64748b;border-radius:4px;padding:.15rem .5rem;font-size:.78rem;font-weight:500;white-space:nowrap">{}</span>"#,
+                    r#"<span style="display:inline-block;background:var(--tint);color:var(--text);border-radius:4px;padding:.15rem .5rem;font-size:.78rem;font-weight:500;white-space:nowrap">{}</span>"#,
                     crate::html_escape(&p.site_hostname),
                 )
             };
