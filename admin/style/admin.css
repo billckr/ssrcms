@@ -529,7 +529,7 @@ a.author-card-name:hover { text-decoration: underline; }
 .doc-content p { margin: 0 0 .75rem; }
 .doc-content ul, .doc-content ol { margin: 0 0 .75rem; padding-left: 1.5rem; }
 .doc-content li { margin-bottom: .25rem; }
-.doc-content code { font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace; font-size: .82em; background: #f1f5f9; border: 1px solid var(--border); border-radius: 3px; padding: .1em .35em; }
+.doc-content code { font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace; font-size: .82em; background: var(--tint); color: var(--text); border: 1px solid var(--border); border-radius: 3px; padding: .1em .35em; }
 .doc-content pre { background: var(--tint); border: 1px solid var(--border); border-radius: var(--radius); padding: .85rem 1rem; overflow-x: auto; margin: 0 0 .75rem; }
 .doc-content pre code { background: none; border: none; padding: 0; font-size: .82rem; }
 .doc-content blockquote { margin: 0 0 .75rem; padding: .4rem .85rem; border-left: 3px solid var(--primary); background: var(--tint); color: var(--muted); font-size: 13px; }
