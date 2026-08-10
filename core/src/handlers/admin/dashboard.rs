@@ -70,6 +70,14 @@ async fn fetch_recent_posts(
         .collect()
 }
 
+/// Layout spike for /admin2 — sidebar + a truly `position: fixed` header,
+/// content scrolls underneath. See `admin::admin2_page`.
+pub async fn dashboard2(State(state): State<AppState>, admin: AdminUser) -> Html<String> {
+    let cs = state.site_hostname(admin.site_id);
+    let ctx = super::page_ctx(&state, &admin, &cs);
+    Html(::admin::admin2_page(&ctx))
+}
+
 pub async fn dashboard(
     State(state): State<AppState>,
     admin: AdminUser,

@@ -148,6 +148,7 @@ pub fn build(
         .route("/admin/profile/change-password", post(profile::change_password))
         // ── Admin dashboard ────────────────────────────────────────────────
         .route("/admin", get(dashboard::dashboard))
+        .route("/admin2", get(dashboard::dashboard2))
         .route("/admin/dashboard/widget-layout", post(dashboard::save_widget_layout))
         // ── Admin posts ────────────────────────────────────────────────────
         .route("/admin/posts", get(posts::list))

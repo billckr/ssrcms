@@ -60,10 +60,8 @@
    surface/border variables as the rest of the page instead of leaving them
    on their own fixed slate color. */
 :root[data-theme="dark"] .admin-sidebar { background: var(--surface); }
-:root[data-theme="dark"] .brand { border-bottom-color: var(--border); }
 :root[data-theme="dark"] .admin-sidebar ul li a:hover,
 :root[data-theme="dark"] .admin-sidebar ul li a.active { background: var(--tint); }
-:root[data-theme="dark"] .sidebar-footer { border-top-color: var(--border); }
 
 /* Theme toggle button: shows a moon (switch to dark) normally, a sun
    (switch to light) once dark mode is active — both icons always exist in
@@ -91,26 +89,30 @@ a:hover { text-decoration: underline; }
 
 /* Layout */
 .admin-wrap { display: flex; min-height: 100vh; }
-.admin-sidebar { position: fixed; left: 0; top: 0; width: var(--sidebar-w); height: 100vh; background: #1e293b; color: #cbd5e1; display: flex; flex-direction: column; z-index: 101; overflow-y: auto; }
+/* top+bottom (not height:100vh) — 100vh can round to a hair less than the
+   real viewport height in Chrome at some zoom levels, leaving a 1px gap
+   under the fixed sidebar that Firefox doesn't produce. Anchoring both
+   edges is pixel-exact regardless of rounding. */
+.admin-sidebar { position: fixed; left: 0; top: 0; bottom: 0; width: var(--sidebar-w); background: #1e293b; color: #cbd5e1; display: flex; flex-direction: column; z-index: 101; overflow-y: auto; }
 /* Fixed height (rather than vertical padding) so it lines up exactly with
    .admin-header's own fixed height — both sit at the same y=0 start, so
    equal heights are what keeps their bottom borders on one line. */
-.brand { display: flex; align-items: center; height: 4rem; box-sizing: border-box; padding: 0 1.25rem; font-size: 1.1rem; font-weight: 700; color: #f8fafc; border-bottom: 1px solid #334155; text-decoration: none; }
+.brand { display: flex; align-items: center; height: 4rem; box-sizing: border-box; padding: 0 1.25rem; font-size: 1.1rem; font-weight: 700; color: #f8fafc; text-decoration: none; }
 .brand-logo { display: block; height: 38px; max-width: 100%; }
 .admin-sidebar ul { list-style: none; padding: .5rem 0; flex: 1; }
 .admin-sidebar ul li a { display: block; padding: .5rem 1.25rem; color: #94a3b8; font-size: 13px; }
 .admin-sidebar ul li a:hover, .admin-sidebar ul li a.active { color: #f8fafc; background: #334155; text-decoration: none; }
-.sidebar-footer { padding: 1rem 1.25rem; border-top: 1px solid #334155; }
+.sidebar-footer { padding: 1rem 1.25rem; }
 .sidebar-footer a { color: #94a3b8; font-size: 13px; }
 .sidebar-footer a:first-child { color: #f8fafc; font-weight: 700; }
 
-.admin-main { margin-left: var(--sidebar-w); flex: 1; display: flex; flex-direction: column; min-width: 0; height: 100vh; overflow-y: auto; }
-/* flex-shrink: 0 is load-bearing: .admin-main is a column flexbox with
-   overflow-y:auto, so its children's min-height:auto resolves to 0 — on any
-   page tall enough to overflow 100vh, the browser will otherwise shrink this
-   fixed-height header to help everything fit, instead of shrinking only
-   .admin-content (which is what should scroll). */
-.admin-header { position: relative; flex-shrink: 0; height: 4rem; box-sizing: border-box; background: var(--surface); padding: 0 1.5rem; display: flex; align-items: center; gap: 1rem; }
+/* padding-top offsets .admin-header, which is now position:fixed and out of
+   flow — without it, the flash message / .admin-content would start at
+   y=0 and sit hidden underneath the header instead of below it. The page
+   itself (not .admin-main) is the scroll container now, so the header stays
+   pinned to the viewport top as the content scrolls up under it. */
+.admin-main { margin-left: var(--sidebar-w); flex: 1; display: flex; flex-direction: column; min-width: 0; padding-top: 4rem; }
+.admin-header { position: fixed; top: 0; left: var(--sidebar-w); right: 0; z-index: 50; height: 4rem; box-sizing: border-box; background: var(--surface); padding: 0 1.5rem; display: flex; align-items: center; gap: 1rem; }
 /* Gradient-fade separator instead of a flat edge-to-edge border — same
    treatment as the Leisure theme's .site-header::after, so the admin
    chrome's bottom edge gets the same "slick" fading accent line. */
@@ -123,8 +125,11 @@ a:hover { text-decoration: underline; }
 }
 .admin-header h1 { font-size: 1.1rem; font-weight: 600; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .admin-header-user { font-size: .9rem; font-weight: 500; color: var(--muted); white-space: nowrap; }
-.site-indicator { margin-left: auto; flex-shrink: 0; font-size: .8rem; font-weight: 700; color: #111827; background: #e2e8f0; text-decoration: none; border: 1px solid #e2e8f0; border-radius: 4px; padding: .2rem .6rem; white-space: nowrap; }
-.site-indicator:hover { background: #cbd5e1; border-color: #cbd5e1; color: #111827; }
+/* Matches .widget-card-header's grey bar (var(--tint)) — the dashboard's
+   "Quick Tools"/"Drafts"/etc panel headers — instead of its own hardcoded
+   grey, so it also adapts correctly in dark mode. */
+.site-indicator { margin-left: auto; flex-shrink: 0; font-size: .72rem; font-weight: 700; color: var(--text); background: var(--tint); text-decoration: none; border: 1px solid var(--border); border-radius: 4px; padding: .15rem .5rem; white-space: nowrap; }
+.site-indicator:hover { background: var(--border); border-color: var(--border); color: var(--text); }
 .ssl-badge { display:inline-flex; align-items:center; background:none; border:none; padding:0 2px; cursor:default; vertical-align:middle; }
 .ssl-inactive { cursor:pointer; border:none; border-radius:3px; padding:1px 3px; min-width:20px; min-height:20px; justify-content:center; }
 .ssl-inactive:hover { background:#f3f4f6; }
@@ -594,8 +599,10 @@ body.sidebar-open .sidebar-overlay {
   /* Hamburger visible */
   .hamburger { display: flex; }
 
-  /* Header flex row */
+  /* Header flex row — spans full width since the sidebar is an off-canvas
+     overlay drawer at this breakpoint, not a permanent rail. */
   .admin-header {
+    left: 0;
     display: flex;
     align-items: center;
     gap: .75rem;
@@ -608,7 +615,7 @@ body.sidebar-open .sidebar-overlay {
     position: fixed;
     top: 0;
     left: 0;
-    height: 100vh;
+    bottom: 0;
     z-index: 100;
     transform: translateX(-100%);
     transition: transform .25s ease;
@@ -1026,5 +1033,38 @@ legend {
 }
 .ql-editor ss-form::before {
   content: "\1F4CB  Form: " attr(data-label);
+}
+
+/* ── /admin2 experiment: header truly position:fixed to the viewport top,
+   page content scrolls underneath it (rather than /admin's approach of
+   making .admin-main its own 100vh scroll container). ────────────────── */
+.admin2-main { margin-left: var(--sidebar-w); flex: 1; min-width: 0; }
+.admin2-header {
+  position: fixed;
+  top: 0;
+  left: var(--sidebar-w);
+  right: 0;
+  z-index: 50;
+  height: 4rem;
+  box-sizing: border-box;
+  background: var(--surface);
+  padding: 0 1.5rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+.admin2-header::after {
+  content: '';
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--primary) 50%, transparent);
+}
+.admin2-content { padding: 1.5rem; padding-top: calc(4rem + 1.5rem); }
+
+@media (max-width: 768px) {
+  .admin2-header { left: 0; padding: .6rem 1rem; }
+  .admin2-main { margin-left: 0; }
+  .admin2-content { padding: 1rem; padding-top: calc(4rem + 1rem); }
 }
 

@@ -277,6 +277,82 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
     )
 }
 
+/// Experimental /admin2 shell: same sidebar as [`admin_page`], but the header
+/// is `position: fixed` to the viewport top instead of living inside a
+/// `.admin-main` scroll container — content scrolls underneath it. Sidebar
+/// nav links point at the real /admin/* routes since this is just a layout
+/// spike, not a full parallel admin section.
+pub fn admin2_page(ctx: &PageContext) -> String {
+    let brand_html = match &ctx.logo_url {
+        Some(url) => format!(
+            r#"<img class="brand-logo" src="{}" alt="{}">"#,
+            html_escape(url),
+            html_escape(&ctx.app_name)
+        ),
+        None => html_escape(&ctx.app_name),
+    };
+
+    let nav_link = |href: &str, label: &str| -> String {
+        format!(r#"<li><a href="{}">{}</a></li>"#, href, label)
+    };
+
+    format!(
+        r#"<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin2 — Synaptic Admin</title>
+  <script>
+    (function() {{
+      try {{
+        if (localStorage.getItem('admin-theme') === 'dark') {{
+          document.documentElement.setAttribute('data-theme', 'dark');
+        }}
+      }} catch (e) {{}}
+    }})();
+  </script>
+  <style>{css}</style>
+</head>
+<body>
+  <div class="sidebar-overlay" onclick="closeSidebar()"></div>
+  <div class="admin-wrap">
+    <nav class="admin-sidebar">
+      <a class="brand" href="/admin">{brand_html}</a>
+      <ul>
+        {dash}
+        {posts}
+        {media}
+      </ul>
+    </nav>
+    <main class="admin2-main">
+      <header class="admin2-header">
+        <button class="hamburger" onclick="toggleSidebar()" aria-label="Open navigation">
+          <span></span><span></span><span></span>
+        </button>
+        <h1>Admin2 — fixed header layout</h1>
+      </header>
+      <div class="admin2-content">
+        <p>Scroll this page — the header above stays pinned to the top of the viewport.</p>
+        {filler}
+      </div>
+    </main>
+  </div>
+  <script>
+    function toggleSidebar() {{ document.body.classList.toggle('sidebar-open'); }}
+    function closeSidebar() {{ document.body.classList.remove('sidebar-open'); }}
+  </script>
+</body>
+</html>"#,
+        css = ADMIN_CSS,
+        brand_html = brand_html,
+        dash = nav_link("/admin", "Dashboard"),
+        posts = nav_link("/admin/posts", "Posts"),
+        media = "<li><a href=\"/admin/media\">Media</a></li>",
+        filler = "<p style=\"height:1800px\">Filler content to force scrolling for the layout test.</p>",
+    )
+}
+
 /// Minimal HTML escaping for values inserted into HTML attributes or text.
 /// Minimal HTML shell for the media picker iframe (no admin sidebar/header).
 /// Used when `/admin/media?picker=1` is requested.
