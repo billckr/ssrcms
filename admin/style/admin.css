@@ -463,6 +463,15 @@ tr.muted td { opacity: .55; }
 .icon-btn:disabled:hover img { filter: none; }
 :root[data-theme="dark"] .icon-btn:disabled:hover img { filter: invert(1); }
 
+/* Header overflow menu — click the list icon to reveal theme toggle + logout,
+   instead of showing them as separate always-visible header icons. */
+.header-menu { position: relative; }
+.header-menu-dropdown { position: absolute; top: calc(100% + 6px); right: 0; min-width: 170px; display: none; flex-direction: column; gap: 2px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); padding: .3rem; z-index: 60; }
+.header-menu-dropdown.open { display: flex; }
+.header-menu-item { display: flex; align-items: center; gap: .6rem; width: 100%; padding: .5rem .6rem; background: none; border: none; border-radius: 4px; font: inherit; font-size: 13px; color: var(--text); text-decoration: none; cursor: pointer; text-align: left; }
+.header-menu-item:hover { background: var(--tint); text-decoration: none; }
+.header-menu-item img { width: 16px; height: 16px; flex-shrink: 0; }
+
 /* Forms */
 .form-group { margin-bottom: 1rem; }
 .form-group label { display: block; font-weight: 500; margin-bottom: .35rem; font-size: 13px; }

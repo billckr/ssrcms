@@ -167,13 +167,23 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
         <h1>{title}</h1>
         {visiting_badge}
         {site_indicator}
-        <button type="button" class="icon-btn theme-toggle" onclick="toggleTheme()" title="Toggle dark mode" aria-label="Toggle dark mode">
-          <img class="theme-icon-light" src="/admin/static/icons/moon.svg" alt="">
-          <img class="theme-icon-dark" src="/admin/static/icons/sun.svg" alt="">
-        </button>
-        <a href="/admin/logout" class="icon-btn" title="Log out">
-          <img src="/admin/static/icons/log-out.svg" alt="Log out">
-        </a>
+        <div class="header-menu">
+          <button type="button" class="icon-btn" onclick="toggleHeaderMenu()" title="Menu" aria-label="Menu" aria-haspopup="true" aria-expanded="false" id="header-menu-btn">
+            <img src="/admin/static/icons/list.svg" alt="">
+          </button>
+          <div class="header-menu-dropdown" id="header-menu-dropdown">
+            <button type="button" class="header-menu-item theme-toggle" onclick="toggleTheme()">
+              <img class="theme-icon-light" src="/admin/static/icons/moon.svg" alt="">
+              <img class="theme-icon-dark" src="/admin/static/icons/sun.svg" alt="">
+              <span class="theme-icon-light">Dark mode</span>
+              <span class="theme-icon-dark">Light mode</span>
+            </button>
+            <a href="/admin/logout" class="header-menu-item">
+              <img src="/admin/static/icons/log-out.svg" alt="">
+              <span>Log out</span>
+            </a>
+          </div>
+        </div>
       </header>
       {flash_html}
       <div class="admin-content">
@@ -194,6 +204,25 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
       document.documentElement.setAttribute('data-theme', next);
       try {{ localStorage.setItem('admin-theme', next); }} catch (e) {{}}
     }}
+    function toggleHeaderMenu() {{
+      var dropdown = document.getElementById('header-menu-dropdown');
+      var btn = document.getElementById('header-menu-btn');
+      var open = dropdown.classList.toggle('open');
+      btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    }}
+    document.addEventListener('click', function(e) {{
+      var menu = document.querySelector('.header-menu');
+      if (menu && !menu.contains(e.target)) {{
+        document.getElementById('header-menu-dropdown').classList.remove('open');
+        document.getElementById('header-menu-btn').setAttribute('aria-expanded', 'false');
+      }}
+    }});
+    document.addEventListener('keydown', function(e) {{
+      if (e.key === 'Escape') {{
+        document.getElementById('header-menu-dropdown').classList.remove('open');
+        document.getElementById('header-menu-btn').setAttribute('aria-expanded', 'false');
+      }}
+    }});
     document.querySelectorAll('.admin-sidebar a').forEach(function(a) {{
       a.addEventListener('click', function(e) {{
         if (a.getAttribute('href') !== '#') closeSidebar();
