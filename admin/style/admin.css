@@ -105,7 +105,12 @@ a:hover { text-decoration: underline; }
 .sidebar-footer a:first-child { color: #f8fafc; font-weight: 700; }
 
 .admin-main { margin-left: var(--sidebar-w); flex: 1; display: flex; flex-direction: column; min-width: 0; height: 100vh; overflow-y: auto; }
-.admin-header { position: relative; height: 4rem; box-sizing: border-box; background: var(--surface); padding: 0 1.5rem; display: flex; align-items: center; gap: 1rem; }
+/* flex-shrink: 0 is load-bearing: .admin-main is a column flexbox with
+   overflow-y:auto, so its children's min-height:auto resolves to 0 — on any
+   page tall enough to overflow 100vh, the browser will otherwise shrink this
+   fixed-height header to help everything fit, instead of shrinking only
+   .admin-content (which is what should scroll). */
+.admin-header { position: relative; flex-shrink: 0; height: 4rem; box-sizing: border-box; background: var(--surface); padding: 0 1.5rem; display: flex; align-items: center; gap: 1rem; }
 /* Gradient-fade separator instead of a flat edge-to-edge border — same
    treatment as the Leisure theme's .site-header::after, so the admin
    chrome's bottom edge gets the same "slick" fading accent line. */
