@@ -7,14 +7,14 @@ pub struct TermItem {
     pub post_count: i64,
 }
 
-pub fn render(terms: &[TermItem], taxonomy: &str, flash: Option<&str>, ctx: &crate::PageContext) -> String {
+pub fn render(terms: &[TermItem], taxonomy: &str, sort: &str, dir: &str, flash: Option<&str>, ctx: &crate::PageContext) -> String {
     let title = if taxonomy == "category" { "Categories" } else { "Tags" };
     let path = if taxonomy == "category" { "/admin/categories" } else { "/admin/tags" };
 
     let list_html = if terms.is_empty() {
         format!(r#"<p class="muted">No {} found.</p>"#, title.to_lowercase())
     } else {
-        render_table(terms, path)
+        render_table(terms, path, sort, dir)
     };
 
     let content = format!(
@@ -71,8 +71,30 @@ pub fn render(terms: &[TermItem], taxonomy: &str, flash: Option<&str>, ctx: &cra
     crate::admin_page(title, path, flash, &content, ctx)
 }
 
-fn render_table(terms: &[TermItem], path: &str) -> String {
-    let rows = terms.iter().map(|t| {
+fn render_table(terms: &[TermItem], path: &str, sort: &str, dir: &str) -> String {
+    let mut sorted: Vec<&TermItem> = terms.iter().collect();
+    match sort {
+        "slug"  => sorted.sort_by_key(|t| t.slug.to_lowercase()),
+        "posts" => sorted.sort_by_key(|t| t.post_count),
+        "name"  => sorted.sort_by_key(|t| t.name.to_lowercase()),
+        _ => {}
+    }
+    let asc = dir != "desc";
+    if !sort.is_empty() && !asc {
+        sorted.reverse();
+    }
+
+    // Sortable column header: link toggles asc/desc for that column.
+    let sort_th = |label: &str, key: &str| -> String {
+        let is_active = sort == key;
+        let next_dir = if is_active && asc { "desc" } else { "asc" };
+        let arrow = if is_active { if asc { " \u{25B2}" } else { " \u{25BC}" } } else { "" };
+        format!(
+            r#"<th><a href="{path}?sort={key}&dir={next_dir}" style="color:inherit;text-decoration:none;white-space:nowrap">{label}{arrow}</a></th>"#
+        )
+    };
+
+    let rows = sorted.iter().map(|t| {
         format!(
             r#"<tr>
               <td>{name}</td>
@@ -96,9 +118,12 @@ fn render_table(terms: &[TermItem], path: &str) -> String {
 
     format!(
         r#"<table class="data-table">
-      <thead><tr><th>Name</th><th>Slug</th><th>Posts</th><th>Actions</th></tr></thead>
+      <thead><tr>{name_th}{slug_th}{posts_th}<th>Actions</th></tr></thead>
       <tbody>{rows}</tbody>
     </table>"#,
-        rows = rows,
+        rows     = rows,
+        name_th  = sort_th("Name", "name"),
+        slug_th  = sort_th("Slug", "slug"),
+        posts_th = sort_th("Posts", "posts"),
     )
 }

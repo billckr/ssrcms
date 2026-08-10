@@ -89,17 +89,18 @@ fn field_label_meta(field_type: &str) -> (&'static str, &'static str) {
     }
 }
 
-fn forms_pagination(page: i64, total_pages: i64, search_qs: &str) -> String {
+fn forms_pagination(page: i64, total_pages: i64, search_qs: &str, sort_qs: &str) -> String {
     if total_pages <= 1 {
         return String::new();
     }
+    let qs = format!("{search_qs}{sort_qs}");
     let prev = if page > 1 {
-        format!(r#"<a href="/admin/form-designer?page={}{search_qs}" class="page-btn">&laquo; Prev</a>"#, page - 1)
+        format!(r#"<a href="/admin/form-designer?page={}{qs}" class="page-btn">&laquo; Prev</a>"#, page - 1)
     } else {
         r#"<span class="page-btn page-btn-disabled">&laquo; Prev</span>"#.to_string()
     };
     let next = if page < total_pages {
-        format!(r#"<a href="/admin/form-designer?page={}{search_qs}" class="page-btn">Next &raquo;</a>"#, page + 1)
+        format!(r#"<a href="/admin/form-designer?page={}{qs}" class="page-btn">Next &raquo;</a>"#, page + 1)
     } else {
         r#"<span class="page-btn page-btn-disabled">Next &raquo;</span>"#.to_string()
     };
@@ -110,7 +111,7 @@ fn forms_pagination(page: i64, total_pages: i64, search_qs: &str) -> String {
         if p == page {
             nums.push_str(&format!(r#"<span class="page-btn page-btn-active">{p}</span>"#));
         } else {
-            nums.push_str(&format!(r#"<a href="/admin/form-designer?page={p}{search_qs}" class="page-btn">{p}</a>"#));
+            nums.push_str(&format!(r#"<a href="/admin/form-designer?page={p}{qs}" class="page-btn">{p}</a>"#));
         }
     }
     format!(r#"<div class="pagination">{prev}{nums}{next}</div>"#)
@@ -118,12 +119,26 @@ fn forms_pagination(page: i64, total_pages: i64, search_qs: &str) -> String {
 
 /// Table + pagination only — swapped by the live-search JS, and reused for
 /// the initial full-page render so both paths render identically.
-pub fn forms_list_fragment(rows: &[FormRow], page: i64, total_pages: i64, search: &str) -> String {
+pub fn forms_list_fragment(rows: &[FormRow], page: i64, total_pages: i64, search: &str, sort: &str, dir: &str) -> String {
     let search_qs = if search.is_empty() {
         String::new()
     } else {
         format!("&search={}", html_escape(search))
     };
+    let sort_qs = if sort.is_empty() { String::new() } else { format!("&sort={}&dir={}", sort, if dir == "desc" { "desc" } else { "asc" }) };
+    let asc = dir != "desc";
+
+    // Sortable column header: link toggles asc/desc for that column, preserving
+    // the current search filter and resetting to page 1 (a new sort is a new view).
+    let sort_th = |label: &str, key: &str| -> String {
+        let is_active = sort == key;
+        let next_dir = if is_active && asc { "desc" } else { "asc" };
+        let arrow = if is_active { if asc { " \u{25B2}" } else { " \u{25BC}" } } else { "" };
+        format!(
+            r#"<th><a href="/admin/form-designer?sort={key}&dir={next_dir}{search_qs}" style="color:inherit;text-decoration:none;white-space:nowrap">{label}{arrow}</a></th>"#
+        )
+    };
+
     let body = if rows.is_empty() {
         r#"<tr><td colspan="4" style="text-align:center;color:var(--muted)">No forms yet. Create one to get started.</td></tr>"#.to_string()
     } else {
@@ -156,18 +171,24 @@ pub fn forms_list_fragment(rows: &[FormRow], page: i64, total_pages: i64, search
 
     format!(
         r#"<table class="data-table">
-  <thead><tr><th>Name</th><th>Slug</th><th>Fields</th><th>Actions</th></tr></thead>
+  <thead><tr>{name_th}{slug_th}{fields_th}<th>Actions</th></tr></thead>
   <tbody>{body}</tbody>
 </table>
 {pagination}"#,
         body = body,
-        pagination = forms_pagination(page, total_pages, &search_qs),
+        pagination = forms_pagination(page, total_pages, &search_qs, &sort_qs),
+        name_th = sort_th("Name", "name"),
+        slug_th = sort_th("Slug", "slug"),
+        fields_th = sort_th("Fields", "fields"),
     )
 }
 
-pub fn render_list(rows: &[FormRow], page: i64, total_pages: i64, search: &str, ctx: &PageContext, flash: Option<&str>) -> String {
-    let fragment = forms_list_fragment(rows, page, total_pages, search);
-    let live_search = crate::live_search_script("form-search", "form-designer-list", "/admin/form-designer?partial=1");
+#[allow(clippy::too_many_arguments)]
+pub fn render_list(rows: &[FormRow], page: i64, total_pages: i64, search: &str, sort: &str, dir: &str, ctx: &PageContext, flash: Option<&str>) -> String {
+    let fragment = forms_list_fragment(rows, page, total_pages, search, sort, dir);
+    let sort_qs = if sort.is_empty() { String::new() } else { format!("&sort={}&dir={}", sort, if dir == "desc" { "desc" } else { "asc" }) };
+    let fetch_prefix = format!("/admin/form-designer?partial=1{}", sort_qs);
+    let live_search = crate::live_search_script("form-search", "form-designer-list", &fetch_prefix);
 
     let content = format!(
         r#"<div style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;margin-bottom:1rem;flex-wrap:wrap">

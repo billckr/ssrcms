@@ -31,9 +31,20 @@ fn require_site_id(admin: &AdminUser) -> Result<uuid::Uuid, Response> {
 
 // ── list all forms ────────────────────────────────────────────────────────────
 
+#[derive(Deserialize, Default)]
+pub struct ListFormsQuery {
+    /// Column to sort by: "name" | "submissions" | "last".
+    #[serde(default)]
+    pub sort: String,
+    /// Sort direction: "asc" or "desc".
+    #[serde(default)]
+    pub dir: String,
+}
+
 pub async fn list_forms(
     State(state): State<AppState>,
     admin: AdminUser,
+    Query(q): Query<ListFormsQuery>,
 ) -> Response {
     if let Err(r) = require_forms_cap(&admin) { return r; }
     let site_id = match require_site_id(&admin) { Ok(id) => id, Err(r) => return r };
@@ -67,11 +78,11 @@ pub async fn list_forms(
                 }
             }).collect();
 
-            Html(admin::pages::forms::render_forms_list(&rows, None, &ctx)).into_response()
+            Html(admin::pages::forms::render_forms_list(&rows, &q.sort, &q.dir, None, &ctx)).into_response()
         }
         Err(e) => {
             tracing::error!("list_forms error: {:?}", e);
-            Html(admin::pages::forms::render_forms_list(&[], Some("Failed to load forms."), &ctx)).into_response()
+            Html(admin::pages::forms::render_forms_list(&[], &q.sort, &q.dir, Some("Failed to load forms."), &ctx)).into_response()
         }
     }
 }

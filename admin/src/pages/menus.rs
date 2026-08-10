@@ -43,7 +43,7 @@ fn location_label(location: Option<&str>) -> &'static str {
     }
 }
 
-pub fn render_list(menus: &[MenuRow], ctx: &crate::PageContext, flash: Option<&str>) -> String {
+pub fn render_list(menus: &[MenuRow], sort: &str, dir: &str, ctx: &crate::PageContext, flash: Option<&str>) -> String {
     let location_opts = LOCATION_OPTIONS.iter().map(|(val, label)| {
         format!(
             r#"<option value="{val}">{label}</option>"#,
@@ -52,10 +52,33 @@ pub fn render_list(menus: &[MenuRow], ctx: &crate::PageContext, flash: Option<&s
         )
     }).collect::<Vec<_>>().join("");
 
-    let rows = if menus.is_empty() {
+    // Small, unpaginated list — sorted in-place here rather than in the handler.
+    let mut sorted: Vec<&MenuRow> = menus.iter().collect();
+    let asc = dir != "desc";
+    match sort {
+        "location" => sorted.sort_by_key(|m| location_label(m.location.as_deref()).to_lowercase()),
+        "items"    => sorted.sort_by_key(|m| m.item_count),
+        "name"     => sorted.sort_by_key(|m| m.name.to_lowercase()),
+        _ => {}
+    }
+    if !sort.is_empty() && !asc {
+        sorted.reverse();
+    }
+
+    // Sortable column header: link toggles asc/desc for that column.
+    let sort_th = |label: &str, key: &str| -> String {
+        let is_active = sort == key;
+        let next_dir = if is_active && asc { "desc" } else { "asc" };
+        let arrow = if is_active { if asc { " \u{25B2}" } else { " \u{25BC}" } } else { "" };
+        format!(
+            r#"<th><a href="/admin/menus?sort={key}&dir={next_dir}" style="color:inherit;text-decoration:none;white-space:nowrap">{label}{arrow}</a></th>"#
+        )
+    };
+
+    let rows = if sorted.is_empty() {
         r#"<tr><td colspan="4" style="text-align:center;color:var(--muted)">No menus yet. Create one below.</td></tr>"#.to_string()
     } else {
-        menus.iter().map(|m| {
+        sorted.iter().map(|m| {
             format!(
                 r#"<tr>
   <td><a href="/admin/menus/{id}">{name}</a></td>
@@ -85,7 +108,7 @@ pub fn render_list(menus: &[MenuRow], ctx: &crate::PageContext, flash: Option<&s
         r#"<div class="two-col">
   <div>
     <table class="data-table">
-      <thead><tr><th>Name</th><th>Location</th><th>Items</th><th>Actions</th></tr></thead>
+      <thead><tr>{name_th}{location_th}{items_th}<th>Actions</th></tr></thead>
       <tbody>{rows}</tbody>
     </table>
   </div>
@@ -128,6 +151,9 @@ pub fn render_list(menus: &[MenuRow], ctx: &crate::PageContext, flash: Option<&s
 </script>"#,
         location_opts = location_opts,
         rows          = rows,
+        name_th       = sort_th("Name", "name"),
+        location_th   = sort_th("Location", "location"),
+        items_th      = sort_th("Items", "items"),
     );
 
     crate::admin_page("Menus", "/admin/menus", flash, &content, ctx)

@@ -26,6 +26,35 @@ pub struct UsersTabQuery {
     pub partial: String,
     /// 1-indexed page number for the active tab's table.
     pub page: Option<i64>,
+    /// Column to sort by: "name" | "username" | "email" | "role".
+    #[serde(default)]
+    pub sort: String,
+    /// Sort direction: "asc" or "desc".
+    #[serde(default)]
+    pub dir: String,
+}
+
+/// Sort key for a given column — lowercased so ordering is case-insensitive.
+fn user_sort_key(u: &UserRow, sort: &str) -> String {
+    match sort {
+        "username" => u.username.to_lowercase(),
+        "email"    => u.email.to_lowercase(),
+        "role"     => u.role.to_lowercase(),
+        _          => u.display_name.to_lowercase(),
+    }
+}
+
+/// Sort a user row list in place by the whitelisted column/direction from the query string.
+/// No-op when `sort` is empty (keeps the existing DB fetch order).
+fn sort_user_rows(rows: &mut [UserRow], sort: &str, dir: &str) {
+    if sort.is_empty() {
+        return;
+    }
+    let asc = dir != "desc";
+    rows.sort_by(|a, b| {
+        let (ka, kb) = (user_sort_key(a, sort), user_sort_key(b, sort));
+        if asc { ka.cmp(&kb) } else { kb.cmp(&ka) }
+    });
 }
 
 const USERS_PER_PAGE: i64 = 20;
@@ -177,7 +206,9 @@ pub async fn list(
 
     let can_manage_access = admin.caps.can_manage_users;
     let active_tab = if q.tab == "subscribers" { "subscribers" } else { "site-users" };
-    let (staff, subscribers) = split_by_role(rows);
+    let (mut staff, mut subscribers) = split_by_role(rows);
+    sort_user_rows(&mut staff, &q.sort, &q.dir);
+    sort_user_rows(&mut subscribers, &q.sort, &q.dir);
     let staff_total = staff.len() as i64;
     let sub_total = subscribers.len() as i64;
 
@@ -250,14 +281,14 @@ pub async fn list(
     // rows HTML so the browser can swap tbody#users-tbody without a full reload.
     if !q.partial.is_empty() {
         return Html(admin::pages::users::users_list_fragment(
-            &staff, &subscribers, &current_user_id, can_manage_access, active_tab, &q.search, page, total_pages,
+            &staff, &subscribers, &current_user_id, can_manage_access, active_tab, &q.search, page, total_pages, &q.sort, &q.dir,
         )).into_response();
     }
 
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
     Html(admin::pages::users::render_list(
         &staff, &subscribers, staff_total, sub_total, page, total_pages, None, &current_user_id,
-        can_manage_access, active_tab, &available_sites, &selected_site_id, &q.search, &ctx,
+        can_manage_access, active_tab, &available_sites, &selected_site_id, &q.search, &q.sort, &q.dir, &ctx,
     )).into_response()
 }
 
@@ -908,6 +939,8 @@ pub async fn delete_user(
                 can_manage_access,
                 "site-users",
                 &[],
+                "",
+                "",
                 "",
                 "",
                 &ctx,

@@ -136,7 +136,11 @@ a:hover { text-decoration: underline; }
 .ssl-inactive:hover img { opacity:0.75 !important; }
 .badge-visiting { margin-left: auto; flex-shrink: 0; font-size: .78rem; font-weight: 600; background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; border-radius: 4px; padding: .2rem .6rem; white-space: nowrap; text-decoration: none; display: inline-flex; align-items: center; gap: .25rem; }
 .badge-visiting:hover { background: #fde68a; border-color: #f59e0b; color: #78350f; }
-.badge-primary-domain { font-size: .78rem; font-weight: 600; background: #dbeafe; color: #1e40af; border: 1px solid #93c5fd; border-radius: 4px; padding: .2rem .6rem; white-space: nowrap; display: inline-flex; align-items: center; }
+/* Same amber look as .badge-visiting, but its own class (not shared) — sized
+   to match the row's count badges and the header .site-indicator badge
+   (padding .15rem .5rem) instead of .badge-visiting's larger header sizing. */
+.badge-site-default { font-size: .78rem; font-weight: 600; background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; border-radius: 4px; padding: .15rem .5rem; white-space: nowrap; display: inline-flex; align-items: center; }
+.badge-primary-domain { font-size: .78rem; font-weight: 600; background: #dbeafe; color: #1e40af; border: 1px solid #93c5fd; border-radius: 4px; padding: .15rem .5rem; white-space: nowrap; display: inline-flex; align-items: center; }
 .admin-content { padding: 1.5rem; }
 
 /* Flash messages */
@@ -851,7 +855,10 @@ legend {
 
 /* Theme list */
 .appearance-toolbar { display: flex; align-items: center; gap: .75rem; margin-bottom: 1.25rem; }
-.appearance-filter-select { padding: .35rem .6rem; font-size: .875rem; font-family: inherit; border: 1px solid var(--border); border-radius: var(--radius); background: var(--field-bg); color: var(--field-text); cursor: pointer; }
+/* height/box-sizing/line-height match .form-group select exactly — without
+   them the box comes out a different size even with identical padding,
+   since that's the only place a select's total height is pinned. */
+.appearance-filter-select { height: 2rem; box-sizing: border-box; line-height: 1.4; padding: .35rem .6rem; font-size: .875rem; font-family: inherit; border: 1px solid var(--border); border-radius: var(--radius); background: var(--field-bg); color: var(--field-text); cursor: pointer; }
 .theme-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 1.5rem; margin-top: 1rem; }
 .theme-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.25rem 1.5rem; box-shadow: var(--shadow); transition: box-shadow .2s; }
 .theme-card.active { border: 2px solid var(--primary); box-shadow: 0 0 0 3px rgba(79,70,229,.1); }

@@ -1,5 +1,5 @@
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::StatusCode,
     response::{Html, IntoResponse, Redirect},
     Form,
@@ -12,31 +12,43 @@ use crate::middleware::admin_auth::AdminUser;
 use crate::models::taxonomy::{CreateTaxonomy, TaxonomyType};
 use admin::pages::taxonomy::TermItem;
 
+#[derive(Deserialize, Default)]
+pub struct TermsQuery {
+    /// Column to sort by: "name" | "slug" | "posts".
+    #[serde(default)]
+    pub sort: String,
+    /// Sort direction: "asc" or "desc".
+    #[serde(default)]
+    pub dir: String,
+}
+
 pub async fn categories(
     State(state): State<AppState>,
     admin: AdminUser,
+    Query(q): Query<TermsQuery>,
 ) -> impl IntoResponse {
     if !admin.caps.can_manage_taxonomies {
         return (StatusCode::FORBIDDEN, Html("<h1>403 Forbidden</h1>".to_string())).into_response();
     }
     let cs = state.site_hostname(admin.site_id);
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
-    list_terms(state, "category", admin.site_id, ctx).await.into_response()
+    list_terms(state, "category", admin.site_id, &q.sort, &q.dir, ctx).await.into_response()
 }
 
 pub async fn tags(
     State(state): State<AppState>,
     admin: AdminUser,
+    Query(q): Query<TermsQuery>,
 ) -> impl IntoResponse {
     if !admin.caps.can_manage_taxonomies {
         return (StatusCode::FORBIDDEN, Html("<h1>403 Forbidden</h1>".to_string())).into_response();
     }
     let cs = state.site_hostname(admin.site_id);
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
-    list_terms(state, "tag", admin.site_id, ctx).await.into_response()
+    list_terms(state, "tag", admin.site_id, &q.sort, &q.dir, ctx).await.into_response()
 }
 
-async fn list_terms(state: AppState, taxonomy: &str, site_id: Option<Uuid>, ctx: admin::PageContext) -> Html<String> {
+async fn list_terms(state: AppState, taxonomy: &str, site_id: Option<Uuid>, sort: &str, dir: &str, ctx: admin::PageContext) -> Html<String> {
     let tax_type = if taxonomy == "category" { TaxonomyType::Category } else { TaxonomyType::Tag };
     let raw = crate::models::taxonomy::list(&state.db, site_id, tax_type).await.unwrap_or_else(|e| {
         tracing::warn!("failed to list {} terms: {:?}", taxonomy, e);
@@ -55,7 +67,7 @@ async fn list_terms(state: AppState, taxonomy: &str, site_id: Option<Uuid>, ctx:
             post_count: count,
         });
     }
-    Html(admin::pages::taxonomy::render(&items, taxonomy, None, &ctx))
+    Html(admin::pages::taxonomy::render(&items, taxonomy, sort, dir, None, &ctx))
 }
 
 #[derive(Deserialize)]
@@ -88,7 +100,7 @@ pub async fn create(
         }
         let cs = state.site_hostname(admin.site_id);
         let ctx = super::page_ctx_full(&state, &admin, &cs).await;
-        return Html(admin::pages::taxonomy::render(&items, &form.taxonomy, Some("Slug must be lowercase letters, numbers, and hyphens only — no spaces."), &ctx)).into_response();
+        return Html(admin::pages::taxonomy::render(&items, &form.taxonomy, "", "", Some("Slug must be lowercase letters, numbers, and hyphens only — no spaces."), &ctx)).into_response();
     }
     let create = CreateTaxonomy {
         site_id: admin.site_id,
@@ -115,7 +127,7 @@ pub async fn create(
         };
         let cs = state.site_hostname(admin.site_id);
         let ctx = super::page_ctx_full(&state, &admin, &cs).await;
-        return Html(admin::pages::taxonomy::render(&items, &form.taxonomy, Some(&msg), &ctx)).into_response();
+        return Html(admin::pages::taxonomy::render(&items, &form.taxonomy, "", "", Some(&msg), &ctx)).into_response();
     }
     Redirect::to(redirect).into_response()
 }

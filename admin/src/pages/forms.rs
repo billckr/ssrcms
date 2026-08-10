@@ -27,13 +27,37 @@ pub struct SubmissionRow {
 
 pub fn render_forms_list(
     forms: &[FormSummaryRow],
+    sort: &str,
+    dir: &str,
     flash: Option<&str>,
     ctx: &PageContext,
 ) -> String {
-    let rows = if forms.is_empty() {
+    let mut sorted: Vec<&FormSummaryRow> = forms.iter().collect();
+    match sort {
+        "submissions" => sorted.sort_by_key(|f| f.submission_count),
+        "last"        => sorted.sort_by(|a, b| a.last_submitted_at.cmp(&b.last_submitted_at)),
+        "name"        => sorted.sort_by_key(|f| f.form_name.to_lowercase()),
+        _ => {}
+    }
+    let asc = dir != "desc";
+    if !sort.is_empty() && !asc {
+        sorted.reverse();
+    }
+
+    // Sortable column header: link toggles asc/desc for that column.
+    let sort_th = |label: &str, key: &str| -> String {
+        let is_active = sort == key;
+        let next_dir = if is_active && asc { "desc" } else { "asc" };
+        let arrow = if is_active { if asc { " \u{25B2}" } else { " \u{25BC}" } } else { "" };
+        format!(
+            r#"<th><a href="/admin/form-data-analytics?sort={key}&dir={next_dir}" style="color:inherit;text-decoration:none;white-space:nowrap">{label}{arrow}</a></th>"#
+        )
+    };
+
+    let rows = if sorted.is_empty() {
         r#"<tr><td colspan="5" class="empty-state">No form submissions yet.</td></tr>"#.to_string()
     } else {
-        forms.iter().map(|f| {
+        sorted.iter().map(|f| {
             let blocked_badge = if f.blocked {
                 r#" <span class="badge badge-danger" title="Not accepting submissions">Blocked</span>"#
             } else { "" };
@@ -96,9 +120,9 @@ pub fn render_forms_list(
 <table class="data-table">
   <thead>
     <tr>
-      <th>Form Name</th>
-      <th>Submissions</th>
-      <th>Last Submitted</th>
+      {name_th}
+      {submissions_th}
+      {last_th}
       <th>Actions</th>
     </tr>
   </thead>
@@ -121,6 +145,9 @@ pub fn render_forms_list(
 }})();
 </script>"#,
         rows = rows,
+        name_th = sort_th("Form Name", "name"),
+        submissions_th = sort_th("Submissions", "submissions"),
+        last_th = sort_th("Last Submitted", "last"),
     );
 
     admin_page("Forms", "/admin/form-data-analytics", flash, &content, ctx)

@@ -19,6 +19,12 @@ use admin::pages::menus::{MenuEdit, MenuItemRow, MenuRow};
 #[derive(Deserialize)]
 pub struct MenusListQuery {
     pub error: Option<String>,
+    /// Column to sort by: "name" | "location" | "items".
+    #[serde(default)]
+    pub sort: String,
+    /// Sort direction: "asc" or "desc".
+    #[serde(default)]
+    pub dir: String,
 }
 
 pub async fn list(
@@ -63,7 +69,7 @@ pub async fn list(
         _ => None,
     };
 
-    Html(admin::pages::menus::render_list(&rows, &ctx, flash)).into_response()
+    Html(admin::pages::menus::render_list(&rows, &q.sort, &q.dir, &ctx, flash)).into_response()
 }
 
 // ── Create ────────────────────────────────────────────────────────────────────

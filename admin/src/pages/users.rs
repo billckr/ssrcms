@@ -275,13 +275,13 @@ fn build_sub_rows(subscribers: &[UserRow], current_user_id: &str) -> String {
 }
 
 /// Build pagination controls for the users list.
-/// Preserves `search_qs`/`site_qs` (each already prefixed with `&`) across page nav.
-fn users_pagination(active_tab: &str, page: i64, total_pages: i64, search_qs: &str, site_qs: &str) -> String {
+/// Preserves `search_qs`/`site_qs`/`sort_qs` (each already prefixed with `&`) across page nav.
+fn users_pagination(active_tab: &str, page: i64, total_pages: i64, search_qs: &str, site_qs: &str, sort_qs: &str) -> String {
     if total_pages <= 1 {
         return String::new();
     }
     let base = format!("/admin/users?tab={}", active_tab);
-    let qs = format!("{search_qs}{site_qs}");
+    let qs = format!("{search_qs}{site_qs}{sort_qs}");
     let prev = if page > 1 {
         format!(r#"<a href="{base}&page={}{qs}" class="page-btn">&laquo; Prev</a>"#, page - 1)
     } else {
@@ -310,6 +310,7 @@ fn users_pagination(active_tab: &str, page: i64, total_pages: i64, search_qs: &s
 /// for `?partial=1` JS live-search requests so the browser can swap the whole table
 /// (rows + pagination) without a full reload. `staff`/`subscribers` are expected to
 /// already be sliced to the current page.
+#[allow(clippy::too_many_arguments)]
 pub fn users_list_fragment(
     staff: &[UserRow],
     subscribers: &[UserRow],
@@ -319,9 +320,28 @@ pub fn users_list_fragment(
     search: &str,
     page: i64,
     total_pages: i64,
+    sort: &str,
+    dir: &str,
 ) -> String {
     let search_qs = if search.is_empty() { String::new() } else { format!("&search={}", crate::html_escape(search)) };
-    let pagination = users_pagination(active_tab, page, total_pages, &search_qs, "");
+    let sort_qs = if sort.is_empty() { String::new() } else { format!("&sort={}&dir={}", sort, if dir == "desc" { "desc" } else { "asc" }) };
+    let pagination = users_pagination(active_tab, page, total_pages, &search_qs, "", &sort_qs);
+
+    // Sortable column header: link toggles asc/desc for that column, preserving the
+    // current search filter and resetting to page 1 (a new sort is a new view).
+    let sort_th = |label: &str, key: &str| -> String {
+        let is_active = sort == key;
+        let showing_asc = dir != "desc";
+        let next_dir = if is_active && showing_asc { "desc" } else { "asc" };
+        let arrow = if is_active {
+            if showing_asc { " \u{25B2}" } else { " \u{25BC}" }
+        } else {
+            ""
+        };
+        format!(
+            r#"<th><a href="/admin/users?tab={active_tab}&sort={key}&dir={next_dir}{search_qs}" style="color:inherit;text-decoration:none;white-space:nowrap">{label}{arrow}</a></th>"#
+        )
+    };
 
     if active_tab != "subscribers" {
         let rows = build_staff_rows(staff, current_user_id, can_manage_access);
@@ -335,11 +355,15 @@ pub fn users_list_fragment(
             r#"<table class="data-table">
   <thead><tr>
     <th style="width:2rem"><input type="checkbox" id="select-all-staff" title="Select all" aria-label="Select all"></th>
-    <th>Name</th><th>Username</th><th>Email</th><th>Domain</th><th>Role</th><th>Actions</th>
+    {name_th}{username_th}{email_th}<th>Domain</th>{role_th}<th>Actions</th>
   </tr></thead>
   <tbody id="users-tbody">{rows}{empty_msg}</tbody>
 </table>
-{pagination}"#
+{pagination}"#,
+            name_th = sort_th("Name", "name"),
+            username_th = sort_th("Username", "username"),
+            email_th = sort_th("Email", "email"),
+            role_th = sort_th("Role", "role"),
         )
     } else {
         let rows = build_sub_rows(subscribers, current_user_id);
@@ -353,15 +377,19 @@ pub fn users_list_fragment(
             r#"<table class="data-table">
   <thead><tr>
     <th style="width:2rem"><input type="checkbox" id="select-all-subs" title="Select all" aria-label="Select all"></th>
-    <th>Name</th><th>Username</th><th>Email</th><th>Domain</th><th>Actions</th>
+    {name_th}{username_th}{email_th}<th>Domain</th><th>Actions</th>
   </tr></thead>
   <tbody id="users-tbody">{rows}{empty_msg}</tbody>
 </table>
-{pagination}"#
+{pagination}"#,
+            name_th = sort_th("Name", "name"),
+            username_th = sort_th("Username", "username"),
+            email_th = sort_th("Email", "email"),
         )
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn render_list(
     staff: &[UserRow],
     subscribers: &[UserRow],
@@ -376,6 +404,8 @@ pub fn render_list(
     available_sites: &[SiteOption],
     selected_site_id: &str,
     search: &str,
+    sort: &str,
+    dir: &str,
     ctx: &crate::PageContext,
 ) -> String {
     let is_subscribers = active_tab == "subscribers";
@@ -408,8 +438,8 @@ pub fn render_list(
         format!(
             r#"<form method="GET" action="/admin/users" style="display:inline-flex;align-items:center;gap:.5rem;margin:0">
   <input type="hidden" name="tab" value="site-users">
-  <select id="site-filter-staff" name="site" onchange="this.form.submit()" aria-label="Filter users by site" style="height:2.25rem;padding:0 .5rem;border:1px solid var(--border,#e5e7eb);border-radius:6px;font-size:.875rem;background:#fff;cursor:pointer">
-    <option value="">All Sites</option>
+  <select id="site-filter-staff" name="site" class="appearance-filter-select" onchange="this.form.submit()" aria-label="Filter users by site">
+    <option value="">site</option>
     {opts}
   </select>
 </form>"#,
@@ -432,8 +462,8 @@ pub fn render_list(
         format!(
             r#"<form method="GET" action="/admin/users" style="display:inline-flex;align-items:center;gap:.5rem;margin:0">
   <input type="hidden" name="tab" value="subscribers">
-  <select id="site-filter-subs" name="site" onchange="this.form.submit()" aria-label="Filter users by site" style="height:2.25rem;padding:0 .5rem;border:1px solid var(--border,#e5e7eb);border-radius:6px;font-size:.875rem;background:#fff;cursor:pointer">
-    <option value="">All Sites</option>
+  <select id="site-filter-subs" name="site" class="appearance-filter-select" onchange="this.form.submit()" aria-label="Filter users by site">
+    <option value="">site</option>
     {opts}
   </select>
 </form>"#,
@@ -596,10 +626,11 @@ document.addEventListener('click', function(e) {
     } else {
         format!("&site={}", crate::html_escape(selected_site_id))
     };
-    let fetch_prefix = format!("/admin/users?partial=1&tab={}{}", active_tab, site_qs);
+    let sort_qs = if sort.is_empty() { String::new() } else { format!("&sort={}&dir={}", sort, if dir == "desc" { "desc" } else { "asc" }) };
+    let fetch_prefix = format!("/admin/users?partial=1&tab={}{}{}", active_tab, site_qs, sort_qs);
     let live_search = crate::live_search_script("user-search", "users-list", &fetch_prefix);
 
-    let fragment = users_list_fragment(staff, subscribers, current_user_id, can_manage_access, active_tab, search, page, total_pages);
+    let fragment = users_list_fragment(staff, subscribers, current_user_id, can_manage_access, active_tab, search, page, total_pages, sort, dir);
 
     let content = if !is_subscribers {
         format!(

@@ -213,6 +213,21 @@ pub async fn list(
         });
     }
 
+    let sort = params.get("sort").map(|s| s.as_str()).unwrap_or("");
+    let dir = params.get("dir").map(|s| s.as_str()).unwrap_or("");
+    match sort {
+        "admin" => rows.sort_by_key(|r| r.admin_email.as_deref().unwrap_or("").to_lowercase()),
+        "users" => rows.sort_by_key(|r| r.user_count),
+        "subs"  => rows.sort_by_key(|r| r.subscriber_count),
+        "posts" => rows.sort_by_key(|r| r.post_count),
+        "pages" => rows.sort_by_key(|r| r.page_count),
+        "hostname" => rows.sort_by_key(|r| r.hostname.to_lowercase()),
+        _ => {}
+    }
+    if !sort.is_empty() && dir == "desc" {
+        rows.reverse();
+    }
+
     const PER_PAGE: i64 = 20;
     let total = rows.len() as i64;
     let total_pages = ((total + PER_PAGE - 1) / PER_PAGE).max(1);
@@ -224,10 +239,10 @@ pub async fn list(
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
 
     if params.contains_key("partial") {
-        return Html(admin::pages::sites::sites_list_fragment(page_rows, page, total_pages, search, &ctx));
+        return Html(admin::pages::sites::sites_list_fragment(page_rows, page, total_pages, search, sort, dir, &ctx));
     }
 
-    Html(admin::pages::sites::render_list(page_rows, flash, can_create, page, total_pages, search, &ctx))
+    Html(admin::pages::sites::render_list(page_rows, flash, can_create, page, total_pages, search, sort, dir, &ctx))
 }
 
 /// Assignable users for the site-owner dropdown on the new-site form: the

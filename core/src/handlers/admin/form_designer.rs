@@ -54,6 +54,18 @@ pub async fn list(State(state): State<AppState>, admin: AdminUser, Query(params)
         rows.retain(|r| r.name.to_lowercase().contains(&needle) || r.slug.to_lowercase().contains(&needle));
     }
 
+    let sort = params.get("sort").map(|s| s.as_str()).unwrap_or("");
+    let dir = params.get("dir").map(|s| s.as_str()).unwrap_or("");
+    match sort {
+        "slug"   => rows.sort_by_key(|r| r.slug.to_lowercase()),
+        "fields" => rows.sort_by_key(|r| r.field_count),
+        "name"   => rows.sort_by_key(|r| r.name.to_lowercase()),
+        _ => {}
+    }
+    if !sort.is_empty() && dir == "desc" {
+        rows.reverse();
+    }
+
     const PER_PAGE: i64 = 20;
     let total = rows.len() as i64;
     let total_pages = ((total + PER_PAGE - 1) / PER_PAGE).max(1);
@@ -63,10 +75,10 @@ pub async fn list(State(state): State<AppState>, admin: AdminUser, Query(params)
     let page_rows = rows.get(start..end).unwrap_or(&[]);
 
     if params.contains_key("partial") {
-        return Html(forms_list_fragment(page_rows, page, total_pages, search)).into_response();
+        return Html(forms_list_fragment(page_rows, page, total_pages, search, sort, dir)).into_response();
     }
 
-    Html(render_list(page_rows, page, total_pages, search, &ctx, None)).into_response()
+    Html(render_list(page_rows, page, total_pages, search, sort, dir, &ctx, None)).into_response()
 }
 
 // ── new / edit form ─────────────────────────────────────────────────────────

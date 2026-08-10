@@ -24,17 +24,18 @@ pub struct SiteRow {
     pub maintenance_mode: bool,
 }
 
-fn sites_pagination(page: i64, total_pages: i64, search_qs: &str) -> String {
+fn sites_pagination(page: i64, total_pages: i64, search_qs: &str, sort_qs: &str) -> String {
     if total_pages <= 1 {
         return String::new();
     }
+    let qs = format!("{search_qs}{sort_qs}");
     let prev = if page > 1 {
-        format!(r#"<a href="/admin/sites?page={}{search_qs}" class="page-btn">&laquo; Prev</a>"#, page - 1)
+        format!(r#"<a href="/admin/sites?page={}{qs}" class="page-btn">&laquo; Prev</a>"#, page - 1)
     } else {
         r#"<span class="page-btn page-btn-disabled">&laquo; Prev</span>"#.to_string()
     };
     let next = if page < total_pages {
-        format!(r#"<a href="/admin/sites?page={}{search_qs}" class="page-btn">Next &raquo;</a>"#, page + 1)
+        format!(r#"<a href="/admin/sites?page={}{qs}" class="page-btn">Next &raquo;</a>"#, page + 1)
     } else {
         r#"<span class="page-btn page-btn-disabled">Next &raquo;</span>"#.to_string()
     };
@@ -45,7 +46,7 @@ fn sites_pagination(page: i64, total_pages: i64, search_qs: &str) -> String {
         if p == page {
             nums.push_str(&format!(r#"<span class="page-btn page-btn-active">{p}</span>"#));
         } else {
-            nums.push_str(&format!(r#"<a href="/admin/sites?page={p}{search_qs}" class="page-btn">{p}</a>"#));
+            nums.push_str(&format!(r#"<a href="/admin/sites?page={p}{qs}" class="page-btn">{p}</a>"#));
         }
     }
     format!(r#"<div class="pagination">{prev}{nums}{next}</div>"#)
@@ -53,12 +54,26 @@ fn sites_pagination(page: i64, total_pages: i64, search_qs: &str) -> String {
 
 /// Table + pagination only — swapped by the live-search JS, and reused for
 /// the initial full-page render so both paths render identically.
-pub fn sites_list_fragment(sites: &[SiteRow], page: i64, total_pages: i64, search: &str, ctx: &crate::PageContext) -> String {
+pub fn sites_list_fragment(sites: &[SiteRow], page: i64, total_pages: i64, search: &str, sort: &str, dir: &str, ctx: &crate::PageContext) -> String {
     let search_qs = if search.is_empty() {
         String::new()
     } else {
         format!("&search={}", crate::html_escape(search))
     };
+    let sort_qs = if sort.is_empty() { String::new() } else { format!("&sort={}&dir={}", sort, if dir == "desc" { "desc" } else { "asc" }) };
+    let asc = dir != "desc";
+
+    // Sortable column header: link toggles asc/desc for that column, preserving
+    // the current search filter and resetting to page 1 (a new sort is a new view).
+    let sort_th = |label: &str, key: &str| -> String {
+        let is_active = sort == key;
+        let next_dir = if is_active && asc { "desc" } else { "asc" };
+        let arrow = if is_active { if asc { " \u{25B2}" } else { " \u{25BC}" } } else { "" };
+        format!(
+            r#"<th><a href="/admin/sites?sort={key}&dir={next_dir}{search_qs}" style="color:inherit;text-decoration:none;white-space:nowrap">{label}{arrow}</a></th>"#
+        )
+    };
+
     let rows = sites.iter().map(|s| {
         let manage_html = if s.can_manage {
             let delete_html = if s.is_default {
@@ -159,7 +174,7 @@ pub fn sites_list_fragment(sites: &[SiteRow], page: i64, total_pages: i64, searc
                 )
             },
             default_badge    = if s.is_default {
-                r#" <span class="badge-visiting" title="Default site — cannot be deleted">default</span>"#
+                r#" <span class="badge-site-default" title="Default site — cannot be deleted">default</span>"#
             } else if s.is_primary_domain {
                 r#" <span class="badge-primary-domain" title="Primary domain for this account">primary</span>"#
             } else {
@@ -194,15 +209,22 @@ pub fn sites_list_fragment(sites: &[SiteRow], page: i64, total_pages: i64, searc
 
     format!(
         r#"<table class="data-table">
-  <thead><tr><th>Site</th><th>Admin</th><th>Users</th><th>Subs</th><th>Posts</th><th>Pages</th><th>Actions</th></tr></thead>
+  <thead><tr>{site_th}{admin_th}{users_th}{subs_th}{posts_th}{pages_th}<th>Actions</th></tr></thead>
   <tbody>{rows}</tbody>
 </table>
 {pagination}"#,
         rows = rows,
-        pagination = sites_pagination(page, total_pages, &search_qs),
+        pagination = sites_pagination(page, total_pages, &search_qs, &sort_qs),
+        site_th  = sort_th("Site", "hostname"),
+        admin_th = sort_th("Admin", "admin"),
+        users_th = sort_th("Users", "users"),
+        subs_th  = sort_th("Subs", "subs"),
+        posts_th = sort_th("Posts", "posts"),
+        pages_th = sort_th("Pages", "pages"),
     )
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn render_list(
     sites: &[SiteRow],
     flash: Option<&str>,
@@ -210,6 +232,8 @@ pub fn render_list(
     page: i64,
     total_pages: i64,
     search: &str,
+    sort: &str,
+    dir: &str,
     ctx: &crate::PageContext,
 ) -> String {
     let new_site_btn = if can_create {
@@ -218,8 +242,10 @@ pub fn render_list(
         ""
     };
 
-    let fragment = sites_list_fragment(sites, page, total_pages, search, ctx);
-    let live_search = crate::live_search_script("site-search", "sites-list", "/admin/sites?partial=1");
+    let fragment = sites_list_fragment(sites, page, total_pages, search, sort, dir, ctx);
+    let sort_qs = if sort.is_empty() { String::new() } else { format!("&sort={}&dir={}", sort, if dir == "desc" { "desc" } else { "asc" }) };
+    let fetch_prefix = format!("/admin/sites?partial=1{}", sort_qs);
+    let live_search = crate::live_search_script("site-search", "sites-list", &fetch_prefix);
 
     let content = format!(
         r#"<div style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;margin-bottom:1rem;flex-wrap:wrap">

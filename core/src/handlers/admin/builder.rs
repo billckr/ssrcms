@@ -62,7 +62,9 @@ pub async fn list(
     }
 
     let flash = params.get("flash").map(|s| s.as_str());
-    Html(admin::pages::builder::render_project_list(&rows, flash, &ctx)).into_response()
+    let sort = params.get("sort").map(|s| s.as_str()).unwrap_or("");
+    let dir = params.get("dir").map(|s| s.as_str()).unwrap_or("");
+    Html(admin::pages::builder::render_project_list(&rows, sort, dir, flash, &ctx)).into_response()
 }
 
 // ── Create project ─────────────────────────────────────────────────────────────

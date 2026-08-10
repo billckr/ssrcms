@@ -22,13 +22,36 @@ pub struct PageRow {
 
 // ── Project list ──────────────────────────────────────────────────────────────
 
-pub fn render_project_list(projects: &[ProjectRow], flash: Option<&str>, ctx: &crate::PageContext) -> String {
-    let rows = if projects.is_empty() {
+pub fn render_project_list(projects: &[ProjectRow], sort: &str, dir: &str, flash: Option<&str>, ctx: &crate::PageContext) -> String {
+    let mut sorted: Vec<&ProjectRow> = projects.iter().collect();
+    match sort {
+        "description" => sorted.sort_by_key(|p| p.description.as_deref().unwrap_or("").to_lowercase()),
+        "pages"        => sorted.sort_by_key(|p| p.page_count),
+        "updated"      => sorted.sort_by(|a, b| a.updated_at.cmp(&b.updated_at)),
+        "name"         => sorted.sort_by_key(|p| p.name.to_lowercase()),
+        _ => {}
+    }
+    let asc = dir != "desc";
+    if !sort.is_empty() && !asc {
+        sorted.reverse();
+    }
+
+    // Sortable column header: link toggles asc/desc for that column.
+    let sort_th = |label: &str, key: &str| -> String {
+        let is_active = sort == key;
+        let next_dir = if is_active && asc { "desc" } else { "asc" };
+        let arrow = if is_active { if asc { " \u{25B2}" } else { " \u{25BC}" } } else { "" };
+        format!(
+            r#"<th><a href="/admin/builder?sort={key}&dir={next_dir}" style="color:inherit;text-decoration:none;white-space:nowrap">{label}{arrow}</a></th>"#
+        )
+    };
+
+    let rows = if sorted.is_empty() {
         r#"<tr><td colspan="5" style="text-align:center;color:var(--muted)">
             No projects yet. Create one below to get started.
         </td></tr>"#.to_string()
     } else {
-        projects.iter().map(|p| {
+        sorted.iter().map(|p| {
             let active_badge = if p.is_active {
                 r#" <span class="badge" style="font-size:.7rem;background:#16a34a;color:#fff">Live</span>"#
             } else { "" };
@@ -102,7 +125,7 @@ pub fn render_project_list(projects: &[ProjectRow], flash: Option<&str>, ctx: &c
 </div>
 <table class="data-table" style="margin-bottom:2rem">
   <thead>
-    <tr><th>Project</th><th>Description</th><th>Pages</th><th>Updated</th><th>Actions</th></tr>
+    <tr>{name_th}{desc_th}{pages_th}{updated_th}<th>Actions</th></tr>
   </thead>
   <tbody>{rows}</tbody>
 </table>
@@ -183,6 +206,10 @@ document.getElementById('rename-dialog').addEventListener('close', function() {{
 </script>"#,
         flash_html = flash_html,
         rows = rows,
+        name_th    = sort_th("Project", "name"),
+        desc_th    = sort_th("Description", "description"),
+        pages_th   = sort_th("Pages", "pages"),
+        updated_th = sort_th("Updated", "updated"),
     );
 
     crate::admin_page("Page Builder", "/admin/builder", None, &content, ctx)
