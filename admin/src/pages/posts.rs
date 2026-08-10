@@ -853,6 +853,23 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
 
     let mut content = format!(
         r#"<link rel="stylesheet" href="/admin/static/quill/quill.snow.css">
+<style>
+  /* Quill's vendored Snow theme is light-only (icon strokes/fills hardcoded
+     to #444, dropdown backgrounds to #fff, etc.) — rather than patch the
+     vendored file, treat the whole toolbar+editor as one "field" that's
+     always light (var(--field-bg)/var(--field-text), same as every other
+     text input) regardless of theme, so its hardcoded icon/text colors
+     stay legible in both light and dark mode without needing their own
+     dark-mode variants. */
+  .ql-toolbar.ql-snow {{ background: var(--field-bg); color: var(--field-text); border-color: var(--border); }}
+  .ql-container.ql-snow {{ border-color: var(--border); }}
+  .ql-editor {{ color: var(--field-text); }}
+  .ql-snow .ql-stroke {{ stroke: var(--field-text); }}
+  .ql-snow .ql-fill, .ql-snow .ql-stroke.ql-fill {{ fill: var(--field-text); }}
+  .ql-snow .ql-picker-label {{ color: var(--field-text); }}
+  .ql-snow .ql-picker-options {{ background: var(--field-bg); color: var(--field-text); border-color: var(--border); }}
+  .ql-snow .ql-picker.ql-expanded .ql-picker-label {{ color: var(--field-text); }}
+</style>
 <form method="POST" action="{action}">
   <div class="editor-layout">
     <div class="editor-main">
@@ -884,7 +901,7 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
           <div class="card-boxed-section">
             <div class="form-group">
               <label>Content <span style="color:var(--danger);font-weight:700">*</span></label>
-              <div id="quill-editor" style="height:620px;background:#fff;font-size:1rem"></div>
+              <div id="quill-editor" style="height:620px;background:var(--field-bg);font-size:1rem"></div>
               <input type="hidden" id="content" name="content">
             </div>
           </div>
