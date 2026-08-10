@@ -223,7 +223,7 @@ fn field_row_html(f: &FieldRow, index: usize) -> String {
     let visual_only_display = if is_visual_only(&f.field_type) { "display:none" } else { "" };
 
     format!(
-        r#"<div class="field-row" data-index="{index}" style="border:1px solid var(--border);border-radius:var(--radius);padding:.85rem 1rem;margin-bottom:.6rem;background:#f8fafc">
+        r#"<div class="field-row" data-index="{index}" style="border:1px solid var(--border);border-radius:var(--radius);padding:.85rem 1rem;margin-bottom:.6rem;background:var(--tint)">
   <div style="display:flex;align-items:flex-start;gap:.6rem">
     <span class="drag-handle" title="Drag to reorder" draggable="true" style="margin-top:1.6rem">
       <img src="/admin/static/icons/move.svg" alt="">
@@ -413,7 +413,7 @@ pub fn render_editor(data: &FormEditData, ctx: &PageContext, flash: Option<&str>
   function makeRow() {{
     var row = document.createElement('div');
     row.className = 'field-row';
-    row.style.cssText = 'border:1px solid var(--border);border-radius:var(--radius);padding:.85rem 1rem;margin-bottom:.6rem;background:#f8fafc';
+    row.style.cssText = 'border:1px solid var(--border);border-radius:var(--radius);padding:.85rem 1rem;margin-bottom:.6rem;background:var(--tint)';
     var typeOpts = {type_opts_js}.map(function(t) {{
       return '<option value="' + t[0] + '">' + t[1] + '</option>';
     }}).join('');
@@ -567,7 +567,7 @@ pub fn render_editor(data: &FormEditData, ctx: &PageContext, flash: Option<&str>
       return '<div style="margin:18px 0">' + title + '<hr style="border:none;border-top:1px solid var(--border);margin:0"></div>';
     }}
     if (f.type === 'note') {{
-      return '<div style="margin-bottom:14px;padding:.7rem .9rem;background:#f8fafc;border-left:3px solid var(--primary);border-radius:3px;font-size:13px;color:var(--text)">' + esc(f.label || 'Note text goes here') + '</div>';
+      return '<div style="margin-bottom:14px;padding:.7rem .9rem;background:var(--tint);border-left:3px solid var(--primary);border-radius:3px;font-size:13px;color:var(--text)">' + esc(f.label || 'Note text goes here') + '</div>';
     }}
     var req = f.required ? ' <span style="color:var(--danger)">*</span>' : '';
     var html = '<div style="margin-bottom:14px">';
@@ -576,10 +576,10 @@ pub fn render_editor(data: &FormEditData, ctx: &PageContext, flash: Option<&str>
     }}
     switch (f.type) {{
       case 'textarea':
-        html += '<textarea disabled rows="3" style="width:100%;padding:8px 10px;font-size:13px;border:1px solid var(--border);border-radius:6px;box-sizing:border-box;background:#fff"></textarea>';
+        html += '<textarea disabled rows="3" style="width:100%;padding:8px 10px;font-size:13px;border:1px solid var(--border);border-radius:6px;box-sizing:border-box;background:var(--field-bg);color:var(--field-text)"></textarea>';
         break;
       case 'select':
-        html += '<select disabled style="width:100%;padding:8px 10px;font-size:13px;border:1px solid var(--border);border-radius:6px;background:#fff">' +
+        html += '<select disabled style="width:100%;padding:8px 10px;font-size:13px;border:1px solid var(--border);border-radius:6px;background:var(--field-bg);color:var(--field-text)">' +
           (f.options || []).map(function(o) {{ return '<option>' + esc(o[1]) + '</option>'; }}).join('') +
           '</select>';
         break;
@@ -598,7 +598,7 @@ pub fn render_editor(data: &FormEditData, ctx: &PageContext, flash: Option<&str>
         break;
       default:
         var inputType = f.type === 'phone' ? 'tel' : (['text','email','number','date'].indexOf(f.type) !== -1 ? f.type : 'text');
-        html += '<input type="' + inputType + '" disabled style="width:100%;padding:8px 10px;font-size:13px;border:1px solid var(--border);border-radius:6px;box-sizing:border-box;background:#fff">';
+        html += '<input type="' + inputType + '" disabled style="width:100%;padding:8px 10px;font-size:13px;border:1px solid var(--border);border-radius:6px;box-sizing:border-box;background:var(--field-bg);color:var(--field-text)">';
     }}
     html += '</div>';
     return html;
