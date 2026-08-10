@@ -444,15 +444,24 @@ tr.muted td { opacity: .55; }
 .copy-email-btn:hover { color: var(--primary-dark); }
 
 /* Icon buttons */
-/* Border/background stay transparent until hover — just the bare icon
-   otherwise, across every page that uses this class. */
-.icon-btn { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; flex-shrink: 0; padding: 0; background: none; border: 1px solid transparent; border-radius: var(--radius); cursor: pointer; color: var(--primary); transition: background .2s, border-color .2s; }
-.icon-btn:hover { background: var(--tint); border-color: var(--primary); }
-.icon-btn img { width: 18px; height: 18px; display: block; }
-.icon-btn.icon-danger { color: var(--danger); }
-.icon-btn.icon-danger:hover { background: #fee2e2; border-color: var(--danger); }
+/* No box/border on hover — just recolor the icon itself to the link blue
+   (--primary). Icons are loaded via <img src="...svg">, so plain CSS `color`
+   can't reach their currentColor stroke; `filter` is used instead, tuned
+   (via a small color-matching script) to turn the icon's black stroke into
+   the exact --primary/--danger hex for each theme. Dark mode already ships
+   a base `invert(1)` on these images (see above) purely for visibility
+   against the dark surface — the hover filters below replace that value
+   entirely (not additively) with a filter computed from the same black
+   starting point, so they need their own dark-mode variants. */
+.icon-btn { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; flex-shrink: 0; padding: 0; background: none; border: 1px solid transparent; border-radius: var(--radius); cursor: pointer; }
+.icon-btn img { width: 18px; height: 18px; display: block; transition: filter .15s; }
+.icon-btn:hover img { filter: invert(24%) sepia(94%) saturate(300%) hue-rotate(204deg) brightness(145%) contrast(193%); }
+:root[data-theme="dark"] .icon-btn:hover img { filter: invert(36%) sepia(75%) saturate(252%) hue-rotate(197deg) brightness(133%) contrast(148%); }
+.icon-btn.icon-danger:hover img { filter: invert(43%) sepia(75%) saturate(563%) hue-rotate(311deg) brightness(75%) contrast(147%); }
+:root[data-theme="dark"] .icon-btn.icon-danger:hover img { filter: invert(56%) sepia(77%) saturate(287%) hue-rotate(311deg) brightness(83%) contrast(145%); }
 .icon-btn:disabled { opacity: .4; cursor: not-allowed; }
-.icon-btn:disabled:hover { background: none; border-color: transparent; }
+.icon-btn:disabled:hover img { filter: none; }
+:root[data-theme="dark"] .icon-btn:disabled:hover img { filter: invert(1); }
 
 /* Forms */
 .form-group { margin-bottom: 1rem; }
