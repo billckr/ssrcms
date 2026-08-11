@@ -12,6 +12,7 @@ done.
 - [ ] allow site admins to either upload via ui or web their owns logo for their account simlar to how the super admin has for the main app.
 - [ ] work on synap install flow.
 - [ ] review dark mode and make small tweaks to button, icon and text colors. Documetnation bold also needs changing.
+- [ ] adjust badged to better fit others size on /admin/sites
 
 ## Done
 

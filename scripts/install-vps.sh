@@ -29,8 +29,8 @@ ADMIN_EMAIL="${ADMIN_EMAIL:-bill.coker@gmail.com}"
 ADMIN_USERNAME="${ADMIN_USERNAME:-admin}"
 ADMIN_PASSWORD="${ADMIN_PASSWORD:-}"
 APP_NAME="${APP_NAME:-SynapCMS}"
-DB_NAME="${DB_NAME:-synaptic_signals}"
-DB_USER="${DB_USER:-synaptic}"
+DB_NAME="${DB_NAME:-synapcms}"
+DB_USER="${DB_USER:-synap}"
 
 CLEAN=0
 UPDATE_ONLY=0
@@ -414,7 +414,8 @@ run_interactive_wizard() {
 
 review_and_confirm() {
   box_header "Review Settings"
-  printf "  %-16s %s\n" "VPS host:"      "${VPS_USER}@${VPS_HOST}:${VPS_PORT}"
+  printf "  %-16s %s\n" "VPS host:"      "$VPS_HOST"
+  printf "  %-16s %s\n" "SSH port:"      "$VPS_PORT"
   printf "  %-16s %s\n" "Auth:"          "$( [[ -n "$VPS_PASSWORD" ]] && echo "password" || echo "SSH key/agent" )"
   printf "  %-16s %s\n" "Domain:"        "$VPS_DOMAIN"
   printf "  %-16s %s\n" "Install dir:"   "$INSTALL_DIR"
@@ -755,6 +756,14 @@ do_install_or_migrate() {
   else
     local admin_pw_env=""
     [[ -n "$ADMIN_PASSWORD" ]] && admin_pw_env="ADMIN_PASSWORD='${ADMIN_PASSWORD}'"
+    # --clean already wiped INSTALL_DIR + the DB, so it means "take over
+    # completely" — declare that up front. Without this, a leftover
+    # /etc/caddy/Caddyfile block for VPS_DOMAIN from a prior install (one
+    # that predates the managed-block markers, or belonging to a different
+    # INSTALL_DIR) makes the remote preflight bail non-interactively, since
+    # `synap install` never defaults to a destructive choice on its own.
+    local on_conflict_flag=""
+    [[ "$CLEAN" -eq 1 ]] && on_conflict_flag="--on-conflict=fresh"
     local cli_output
     cli_output=$(ssh_run "sudo -u ${SYNAPTIC_USER} \
       DATABASE_URL='${DATABASE_URL}' \
@@ -766,7 +775,7 @@ do_install_or_migrate() {
       ADMIN_EMAIL='${ADMIN_EMAIL}' \
       ADMIN_USERNAME='${ADMIN_USERNAME}' \
       ${admin_pw_env} \
-      ${INSTALL_DIR}/synap install --non-interactive --output-dir ${INSTALL_DIR} 2>&1") \
+      ${INSTALL_DIR}/synap install --non-interactive --output-dir ${INSTALL_DIR} ${on_conflict_flag} 2>&1") \
       || { echo "synap install failed:"; echo "$cli_output"; return 1; }
     echo "$cli_output"
 
