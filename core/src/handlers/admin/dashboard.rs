@@ -86,7 +86,7 @@ pub async fn dashboard(
     let site_id = admin.site_id;
     let is_author = admin.site_role == "author";
 
-    let total_users = if admin.caps.is_global_admin {
+    let total_users = if admin.caps.is_global_admin && !admin.caps.is_impersonating {
         crate::models::user::count_staff(&state.db, admin.user.id).await
             .unwrap_or_else(|e| { tracing::warn!("dashboard users count error: {:?}", e); 0 })
     } else if let Some(sid) = admin.site_id {
@@ -96,7 +96,7 @@ pub async fn dashboard(
         0
     };
 
-    let total_subscribers = if admin.caps.is_global_admin {
+    let total_subscribers = if admin.caps.is_global_admin && !admin.caps.is_impersonating {
         crate::models::user::count_subscribers(&state.db).await
             .unwrap_or_else(|e| { tracing::warn!("dashboard subscribers count error: {:?}", e); 0 })
     } else if let Some(sid) = admin.site_id {
