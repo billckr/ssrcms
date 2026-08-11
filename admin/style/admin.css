@@ -782,6 +782,142 @@ body.sidebar-open .sidebar-overlay {
   border-bottom: 1px solid var(--border);
 }
 
+/* Two-column profile layout: form cards on the left, avatar on the right. */
+.profile-layout {
+  display: flex;
+  align-items: flex-start;
+  gap: 1.5rem;
+}
+.profile-main {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.profile-side {
+  flex: 0 0 260px;
+  width: 260px;
+}
+
+.profile-avatar-card {
+  background: radial-gradient(120% 70px at 50% 0%, rgba(129, 140, 248, .12), transparent), var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 1.75rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  position: sticky;
+  top: 1rem;
+  margin-bottom: 1.5rem;
+  overflow: hidden;
+}
+
+.profile-bio-card {
+  background: radial-gradient(120% 50px at 50% 0%, rgba(129, 140, 248, .1), transparent), var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 1.25rem;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Same fading accent line as .admin-header::after, on the top edge instead
+   of the bottom, to tie these side-column cards into the header's look. */
+.profile-avatar-card::before,
+.profile-bio-card::before {
+  content: '';
+  position: absolute;
+  left: 0; right: 0; top: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--primary) 50%, transparent);
+}
+
+.profile-avatar {
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2rem;
+  font-weight: 600;
+  letter-spacing: .02em;
+  color: #fff;
+  background: radial-gradient(circle at 30% 25%, #818cf8, var(--primary) 70%);
+  box-shadow: 0 4px 14px rgba(79, 70, 229, .35);
+  margin-bottom: 1rem;
+}
+
+.profile-avatar-name {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.profile-avatar-email {
+  font-size: 13px;
+  color: var(--muted);
+  margin-top: .15rem;
+  margin-bottom: 1.25rem;
+  word-break: break-word;
+}
+
+.profile-avatar-btn {
+  align-self: center;
+  margin-top: 0;
+}
+
+.profile-summary-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 1.5rem;
+  padding: .6rem 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 14px;
+}
+.profile-summary-row:last-child { border-bottom: none; }
+.profile-summary-label { color: var(--muted); flex-shrink: 0; }
+.profile-summary-row span:last-child {
+  text-align: right;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.profile-summary-empty { color: var(--muted); }
+
+.profile-bio {
+  font-size: 13px;
+  color: var(--text);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.profile-avatar-btn .icon-btn:disabled {
+  cursor: not-allowed;
+}
+
+.profile-avatar-hint {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: .75rem;
+  line-height: 1.4;
+}
+
+@media (max-width: 720px) {
+  .profile-layout {
+    flex-direction: column;
+  }
+  .profile-side {
+    width: 100%;
+    flex: 1 1 auto;
+    order: -1;
+  }
+  .profile-avatar-card {
+    position: static;
+  }
+}
+
 /* ── Boxed card: grey header bar flush to the edges, white body ───────────── */
 /* Matches the .data-table grey-header/white-body look for non-table content
    (e.g. the "Add Category/Tag" panel), so both halves of a page read as one
@@ -849,6 +985,7 @@ body.sidebar-open .sidebar-overlay {
    flex-centering when applied to a div instead. */
 .modal-card {
   background: var(--surface);
+  color: var(--text);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
