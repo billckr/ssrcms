@@ -849,7 +849,7 @@ pub async fn provision_ssl(
         Ok(c)  => c,
         Err(e) => {
             tracing::error!("provision_ssl: cannot read {}: {:?}", caddyfile_path, e);
-            return Redirect::to("/admin/sites?flash=Cannot+read+Caddyfile").into_response();
+            return Redirect::to("/admin/sites?flash=Cannot+read+SSL+configuration").into_response();
         }
     };
 
@@ -873,7 +873,7 @@ pub async fn provision_ssl(
 
     if let Err(e) = std::fs::write(caddyfile_path, &new_content) {
         tracing::error!("provision_ssl: cannot write {}: {:?}", caddyfile_path, e);
-        return Redirect::to("/admin/sites?flash=Cannot+write+Caddyfile").into_response();
+        return Redirect::to("/admin/sites?flash=Cannot+write+SSL+configuration").into_response();
     }
 
     // Run caddy reload directly — no sudo needed since caddy reload just talks
@@ -893,11 +893,11 @@ pub async fn provision_ssl(
         Ok(out) => {
             let stderr = String::from_utf8_lossy(&out.stderr);
             tracing::error!("provision_ssl: caddy reload failed: {}", stderr);
-            return Redirect::to("/admin/sites?flash=Caddy+reload+failed%3A+check+server+logs").into_response();
+            return Redirect::to("/admin/sites?flash=Failed+to+enable+SSL%3A+check+server+logs").into_response();
         }
         Err(e) => {
             tracing::error!("provision_ssl: cannot run caddy reload: {:?}", e);
-            return Redirect::to("/admin/sites?flash=Cannot+run+caddy+reload").into_response();
+            return Redirect::to("/admin/sites?flash=Failed+to+enable+SSL%3A+check+server+logs").into_response();
         }
     }
 

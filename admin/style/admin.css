@@ -63,12 +63,19 @@
 :root[data-theme="dark"] .admin-sidebar ul li a:hover,
 :root[data-theme="dark"] .admin-sidebar ul li a.active { background: var(--tint); }
 
-/* Theme toggle button: shows a moon (switch to dark) normally, a sun
-   (switch to light) once dark mode is active — both icons always exist in
-   the DOM, CSS just picks one, so there's no JS-timing/flash risk. */
-.theme-toggle .theme-icon-dark { display: none; }
-:root[data-theme="dark"] .theme-toggle .theme-icon-light { display: none; }
-:root[data-theme="dark"] .theme-toggle .theme-icon-dark { display: block; }
+/* Theme switch: a row of icon buttons (light / system / dark) at the top of
+   the header overflow menu, sized to its content. Hover/active use the same
+   blue-tint icon filter as .icon-btn elsewhere (see actions row on the
+   Users page) rather than a filled circle. The active choice is marked by
+   JS via the .active class on load and on click. */
+.theme-switch { display: inline-flex; align-self: flex-start; align-items: center; gap: 2px; width: auto; background: var(--tint); border-radius: 999px; padding: .25rem; margin: 2px; }
+.theme-switch-btn { display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; padding: 0; background: none; border: none; border-radius: var(--radius); cursor: pointer; }
+.theme-switch-btn img { width: 16px; height: 16px; transition: filter .15s; }
+.theme-switch-btn:hover img,
+.theme-switch-btn.active img { filter: invert(24%) sepia(94%) saturate(300%) hue-rotate(204deg) brightness(145%) contrast(193%); }
+:root[data-theme="dark"] .theme-switch-btn:hover img,
+:root[data-theme="dark"] .theme-switch-btn.active img { filter: invert(36%) sepia(75%) saturate(252%) hue-rotate(197deg) brightness(133%) contrast(148%); }
+.header-menu-divider { height: 1px; background: var(--border); margin: .3rem 2px; }
 
 body { font: 14px/1.5 system-ui, sans-serif; color: var(--text); background: var(--bg); }
 a { color: var(--primary); text-decoration: none; }

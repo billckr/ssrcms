@@ -114,14 +114,14 @@ pub fn sites_list_fragment(sites: &[SiteRow], page: i64, total_pages: i64, searc
         let ssl_badge = if !ctx.can_manage_sites {
             String::new()
         } else if s.ssl_active {
-            r#"<span class="ssl-badge ssl-active" title="SSL active — Caddy block provisioned">
+            r#"<span class="ssl-badge ssl-active" title="SSL is active for this site">
                  <img src="/admin/static/icons/lock.svg" alt="SSL active" style="width:18px;height:18px;vertical-align:middle;filter:invert(35%) sepia(80%) saturate(500%) hue-rotate(95deg)">
                </span>"#.to_string()
         } else {
             format!(
                 r#"<form method="post" action="/admin/sites/{id}/provision-ssl" style="display:inline"
-                        onsubmit="return confirm('Add SSL (Caddy block) for {hostname_js}?\n\nDNS for this domain must already point to this server — we\'ll check and let you know if it isn\'t ready yet.\nCaddy will provision the Let\'s Encrypt certificate automatically.')">
-                     <button type="submit" class="ssl-badge ssl-inactive" title="SSL not provisioned — click to set up">
+                        onsubmit="return confirm('Enable SSL for {hostname_js}?\n\nDNS for this domain must already point to this server — we\'ll check and let you know if it isn\'t ready yet.\nA certificate will be issued automatically.')">
+                     <button type="submit" class="ssl-badge ssl-inactive" title="SSL not provisioned — Click to secure">
                        <img src="/admin/static/icons/lock.svg" alt="Provision SSL" style="width:18px;height:18px;vertical-align:middle;opacity:0.4">
                      </button>
                    </form>"#,

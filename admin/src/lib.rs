@@ -124,7 +124,9 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
     // wrong theme — must run synchronously in <head>, ahead of <style>.
     (function() {{
       try {{
-        if (localStorage.getItem('admin-theme') === 'dark') {{
+        var pref = localStorage.getItem('admin-theme') || 'system';
+        var dark = pref === 'dark' || (pref === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        if (dark) {{
           document.documentElement.setAttribute('data-theme', 'dark');
         }}
       }} catch (e) {{}}
@@ -172,12 +174,18 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
             <img src="/admin/static/icons/list.svg" alt="">
           </button>
           <div class="header-menu-dropdown" id="header-menu-dropdown">
-            <button type="button" class="header-menu-item theme-toggle" onclick="toggleTheme()">
-              <img class="theme-icon-light" src="/admin/static/icons/moon.svg" alt="">
-              <img class="theme-icon-dark" src="/admin/static/icons/sun.svg" alt="">
-              <span class="theme-icon-light">Dark mode</span>
-              <span class="theme-icon-dark">Light mode</span>
-            </button>
+            <div class="theme-switch" role="group" aria-label="Theme" id="theme-switch">
+              <button type="button" class="theme-switch-btn" data-theme-choice="light" onclick="setTheme('light')" title="Light mode" aria-label="Light mode">
+                <img src="/admin/static/icons/sun.svg" alt="">
+              </button>
+              <button type="button" class="theme-switch-btn" data-theme-choice="system" onclick="setTheme('system')" title="Match system" aria-label="Match system">
+                <img src="/admin/static/icons/monitor.svg" alt="">
+              </button>
+              <button type="button" class="theme-switch-btn" data-theme-choice="dark" onclick="setTheme('dark')" title="Dark mode" aria-label="Dark mode">
+                <img src="/admin/static/icons/moon.svg" alt="">
+              </button>
+            </div>
+            <div class="header-menu-divider"></div>
             <a href="/admin/logout" class="header-menu-item">
               <img src="/admin/static/icons/log-out.svg" alt="">
               <span>Log out</span>
@@ -199,11 +207,28 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
     function closeSidebar() {{
       document.body.classList.remove('sidebar-open');
     }}
-    function toggleTheme() {{
-      var next = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
-      document.documentElement.setAttribute('data-theme', next);
-      try {{ localStorage.setItem('admin-theme', next); }} catch (e) {{}}
+    function applyTheme(pref) {{
+      var dark = pref === 'dark' || (pref === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+      if (dark) {{
+        document.documentElement.setAttribute('data-theme', 'dark');
+      }} else {{
+        document.documentElement.removeAttribute('data-theme');
+      }}
+      var switchEl = document.getElementById('theme-switch');
+      if (switchEl) {{
+        var btns = switchEl.querySelectorAll('.theme-switch-btn');
+        for (var i = 0; i < btns.length; i++) {{
+          btns[i].classList.toggle('active', btns[i].getAttribute('data-theme-choice') === pref);
+        }}
+      }}
     }}
+    function setTheme(pref) {{
+      try {{ localStorage.setItem('admin-theme', pref); }} catch (e) {{}}
+      applyTheme(pref);
+    }}
+    applyTheme((function() {{
+      try {{ return localStorage.getItem('admin-theme') || 'system'; }} catch (e) {{ return 'system'; }}
+    }})());
     function toggleHeaderMenu() {{
       var dropdown = document.getElementById('header-menu-dropdown');
       var btn = document.getElementById('header-menu-btn');
