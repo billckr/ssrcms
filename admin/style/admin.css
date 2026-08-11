@@ -81,14 +81,23 @@ body { font: 14px/1.5 system-ui, sans-serif; color: var(--text); background: var
 a { color: var(--primary); text-decoration: none; }
 a:hover { text-decoration: underline; }
 
-/* Login */
+/* Login — same card look as the profile page's side cards (.profile-avatar-card
+   / .profile-bio-card): surface + border + shadow, with the fading accent
+   line across the top tying it to .admin-header::after. */
 .login-body { display: flex; align-items: center; justify-content: center; min-height: 100vh; }
-.login-box { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 2rem; width: 360px; box-shadow: var(--shadow); }
+.login-box { position: relative; overflow: hidden; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 2rem; width: 360px; box-shadow: var(--shadow); }
 .login-box.login-box--wide { width: 440px; }
+.login-box::before {
+  content: '';
+  position: absolute;
+  left: 0; right: 0; top: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--primary) 50%, transparent);
+}
 .login-brand { font-size: 1.5rem; font-weight: 700; margin-bottom: .5rem; color: var(--primary); }
 .login-box h2 { font-size: 1.1rem; color: var(--muted); margin-bottom: 1.5rem; }
 .login-box label { display: block; font-weight: 500; margin-bottom: .25rem; }
-.login-box input { width: 100%; padding: .5rem .75rem; border: 1px solid var(--border); border-radius: var(--radius); font-size: 14px; margin-bottom: 1rem; }
+.login-box input { width: 100%; padding: .5rem .75rem; border: 1px solid var(--border); border-radius: var(--radius); font-size: 14px; margin-bottom: 1rem; background: var(--field-bg); color: var(--field-text); }
 .login-box button { width: 100%; padding: .6rem; background-image: radial-gradient(100% 100% at 100% 0, #818cf8 0, var(--primary) 100%); color: #fff; border: none; border-radius: var(--radius); font-size: 14px; cursor: pointer; box-shadow: rgba(45,35,66,.4) 0 2px 4px, rgba(45,35,66,.3) 0 7px 13px -3px, rgba(67,56,202,.5) 0 -3px 0 inset; transition: box-shadow .15s, transform .15s; will-change: box-shadow, transform; }
 .login-box button:hover { box-shadow: rgba(45,35,66,.3) 0 3px 6px, rgba(45,35,66,.2) 0 5px 10px -3px, var(--primary-dark) 0 -2px 0 inset; transform: translateY(-1px); }
 .login-box button:active { box-shadow: var(--primary-dark) 0 2px 5px inset; transform: translateY(1px); }
@@ -153,6 +162,9 @@ a:hover { text-decoration: underline; }
 .flash.success { background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
 .flash.error { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
 .error { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; padding: .75rem 1rem; border-radius: var(--radius); margin-bottom: 1rem; }
+:root[data-theme="dark"] .flash.success { background: rgba(74,222,128,.12); color: #86efac; border-color: rgba(74,222,128,.3); }
+:root[data-theme="dark"] .flash.error,
+:root[data-theme="dark"] .error { background: rgba(248,113,113,.12); color: #fca5a5; border-color: rgba(248,113,113,.3); }
 
 /* Generic card */
 .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); }

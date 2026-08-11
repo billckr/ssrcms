@@ -38,8 +38,9 @@ pub struct RedirectQuery {
 }
 
 /// GET /admin/login — render login page.
-pub async fn login_form() -> impl IntoResponse {
-    Html(admin::pages::login::render(None))
+pub async fn login_form(State(state): State<AppState>) -> impl IntoResponse {
+    let default_theme = state.app_settings.read().unwrap().default_theme.clone();
+    Html(admin::pages::login::render(None, &default_theme))
 }
 
 /// POST /admin/login — verify credentials, create session.
@@ -49,17 +50,19 @@ pub async fn login_post(
     headers: HeaderMap,
     Form(form): Form<LoginForm>,
 ) -> impl IntoResponse {
+    let default_theme = state.app_settings.read().unwrap().default_theme.clone();
+
     // Look up user by email.
     let user = match crate::models::user::get_by_email(&state.db, &form.email).await {
         Ok(u) => u,
         Err(_) => {
-            return Html(admin::pages::login::render(Some("Invalid email or password."))).into_response();
+            return Html(admin::pages::login::render(Some("Invalid email or password."), &default_theme)).into_response();
         }
     };
 
     // Verify password.
     if !user.verify_password(&form.password) {
-        return Html(admin::pages::login::render(Some("Invalid email or password."))).into_response();
+        return Html(admin::pages::login::render(Some("Invalid email or password."), &default_theme)).into_response();
     }
 
     // Check role — staff only. Subscribers must use /login.
@@ -67,12 +70,12 @@ pub async fn login_post(
         "super_admin" | "site_admin" | "editor" | "author" => {}
         "subscriber" => {
             return Html(admin::pages::login::render(
-                Some("Subscriber accounts sign in at /login."),
+                Some("Subscriber accounts sign in at /login."), &default_theme,
             )).into_response();
         }
         _ => {
             return Html(admin::pages::login::render(
-                Some("Your account does not have admin access."),
+                Some("Your account does not have admin access."), &default_theme,
             )).into_response();
         }
     }
@@ -100,14 +103,14 @@ pub async fn login_post(
                     Ok(Some(_)) => {} // has access — continue
                     _ => {
                         return Html(admin::pages::login::render(
-                            Some("Your account does not have access to this site."),
+                            Some("Your account does not have access to this site."), &default_theme,
                         )).into_response();
                     }
                 }
             }
             None => {
                 return Html(admin::pages::login::render(
-                    Some("No site found for this domain."),
+                    Some("No site found for this domain."), &default_theme,
                 )).into_response();
             }
         }
@@ -116,7 +119,7 @@ pub async fn login_post(
     // Store user ID in session.
     if let Err(e) = session.insert(SESSION_USER_ID_KEY, user.id.to_string()).await {
         tracing::error!("session insert error: {}", e);
-        return Html(admin::pages::login::render(Some("Session error. Please try again."))).into_response();
+        return Html(admin::pages::login::render(Some("Session error. Please try again."), &default_theme)).into_response();
     }
     tracing::info!("login: user_id stored in session for {}", form.email);
 
@@ -134,10 +137,12 @@ pub async fn login_post(
 
 /// GET /login — public-facing login form (for subscribers).
 pub async fn public_login_form(
+    State(state): State<AppState>,
     Query(q): Query<RedirectQuery>,
 ) -> impl IntoResponse {
+    let default_theme = state.app_settings.read().unwrap().default_theme.clone();
     let redirect = q.redirect.as_deref();
-    Html(admin::pages::login::render_public(None, q.flash.as_deref(), redirect))
+    Html(admin::pages::login::render_public(None, q.flash.as_deref(), redirect, &default_theme))
 }
 
 /// POST /login — subscriber login only.
@@ -148,15 +153,17 @@ pub async fn public_login_post(
     headers: HeaderMap,
     Form(form): Form<LoginForm>,
 ) -> impl IntoResponse {
+    let default_theme = state.app_settings.read().unwrap().default_theme.clone();
+
     // Preserve the redirect path through error re-renders.
     let redirect_val = if form.redirect.is_empty() { None } else { Some(form.redirect.as_str()) };
 
     let user = match crate::models::user::get_by_email(&state.db, &form.email).await {
         Ok(u) => u,
-        Err(_) => return Html(admin::pages::login::render_public(Some("Invalid email or password."), None, redirect_val)).into_response(),
+        Err(_) => return Html(admin::pages::login::render_public(Some("Invalid email or password."), None, redirect_val, &default_theme)).into_response(),
     };
     if !user.verify_password(&form.password) {
-        return Html(admin::pages::login::render_public(Some("Invalid email or password."), None, redirect_val)).into_response();
+        return Html(admin::pages::login::render_public(Some("Invalid email or password."), None, redirect_val, &default_theme)).into_response();
     }
     match user.role.as_str() {
         "subscriber" => {}
@@ -168,9 +175,9 @@ pub async fn public_login_post(
         // staff account, which is useful targeting information even though
         // they already have valid creds for it.
         "super_admin" | "site_admin" | "editor" | "author" => {
-            return Html(admin::pages::login::render_public(Some("Invalid email or password."), None, redirect_val)).into_response();
+            return Html(admin::pages::login::render_public(Some("Invalid email or password."), None, redirect_val, &default_theme)).into_response();
         }
-        _ => return Html(admin::pages::login::render_public(Some("Invalid email or password."), None, redirect_val)).into_response(),
+        _ => return Html(admin::pages::login::render_public(Some("Invalid email or password."), None, redirect_val, &default_theme)).into_response(),
     }
 
     let raw_host = headers
@@ -187,19 +194,19 @@ pub async fn public_login_post(
                 Ok(Some(_)) => {}
                 _ => return Html(admin::pages::login::render_public(
                     Some("Your account does not have access to this site."),
-                    None, redirect_val,
+                    None, redirect_val, &default_theme,
                 )).into_response(),
             }
         }
         None => return Html(admin::pages::login::render_public(
             Some("No site found for this domain."),
-            None, redirect_val,
+            None, redirect_val, &default_theme,
         )).into_response(),
     }
 
     if let Err(e) = session.insert(SESSION_ACCOUNT_USER_ID_KEY, user.id.to_string()).await {
         tracing::error!("account login session insert error: {}", e);
-        return Html(admin::pages::login::render_public(Some("Session error. Please try again."), None, redirect_val)).into_response();
+        return Html(admin::pages::login::render_public(Some("Session error. Please try again."), None, redirect_val, &default_theme)).into_response();
     }
 
     // Redirect back to the page that sent the user to login, or fall back to /account.

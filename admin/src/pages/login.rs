@@ -2,18 +2,20 @@
 
 /// Render the standalone login page (no sidebar).
 /// `action` is the form POST target — "/admin/login" for staff, "/login" for the public page.
-pub fn render(error: Option<&str>) -> String {
-    render_with_action(error, None, "/admin/login", None)
+/// `default_theme` is the site-wide fallback appearance ("light"/"dark"/"system")
+/// from Settings → General → Appearance.
+pub fn render(error: Option<&str>, default_theme: &str) -> String {
+    render_with_action(error, None, "/admin/login", None, default_theme)
 }
 
 /// Same form rendered for the public-facing /login page.
 /// `redirect` is an optional path to send the user to after a successful login.
 /// `flash` is an optional one-shot success message (e.g. after a password reset).
-pub fn render_public(error: Option<&str>, flash: Option<&str>, redirect: Option<&str>) -> String {
-    render_with_action(error, flash, "/login", redirect)
+pub fn render_public(error: Option<&str>, flash: Option<&str>, redirect: Option<&str>, default_theme: &str) -> String {
+    render_with_action(error, flash, "/login", redirect, default_theme)
 }
 
-fn render_with_action(error: Option<&str>, flash: Option<&str>, action: &str, redirect: Option<&str>) -> String {
+fn render_with_action(error: Option<&str>, flash: Option<&str>, action: &str, redirect: Option<&str>, default_theme: &str) -> String {
     let error_html = match error {
         Some(msg) => format!(r#"<div class="error">{}</div>"#, crate::html_escape(msg)),
         None => String::new(),
@@ -40,6 +42,13 @@ fn render_with_action(error: Option<&str>, flash: Option<&str>, action: &str, re
         ""
     };
 
+    // Already validated to one of these three literals when saved — safe to
+    // splice into JS, but re-checked here since callers pass it through untrusted.
+    let default_theme = match default_theme {
+        "light" | "dark" => default_theme,
+        _ => "system",
+    };
+
     format!(
         r#"<!DOCTYPE html>
 <html lang="en">
@@ -47,6 +56,20 @@ fn render_with_action(error: Option<&str>, flash: Option<&str>, action: &str, re
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Sign in</title>
+  <script>
+    // Applies the saved/system theme before first paint (same key + logic as
+    // the admin shell in lib.rs) so this standalone page matches whatever
+    // theme the user last chose there instead of always rendering light.
+    (function() {{
+      try {{
+        var pref = localStorage.getItem('admin-theme') || '{default_theme}';
+        var dark = pref === 'dark' || (pref === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        if (dark) {{
+          document.documentElement.setAttribute('data-theme', 'dark');
+        }}
+      }} catch (e) {{}}
+    }})();
+  </script>
   <style>{css}</style>
 </head>
 <body class="login-body">
@@ -73,5 +96,6 @@ fn render_with_action(error: Option<&str>, flash: Option<&str>, action: &str, re
         redirect_input   = redirect_input,
         action           = action,
         below_form_links = below_form_links,
+        default_theme    = default_theme,
     )
 }

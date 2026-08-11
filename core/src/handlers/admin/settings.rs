@@ -20,9 +20,9 @@ pub async fn settings(
     let flash = params.get("flash").map(|s| s.as_str());
     let cs = state.site_hostname(admin.site_id);
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
-    let (app_name, timezone, max_upload_mb) = {
+    let (app_name, timezone, max_upload_mb, default_theme) = {
         let s = state.app_settings.read().unwrap();
-        (s.app_name.clone(), s.timezone.clone(), s.max_upload_mb.max(0) as u64)
+        (s.app_name.clone(), s.timezone.clone(), s.max_upload_mb.max(0) as u64, s.default_theme.clone())
     };
     let sites: Vec<(uuid::Uuid, String)> = crate::models::site::list(&state.db)
         .await
@@ -30,7 +30,7 @@ pub async fn settings(
         .into_iter()
         .map(|s| (s.id, s.hostname))
         .collect();
-    Html(admin::pages::settings::render(flash, &app_name, &timezone, max_upload_mb, &sites, &ctx)).into_response()
+    Html(admin::pages::settings::render(flash, &app_name, &timezone, max_upload_mb, &default_theme, &sites, &ctx)).into_response()
 }
 
 pub async fn save_settings(
@@ -79,6 +79,28 @@ pub async fn save_settings(
         }
 
         let flash = error.as_deref().unwrap_or("Localisation settings saved.");
+        return Redirect::to(&format!("/admin/settings?flash={}", flash.replace(' ', "+"))).into_response();
+    }
+
+    if tab == "appearance" {
+        let default_theme = form.get("default_theme").map(|s| s.trim()).unwrap_or("system");
+
+        let flash = if matches!(default_theme, "light" | "dark" | "system") {
+            match set_app_setting(&state.db, "default_theme", default_theme).await {
+                Ok(()) => {
+                    if let Err(e) = state.reload_app_settings().await {
+                        tracing::warn!("failed to reload app_settings cache: {}", e);
+                    }
+                    "Appearance settings saved."
+                }
+                Err(e) => {
+                    tracing::error!("failed to save default_theme: {}", e);
+                    "Failed to save settings. Please try again."
+                }
+            }
+        } else {
+            "Invalid theme selection."
+        };
         return Redirect::to(&format!("/admin/settings?flash={}", flash.replace(' ', "+"))).into_response();
     }
 

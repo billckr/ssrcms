@@ -42,13 +42,15 @@ pub struct SubscribeForm {
 
 /// GET /subscribe — show the signup form (or success page after redirect).
 pub async fn subscribe_form(
+    State(state): State<AppState>,
     Query(q): Query<SubscribeQuery>,
     site: CurrentSite,
 ) -> Response {
+    let default_theme = state.app_settings.read().unwrap().default_theme.clone();
     if q.subscribed.as_deref() == Some("1") {
-        Html(admin::pages::subscribe::render_success(&site.settings.site_name)).into_response()
+        Html(admin::pages::subscribe::render_success(&site.settings.site_name, &default_theme)).into_response()
     } else {
-        Html(admin::pages::subscribe::render(None, &site.settings.site_name)).into_response()
+        Html(admin::pages::subscribe::render(None, &site.settings.site_name, &default_theme)).into_response()
     }
 }
 
@@ -60,10 +62,11 @@ pub async fn subscribe_post(
 ) -> Response {
     let site_name = site.settings.site_name.clone();
     let site_id = site.site.id;
+    let default_theme = state.app_settings.read().unwrap().default_theme.clone();
 
     macro_rules! err {
         ($msg:expr) => {
-            return Html(admin::pages::subscribe::render(Some($msg), &site_name)).into_response()
+            return Html(admin::pages::subscribe::render(Some($msg), &site_name, &default_theme)).into_response()
         };
     }
 
@@ -95,7 +98,7 @@ pub async fn subscribe_post(
         err!("Passwords do not match.");
     }
     if let Err(msg) = crate::models::user::validate_password(&form.password) {
-        return Html(admin::pages::subscribe::render(Some(msg), &site_name)).into_response();
+        return Html(admin::pages::subscribe::render(Some(msg), &site_name, &default_theme)).into_response();
     }
 
     // ── Email already exists? ─────────────────────────────────────────────────

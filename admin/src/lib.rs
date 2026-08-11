@@ -40,6 +40,9 @@ pub struct PageContext {
     /// Public URL of a custom admin sidebar logo, if one was found at startup.
     /// `None` falls back to rendering `app_name` as text.
     pub logo_url: Option<String>,
+    /// Site-wide fallback appearance ("light" | "dark" | "system") from
+    /// Settings → General → Appearance — from app_settings.default_theme.
+    pub default_theme: String,
 }
 
 /// Wrap a rendered content HTML string in the full admin page shell.
@@ -112,6 +115,14 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
         None => html_escape(&ctx.app_name),
     };
 
+    // Site-wide fallback (Settings → General → Appearance) for visitors who
+    // haven't made their own per-browser choice yet — already validated to
+    // one of these three literals when saved, so safe to splice into JS.
+    let default_theme = match ctx.default_theme.as_str() {
+        "light" | "dark" => ctx.default_theme.as_str(),
+        _ => "system",
+    };
+
     format!(
         r#"<!DOCTYPE html>
 <html lang="en">
@@ -124,7 +135,7 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
     // wrong theme — must run synchronously in <head>, ahead of <style>.
     (function() {{
       try {{
-        var pref = localStorage.getItem('admin-theme') || 'system';
+        var pref = localStorage.getItem('admin-theme') || '{default_theme}';
         var dark = pref === 'dark' || (pref === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
         if (dark) {{
           document.documentElement.setAttribute('data-theme', 'dark');
@@ -230,7 +241,7 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
       applyTheme(pref);
     }}
     applyTheme((function() {{
-      try {{ return localStorage.getItem('admin-theme') || 'system'; }} catch (e) {{ return 'system'; }}
+      try {{ return localStorage.getItem('admin-theme') || '{default_theme}'; }} catch (e) {{ return '{default_theme}'; }}
     }})());
     function toggleHeaderMenu() {{
       var dropdown = document.getElementById('header-menu-dropdown');

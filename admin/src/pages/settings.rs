@@ -7,10 +7,24 @@ pub fn render(
     app_name: &str,
     timezone: &str,
     max_upload_mb: u64,
+    default_theme: &str,
     sites: &[(Uuid, String)],
     ctx: &crate::PageContext,
 ) -> String {
     let app_name_escaped = crate::html_escape(app_name);
+
+    let theme_options = [
+        ("system", "Match system"),
+        ("light", "Light"),
+        ("dark", "Dark"),
+    ]
+    .iter()
+    .map(|(value, label)| {
+        let selected = if *value == default_theme { " selected" } else { "" };
+        format!(r#"<option value="{value}"{selected}>{label}</option>"#)
+    })
+    .collect::<Vec<_>>()
+    .join("\n        ");
 
     let site_options = sites
         .iter()
@@ -188,6 +202,35 @@ pub fn render(
 
       <div class="icon-pill" style="margin-top:1.5rem">
         <button type="submit" id="localisation-save-btn" class="icon-btn" title="Save Localisation" aria-label="Save Localisation" disabled>
+          <img src="/admin/static/icons/save.svg" alt="">
+        </button>
+      </div>
+    </form>
+    </div>
+  </div>
+
+  <div class="card-boxed">
+    <h2 class="card-boxed-header">Appearance</h2>
+    <div class="card-boxed-body">
+    <form method="post" action="/admin/settings" class="edit-form appearance-settings-form">
+      <input type="hidden" name="tab" value="appearance">
+
+      <div class="card-boxed-section">
+        <div class="form-group" style="max-width:360px">
+          <label for="sg-default-theme">Default Theme</label>
+          <select id="sg-default-theme" name="default_theme">
+            {theme_options}
+          </select>
+          <small>
+            Fallback appearance for the login, signup, and admin sign-in pages, and for anyone
+            who hasn't yet picked their own theme. Signed-in users can still override it per
+            browser from the light/system/dark switch in the header menu.
+          </small>
+        </div>
+      </div>
+
+      <div class="icon-pill" style="margin-top:1.5rem">
+        <button type="submit" id="appearance-save-btn" class="icon-btn" title="Save Appearance" aria-label="Save Appearance" disabled>
           <img src="/admin/static/icons/save.svg" alt="">
         </button>
       </div>
@@ -510,6 +553,7 @@ function dtEnableOnChange(formSelector, btnId) {{
 }}
 dtEnableOnChange('.general-settings-form', 'general-save-btn');
 dtEnableOnChange('.localisation-settings-form', 'localisation-save-btn');
+dtEnableOnChange('.appearance-settings-form', 'appearance-save-btn');
 dtEnableOnChange('.uploads-settings-form', 'uploads-save-btn');
 </script>
 "#,

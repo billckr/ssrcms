@@ -113,6 +113,11 @@ pub struct AppSettings {
     pub app_name: String,
     pub timezone: String,
     pub max_upload_mb: i64,
+    /// Site-wide fallback appearance ("light" | "dark" | "system") applied to
+    /// /login, /subscribe, /admin/login, and any /admin visit before the
+    /// visitor has picked their own preference in the header theme toggle
+    /// (which is stored per-browser in localStorage and always wins once set).
+    pub default_theme: String,
 }
 
 impl Default for AppSettings {
@@ -121,6 +126,7 @@ impl Default for AppSettings {
             app_name: "Synaptic".to_string(),
             timezone: "UTC".to_string(),
             max_upload_mb: 25,
+            default_theme: "system".to_string(),
         }
     }
 }
@@ -145,6 +151,10 @@ impl AppSettings {
                 .remove("max_upload_mb")
                 .and_then(|v| v.parse().ok())
                 .unwrap_or(default_max_upload_mb),
+            default_theme: map
+                .remove("default_theme")
+                .filter(|v| matches!(v.as_str(), "light" | "dark" | "system"))
+                .unwrap_or_else(|| "system".into()),
         })
     }
 }

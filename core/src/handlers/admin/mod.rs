@@ -15,9 +15,13 @@ fn role_display_name(role: &str) -> String {
 /// Build a [`admin::PageContext`] synchronously (unread count defaults to 0).
 /// Prefer `page_ctx_full` in async handlers to include the live unread badge count.
 pub fn page_ctx(state: &AppState, admin: &AdminUser, current_site: &str) -> admin::PageContext {
-    let app_name = state.app_settings.read()
-        .map(|s| s.app_name.clone())
-        .unwrap_or_else(|_| "Synaptic".to_string());
+    let (app_name, default_theme) = {
+        let s = state.app_settings.read();
+        match s {
+            Ok(s) => (s.app_name.clone(), s.default_theme.clone()),
+            Err(_) => ("Synaptic".to_string(), "system".to_string()),
+        }
+    };
 
     admin::PageContext {
         current_site: current_site.to_string(),
@@ -37,6 +41,7 @@ pub fn page_ctx(state: &AppState, admin: &AdminUser, current_site: &str) -> admi
         unread_forms_count: 0,
         app_name,
         logo_url: state.logo_url.clone(),
+        default_theme,
     }
 }
 

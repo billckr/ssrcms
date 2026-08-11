@@ -1504,6 +1504,7 @@ mod tests {
             unread_forms_count: 0,
             app_name: "Synaptic".to_string(),
             logo_url: None,
+            default_theme: "system".to_string(),
         }
     }
 

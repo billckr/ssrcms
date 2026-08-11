@@ -1,12 +1,18 @@
 //! Public subscriber signup page (standalone, no admin sidebar).
 
 /// Render the signup form. `error` may contain a validation or conflict message.
-pub fn render(error: Option<&str>, site_name: &str) -> String {
+/// `default_theme` is the site-wide fallback appearance ("light"/"dark"/"system")
+/// from Settings → General → Appearance.
+pub fn render(error: Option<&str>, site_name: &str, default_theme: &str) -> String {
     let error_html = match error {
         Some(msg) => format!(r#"<div class="error">{}</div>"#, crate::html_escape(msg)),
         None => String::new(),
     };
     let site_name = crate::html_escape(site_name);
+    let default_theme = match default_theme {
+        "light" | "dark" => default_theme,
+        _ => "system",
+    };
 
     format!(
         r#"<!DOCTYPE html>
@@ -15,6 +21,20 @@ pub fn render(error: Option<&str>, site_name: &str) -> String {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Subscribe — {site_name}</title>
+  <script>
+    // Applies the saved/system theme before first paint (same key + logic as
+    // the admin shell in lib.rs) so this standalone page matches whatever
+    // theme the user last chose there instead of always rendering light.
+    (function() {{
+      try {{
+        var pref = localStorage.getItem('admin-theme') || '{default_theme}';
+        var dark = pref === 'dark' || (pref === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        if (dark) {{
+          document.documentElement.setAttribute('data-theme', 'dark');
+        }}
+      }} catch (e) {{}}
+    }})();
+  </script>
   <style>{css}</style>
 </head>
 <body class="login-body">
@@ -132,8 +152,12 @@ pub fn render(error: Option<&str>, site_name: &str) -> String {
 }
 
 /// Render the post-signup success page.
-pub fn render_success(site_name: &str) -> String {
+pub fn render_success(site_name: &str, default_theme: &str) -> String {
     let site_name = crate::html_escape(site_name);
+    let default_theme = match default_theme {
+        "light" | "dark" => default_theme,
+        _ => "system",
+    };
 
     format!(
         r#"<!DOCTYPE html>
@@ -142,6 +166,17 @@ pub fn render_success(site_name: &str) -> String {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Subscribed — {site_name}</title>
+  <script>
+    (function() {{
+      try {{
+        var pref = localStorage.getItem('admin-theme') || '{default_theme}';
+        var dark = pref === 'dark' || (pref === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        if (dark) {{
+          document.documentElement.setAttribute('data-theme', 'dark');
+        }}
+      }} catch (e) {{}}
+    }})();
+  </script>
   <style>{css}</style>
 </head>
 <body class="login-body">
