@@ -230,12 +230,38 @@ a.stat-cell-link:hover { background: var(--tint); }
 .icon-search-box input[type=search]:focus { outline: none; border-color: var(--text); }
 
 /* Tinted box separating one distinct field/option from its neighbors within
-   the same card body — same fix applied to Form Designer's Settings card
-   and its field rows, reused wherever a card body would otherwise stack
-   several unrelated fields with nothing visually telling them apart. */
+   the same card body — used wherever a .card-boxed-body would otherwise
+   stack several unrelated fields/rows with nothing visually telling them
+   apart (Form Designer's Settings card is one example; see the other
+   .card-boxed-section usages across admin/src/pages/*.rs for the rest).
+   Light mode needs the visible box: --tint (~#f8fafc) sits so close to
+   --surface (#fff) that stacked white-on-white fields bleed together
+   without an explicit border+fill telling you where one group ends and
+   the next begins.
+   Dark mode does NOT need it: --surface/--tint/--field-bg already read as
+   distinct enough tones from each other that the extra box is redundant
+   visual noise rather than a clarity aid — so it's neutralized to
+   transparent below rather than removed from the markup. The div, its
+   padding, and its margin-bottom spacing all stay in dark mode; only the
+   background/border paint is turned off.
+   If another boxed-looking element (card-boxed, badges, panel sections,
+   etc.) turns out to have the same "helps in light mode, redundant in
+   dark mode" problem, follow this same pattern rather than inventing a
+   new one: keep the light-mode rule building on --tint/--border as-is,
+   then add a `:root[data-theme="dark"] .the-class { background:
+   transparent; border-color: transparent; }` override immediately after
+   it — don't touch the base rule itself for a dark-only fix like this,
+   that changes light mode too by accident. */
 .card-boxed-section { border: 1px solid var(--border); border-radius: var(--radius); padding: .85rem 1rem; margin-bottom: .6rem; background: var(--tint); }
 .card-boxed-section:last-child { margin-bottom: 0; }
 .card-boxed-section .form-group { margin: 0; }
+:root[data-theme="dark"] .card-boxed-section { background: transparent; border-color: transparent; }
+/* Opt-in modifier for a specific page/section that wants the box gone in
+   BOTH themes (not just dark, which already gets it above) — e.g. a page
+   dense enough that the extra border/fill is noise even in light mode.
+   Add class="card-boxed-section card-boxed-section-hidden" in markup;
+   layout (padding/margin) is untouched, only the paint is dropped. */
+.card-boxed-section-hidden { background: transparent; border-color: transparent; }
 
 /* Badges */
 .badge { display: inline-block; padding: .1rem .4rem; border-radius: 3px; font-size: 11px; font-weight: 600; background: var(--tint); color: var(--muted); }
