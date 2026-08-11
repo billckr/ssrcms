@@ -867,6 +867,63 @@ pub async fn api_set_sources_public(
     }
 }
 
+/// POST /admin/api/posts/{id}/sources — save just the source URL list (and
+/// the public-visibility toggle) without requiring a full post form submit.
+/// Mirrors api_set_sources_public but also carries the source URLs — the
+/// Sources card sits below the whole post form on the page, so a dedicated
+/// save action there is more discoverable than expecting the far-away main
+/// Save button to cover it too.
+pub async fn api_set_sources(
+    State(state): State<AppState>,
+    admin: AdminUser,
+    Path(id): Path<Uuid>,
+    axum::Json(body): axum::Json<serde_json::Value>,
+) -> impl IntoResponse {
+    let sources: Vec<String> = body.get("sources")
+        .and_then(|v| v.as_array())
+        .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+        .unwrap_or_default();
+    let public = body.get("public").and_then(|v| v.as_bool()).unwrap_or(false);
+
+    let post = match crate::models::post::get_by_id(&state.db, id).await {
+        Ok(p) => p,
+        Err(_) => return (axum::http::StatusCode::NOT_FOUND, axum::Json(serde_json::json!({"error": "Not found"}))).into_response(),
+    };
+    if !admin.caps.is_global_admin && post.site_id != admin.site_id {
+        return (axum::http::StatusCode::FORBIDDEN, axum::Json(serde_json::json!({"error": "Forbidden"}))).into_response();
+    }
+    if admin.site_role == "author" && post.author_id != admin.user.id {
+        return (axum::http::StatusCode::FORBIDDEN, axum::Json(serde_json::json!({"error": "Forbidden"}))).into_response();
+    }
+
+    let update = UpdatePost {
+        title: None,
+        slug: None,
+        content: None,
+        content_format: None,
+        excerpt: None,
+        status: None,
+        featured_image_id: None,
+        clear_featured_image: false,
+        published_at: None,
+        template: None,
+        clear_post_password: false,
+        new_post_password_hash: None,
+        comments_enabled: None,
+        parent_id: None,
+        sources: Some(sources),
+        sources_public: Some(public),
+    };
+
+    match crate::models::post::update(&state.db, id, &update).await {
+        Ok(_) => axum::Json(serde_json::json!({"ok": true})).into_response(),
+        Err(e) => {
+            tracing::error!("failed to update sources for post {}: {:?}", id, e);
+            (axum::http::StatusCode::INTERNAL_SERVER_ERROR, axum::Json(serde_json::json!({"error": "Update failed"}))).into_response()
+        }
+    }
+}
+
 pub async fn delete_post(
     State(state): State<AppState>,
     admin: AdminUser,

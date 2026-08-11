@@ -606,11 +606,16 @@ fn widgets_section(
     box-shadow: var(--shadow); padding: .72rem 1rem 1rem; user-select: none;
     min-width: 0;
   }}
-  .widget-card h3 {{ margin: 0; font-size: .95rem; font-weight: 600; }}
+  .widget-card h3 {{ margin: 0; font-size: .95rem; font-weight: 600; line-height: 1.2; }}
   .widget-body {{ flex: 1; min-width: 0; }}
   .widget-drag-handle {{ display: block; flex-shrink: 0; padding: 0; margin-top: .04rem; color: var(--muted); font-size: .9rem; line-height: 1; cursor: grab; }}
   /* Boxed widgets: grey header bar (drag handle + title) flush to the card edges,
-     matching the Menus list table's grey-header/white-body look. */
+     matching the Menus list table's grey-header/white-body look. Height here
+     is a standalone copy of .card-boxed-header's own height fix (same
+     .48rem padding + line-height:1.2 on the title) rather than sharing the
+     selector, so this widget-specific header can keep evolving on its own —
+     see the .card-boxed-header comment in admin.css for the full reasoning
+     behind matching .data-table th's rendered height. */
   .widget-card-boxed {{ flex-direction: column; align-items: stretch; padding: 0; overflow: hidden; }}
   .widget-card-header {{
     display: flex; align-items: center; gap: .5rem;

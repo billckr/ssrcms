@@ -829,16 +829,24 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
         format!(
             r#"<div class="source-row" style="display:flex;gap:.5rem;margin-bottom:.5rem;align-items:center">
         <input type="url" class="source-url-input" value="{url}" placeholder="https://example.com/article" style="flex:1">
-        <button type="button" class="icon-btn icon-danger" title="Remove" onclick="this.closest('.source-row').remove(); markDirty();">
-          <img src="/admin/static/icons/trash.svg" alt="Remove">
-        </button>
+        <div class="icon-pill" style="align-self:center;margin-top:0">
+          <button type="button" class="icon-btn icon-danger" title="Remove" onclick="this.closest('.source-row').remove(); markSourcesDirty();">
+            <img src="/admin/static/icons/trash.svg" alt="Remove">
+          </button>
+        </div>
       </div>"#,
             url = crate::html_escape(url),
         )
     }).collect();
     let sources_json = serde_json::to_string(&post.sources).unwrap_or_else(|_| "[]".to_string());
-    let sources_section = format!(
-        r#"<div class="card-boxed">
+    // Sources is an editorial/citation feature — fits blog posts, not
+    // structural content like an About or Contact page, so it's hidden for
+    // pages rather than shown empty.
+    let sources_section = if post.post_type == "page" {
+        String::new()
+    } else {
+        format!(
+            r#"<div class="card-boxed">
       <h2 class="card-boxed-header">Sources</h2>
       <div class="card-boxed-body">
         <div class="form-group" style="margin-bottom:.75rem">
@@ -850,17 +858,30 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
         </div>
         <div id="sources-list">{source_rows}</div>
         <div class="icon-pill">
-          <button type="button" class="icon-btn" title="Add Source URL" aria-label="Add Source URL" onclick="addSourceRow()">
+          <button type="button" class="icon-btn" id="add-source-btn" title="Add Source URL" aria-label="Add Source URL" onclick="addSourceRow()">
             <img src="/admin/static/icons/file-plus.svg" alt="">
           </button>
+          {save_sources_btn}
         </div>
+        <span id="sources-saved" style="display:none;color:var(--muted);font-size:12px;margin-left:.5rem">Saved</span>
         <input type="hidden" id="sources_json" name="sources_json" value='{sources_json_attr}'>
       </div>
     </div>"#,
-        sources_public_checked = sources_public_checked,
-        source_rows = source_rows,
-        sources_json_attr = crate::html_escape(&sources_json),
-    );
+            sources_public_checked = sources_public_checked,
+            source_rows = source_rows,
+            sources_json_attr = crate::html_escape(&sources_json),
+            // Only meaningful once the post exists (the save endpoint needs
+            // an id) — for a brand-new, not-yet-saved post, sources are
+            // covered by the main Save like everything else.
+            save_sources_btn = if post.id.is_some() {
+                r#"<button type="button" class="icon-btn" id="save-sources-btn" title="Save Sources" aria-label="Save Sources" onclick="saveSources()" disabled>
+            <img src="/admin/static/icons/save.svg" alt="">
+          </button>"#
+            } else {
+                ""
+            },
+        )
+    };
 
     let mut content = format!(
         r#"<link rel="stylesheet" href="/admin/static/quill/quill.snow.css">
@@ -1024,9 +1045,10 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
   var postForm = document.querySelector('form');
   ['input', 'change'].forEach(function(evt) {{
     postForm.addEventListener(evt, function(e) {{
-      // The sources-public checkbox auto-saves itself and shows its own
-      // "Saved" indicator — it shouldn't also flag the whole form dirty.
-      if (e.target && e.target.id === 'sources-public-cb') return;
+      // The sources-public checkbox and source URL rows are covered by the
+      // dedicated Save Sources button (see saveSources/markSourcesDirty) —
+      // they shouldn't also flag the main post form dirty.
+      if (e.target && (e.target.id === 'sources-public-cb' || e.target.classList.contains('source-url-input'))) return;
       markDirty();
     }});
   }});
@@ -1062,17 +1084,52 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
   }});
 
   // ── Sources ───────────────────────────────────────────────────────────
+  // Save Sources starts disabled and only enables once a URL is actually
+  // typed/removed AND every non-empty source field looks like a real
+  // http(s):// URL — matches the post editor's own Save-until-dirty
+  // pattern, plus a validity gate so a half-typed/garbage entry can't be
+  // saved by accident.
+  var sourcesDirty = false;
+  function isValidSourceUrl(v) {{
+    return /^https?:\/\/[^\s]+\.[^\s]+$/i.test(v.trim());
+  }}
+  function syncSourcesSaveState() {{
+    var btn = document.getElementById('save-sources-btn');
+    if (!btn) return;
+    var allValid = Array.prototype.every.call(document.querySelectorAll('.source-url-input'), function(el) {{
+      var v = el.value.trim();
+      var valid = v === '' || isValidSourceUrl(v);
+      el.classList.toggle('field-invalid', !valid);
+      return valid;
+    }});
+    btn.disabled = !sourcesDirty || !allValid;
+  }}
+  window.markSourcesDirty = function() {{
+    sourcesDirty = true;
+    syncSourcesSaveState();
+  }};
+  var sourcesListEl = document.getElementById('sources-list');
+  if (sourcesListEl) {{
+    sourcesListEl.addEventListener('input', function(e) {{
+      if (e.target && e.target.classList.contains('source-url-input')) markSourcesDirty();
+    }});
+  }}
+
+  // Only one not-yet-saved new row is allowed at a time — Add Source URL
+  // stays disabled until that row is either saved (via Save Sources) or
+  // removed, so unsaved blank rows can't pile up.
   window.addSourceRow = function() {{
+    var addBtn = document.getElementById('add-source-btn');
     var list = document.getElementById('sources-list');
     var row = document.createElement('div');
     row.className = 'source-row';
     row.style.cssText = 'display:flex;gap:.5rem;margin-bottom:.5rem;align-items:center';
     row.innerHTML = '<input type="url" class="source-url-input" placeholder="https://example.com/article" style="flex:1">'
-      + '<button type="button" class="icon-btn icon-danger" title="Remove" onclick="this.closest(\'.source-row\').remove(); markDirty();">'
-      + '<img src="/admin/static/icons/trash.svg" alt="Remove"></button>';
+      + '<div class="icon-pill" style="align-self:center;margin-top:0"><button type="button" class="icon-btn icon-danger" title="Remove" onclick="this.closest(\'.source-row\').remove(); markSourcesDirty(); var b=document.getElementById(\'add-source-btn\'); if (b) b.disabled = false;">'
+      + '<img src="/admin/static/icons/trash.svg" alt="Remove"></button></div>';
     list.appendChild(row);
     row.querySelector('input').focus();
-    markDirty();
+    if (addBtn) addBtn.disabled = true;
   }};
 
   // Auto-save the "Show sources on the live page" toggle immediately on
@@ -1098,13 +1155,45 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
     }});
   }})();
 
+  // Save just the Sources list (+ the public toggle) without submitting the
+  // whole post form — the Sources card sits below the main editor, far from
+  // the primary Save button, so a dedicated save action here is more
+  // discoverable than expecting the reader to scroll back up.
+  window.saveSources = function() {{
+    var postId = {post_id_js};
+    if (!postId) return;
+    var cb = document.getElementById('sources-public-cb');
+    var saved = document.getElementById('sources-saved');
+    var sourceUrls = Array.prototype.slice.call(document.querySelectorAll('.source-url-input'))
+      .map(function(el) {{ return el.value.trim(); }})
+      .filter(function(v) {{ return v.length > 0; }});
+    fetch('/admin/api/posts/' + postId + '/sources', {{
+      method: 'POST',
+      headers: {{ 'Content-Type': 'application/json' }},
+      body: JSON.stringify({{ sources: sourceUrls, public: cb ? cb.checked : false }}),
+    }}).then(function(r) {{
+      if (r.ok) {{
+        sourcesDirty = false;
+        syncSourcesSaveState();
+        var addBtn = document.getElementById('add-source-btn');
+        if (addBtn) addBtn.disabled = false;
+        if (saved) {{
+          saved.style.display = '';
+          clearTimeout(saved._hideTimer);
+          saved._hideTimer = setTimeout(function() {{ saved.style.display = 'none'; }}, 2000);
+        }}
+      }}
+    }});
+  }};
+
   // On submit, copy Quill HTML into the hidden input and validate excerpt
   document.querySelector('form').addEventListener('submit', function(e) {{
     document.getElementById('content').value = quill.root.innerHTML;
     var sourceUrls = Array.prototype.slice.call(document.querySelectorAll('.source-url-input'))
       .map(function(el) {{ return el.value.trim(); }})
       .filter(function(v) {{ return v.length > 0; }});
-    document.getElementById('sources_json').value = JSON.stringify(sourceUrls);
+    var sourcesJsonInput = document.getElementById('sources_json');
+    if (sourcesJsonInput) sourcesJsonInput.value = JSON.stringify(sourceUrls);
     var excerpt = document.getElementById('excerpt').value.trim();
     if (!excerpt) {{
       e.preventDefault();
