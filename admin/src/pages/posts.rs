@@ -525,12 +525,12 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
 
     let live_url_link = match &post.live_url {
         Some(url) => format!(
-            r#"<a href="{url}" target="_blank" rel="noopener" style="display:inline-block;margin-top:.4rem;font-size:12px">View live &#x2197;</a>"#,
+            r#"<div class="icon-pill" style="margin-top:.4rem"><a href="{url}" class="icon-btn" title="View live" aria-label="View live" target="_blank" rel="noopener"><img src="/admin/static/icons/eye.svg" alt=""></a></div>"#,
             url = crate::html_escape(url),
         ),
         None => match &post.preview_url {
             Some(url) => format!(
-                r#"<a href="{url}" target="_blank" rel="noopener" style="display:inline-block;margin-top:.4rem;font-size:12px">Preview &#x2197;</a>"#,
+                r#"<div class="icon-pill" style="margin-top:.4rem"><a href="{url}" class="icon-btn" title="Preview" aria-label="Preview" target="_blank" rel="noopener"><img src="/admin/static/icons/eye.svg" alt=""></a></div>"#,
                 url = crate::html_escape(url),
             ),
             None => String::new(),
@@ -658,9 +658,7 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
                 ("Post", format!("/admin/posts/{}/delete", id))
             };
             format!(
-                r#"<button type="button" class="icon-btn icon-danger" title="Delete {label}" aria-label="Delete {label}" onclick="deletePostConfirm('{path}', '{label_lower}')">
-            <img src="/admin/static/icons/delete.svg" alt="">
-          </button>"#,
+                r##"<a href="#" style="font-size:12px;font-weight:600;color:var(--danger)" onclick="event.preventDefault();deletePostConfirm('{path}', '{label_lower}')">Delete {label}</a>"##,
                 label = label,
                 label_lower = label.to_lowercase(),
                 path = crate::html_escape(&path),
@@ -948,7 +946,10 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
       {author_card}
       {template_section}
       <div class="form-section">
-        <h3>Publish</h3>
+        <h3 style="display:flex;align-items:center;justify-content:space-between;gap:.5rem">
+          <span>Publish</span>
+          {delete_btn_inline}
+        </h3>
         <div class="card-boxed-section">
           <div class="form-group">
             <label for="status">Status</label>
@@ -969,7 +970,6 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
             <button type="submit" class="icon-btn" id="save-btn" title="Save" aria-label="Save" disabled>
               <img src="/admin/static/icons/save.svg" alt="">
             </button>
-            {delete_btn_inline}
           </div>
           <span id="unsaved-indicator" style="display:none;color:var(--danger);font-size:12px;font-weight:600">Unsaved changes</span>
         </div>
@@ -1052,6 +1052,11 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
       // dedicated Save Sources button (see saveSources/markSourcesDirty) —
       // they shouldn't also flag the main post form dirty.
       if (e.target && (e.target.id === 'sources-public-cb' || e.target.classList.contains('source-url-input'))) return;
+      // Just checking "Password Protected" reveals the password field but
+      // hasn't actually changed anything worth saving yet — only count it
+      // once a password is typed. Unchecking it (removing protection) IS a
+      // real change on its own, so that still marks dirty immediately.
+      if (e.target && e.target.id === 'post-protected-cb' && e.target.checked) return;
       markDirty();
     }});
   }});
