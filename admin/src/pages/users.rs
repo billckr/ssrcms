@@ -1368,7 +1368,11 @@ pub fn render_site_access(
       <option value="subscriber"{subscriber_selected}>Subscriber</option>
     </select>
   </div>
-  <button type="submit" class="btn btn-primary" id="assign-btn" disabled>Assign</button>
+  <div class="icon-pill" style="margin-top:1.5rem">
+    <button type="submit" class="icon-btn" id="assign-btn" title="Assign" aria-label="Assign" disabled>
+      <img src="/admin/static/icons/save.svg" alt="">
+    </button>
+  </div>
 </form>
 
 <!-- Existing Site Admin modal -->
@@ -1499,15 +1503,17 @@ pub fn render_site_access(
     let content = format!(
         r#"<div class="two-col">
   <div>
-    <h2>Current Site Access</h2>
+    <h2>User Access + Role</h2>
     <table class="data-table">
       <thead><tr><th>Site</th><th>Role</th><th>Actions</th></tr></thead>
       <tbody>{rows}</tbody>
     </table>
   </div>
-  <div>
-    <h2>Add to a Site</h2>
+  <div class="card-boxed">
+    <h2 class="card-boxed-header">Site Access</h2>
+    <div class="card-boxed-body">
     {add_form}
+    </div>
   </div>
 </div>"#,
         rows     = assignment_rows,
