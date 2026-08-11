@@ -115,14 +115,14 @@ pub fn sites_list_fragment(sites: &[SiteRow], page: i64, total_pages: i64, searc
             String::new()
         } else if s.ssl_active {
             r#"<span class="ssl-badge ssl-active" title="SSL active — Caddy block provisioned">
-                 <img src="/admin/static/icons/lock.svg" alt="SSL active" style="width:14px;height:14px;vertical-align:middle;filter:invert(35%) sepia(80%) saturate(500%) hue-rotate(95deg)">
+                 <img src="/admin/static/icons/lock.svg" alt="SSL active" style="width:18px;height:18px;vertical-align:middle;filter:invert(35%) sepia(80%) saturate(500%) hue-rotate(95deg)">
                </span>"#.to_string()
         } else {
             format!(
                 r#"<form method="post" action="/admin/sites/{id}/provision-ssl" style="display:inline"
-                        onsubmit="return confirm('Add SSL (Caddy block) for {hostname_js}?\n\nEnsure DNS for this domain points to this server before proceeding.\nCaddy will provision the Let\'s Encrypt certificate automatically.')">
+                        onsubmit="return confirm('Add SSL (Caddy block) for {hostname_js}?\n\nDNS for this domain must already point to this server — we\'ll check and let you know if it isn\'t ready yet.\nCaddy will provision the Let\'s Encrypt certificate automatically.')">
                      <button type="submit" class="ssl-badge ssl-inactive" title="SSL not provisioned — click to set up">
-                       <img src="/admin/static/icons/lock.svg" alt="Provision SSL" style="width:14px;height:14px;vertical-align:middle;opacity:0.4">
+                       <img src="/admin/static/icons/lock.svg" alt="Provision SSL" style="width:18px;height:18px;vertical-align:middle;opacity:0.4">
                      </button>
                    </form>"#,
                 id          = crate::html_escape(&s.id),
@@ -146,7 +146,7 @@ pub fn sites_list_fragment(sites: &[SiteRow], page: i64, total_pages: i64, searc
 
         format!(
             r#"<tr>
-              <td><a href="{site_url}" target="_blank" rel="noopener noreferrer">{hostname}</a>{default_badge} {ssl_badge}{maintenance_badge}</td>
+              <td><a href="{site_url}" target="_blank" rel="noopener noreferrer">{hostname}</a>{default_badge} {maintenance_badge}</td>
               <td style="color:var(--muted);font-size:0.875rem">{admin_email}</td>
               <td><span style="display:inline-block;background:var(--tint);color:var(--text);border-radius:4px;padding:.15rem .5rem;font-size:.78rem;font-weight:500">{user_count}</span></td>
               <td><span style="display:inline-block;background:var(--tint);color:var(--text);border-radius:4px;padding:.15rem .5rem;font-size:.78rem;font-weight:500">{subscriber_count}</span></td>
@@ -155,6 +155,7 @@ pub fn sites_list_fragment(sites: &[SiteRow], page: i64, total_pages: i64, searc
               <td class="actions">
                 {switch_btn}
                 {users_link}
+                {ssl_badge}
                 {manage}
               </td>
             </tr>"#,

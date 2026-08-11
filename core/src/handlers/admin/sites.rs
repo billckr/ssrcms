@@ -857,6 +857,13 @@ pub async fn provision_ssl(
         return Redirect::to("/admin/sites?flash=SSL+already+active+for+this+site").into_response();
     }
 
+    if !dns_points_here(hostname).await {
+        tracing::info!(hostname = %hostname, "provision_ssl: DNS not pointing here yet, refusing to provision");
+        return Redirect::to(
+            "/admin/sites?flash=DNS+for+this+domain+doesn%27t+point+to+this+server+yet+%E2%80%94+wait+for+it+to+propagate+and+try+again"
+        ).into_response();
+    }
+
     let block = build_caddy_block(
         hostname,
         state.config.port,
@@ -895,6 +902,39 @@ pub async fn provision_ssl(
     }
 
     Redirect::to("/admin/sites?flash=SSL+provisioning+started+for+this+site").into_response()
+}
+
+/// Does `hostname` currently resolve (via the system DNS resolver, which also
+/// honors /etc/hosts) to this machine's real, outward-routable IP?
+///
+/// Deliberately does NOT accept loopback as a match: real ACME/Let's Encrypt
+/// issuance (what provisioning actually triggers) can never succeed for a
+/// loopback-only domain — it needs a publicly reachable server. A local dev
+/// machine's /etc/hosts entries pointing at 127.0.0.1 are for the catch-all
+/// `tls internal` Caddy block, not for real certificate issuance, so those
+/// domains should correctly be reported as "not pointing here yet."
+async fn dns_points_here(hostname: &str) -> bool {
+    let resolved: Vec<std::net::IpAddr> = match tokio::net::lookup_host((hostname, 0)).await {
+        Ok(addrs) => addrs.map(|a| a.ip()).collect(),
+        Err(e) => {
+            tracing::info!(hostname = %hostname, error = %e, "dns_points_here: lookup failed");
+            return false;
+        }
+    };
+    if resolved.is_empty() {
+        return false;
+    }
+    let local_ip = outbound_local_ip();
+    resolved.iter().any(|ip| Some(*ip) == local_ip)
+}
+
+/// This machine's IP on the interface the OS would use to reach the public
+/// internet. Uses the standard "connect a UDP socket, read back local_addr"
+/// trick — connect() on UDP just resolves routing locally, no packets sent.
+fn outbound_local_ip() -> Option<std::net::IpAddr> {
+    let socket = std::net::UdpSocket::bind("0.0.0.0:0").ok()?;
+    socket.connect("8.8.8.8:80").ok()?;
+    socket.local_addr().ok().map(|addr| addr.ip())
 }
 
 /// Returns true if the Caddyfile already contains a block for `hostname`.
