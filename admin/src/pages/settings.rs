@@ -263,7 +263,11 @@ pub fn render(
       </div>
     </div>
     <div style="margin-top:1rem">
-      <button type="button" class="btn btn-primary" onclick="seedUsers()" id="dtUserBtn" disabled>Seed Users</button>
+      <div class="icon-pill">
+        <button type="button" class="icon-btn" onclick="seedUsers()" id="dtUserBtn" title="Seed Users" aria-label="Seed Users" disabled>
+          <img src="/admin/static/icons/users.svg" alt="">
+        </button>
+      </div>
       <span class="dt-spinner" id="dtUserSpinner" hidden></span>
       <pre id="dtUserResult" class="dt-result"></pre>
     </div>
@@ -312,7 +316,11 @@ pub fn render(
       </div>
     </div>
     <div style="margin-top:1rem">
-      <button type="button" class="btn btn-primary" onclick="seedPosts()" id="dtPostBtn" disabled>Seed Posts</button>
+      <div class="icon-pill">
+        <button type="button" class="icon-btn" onclick="seedPosts()" id="dtPostBtn" title="Seed Posts" aria-label="Seed Posts" disabled>
+          <img src="/admin/static/icons/file-text.svg" alt="">
+        </button>
+      </div>
       <span class="dt-spinner" id="dtPostSpinner" hidden></span>
       <pre id="dtPostResult" class="dt-result"></pre>
     </div>
@@ -343,7 +351,11 @@ pub fn render(
       </div>
     </div>
     <div style="margin-top:1rem">
-      <button type="button" class="btn btn-danger" onclick="clearTestData()" id="dtClearBtn">Clear Test Data</button>
+      <div class="icon-pill">
+        <button type="button" class="icon-btn icon-danger" onclick="clearTestData()" id="dtClearBtn" title="Clear Test Data" aria-label="Clear Test Data">
+          <img src="/admin/static/icons/delete.svg" alt="">
+        </button>
+      </div>
       <span class="dt-spinner" id="dtClearSpinner" hidden></span>
       <pre id="dtClearResult" class="dt-result"></pre>
     </div>

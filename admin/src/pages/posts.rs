@@ -650,7 +650,7 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
         String::new()
     };
 
-    let delete_section = match &post.id {
+    let delete_btn_inline = match &post.id {
         Some(id) => {
             let (label, path) = if post.post_type == "page" {
                 ("Page", format!("/admin/pages/{}/delete", id))
@@ -658,16 +658,9 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
                 ("Post", format!("/admin/posts/{}/delete", id))
             };
             format!(
-                r#"<div class="card-boxed">
-      <h2 class="card-boxed-header">Delete {label}</h2>
-      <div class="card-boxed-body">
-        <div class="icon-pill">
-          <button type="button" class="icon-btn icon-danger" title="Delete {label}" aria-label="Delete {label}" onclick="deletePostConfirm('{path}', '{label_lower}')">
+                r#"<button type="button" class="icon-btn icon-danger" title="Delete {label}" aria-label="Delete {label}" onclick="deletePostConfirm('{path}', '{label_lower}')">
             <img src="/admin/static/icons/delete.svg" alt="">
-          </button>
-        </div>
-      </div>
-    </div>"#,
+          </button>"#,
                 label = label,
                 label_lower = label.to_lowercase(),
                 path = crate::html_escape(&path),
@@ -897,12 +890,12 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
           <div class="card-boxed-section">
             <div style="display:grid;grid-template-columns:1fr auto;gap:.75rem;align-items:start">
               <div class="form-group" style="margin:0">
-                <label for="title">Title <span style="color:var(--danger);font-weight:700">*</span></label>
+                <label for="title"><span style="display:inline-block;background:var(--tint);color:var(--text);border-radius:999px;padding:.15rem .65rem;font-size:.78rem;font-weight:600">Title</span> <span style="color:var(--danger);font-weight:700">*</span></label>
                 <input type="text" id="title" name="title" value="{title_val}" required class="title-input" maxlength="255"{autofocus}>
                 <small id="title-count" style="color:var(--muted)">255 remaining</small>
               </div>
               <div class="form-group" style="margin:0;min-width:200px;max-width:280px">
-                <label for="slug">Slug</label>
+                <label for="slug"><span style="display:inline-block;background:var(--tint);color:var(--text);border-radius:999px;padding:.15rem .65rem;font-size:.78rem;font-weight:600">Slug</span></label>
                 <input type="text" id="slug" name="slug" value="{slug}" maxlength="200"
                   onkeydown="if(event.key===' '){{ event.preventDefault(); var i=this.selectionStart; this.value=this.value.slice(0,i)+'-'+this.value.slice(this.selectionEnd); this.selectionStart=this.selectionEnd=i+1; }}"
                   onblur="this.value=this.value.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'');">
@@ -911,14 +904,14 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
           </div>
           <div class="card-boxed-section">
             <div class="form-group">
-              <label for="excerpt">Excerpt <span style="color:var(--danger);font-weight:700">*</span> <small style="font-weight:400;color:var(--muted)">Used as meta description — required for SEO</small></label>
+              <label for="excerpt"><span style="display:inline-block;background:var(--tint);color:var(--text);border-radius:999px;padding:.15rem .65rem;font-size:.78rem;font-weight:600">Excerpt</span> <span style="color:var(--danger);font-weight:700">*</span> <small style="font-weight:400;color:var(--muted)">Used as meta description — required for SEO</small></label>
               <textarea id="excerpt" name="excerpt" rows="3" required maxlength="500" style="resize:none">{excerpt}</textarea>
               <small id="excerpt-count" style="color:var(--muted)">500 remaining</small>
             </div>
           </div>
           <div class="card-boxed-section">
             <div class="form-group">
-              <label>Content <span style="color:var(--danger);font-weight:700">*</span></label>
+              <label><span style="display:inline-block;background:var(--tint);color:var(--text);border-radius:999px;padding:.15rem .65rem;font-size:.78rem;font-weight:600">Content</span> <span style="color:var(--danger);font-weight:700">*</span></label>
               <div id="quill-editor" style="height:620px;background:var(--field-bg);font-size:1rem"></div>
               <input type="hidden" id="content" name="content">
             </div>
@@ -949,9 +942,10 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
         <input type="hidden" name="post_type" value="{post_type}">
         <div style="display:flex;align-items:center;gap:.6rem">
           <div class="icon-pill">
-            <button type="submit" class="icon-btn" title="Save" aria-label="Save">
+            <button type="submit" class="icon-btn" id="save-btn" title="Save" aria-label="Save" disabled>
               <img src="/admin/static/icons/save.svg" alt="">
             </button>
+            {delete_btn_inline}
           </div>
           <span id="unsaved-indicator" style="display:none;color:var(--danger);font-size:12px;font-weight:600">Unsaved changes</span>
         </div>
@@ -960,7 +954,6 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
       {inline_media_section}
       {parent_section}
       {categories_section}
-      {delete_section}
     </div>
   </div>
 </form>
@@ -1024,6 +1017,8 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
     formDirty = true;
     var el = document.getElementById('unsaved-indicator');
     if (el) el.style.display = '';
+    var saveBtn = document.getElementById('save-btn');
+    if (saveBtn) saveBtn.disabled = false;
   }}
   window.markDirty = markDirty;
   var postForm = document.querySelector('form');
@@ -1342,7 +1337,7 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
         author_card = author_card,
         sources_section = sources_section,
         live_url_link = live_url_link,
-        delete_section = delete_section,
+        delete_btn_inline = delete_btn_inline,
     );
 
     let path = if post.post_type == "page" { "/admin/pages" } else { "/admin/posts" };
