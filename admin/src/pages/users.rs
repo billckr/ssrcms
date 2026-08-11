@@ -874,7 +874,7 @@ pub fn render_editor(user: &UserEdit, flash: Option<&str>, ctx: &crate::PageCont
             )
         }).collect::<Vec<_>>().join("\n");
         format!(r#"
-<div class="form-group" style="margin-top:0.5rem">
+<div class="form-group" style="margin:0">
   <label>Site Assignment</label>
   <div style="display:flex;gap:1.5rem;margin:0.4rem 0 0.75rem;flex-wrap:wrap">
     <label class="radio-label">
@@ -912,27 +912,30 @@ function toggleSiteFields() {{
         String::new()
     };
 
-    // Role + site-assignment box — only has visible content on the new-user
-    // form (an editable role dropdown + site picker). On edit, role_field is
-    // just a hidden input (role is read-only here, changed via /site-access)
-    // and site_section is empty, so wrapping it in a visible bordered box
-    // left a pointless empty section — keep the hidden input (still needed
-    // for form submission) but drop the box on edit.
-    let role_and_site_section = if is_new {
+    // Role box — only has visible content on the new-user form (an editable
+    // role dropdown). On edit, role_field is just a hidden input (role is
+    // read-only here, changed via /site-access), so wrapping it in a visible
+    // bordered box left a pointless empty section — keep the hidden input
+    // (still needed for form submission) but drop the box on edit.
+    let role_section_new = if is_new {
         format!(
             r#"<div class="card-boxed-section">
-    <div class="user-form-grid">
-      <div class="form-group">
+      <div class="form-group" style="margin:0">
         {role_field_inner}
       </div>
-      {site_section}
-    </div>
     </div>"#,
             role_field_inner = role_field,
-            site_section = site_section,
         )
     } else {
         role_field.clone()
+    };
+
+    // Site-assignment gets its own card-boxed-section, stacked below Role
+    // rather than side-by-side with it.
+    let site_assignment_section = if site_section.is_empty() {
+        String::new()
+    } else {
+        format!(r#"<div class="card-boxed-section">{site_section}</div>"#)
     };
 
     // Requirements checklist — new-user form only. Admins editing an existing
@@ -963,6 +966,7 @@ function toggleSiteFields() {{
       <p><strong>Role requirements:</strong></p>
       <ul style="list-style:none;padding-left:0;margin:0.25rem 0 0">
         <li id="role-req"><span class="pw-dot" style="display:inline-block;width:1.1rem;font-style:normal">·</span>Role selected</li>
+        <li id="site-req" style="display:none"><span class="pw-dot" style="display:inline-block;width:1.1rem;font-style:normal">·</span><span id="site-req-label">Site selected</span></li>
       </ul>
     </div>
     </div>"#
@@ -1011,7 +1015,8 @@ function toggleSiteFields() {{
     </div>
     {suspend_toggle}
     {requirements_section}
-    {role_and_site_section}
+    {role_section_new}
+    {site_assignment_section}
     {role_section}
   </form>
   {suspend_form}
@@ -1063,7 +1068,7 @@ function toggleSiteFields() {{
         if (roleHasValue) {{
           roleLi.style.color = '#16a34a'; if (roleDot) roleDot.textContent = '✓';
         }} else {{
-          roleLi.style.color = '#dc2626'; if (roleDot) roleDot.textContent = '✗';
+          roleLi.style.color = ''; if (roleDot) roleDot.textContent = '·';
         }}
       }}
 
@@ -1108,6 +1113,34 @@ function toggleSiteFields() {{
       if (hnHint && hnEl) {{
         var hnVal = hnEl.value.trim();
         hnHint.style.display = (assignEl && assignEl.value === 'new' && hnVal && !isValidHostname(hnVal)) ? '' : 'none';
+      }}
+      // Site-assignment requirement — only shown once "Existing" or "New" is
+      // picked (nothing to require when "None" is chosen); neutral until a
+      // site is actually selected/typed in, then green.
+      var siteLi = document.getElementById('site-req');
+      if (siteLi) {{
+        var siteDot = siteLi.querySelector('.pw-dot');
+        var siteLabel = siteLi.querySelector('#site-req-label');
+        var assignVal = assignEl ? assignEl.value : 'none';
+        if (assignVal === 'none' || !assignVal) {{
+          siteLi.style.display = 'none';
+        }} else {{
+          siteLi.style.display = '';
+          var satisfied = false;
+          if (assignVal === 'existing') {{
+            var siteSel = document.getElementById('site-existing-select');
+            satisfied = !!(siteSel && siteSel.value);
+            if (siteLabel) siteLabel.textContent = 'Existing site selected';
+          }} else if (assignVal === 'new') {{
+            satisfied = !!(hnEl && hnEl.value.trim() && isValidHostname(hnEl.value.trim()));
+            if (siteLabel) siteLabel.textContent = 'Valid domain entered';
+          }}
+          if (satisfied) {{
+            siteLi.style.color = '#16a34a'; if (siteDot) siteDot.textContent = '✓';
+          }} else {{
+            siteLi.style.color = ''; if (siteDot) siteDot.textContent = '·';
+          }}
+        }}
       }}
     }};
     function isValidHostname(h) {{
@@ -1196,7 +1229,8 @@ function toggleSiteFields() {{
         username          = crate::html_escape(&user.username),
         display_name      = crate::html_escape(&user.display_name),
         email             = crate::html_escape(&user.email),
-        role_and_site_section = role_and_site_section,
+        role_section_new = role_section_new,
+        site_assignment_section = site_assignment_section,
         requirements_section = requirements_section,
         suspend_toggle    = suspend_toggle,
         suspend_form      = suspend_form,
