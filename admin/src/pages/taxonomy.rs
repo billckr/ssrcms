@@ -24,12 +24,7 @@ pub fn render(terms: &[TermItem], taxonomy: &str, sort: &str, dir: &str, flash: 
   </div>
   <div>
     <div class="card-boxed">
-      <h2 class="card-boxed-header" style="display:flex;align-items:center;justify-content:space-between;gap:.5rem;">
-        <span>Add {title_s}</span>
-        <button type="submit" form="add-term-form" id="add-term-btn" class="icon-btn" title="Add {title_s}" aria-label="Add {title_s}" disabled>
-          <img src="/admin/static/icons/file-plus.svg" alt="">
-        </button>
-      </h2>
+      <h2 class="card-boxed-header">Add {title_s}</h2>
       <div class="card-boxed-body">
       <form method="POST" action="{path}/new" id="add-term-form">
         <div class="form-group">
@@ -44,6 +39,11 @@ pub fn render(terms: &[TermItem], taxonomy: &str, sort: &str, dir: &str, flash: 
           <small>Lowercase, hyphens only. Auto-filled from name as you type &mdash; edit it here to override.</small>
         </div>
         <input type="hidden" name="taxonomy" value="{taxonomy}">
+        <div class="icon-pill">
+          <button type="submit" form="add-term-form" id="add-term-btn" class="icon-btn" title="Add {title_s}" aria-label="Add {title_s}" disabled>
+            <img src="/admin/static/icons/file-plus.svg" alt="">
+          </button>
+        </div>
       </form>
       </div>
       <script>
@@ -99,13 +99,15 @@ fn render_table(terms: &[TermItem], path: &str, sort: &str, dir: &str) -> String
             r#"<tr>
               <td>{name}</td>
               <td>{slug}</td>
-              <td>{count}</td>
+              <td><span style="display:inline-block;background:var(--tint);color:var(--text);border-radius:4px;padding:.15rem .5rem;font-size:.78rem;font-weight:500">{count}</span></td>
               <td class="actions">
-                <form method="POST" action="{path}/{id}/delete" style="display:inline" onsubmit="return confirm('Delete?')">
-                  <button class="icon-btn icon-danger" title="Delete" type="submit">
-                    <img src="/admin/static/icons/trash.svg" alt="Delete">
-                  </button>
-                </form>
+                <div class="icon-pill-actionbuttons">
+                  <form method="POST" action="{path}/{id}/delete" style="display:inline" onsubmit="return confirm('Delete?')">
+                    <button class="icon-btn icon-danger" title="Delete" type="submit">
+                      <img src="/admin/static/icons/trash.svg" alt="Delete">
+                    </button>
+                  </form>
+                </div>
               </td>
             </tr>"#,
             name = crate::html_escape(&t.name),

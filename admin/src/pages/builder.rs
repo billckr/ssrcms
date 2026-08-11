@@ -121,7 +121,9 @@ pub fn render_project_list(projects: &[ProjectRow], sort: &str, dir: &str, flash
     let content = format!(
         r#"{flash_html}<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.5rem">
   <p style="margin:0;color:var(--muted)">Organise your site pages into projects. One project can be live at a time.</p>
-  <button type="button" class="icon-btn" title="New Project" aria-label="New Project" onclick="document.getElementById('new-project-dialog').showModal();document.querySelector('.admin-content').style.filter='blur(1.5px)'"><img src="/admin/static/icons/file-plus.svg" alt=""></button>
+  <div class="icon-pill">
+    <button type="button" class="icon-btn" title="New Project" aria-label="New Project" onclick="document.getElementById('new-project-dialog').showModal();document.querySelector('.admin-content').style.filter='blur(1.5px)'"><img src="/admin/static/icons/file-plus.svg" alt=""></button>
+  </div>
 </div>
 <table class="data-table" style="margin-bottom:2rem">
   <thead>

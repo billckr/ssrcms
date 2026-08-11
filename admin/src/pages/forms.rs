@@ -113,7 +113,9 @@ pub fn render_forms_list(
     </div>
   </div>
   <div style="display:flex;align-items:center;gap:.5rem">
-    <a href="/admin/form-designer/new" class="icon-btn" title="New Form" aria-label="New Form"><img src="/admin/static/icons/file-plus.svg" alt=""></a>
+    <div class="icon-pill">
+      <a href="/admin/form-designer/new" class="icon-btn" title="New Form" aria-label="New Form"><img src="/admin/static/icons/file-plus.svg" alt=""></a>
+    </div>
   </div>
 </div>
 <div class="table-wrap">

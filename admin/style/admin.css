@@ -494,6 +494,30 @@ tr.muted td { opacity: .55; }
 .icon-btn:disabled:hover img { filter: none; }
 :root[data-theme="dark"] .icon-btn:disabled:hover img { filter: invert(1); }
 
+/* Rounded "pill" wrapper for one or more icon-btns living outside a header
+   — e.g. a form's primary action placed below its last field instead of
+   in the card-boxed-header (the header felt novel but its icon-btn had to
+   be shrunk down small enough to keep the header's height matched to
+   .data-table th, which made the icon too small to read comfortably; this
+   is the same rounded-pill treatment as the header theme switch
+   (.theme-switch), just holding form actions instead of theme choices, at
+   .icon-btn's normal (unshrunk) size). Reuse this instead of a bare
+   icon-btn wherever a set of icon actions needs a distinct, contained
+   look rather than sitting flush against the page. */
+.icon-pill { display: inline-flex; align-self: flex-start; align-items: center; gap: 2px; background: var(--tint); border-radius: 999px; padding: .3rem; margin-top: .85rem; }
+.icon-pill .icon-btn { border: none; }
+
+/* Compact variant for a table's Actions column (e.g. /admin/sites) — same
+   rounded pill, same full-size (unshrunk) icon-btn inside, just without
+   .icon-pill's own margin-top/padding (which are tuned for sitting below a
+   form, not for a tight table row) so it doesn't add extra height on top
+   of .data-table's own cell padding. Wrap only the plain icon-btn actions
+   (switch/edit/delete, etc.) — leave differently-styled elements like
+   .ssl-badge outside it, since mixing an icon-btn's look with a colored
+   status-badge's look inside the same pill would read as inconsistent. */
+.icon-pill-actionbuttons { display: inline-flex; align-items: center; gap: 2px; background: var(--tint); border-radius: 999px; padding: .2rem; }
+.icon-pill-actionbuttons .icon-btn { border: none; }
+
 /* Header overflow menu — click the list icon to reveal theme toggle + logout,
    instead of showing them as separate always-visible header icons. */
 .header-menu { position: relative; }
@@ -547,7 +571,7 @@ details.form-section[open] summary { border-bottom: 1px solid var(--border); bor
 details.form-section summary .section-chevron { margin-left: auto; flex-shrink: 0; transition: transform .2s ease; }
 details.form-section[open] summary .section-chevron { transform: rotate(180deg); }
 details.form-section .form-section-body { padding: .75rem 1rem; }
-.inline-media-count { display: inline-block; background: #f3f4f6; color: #374151; border-radius: 4px; padding: .15rem .5rem; font-size: .78rem; font-weight: 500; }
+.inline-media-count { display: inline-block; background: var(--tint); color: var(--text); border-radius: 4px; padding: .15rem .5rem; font-size: .78rem; font-weight: 500; }
 .author-card { border-color: var(--border); }
 .author-card-name { display: block; font-weight: 600; font-size: 14px; color: var(--text); text-decoration: none; }
 a.author-card-name:hover { text-decoration: underline; }
@@ -770,13 +794,50 @@ body.sidebar-open .sidebar-overlay {
   overflow: hidden;
   margin-bottom: 2rem;
 }
+/* Height here is deliberately matched to .data-table th's rendered height
+   (.48rem vertical padding + 12px/1.5 line box ≈ 33px) so a page's table
+   panel and its neighboring card-boxed panel read as the same visual
+   "row" — the display:flex/align-items/line-height below exist so that
+   stays true even when a header holds an icon-btn (save/back/etc.) rather
+   than plain text; without them the icon's natural 32px+border size would
+   make icon-holding headers taller than plain-text ones. See the
+   .card-boxed-header .icon-btn override further down, which shrinks the
+   icon-btn itself to fit inside this same target height instead of
+   growing the header to fit the icon. */
 .card-boxed-header {
   margin: 0;
   background: var(--tint);
-  padding: .5rem .875rem;
+  padding: .48rem .875rem;
   font-size: .95rem;
   font-weight: 600;
+  line-height: 1.2;
   border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .5rem;
+}
+/* This shrinks a header's icon-btn (save/back/create/etc.) down small
+   enough to fit inside the fixed header height above WITHOUT growing it —
+   the icon is a compromise size, not a good one; keep it only where the
+   action is secondary or a header icon is otherwise expected (e.g. the
+   Users/Sites/Form Designer/Taxonomy edit pages' Save/Back pair, which
+   read fine at this size in pairs). For a form's PRIMARY action (the one
+   button whose size matters, e.g. an "Add X" create button), prefer
+   .icon-pill instead: a small rounded pill placed below the form's last
+   field, holding the icon-btn at its normal unshrunk size. See
+   /admin/menus "Add Menu" for the .icon-pill version and, for comparison,
+   any of the pages above for the shrunk-in-header version — pick whichever
+   matches how prominent that particular action needs to be, not
+   automatically whichever the page already happens to use. */
+.card-boxed-header .icon-btn {
+  width: 18px;
+  height: 18px;
+  border: none;
+}
+.card-boxed-header .icon-btn img {
+  width: 17px;
+  height: 17px;
 }
 
 /* Modal dialog panel — a standalone copy of .card-boxed's current look

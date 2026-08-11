@@ -153,10 +153,12 @@ pub fn sites_list_fragment(sites: &[SiteRow], page: i64, total_pages: i64, searc
               <td><span style="display:inline-block;background:var(--tint);color:var(--text);border-radius:4px;padding:.15rem .5rem;font-size:.78rem;font-weight:500">{post_count}</span></td>
               <td><span style="display:inline-block;background:var(--tint);color:var(--text);border-radius:4px;padding:.15rem .5rem;font-size:.78rem;font-weight:500">{page_count}</span></td>
               <td class="actions">
-                {switch_btn}
-                {users_link}
-                {ssl_badge}
-                {manage}
+                <div class="icon-pill-actionbuttons">
+                  {switch_btn}
+                  {ssl_badge}
+                  {users_link}
+                  {manage}
+                </div>
               </td>
             </tr>"#,
             hostname         = crate::html_escape(&s.hostname),
@@ -238,7 +240,7 @@ pub fn render_list(
     ctx: &crate::PageContext,
 ) -> String {
     let new_site_btn = if can_create {
-        r#"<a href="/admin/sites/new" class="icon-btn" title="New Site" aria-label="New Site"><img src="/admin/static/icons/file-plus.svg" alt=""></a>"#
+        r#"<div class="icon-pill"><a href="/admin/sites/new" class="icon-btn" title="New Site" aria-label="New Site"><img src="/admin/static/icons/file-plus.svg" alt=""></a></div>"#
     } else {
         ""
     };
@@ -288,41 +290,51 @@ pub struct SiteSettingsData {
 pub fn render_settings(data: &SiteSettingsData, flash: Option<&str>, ctx: &crate::PageContext) -> String {
     let content = format!(
         r#"<div style="max-width:720px">
-<div class="profile-container">
-  <p style="margin:0;padding:.65rem .85rem;background:#f8fafc;border:1px solid #e2e8f0;
-            border-radius:6px;font-size:.875rem;color:#475569;line-height:1.6;">
-    To rename the domain, use the CLI from the server:<br>
-    <code style="font-size:.8rem;background:#f1f5f9;padding:.15rem .4rem;border-radius:4px;">synap site rename --id {id} --hostname &lt;new-domain&gt;</code>
-  </p>
+<div class="card-boxed">
+  <h2 class="card-boxed-header">Domain</h2>
+  <div class="card-boxed-body">
+    <p class="form-note" style="margin:0">
+      To rename the domain, use the CLI from the server:<br>
+      <code style="font-size:.8rem;background:var(--tint);padding:.15rem .4rem;border-radius:4px;">synap site rename --id {id} --hostname &lt;new-domain&gt;</code>
+    </p>
+  </div>
 </div>
 
-<div class="profile-container">
-  <h2>Settings</h2>
+<div class="card-boxed">
+  <h2 class="card-boxed-header">Settings</h2>
+  <div class="card-boxed-body">
   <form method="post" action="/admin/sites/{id}/site-config" class="edit-form" id="site-settings-form">
-    <div class="form-group">
-      <label for="site_name">Site Name</label>
-      <input type="text" id="site_name" name="site_name" value="{site_name}" required>
-      <small>The display name shown in the browser tab, header, and footer.</small>
+    <div class="card-boxed-section">
+      <div class="form-group">
+        <label for="site_name">Site Name</label>
+        <input type="text" id="site_name" name="site_name" value="{site_name}" required>
+        <small>The display name shown in the browser tab, header, and footer.</small>
+      </div>
+      <div class="form-group">
+        <label for="site_description">Site Description</label>
+        <textarea id="site_description" name="site_description" rows="3">{site_description}</textarea>
+      </div>
+      <div class="form-group">
+        <label for="language">Language</label>
+        <input type="text" id="language" name="language" value="{language}">
+      </div>
+      <div class="form-group">
+        <label for="posts_per_page">Posts Per Page</label>
+        <input type="number" id="posts_per_page" name="posts_per_page" value="{posts_per_page}" min="1" max="100">
+      </div>
+      <div class="form-group">
+        <label for="date_format">Date Format</label>
+        <input type="text" id="date_format" name="date_format" value="{date_format}">
+        <small>Uses chrono format strings, e.g. "%B %-d, %Y" &rarr; January 1, 2026</small>
+      </div>
     </div>
-    <div class="form-group">
-      <label for="site_description">Site Description</label>
-      <textarea id="site_description" name="site_description" rows="3">{site_description}</textarea>
+    <div class="icon-pill">
+      <button type="submit" id="save-settings-btn" class="icon-btn" title="Save Settings" aria-label="Save Settings" disabled>
+        <img src="/admin/static/icons/save.svg" alt="">
+      </button>
     </div>
-    <div class="form-group">
-      <label for="language">Language</label>
-      <input type="text" id="language" name="language" value="{language}">
-    </div>
-    <div class="form-group">
-      <label for="posts_per_page">Posts Per Page</label>
-      <input type="number" id="posts_per_page" name="posts_per_page" value="{posts_per_page}" min="1" max="100">
-    </div>
-    <div class="form-group">
-      <label for="date_format">Date Format</label>
-      <input type="text" id="date_format" name="date_format" value="{date_format}">
-      <small>Uses chrono format strings, e.g. "%B %-d, %Y" &rarr; January 1, 2026</small>
-    </div>
-    <button type="submit" id="save-settings-btn" class="btn btn-primary" disabled>Save Settings</button>
   </form>
+  </div>
 </div>
 <script>
 (function() {{
@@ -342,9 +354,10 @@ pub fn render_settings(data: &SiteSettingsData, flash: Option<&str>, ctx: &crate
 }})();
 </script>
 
-<div class="profile-container">
-  <h2>Maintenance Mode</h2>
-  <p style="margin:0 0 1rem;font-size:.875rem;color:var(--muted)">
+<div class="card-boxed">
+  <h2 class="card-boxed-header">Maintenance Mode</h2>
+  <div class="card-boxed-body">
+  <p class="form-note" style="margin:0 0 1rem">
     Shows a maintenance page to visitors of this site. Takes effect immediately &mdash; no
     restart needed. <code>/admin/*</code> always stays reachable so you can turn it back off.
   </p>
@@ -352,18 +365,25 @@ pub fn render_settings(data: &SiteSettingsData, flash: Option<&str>, ctx: &crate
         onsubmit="return confirm(document.getElementById('maintenance_mode').checked
           ? 'Enable maintenance mode? Visitors will see a maintenance page immediately.'
           : 'Disable maintenance mode? The site will be reachable by visitors again.')">
-    <div class="form-group">
-      <label style="display:inline;font-weight:400">
-        <input type="checkbox" id="maintenance_mode" name="maintenance_mode" style="display:inline;width:auto;height:auto"{maintenance_checked}>
-        Enable maintenance mode
-      </label>
+    <div class="card-boxed-section">
+      <div class="form-group">
+        <label style="display:inline;font-weight:400">
+          <input type="checkbox" id="maintenance_mode" name="maintenance_mode" style="display:inline;width:auto;height:auto"{maintenance_checked}>
+          Enable maintenance mode
+        </label>
+      </div>
+      <div class="form-group">
+        <label for="maintenance_message">Message</label>
+        <textarea id="maintenance_message" name="maintenance_message" rows="3">{maintenance_message}</textarea>
+      </div>
     </div>
-    <div class="form-group">
-      <label for="maintenance_message">Message</label>
-      <textarea id="maintenance_message" name="maintenance_message" rows="3">{maintenance_message}</textarea>
+    <div class="icon-pill">
+      <button type="submit" id="save-maintenance-btn" class="icon-btn" title="Save Maintenance" aria-label="Save Maintenance" disabled>
+        <img src="/admin/static/icons/save.svg" alt="">
+      </button>
     </div>
-    <button type="submit" id="save-maintenance-btn" class="btn btn-primary" disabled>Save Maintenance</button>
   </form>
+  </div>
 </div>
 <script>
 (function() {{
@@ -381,25 +401,33 @@ pub fn render_settings(data: &SiteSettingsData, flash: Option<&str>, ctx: &crate
 }})();
 </script>
 
-<div class="profile-container">
-  <h2>Email (Mailgun)</h2>
-  <p style="margin:0 0 1rem;font-size:.875rem;color:var(--muted)">
+<div class="card-boxed">
+  <h2 class="card-boxed-header">Email (Mailgun)</h2>
+  <div class="card-boxed-body">
+  <p class="form-note" style="margin:0 0 1rem">
     Give this site its own Mailgun account for form notifications, instead of sharing the
     install-wide one. Leave both fields blank to use the install-wide account.
   </p>
   <form method="post" action="/admin/sites/{id}/mail-config" class="edit-form" id="mail-config-form" data-key-set="{mailgun_key_set_js}">
-    <div class="form-group">
-      <label for="mailgun_domain">Mailgun domain</label>
-      <input type="text" id="mailgun_domain" name="mailgun_domain" value="{mailgun_domain}" placeholder="e.g. mg.example.com">
+    <div class="card-boxed-section">
+      <div class="form-group">
+        <label for="mailgun_domain">Mailgun domain</label>
+        <input type="text" id="mailgun_domain" name="mailgun_domain" value="{mailgun_domain}" placeholder="e.g. mg.example.com">
+      </div>
+      <div class="form-group">
+        <label for="mailgun_api_key">Mailgun API key</label>
+        <input type="password" id="mailgun_api_key" name="mailgun_api_key" autocomplete="off" placeholder="{mailgun_key_placeholder}">
+        <small>{mailgun_key_hint}</small>
+      </div>
     </div>
-    <div class="form-group">
-      <label for="mailgun_api_key">Mailgun API key</label>
-      <input type="password" id="mailgun_api_key" name="mailgun_api_key" autocomplete="off" placeholder="{mailgun_key_placeholder}">
-      <small>{mailgun_key_hint}</small>
+    <p class="field-hint" id="mail-config-error" style="color:var(--danger);display:none;margin:0 0 .75rem"></p>
+    <div class="icon-pill">
+      <button type="submit" id="save-mail-config-btn" class="icon-btn" title="Save Email Settings" aria-label="Save Email Settings" disabled>
+        <img src="/admin/static/icons/save.svg" alt="">
+      </button>
     </div>
-    <p class="field-hint" id="mail-config-error" style="color:#dc2626;display:none;margin:0 0 .75rem"></p>
-    <button type="submit" id="save-mail-config-btn" class="btn btn-primary" disabled>Save Email Settings</button>
   </form>
+  </div>
 </div>
 <script>
 (function() {{
@@ -504,17 +532,7 @@ pub fn render_new(data: &NewSiteData, flash: Option<&str>, ctx: &crate::PageCont
 
     let content = format!(
         r#"<div class="card-boxed" style="max-width:560px">
-  <h2 class="card-boxed-header" style="display:flex;align-items:center;justify-content:space-between;gap:.5rem;">
-    <span>New Site</span>
-    <span style="display:flex;align-items:center;gap:.5rem;">
-      <button type="submit" form="new-site-form" id="create-btn" class="icon-btn" title="Create Site" aria-label="Create Site" disabled>
-        <img src="/admin/static/icons/file-plus.svg" alt="">
-      </button>
-      <a href="/admin/sites" class="icon-btn" title="Back to Sites" aria-label="Back to Sites">
-        <img src="/admin/static/icons/corner-down-left.svg" alt="">
-      </a>
-    </span>
-  </h2>
+  <h2 class="card-boxed-header">New Site</h2>
   <div class="card-boxed-body">
   <form method="post" action="/admin/sites" class="edit-form" id="new-site-form" style="max-width:580px">
   <div class="card-boxed-section">
@@ -594,6 +612,11 @@ pub fn render_new(data: &NewSiteData, flash: Option<&str>, ctx: &crate::PageCont
       <small>A new account is created and assigned as this site's admin and owner.</small>
     </div>
   </div>
+  </div>
+  <div class="icon-pill">
+    <button type="submit" form="new-site-form" id="create-btn" class="icon-btn" title="Create Site" aria-label="Create Site" disabled>
+      <img src="/admin/static/icons/file-plus.svg" alt="">
+    </button>
   </div>
   </form>
   </div>

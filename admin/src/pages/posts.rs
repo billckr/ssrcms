@@ -249,9 +249,11 @@ pub fn posts_list_fragment(
               <td><span class="badge badge-{status_cls}">{status_label}</span>{protected_badge}</td>
               {middle_tds}
               <td class="actions">
-                {view_btn}
-                {edit_btn}
-                {delete_btn}
+                <div class="icon-pill-actionbuttons">
+                  {view_btn}
+                  {edit_btn}
+                  {delete_btn}
+                </div>
               </td>
             </tr>"#,
             id            = crate::html_escape(&p.id),
@@ -381,7 +383,9 @@ pub fn render_list(posts: &[PostRow], post_type: &str, page: i64, total_pages: i
     </div>
   </div>
   <div style="display:flex;align-items:center;gap:.5rem">
-    <a href="{new_href}" class="icon-btn" title="{new_label}" aria-label="{new_label}"><img src="/admin/static/icons/file-plus.svg" alt=""></a>
+    <div class="icon-pill">
+      <a href="{new_href}" class="icon-btn" title="{new_label}" aria-label="{new_label}"><img src="/admin/static/icons/file-plus.svg" alt=""></a>
+    </div>
   </div>
 </div>
 <div id="posts-list">{fragment}</div>
@@ -657,7 +661,11 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
                 r#"<div class="card-boxed">
       <h2 class="card-boxed-header">Delete {label}</h2>
       <div class="card-boxed-body">
-        <button type="button" class="btn btn-danger" style="width:100%" onclick="deletePostConfirm('{path}', '{label_lower}')">Delete {label}</button>
+        <div class="icon-pill">
+          <button type="button" class="icon-btn icon-danger" title="Delete {label}" aria-label="Delete {label}" onclick="deletePostConfirm('{path}', '{label_lower}')">
+            <img src="/admin/static/icons/delete.svg" alt="">
+          </button>
+        </div>
       </div>
     </div>"#,
                 label = label,
@@ -687,8 +695,14 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
       <input type="hidden" id="featured_image_url_field" name="featured_image_url" value="{url_val}">
       <input type="hidden" id="featured_image_cleared" name="featured_image_cleared" value="">
       <div class="featured-image-box{has_image_class}" id="featured-image-box">{fi_box_inner}</div>
-      <button type="button" id="fi-remove-btn" class="featured-image-remove" onclick="removeFeaturedImage()" style="{remove_display}">&#x2715; Remove featured image</button>
-      <button type="button" class="btn btn-primary" style="width:100%;font-size:12px;margin-top:.5rem" onclick="openMediaPicker()">Set Featured Image</button>
+      <div class="icon-pill" style="margin-top:.5rem">
+        <button type="button" class="icon-btn" title="Set Featured Image" aria-label="Set Featured Image" onclick="openMediaPicker()">
+          <img src="/admin/static/icons/image.svg" alt="">
+        </button>
+        <button type="button" id="fi-remove-btn" class="icon-btn icon-danger" title="Remove featured image" aria-label="Remove featured image" onclick="removeFeaturedImage()" style="{remove_display}">
+          <img src="/admin/static/icons/x.svg" alt="">
+        </button>
+      </div>
     </div>"#,
         id_val = crate::html_escape(featured_image_id_val),
         url_val = crate::html_escape(featured_image_url_val),
@@ -842,7 +856,11 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
           <span id="sources-public-saved" style="display:none;color:var(--muted);font-size:12px;margin-left:1.6rem">Saved</span>
         </div>
         <div id="sources-list">{source_rows}</div>
-        <button type="button" class="btn btn-primary" style="font-size:12px" onclick="addSourceRow()">+ Add Source URL</button>
+        <div class="icon-pill">
+          <button type="button" class="icon-btn" title="Add Source URL" aria-label="Add Source URL" onclick="addSourceRow()">
+            <img src="/admin/static/icons/file-plus.svg" alt="">
+          </button>
+        </div>
         <input type="hidden" id="sources_json" name="sources_json" value='{sources_json_attr}'>
       </div>
     </div>"#,
@@ -930,7 +948,11 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
         {password_and_comments_box}
         <input type="hidden" name="post_type" value="{post_type}">
         <div style="display:flex;align-items:center;gap:.6rem">
-          <button type="submit" class="btn btn-primary">Save</button>
+          <div class="icon-pill">
+            <button type="submit" class="icon-btn" title="Save" aria-label="Save">
+              <img src="/admin/static/icons/save.svg" alt="">
+            </button>
+          </div>
           <span id="unsaved-indicator" style="display:none;color:var(--danger);font-size:12px;font-weight:600">Unsaved changes</span>
         </div>
       </div>

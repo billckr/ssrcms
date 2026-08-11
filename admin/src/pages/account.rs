@@ -367,7 +367,7 @@ pub fn render_saved_posts(rows: &[SavedPostRow], page: i64, total_pages: i64, se
          type="search"
          placeholder="Search saved posts&hellip;"
          value="{search_val}"
-         style="width:100%;max-width:320px;padding:.4rem .75rem;border:1px solid var(--border);border-radius:4px;font-size:14px;background:var(--card-bg);color:inherit">
+         style="width:100%;max-width:320px;padding:.4rem .75rem;border:1px solid var(--border);border-radius:4px;font-size:14px;background:var(--field-bg);color:var(--field-text)">
   <div>{top_pagination}</div>
 </div>
 <div id="saved-posts-list">{fragment}</div>
@@ -540,7 +540,7 @@ pub fn render_my_comments(rows: &[MyCommentRow], page: i64, total_pages: i64, se
          type="search"
          placeholder="Search comments&hellip;"
          value="{search_val}"
-         style="width:100%;max-width:320px;padding:.4rem .75rem;border:1px solid var(--border);border-radius:4px;font-size:14px;background:var(--card-bg);color:inherit">
+         style="width:100%;max-width:320px;padding:.4rem .75rem;border:1px solid var(--border);border-radius:4px;font-size:14px;background:var(--field-bg);color:var(--field-text)">
   <div>{top_pagination}</div>
 </div>
 <div id="comments-list">{fragment}</div>

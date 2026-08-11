@@ -556,6 +556,17 @@ gate_on_requirements() {
     exit 1
   fi
   ok "All requirements met."
+  echo ""
+  # No TTY on stdin (piped input, CI) — there's no one to ask, so proceed
+  # without prompting rather than hanging on a read() that will never return.
+  if [[ ! -t 0 ]]; then
+    return 0
+  fi
+  if ! prompt_yes_no "Proceed?" "y"; then
+    echo ""
+    log "Aborted — nothing was changed. Re-run to adjust settings."
+    exit 0
+  fi
 }
 
 # ── Install steps — each is a plain function so run_step() can wrap it ─────

@@ -147,17 +147,19 @@ pub fn forms_list_fragment(rows: &[FormRow], page: i64, total_pages: i64, search
                 r#"<tr>
   <td><a href="/admin/form-designer/{id}">{name}</a></td>
   <td><code>{slug}</code></td>
-  <td>{count}</td>
+  <td><span style="display:inline-block;background:var(--tint);color:var(--text);border-radius:4px;padding:.15rem .5rem;font-size:.78rem;font-weight:500">{count}</span></td>
   <td class="actions">
-    <a href="/admin/form-designer/{id}" class="icon-btn" title="Edit">
-      <img src="/admin/static/icons/edit.svg" alt="Edit">
-    </a>
-    <form method="POST" action="/admin/form-designer/{id}/delete" style="display:inline"
-          onsubmit="return confirm('Delete the form \'{name_js}\'? This does not delete any submissions already collected under it.')">
-      <button class="icon-btn icon-danger" title="Delete" type="submit">
-        <img src="/admin/static/icons/trash.svg" alt="Delete">
-      </button>
-    </form>
+    <div class="icon-pill-actionbuttons">
+      <a href="/admin/form-designer/{id}" class="icon-btn" title="Edit">
+        <img src="/admin/static/icons/edit.svg" alt="Edit">
+      </a>
+      <form method="POST" action="/admin/form-designer/{id}/delete" style="display:inline"
+            onsubmit="return confirm('Delete the form \'{name_js}\'? This does not delete any submissions already collected under it.')">
+        <button class="icon-btn icon-danger" title="Delete" type="submit">
+          <img src="/admin/static/icons/trash.svg" alt="Delete">
+        </button>
+      </form>
+    </div>
   </td>
 </tr>"#,
                 id = html_escape(&f.id),
@@ -197,7 +199,9 @@ pub fn render_list(rows: &[FormRow], page: i64, total_pages: i64, search: &str, 
     <input id="form-search" type="search" placeholder="Search forms&hellip;" value="{search_val}" autocomplete="off">
   </div>
   <div style="display:flex;align-items:center;gap:.5rem">
-    <a href="/admin/form-designer/new" class="icon-btn" title="New Form" aria-label="New Form"><img src="/admin/static/icons/file-plus.svg" alt=""></a>
+    <div class="icon-pill">
+      <a href="/admin/form-designer/new" class="icon-btn" title="New Form" aria-label="New Form"><img src="/admin/static/icons/file-plus.svg" alt=""></a>
+    </div>
   </div>
 </div>
 <div id="form-designer-list">{fragment}</div>
@@ -333,42 +337,28 @@ pub fn render_editor(data: &FormEditData, ctx: &PageContext, flash: Option<&str>
   <div class="two-col">
     <div>
       <div class="card-boxed">
-        <h2 class="card-boxed-header" style="display:flex;align-items:center;justify-content:space-between;gap:.5rem;">
-          <span>Fields</span>
-          <button type="button" id="add-field-btn" class="icon-btn" title="Add Field" aria-label="Add Field">
-            <img src="/admin/static/icons/file-plus.svg" alt="">
-          </button>
-        </h2>
+        <h2 class="card-boxed-header">Fields</h2>
         <div class="card-boxed-body">
           <div id="field-rows">{rows_html}</div>
           <input type="hidden" name="fields_json" id="fields-json">
+          <div class="icon-pill">
+            <button type="button" id="add-field-btn" class="icon-btn" title="Add Field" aria-label="Add Field">
+              <img src="/admin/static/icons/file-plus.svg" alt="">
+            </button>
+          </div>
         </div>
       </div>
     </div>
     <div>
       <details class="card-boxed" style="position:sticky;top:1rem">
-        <summary class="card-boxed-header" style="display:flex;align-items:center;gap:.5rem;">
-          <span>Preview</span>
-          <div class="customizer-header-actions" style="margin-left:auto">
-            <button type="button" id="save-form-btn" class="icon-btn" title="{save_label}" aria-label="{save_label}"
-                    onclick="event.preventDefault();event.stopPropagation();document.getElementById('form-designer-form').requestSubmit();">
-              <img src="/admin/static/icons/save.svg" alt="">
-            </button>
-            {delete_btn}
-          </div>
-        </summary>
+        <summary class="card-boxed-header">Preview</summary>
         <div class="card-boxed-body">
           <p class="field-hint" style="margin-bottom:.85rem">A live mockup — this is what visitors will see. It isn't wired to submit anything from here.</p>
           <div id="form-preview"></div>
         </div>
       </details>
       <details class="card-boxed" style="margin-top:1rem"{settings_open}>
-        <summary class="card-boxed-header">
-          <span>Settings</span>
-          <button type="button" class="icon-btn" style="visibility:hidden" tabindex="-1" aria-hidden="true">
-            <img src="/admin/static/icons/save.svg" alt="">
-          </button>
-        </summary>
+        <summary class="card-boxed-header">Settings</summary>
         <div class="card-boxed-body">
           <div class="card-boxed-section">
             <div class="form-group">
@@ -406,6 +396,13 @@ pub fn render_editor(data: &FormEditData, ctx: &PageContext, flash: Option<&str>
             <p class="field-hint">Leave blank to disable. Sent via the site's configured Mailgun account.</p>
           </div>
         </div>
+      </div>
+      <div class="icon-pill">
+        <button type="button" id="save-form-btn" class="icon-btn" title="{save_label}" aria-label="{save_label}"
+                onclick="event.preventDefault();event.stopPropagation();document.getElementById('form-designer-form').requestSubmit();">
+          <img src="/admin/static/icons/save.svg" alt="">
+        </button>
+        {delete_btn}
       </div>
     </div>
   </div>

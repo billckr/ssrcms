@@ -150,7 +150,7 @@ fn year_select(
         r#"<form method="GET" action="/admin" style="display:inline-flex;align-items:center">
   <input type="hidden" name="range" value="{range}">
   <input type="hidden" name="views_range" value="{views_range}">
-  {year_hidden}{views_year_hidden}<select name="{select_name}" onchange="this.form.submit()" style="font-size:12px;padding:.2rem .5rem;border:1px solid var(--border);border-radius:4px;background:var(--card-bg);color:inherit;cursor:pointer">{options}</select>
+  {year_hidden}{views_year_hidden}<select name="{select_name}" onchange="this.form.submit()" style="font-size:12px;padding:.2rem .5rem;border:1px solid var(--border);border-radius:4px;background:var(--field-bg);color:var(--field-text);cursor:pointer">{options}</select>
 </form>"#,
         select_name = select_name,
         range = range,

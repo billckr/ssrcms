@@ -90,7 +90,11 @@ pub fn render_with_flash(themes: &[ThemeInfo], flash: Option<&str>, ctx: &crate:
     <div class="form-group">
       <input type="file" id="theme_zip" name="file" accept=".zip" required>
     </div>
-    <button type="submit" class="btn btn-primary" id="theme-upload-btn" disabled>Upload &amp; Install</button>
+    <div class="icon-pill">
+      <button type="submit" class="icon-btn" id="theme-upload-btn" title="Upload &amp; Install" aria-label="Upload &amp; Install" disabled>
+        <img src="/admin/static/icons/upload.svg" alt="">
+      </button>
+    </div>
   </form>
   </div>
 </div>
@@ -501,13 +505,7 @@ fn render_customizer_landing(theme_name: &str, source: &str, data: &CustomizerDa
 
         format!(
             r#"<div class="card-boxed">
-  <h2 class="card-boxed-header" style="display:flex;align-items:center;justify-content:space-between;gap:.5rem;">
-    <span>{group}</span>
-    <div class="customizer-header-actions">
-      <button type="submit" form="{form_id}" id="{btn_id}" class="icon-btn" disabled title="Save Changes" aria-label="Save Changes"><img src="/admin/static/icons/save.svg" alt=""></button>
-      {restore}
-    </div>
-  </h2>
+  <h2 class="card-boxed-header">{group}</h2>
   <div class="card-boxed-body">
     <form method="POST" action="/admin/appearance/editor/{theme}/customizer-save" id="{form_id}">
       <input type="hidden" name="source" value="{source}">
@@ -518,6 +516,10 @@ fn render_customizer_landing(theme_name: &str, source: &str, data: &CustomizerDa
       {images}
       {options}
       {order}
+      <div class="icon-pill">
+        <button type="submit" form="{form_id}" id="{btn_id}" class="icon-btn" disabled title="Save Changes" aria-label="Save Changes"><img src="/admin/static/icons/save.svg" alt=""></button>
+        {restore}
+      </div>
     </form>
   </div>
 </div>
@@ -1176,7 +1178,7 @@ fn render_card(t: &ThemeInfo, ctx: &crate::PageContext, filter: &str) -> String 
         // publish it to global, or remove it entirely.
         let (edit_html, make_global_html, remove_html) = if filter == "private" {
             let edit = format!(
-                r#"<a href="/admin/appearance/editor/{name}?source=private" class="btn btn-primary">Edit</a>"#,
+                r#"<div class="icon-pill"><a href="/admin/appearance/editor/{name}?source=private" class="icon-btn" title="Edit" aria-label="Edit"><img src="/admin/static/icons/edit.svg" alt=""></a></div>"#,
                 name = name_esc,
             );
 
@@ -1200,12 +1202,12 @@ fn render_card(t: &ThemeInfo, ctx: &crate::PageContext, filter: &str) -> String 
 
             let remove = if t.can_delete {
                 format!(
-                    r#"<form method="post" action="/admin/appearance/delete" style="display:inline;"
+                    r#"<div class="icon-pill"><form method="post" action="/admin/appearance/delete" style="display:inline;"
      onsubmit="return confirm('Remove private theme &quot;{name}&quot;? This only deletes the private copy — any site copies are unaffected.')">
     <input type="hidden" name="theme" value="{name}">
     <input type="hidden" name="source" value="private">
-    <button type="submit" class="btn btn-danger">Remove</button>
-</form>"#,
+    <button type="submit" class="icon-btn icon-danger" title="Remove" aria-label="Remove"><img src="/admin/static/icons/delete.svg" alt=""></button>
+</form></div>"#,
                     name = name_esc,
                 )
             } else {
@@ -1243,7 +1245,7 @@ fn render_card(t: &ThemeInfo, ctx: &crate::PageContext, filter: &str) -> String 
             r#"<form method="post" action="/admin/appearance/activate" style="display:inline;"
                   data-confirm="{confirm_msg}" onsubmit="return confirm(this.dataset.confirm)">
     <input type="hidden" name="theme" value="{name}">
-    <button type="submit" class="btn btn-primary">Activate</button>
+    <button type="submit" class="icon-btn" title="Activate" aria-label="Activate"><img src="/admin/static/icons/power.svg" alt=""></button>
 </form>"#,
             name = name_esc,
             confirm_msg = crate::html_escape(&confirm_msg),
@@ -1251,7 +1253,7 @@ fn render_card(t: &ThemeInfo, ctx: &crate::PageContext, filter: &str) -> String 
     };
 
     let edit_html = format!(
-        r#"<a href="/admin/appearance/editor/{name}?source={source}" class="btn btn-primary">Edit</a>"#,
+        r#"<a href="/admin/appearance/editor/{name}?source={source}" class="icon-btn" title="Edit" aria-label="Edit"><img src="/admin/static/icons/edit.svg" alt=""></a>"#,
         name   = name_esc,
         source = crate::html_escape(&t.source),
     );
@@ -1274,12 +1276,12 @@ fn render_card(t: &ThemeInfo, ctx: &crate::PageContext, filter: &str) -> String 
             )
         };
         format!(
-            r#"<form method="post" action="/admin/appearance/delete" style="display:inline;"
+            r#"<div class="icon-pill"><form method="post" action="/admin/appearance/delete" style="display:inline;"
                 data-confirm="{confirm}" onsubmit="return confirm(this.dataset.confirm)">
     <input type="hidden" name="theme" value="{name}">
     <input type="hidden" name="source" value="{source}">
-    <button type="submit" class="btn btn-danger">{label}</button>
-</form>"#,
+    <button type="submit" class="icon-btn icon-danger" title="{label}" aria-label="{label}"><img src="/admin/static/icons/delete.svg" alt=""></button>
+</form></div>"#,
             confirm = confirm_msg,
             name    = name_esc,
             source  = crate::html_escape(&t.source),
@@ -1294,7 +1296,7 @@ fn render_card(t: &ThemeInfo, ctx: &crate::PageContext, filter: &str) -> String 
   {screenshot}
   {header}
   <div class="theme-actions">
-    {activate}{edit}{delete}
+    <div class="icon-pill">{activate}{edit}</div>{delete}
   </div>
 </div>"#,
         active     = active_class,

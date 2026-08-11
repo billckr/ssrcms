@@ -13,6 +13,8 @@ done.
 - [ ] work on synap install flow.
 - [ ] review dark mode and make small tweaks to button, icon and text colors. Documetnation bold also needs changing.
 - [ ] adjust badged to better fit others size on /admin/sites
+- [ ] add a dark mode maintenaince page. Add light/dark move option to https://synapcms.dev/admin/sites/8e8b22bc-ecd8-4f39-bcf5-f29876d7312b/settings in Maintenance Mode section. So either the dark mode or light mode maintance page can be selected.
+- [ ] revisit the need or funtion login behind the http://pong.com/admin/menus menu location. The theme has to be aware of this and it may need adjustment based on new menu options.
 
 ## Done
 

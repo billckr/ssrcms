@@ -83,17 +83,19 @@ pub fn render_list(menus: &[MenuRow], sort: &str, dir: &str, ctx: &crate::PageCo
                 r#"<tr>
   <td><a href="/admin/menus/{id}">{name}</a></td>
   <td>{location}</td>
-  <td>{items}</td>
+  <td><span style="display:inline-block;background:var(--tint);color:var(--text);border-radius:4px;padding:.15rem .5rem;font-size:.78rem;font-weight:500">{items}</span></td>
   <td class="actions">
-    <a href="/admin/menus/{id}" class="icon-btn" title="Edit">
-      <img src="/admin/static/icons/edit.svg" alt="Edit">
-    </a>
-    <form method="POST" action="/admin/menus/{id}/delete" style="display:inline"
-          onsubmit="return confirm('Delete this menu?')">
-      <button class="icon-btn icon-danger" title="Delete" type="submit">
-        <img src="/admin/static/icons/trash.svg" alt="Delete">
-      </button>
-    </form>
+    <div class="icon-pill-actionbuttons">
+      <a href="/admin/menus/{id}" class="icon-btn" title="Edit">
+        <img src="/admin/static/icons/edit.svg" alt="Edit">
+      </a>
+      <form method="POST" action="/admin/menus/{id}/delete" style="display:inline"
+            onsubmit="return confirm('Delete this menu?')">
+        <button class="icon-btn icon-danger" title="Delete" type="submit">
+          <img src="/admin/static/icons/trash.svg" alt="Delete">
+        </button>
+      </form>
+    </div>
   </td>
 </tr>"#,
                 id       = crate::html_escape(&m.id),
@@ -114,24 +116,26 @@ pub fn render_list(menus: &[MenuRow], sort: &str, dir: &str, ctx: &crate::PageCo
   </div>
   <div>
     <div class="card-boxed">
-      <h2 class="card-boxed-header" style="display:flex;align-items:center;justify-content:space-between;gap:.5rem;">
-        <span>Add Menu</span>
-        <button type="submit" form="new-menu-form" class="icon-btn" id="create-menu-submit" title="Create Menu" aria-label="Create Menu" disabled>
-          <img src="/admin/static/icons/file-plus.svg" alt="">
-        </button>
-      </h2>
+      <h2 class="card-boxed-header">Add Menu</h2>
       <div class="card-boxed-body">
         <form method="POST" action="/admin/menus" id="new-menu-form">
-          <div class="form-group">
-            <label for="new-menu-name">Menu Name</label>
-            <input id="new-menu-name" type="text" name="name" required placeholder="e.g. Main Menu" maxlength="25">
-            <span class="form-hint char-count" id="new-menu-name-count">0/25</span>
-          </div>
-          <div class="form-group">
-            <label for="new-menu-location">Location</label>
-            <select id="new-menu-location" name="location">{location_opts}</select>
+          <div class="card-boxed-section">
+            <div class="form-group">
+              <label for="new-menu-name">Menu Name</label>
+              <input id="new-menu-name" type="text" name="name" required placeholder="e.g. Main Menu" maxlength="25">
+              <span class="form-hint char-count" id="new-menu-name-count">0/25</span>
+            </div>
+            <div class="form-group">
+              <label for="new-menu-location">Location</label>
+              <select id="new-menu-location" name="location">{location_opts}</select>
+            </div>
           </div>
         </form>
+        <div class="icon-pill">
+          <button type="submit" form="new-menu-form" class="icon-btn" id="create-menu-submit" title="Create Menu" aria-label="Create Menu" disabled>
+            <img src="/admin/static/icons/file-plus.svg" alt="">
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -257,15 +261,17 @@ pub fn render_edit(
       <span class="menu-item-card__dest">{dest}</span>
     </div>
     <div class="menu-item-card__actions">
-      <label class="icon-btn" for="edit-toggle-{item_id}" title="Edit" style="cursor:pointer">
-        <img src="/admin/static/icons/edit.svg" alt="Edit">
-      </label>
-      <form method="POST" action="/admin/menus/{menu_id}/items/{item_id}/delete"
-            onsubmit="return confirm('Delete the following menu item?\n\n{label_val}')" style="display:inline">
-        <button class="icon-btn icon-danger" type="submit" title="Delete">
-          <img src="/admin/static/icons/trash.svg" alt="Delete">
-        </button>
-      </form>
+      <div class="icon-pill-actionbuttons">
+        <label class="icon-btn" for="edit-toggle-{item_id}" title="Edit" style="cursor:pointer">
+          <img src="/admin/static/icons/edit.svg" alt="Edit">
+        </label>
+        <form method="POST" action="/admin/menus/{menu_id}/items/{item_id}/delete"
+              onsubmit="return confirm('Delete the following menu item?\n\n{label_val}')" style="display:inline">
+          <button class="icon-btn icon-danger" type="submit" title="Delete">
+            <img src="/admin/static/icons/trash.svg" alt="Delete">
+          </button>
+        </form>
+      </div>
     </div>
   </div>
   <input type="checkbox" id="edit-toggle-{item_id}" class="menu-item-toggle" style="display:none">
@@ -421,7 +427,7 @@ pub fn render_edit(
 .menu-item-children {{
   padding-left: 1.75rem;
   border-top: 1px solid var(--border);
-  background: var(--sidebar-bg, #f8f8f8);
+  background: var(--surface);
 }}
 .menu-item-children .menu-item-group:last-child > .menu-item-card {{ border-bottom: none; }}
 .menu-item-card__row {{
@@ -429,7 +435,7 @@ pub fn render_edit(
   align-items: center;
   justify-content: space-between;
   padding: .65rem 1rem;
-  background: var(--card-bg, #fff);
+  background: var(--tint);
   gap: .65rem;
 }}
 .menu-item-group.dragging > .menu-item-card {{ opacity: .4; }}
@@ -454,13 +460,20 @@ pub fn render_edit(
   gap: .5rem;
   flex-shrink: 0;
 }}
+/* The row itself is var(--tint) (see .menu-item-card__row above), so the
+   shared .icon-pill-actionbuttons background (also --tint) would be
+   invisible here — override to --surface, which is darker, for contrast
+   against this specific row background. */
+.menu-item-card__actions .icon-pill-actionbuttons {{
+  background: var(--surface);
+}}
 .menu-item-toggle:checked ~ .menu-item-card__form {{
   display: block;
 }}
 .menu-item-card__form {{
   display: none;
   padding: 1rem 1.25rem 1.25rem;
-  background: var(--sidebar-bg, #f8f8f8);
+  background: var(--surface);
   border-top: 1px solid var(--border);
 }}
 @media (max-width: 600px) {{
@@ -484,13 +497,17 @@ pub fn render_edit(
         </div>
       </div>
     </div>
-    <div class="form-actions">
+    <div class="icon-pill">
       <form id="menu-settings-form" method="POST" action="/admin/menus/{menu_id}" style="margin:0;display:inline">
-        <button type="submit" class="btn btn-primary" id="menu-settings-save" disabled>Save</button>
+        <button type="submit" class="icon-btn" id="menu-settings-save" title="Save" aria-label="Save" disabled>
+          <img src="/admin/static/icons/save.svg" alt="">
+        </button>
       </form>
       <form method="POST" action="/admin/menus/{menu_id}/delete"
             onsubmit="return confirm('Delete this menu and all its items?')" style="margin:0;display:inline">
-        <button type="submit" class="btn btn-danger">Delete</button>
+        <button type="submit" class="icon-btn icon-danger" title="Delete" aria-label="Delete">
+          <img src="/admin/static/icons/delete.svg" alt="">
+        </button>
       </form>
     </div>
   </div>
@@ -516,6 +533,7 @@ pub fn render_edit(
 <div class="card-boxed">
   <h2 class="card-boxed-header">Menu Items</h2>
   <div class="card-boxed-body">
+    <p class="form-note">Drag an item by its handle to reorder it or nest it under another item as a dropdown parent.</p>
     {items_section}
   </div>
 </div>
@@ -524,6 +542,7 @@ pub fn render_edit(
   <h2 class="card-boxed-header">Add Item</h2>
   <div class="card-boxed-body">
     <form method="POST" action="/admin/menus/{menu_id}/items/new" class="js-menu-item-form">
+      <p class="form-note">To create a dropdown parent (a menu heading that reveals sub-items), give it a Label and leave both Page and Custom URL blank — then add its sub-items with this one set as their Parent item.</p>
       <div class="card-boxed-section">
         <div class="form-stack">
           <div class="form-group" style="margin:0">
@@ -570,9 +589,10 @@ pub fn render_edit(
           </div>
         </div>
       </div>
-      <p class="form-note">To create a dropdown parent (a menu heading that reveals sub-items), give it a Label and leave both Page and Custom URL blank — then add its sub-items with this one set as their Parent item.</p>
-      <div class="form-actions">
-        <button type="submit" class="btn btn-primary">Save Item</button>
+      <div class="icon-pill">
+        <button type="submit" class="icon-btn" title="Save Item" aria-label="Save Item">
+          <img src="/admin/static/icons/save.svg" alt="">
+        </button>
       </div>
     </form>
   </div>

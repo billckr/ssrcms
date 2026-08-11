@@ -178,11 +178,13 @@ fn build_staff_rows(staff: &[UserRow], current_user_id: &str, can_manage_access:
               <td>{domain_badges}</td>
               <td><span class="badge {badge_class}">{role}</span></td>
               <td class="actions">
-                <a href="/admin/users/{id}/edit" class="icon-btn" title="Edit">
-                  <img src="/admin/static/icons/edit.svg" alt="Edit">
-                </a>
-                {site_access_btn}
-                {delete_btn}
+                <div class="icon-pill-actionbuttons">
+                  <a href="/admin/users/{id}/edit" class="icon-btn" title="Edit">
+                    <img src="/admin/static/icons/edit.svg" alt="Edit">
+                  </a>
+                  {site_access_btn}
+                  {delete_btn}
+                </div>
               </td>
             </tr>"#,
             row_style = if !u.is_active { r#" style="opacity:.65""# } else { "" },
@@ -254,10 +256,12 @@ fn build_sub_rows(subscribers: &[UserRow], current_user_id: &str) -> String {
               <td><button type="button" class="copy-email-btn" data-email="{email_raw}" title="Click to copy email">{email}</button></td>
               <td>{domain_badges}</td>
               <td class="actions">
-                <a href="/admin/users/{id}/edit" class="icon-btn" title="Edit">
-                  <img src="/admin/static/icons/edit.svg" alt="Edit">
-                </a>
-                {delete_btn}
+                <div class="icon-pill-actionbuttons">
+                  <a href="/admin/users/{id}/edit" class="icon-btn" title="Edit">
+                    <img src="/admin/static/icons/edit.svg" alt="Edit">
+                  </a>
+                  {delete_btn}
+                </div>
               </td>
             </tr>"#,
             row_style = if !u.is_active { r#" style="opacity:.65""# } else { "" },
@@ -643,7 +647,9 @@ document.addEventListener('click', function(e) {
     {site_filter_staff}
   </div>
   <div style="display:flex;align-items:center;gap:.5rem">
-    <a href="/admin/users/new" class="icon-btn" title="New User" aria-label="New User"><img src="/admin/static/icons/file-plus.svg" alt=""></a>
+    <div class="icon-pill">
+      <a href="/admin/users/new" class="icon-btn" title="New User" aria-label="New User"><img src="/admin/static/icons/file-plus.svg" alt=""></a>
+    </div>
   </div>
 </div>
 <div id="users-list">{fragment}</div>
@@ -976,16 +982,11 @@ function toggleSiteFields() {{
 
     let content = format!(
         r#"<div class="card-boxed" style="max-width:560px">
-  <h2 class="card-boxed-header" style="display:flex;align-items:center;justify-content:space-between;gap:.5rem;">
+  <h2 class="card-boxed-header">
     <span>{form_title}</span>
-    <span style="display:flex;align-items:center;gap:.5rem;">
-      <button type="submit" form="user-editor-form" id="save-btn" class="icon-btn" title="Save" aria-label="Save"{save_disabled}>
-        <img src="/admin/static/icons/save.svg" alt="">
-      </button>
-      <a href="/admin/users" class="icon-btn" title="Back to Users" aria-label="Back to Users">
-        <img src="/admin/static/icons/corner-down-left.svg" alt="">
-      </a>
-    </span>
+    <a href="/admin/users" class="icon-btn" title="Back to Users" aria-label="Back to Users">
+      <img src="/admin/static/icons/corner-down-left.svg" alt="">
+    </a>
   </h2>
   <div class="card-boxed-body">
   <form method="POST" action="{action}" id="user-editor-form" style="max-width:580px">
@@ -1018,6 +1019,11 @@ function toggleSiteFields() {{
     {role_section_new}
     {site_assignment_section}
     {role_section}
+    <div class="icon-pill">
+      <button type="submit" form="user-editor-form" id="save-btn" class="icon-btn" title="Save" aria-label="Save"{save_disabled}>
+        <img src="/admin/static/icons/save.svg" alt="">
+      </button>
+    </div>
   </form>
   {suspend_form}
   </div>
@@ -1305,7 +1311,7 @@ pub fn render_site_access(
                 r#"<tr>
                   <td>{hostname}</td>
                   <td><span class="badge">{role}</span></td>
-                  <td class="actions">{remove_action}</td>
+                  <td class="actions"><div class="icon-pill-actionbuttons">{remove_action}</div></td>
                 </tr>"#,
                 hostname      = crate::html_escape(&a.hostname),
                 role          = crate::html_escape(role_display(&a.role)),

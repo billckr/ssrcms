@@ -161,8 +161,10 @@ pub fn render(
           <small>Shown in the admin sidebar top-left. Set to your agency or CMS brand name.</small>
         </div>
       </div>
-      <div class="form-actions" style="margin-top:1.5rem">
-        <button type="submit" class="btn btn-primary" id="general-save-btn" disabled>Save General</button>
+      <div class="icon-pill" style="margin-top:1.5rem">
+        <button type="submit" id="general-save-btn" class="icon-btn" title="Save General" aria-label="Save General" disabled>
+          <img src="/admin/static/icons/save.svg" alt="">
+        </button>
       </div>
     </form>
     </div>
@@ -184,8 +186,10 @@ pub fn render(
         </div>
       </div>
 
-      <div class="form-actions" style="margin-top:1.5rem">
-        <button type="submit" class="btn btn-primary" id="localisation-save-btn" disabled>Save Localisation</button>
+      <div class="icon-pill" style="margin-top:1.5rem">
+        <button type="submit" id="localisation-save-btn" class="icon-btn" title="Save Localisation" aria-label="Save Localisation" disabled>
+          <img src="/admin/static/icons/save.svg" alt="">
+        </button>
       </div>
     </form>
     </div>
@@ -219,8 +223,10 @@ pub fn render(
           <small>Applies to media and theme zip uploads. Takes effect immediately, no restart needed.</small>
         </div>
       </div>
-      <div class="form-actions" style="margin-top:1.5rem">
-        <button type="submit" class="btn btn-primary" id="uploads-save-btn" disabled>Save Uploads</button>
+      <div class="icon-pill" style="margin-top:1.5rem">
+        <button type="submit" id="uploads-save-btn" class="icon-btn" title="Save Uploads" aria-label="Save Uploads" disabled>
+          <img src="/admin/static/icons/save.svg" alt="">
+        </button>
       </div>
     </form>
     </div>
