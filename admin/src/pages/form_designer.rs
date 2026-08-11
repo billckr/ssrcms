@@ -379,31 +379,28 @@ pub fn render_editor(data: &FormEditData, ctx: &PageContext, flash: Option<&str>
             </div>
           </div>
           <div class="card-boxed-section">
+            <div class="form-group">
+              <label for="notify-email">Notify on new submission</label>
+              <input type="email" id="notify-email" name="notify_email" maxlength="255" value="{notify_email}" placeholder="you@example.com">
+              <p class="field-hint">Leave blank to disable. Sent via the site's configured Mailgun account.</p>
+            </div>
+          </div>
+          <div class="card-boxed-section">
             <label class="switch-toggle">
               <input type="checkbox" id="include-honeypot" name="include_honeypot" value="true"{honeypot_checked}>
               <span class="switch-slider"></span>
               <span>Include spam honeypot field</span>
             </label>
           </div>
-        </div>
-      </details>
-      <div class="card-boxed" style="margin-top:1rem">
-        <h2 class="card-boxed-header">Email</h2>
-        <div class="card-boxed-body">
-          <div class="form-group">
-            <label for="notify-email">Notify on new submission</label>
-            <input type="email" id="notify-email" name="notify_email" maxlength="255" value="{notify_email}" placeholder="you@example.com">
-            <p class="field-hint">Leave blank to disable. Sent via the site's configured Mailgun account.</p>
+          <div class="icon-pill">
+            <button type="button" id="save-form-btn" class="icon-btn" title="{save_label}" aria-label="{save_label}"
+                    onclick="event.preventDefault();event.stopPropagation();document.getElementById('form-designer-form').requestSubmit();">
+              <img src="/admin/static/icons/save.svg" alt="">
+            </button>
+            {delete_btn}
           </div>
         </div>
-      </div>
-      <div class="icon-pill">
-        <button type="button" id="save-form-btn" class="icon-btn" title="{save_label}" aria-label="{save_label}"
-                onclick="event.preventDefault();event.stopPropagation();document.getElementById('form-designer-form').requestSubmit();">
-          <img src="/admin/static/icons/save.svg" alt="">
-        </button>
-        {delete_btn}
-      </div>
+      </details>
     </div>
   </div>
 </form>
