@@ -16,6 +16,8 @@ done.
 - [ ] add a dark mode maintenaince page. Add light/dark move option to https://synapcms.dev/admin/sites/8e8b22bc-ecd8-4f39-bcf5-f29876d7312b/settings in Maintenance Mode section. So either the dark mode or light mode maintance page can be selected.
 - [ ] revisit the need or funtion login behind the http://pong.com/admin/menus menu location. The theme has to be aware of this and it may need adjustment based on new menu options.
 - [ ] consider change the text field colors on post page. They are white and are very bright for a dark theme.
+- [ ] consiider adding clerk-rs as account creation option. It's not offical but appears to be well maintained.
+- [ ] add Google login via OAuth2 (oauth2 crate) as an account creation/sign-in option.
 
 ## Done
 

@@ -186,7 +186,7 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
               </button>
             </div>
             <a href="{profile_or_home}" class="header-menu-item">
-              <img src="/admin/static/icons/user.svg" alt="">
+              <img src="/admin/static/icons/fingerprint-light.svg" alt="">
               <span>Profile</span>
             </a>
             <a href="/admin/logout" class="header-menu-item">
