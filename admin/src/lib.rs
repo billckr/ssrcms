@@ -53,7 +53,7 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
     } else {
         String::new()
     };
-    let site_indicator = if ctx.current_site.is_empty() {
+    let site_indicator = if ctx.current_site.is_empty() || ctx.is_impersonating {
         String::new()
     } else {
         format!(
