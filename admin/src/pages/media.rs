@@ -394,6 +394,15 @@ body.sidebar-open .admin-sidebar {{
   display: flex !important;
 }}
 /* ── Media Manager 2 — page-scoped styles ────────────────────────────── */
+/* Media-manager-only dark-mode override: --surface/--tint swapped from the
+   rest of the admin so the toolbar/sidebar/table-header "tint" areas sit
+   darker/recessed than the main content surface, instead of the global
+   dark palette's tint being lighter than surface. Scoped to .mm-layout so
+   it doesn't affect any other admin page. */
+:root[data-theme="dark"] .mm-layout {{
+  --surface: #38383d;
+  --tint: #232326;
+}}
 .mm-layout {{
   display: grid;
   grid-template-columns: 220px 1fr;

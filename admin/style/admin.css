@@ -34,8 +34,8 @@
    variables in a follow-up pass. */
 :root[data-theme="dark"] {
   --bg: #2d2d31;
-  --surface: #38383d;
-  --tint: #232326;
+  --surface: #232326;
+  --tint: #38383d;
   --border: #48484f;
   --primary: #818cf8;
   --primary-dark: #6366f1;
