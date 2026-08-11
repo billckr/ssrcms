@@ -352,7 +352,7 @@ pub fn render_list(posts: &[PostRow], post_type: &str, page: i64, total_pages: i
         };
         let extra = if *val == "pending" && pending_count > 0 {
             format!(
-                r#" <span class="badge badge-pending" style="font-size:10px;padding:.05rem .35rem;vertical-align:middle">{}</span>"#,
+                r#" <span class="badge" style="margin-left:.35rem;font-size:.75rem;padding:.1rem .45rem">{}</span>"#,
                 pending_count
             )
         } else {
