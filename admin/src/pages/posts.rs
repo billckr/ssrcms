@@ -828,6 +828,9 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
     let source_rows: String = post.sources.iter().map(|url| {
         format!(
             r#"<div class="source-row" style="display:flex;gap:.5rem;margin-bottom:.5rem;align-items:center">
+        <span class="drag-handle" title="Drag to reorder" draggable="true">
+          <img src="/admin/static/icons/move.svg" alt="">
+        </span>
         <input type="url" class="source-url-input" value="{url}" placeholder="https://example.com/article" style="flex:1">
         <div class="icon-pill" style="align-self:center;margin-top:0">
           <button type="button" class="icon-btn icon-danger" title="Remove" onclick="this.closest('.source-row').remove(); markSourcesDirty();">
@@ -1124,13 +1127,38 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
     var row = document.createElement('div');
     row.className = 'source-row';
     row.style.cssText = 'display:flex;gap:.5rem;margin-bottom:.5rem;align-items:center';
-    row.innerHTML = '<input type="url" class="source-url-input" placeholder="https://example.com/article" style="flex:1">'
+    row.innerHTML = '<span class="drag-handle" title="Drag to reorder" draggable="true"><img src="/admin/static/icons/move.svg" alt=""></span>'
+      + '<input type="url" class="source-url-input" placeholder="https://example.com/article" style="flex:1">'
       + '<div class="icon-pill" style="align-self:center;margin-top:0"><button type="button" class="icon-btn icon-danger" title="Remove" onclick="this.closest(\'.source-row\').remove(); markSourcesDirty(); var b=document.getElementById(\'add-source-btn\'); if (b) b.disabled = false;">'
       + '<img src="/admin/static/icons/trash.svg" alt="Remove"></button></div>';
     list.appendChild(row);
     row.querySelector('input').focus();
     if (addBtn) addBtn.disabled = true;
   }};
+
+  // Drag-to-reorder, same pattern as the form designer's field list and
+  // menu editor's item list. Reordering counts as a change to save.
+  if (sourcesListEl) {{
+    var sourceDragEl = null;
+    sourcesListEl.addEventListener('dragstart', function(e) {{
+      if (!e.target.classList.contains('drag-handle') && !e.target.closest('.drag-handle')) return;
+      sourceDragEl = e.target.closest('.source-row');
+      e.dataTransfer.effectAllowed = 'move';
+    }});
+    sourcesListEl.addEventListener('dragover', function(e) {{
+      e.preventDefault();
+      if (!sourceDragEl) return;
+      var target = e.target.closest('.source-row');
+      if (!target || target === sourceDragEl) return;
+      var rect = target.getBoundingClientRect();
+      var before = (e.clientY - rect.top) < rect.height / 2;
+      sourcesListEl.insertBefore(sourceDragEl, before ? target : target.nextSibling);
+    }});
+    sourcesListEl.addEventListener('dragend', function() {{
+      if (sourceDragEl) markSourcesDirty();
+      sourceDragEl = null;
+    }});
+  }}
 
   // Auto-save the "Show sources on the live page" toggle immediately on
   // change, rather than waiting for the full post form to be saved — the
