@@ -34,8 +34,8 @@
    variables in a follow-up pass. */
 :root[data-theme="dark"] {
   --bg: #2d2d31;
-  --surface: #232326;
-  --tint: #38383d;
+  --surface: #38383d;
+  --tint: #232326;
   --border: #48484f;
   --primary: #818cf8;
   --primary-dark: #6366f1;
@@ -993,7 +993,7 @@ legend {
   border-radius: var(--radius);
   flex-shrink: 0;
 }
-.mpicker-close:hover { background: #f1f5f9; color: var(--text); }
+.mpicker-close:hover { background: var(--tint); color: var(--text); }
 .mpicker-body { display: flex; flex: 1; overflow: hidden; }
 .mpicker-grid {
   flex: 1;

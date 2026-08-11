@@ -145,7 +145,7 @@ pub fn render_list(
             )
         } else {
             format!(
-                r##"<div class="mm-list-thumb" style="display:flex;align-items:center;justify-content:center;background:#f1f5f9;font-size:18px">📄</div>"##
+                r##"<div class="mm-list-thumb" style="display:flex;align-items:center;justify-content:center;background:var(--tint);font-size:18px">📄</div>"##
             )
         };
         format!(
@@ -416,7 +416,7 @@ body.sidebar-open .admin-sidebar {{
   align-items: center;
   gap: .6rem;
   padding: .65rem 1rem;
-  background: #f8fafc;
+  background: var(--tint);
   border-bottom: 1px solid var(--border);
   flex-wrap: wrap;
 }}
@@ -450,14 +450,14 @@ body.sidebar-open .admin-sidebar {{
   color: var(--muted); transition: background .15s, color .15s;
 }}
 .mm-view-btn.active {{ background: var(--primary); color: #fff; }}
-.mm-view-btn:hover:not(.active) {{ background: #f1f5f9; color: var(--text); }}
+.mm-view-btn:hover:not(.active) {{ background: var(--tint); color: var(--text); }}
 
 .mm-bulk-btn {{ font-size: 12px; padding: .3rem .65rem; }}
 
 /* ── Left panel ───────────────────────────────────────────────────────── */
 .mm-sidebar {{
   border-right: 1px solid var(--border);
-  background: #fafbfc;
+  background: var(--tint);
   overflow-y: auto;
   display: flex;
   flex-direction: column;
@@ -477,7 +477,7 @@ body.sidebar-open .admin-sidebar {{
   color: var(--text); text-decoration: none; transition: background .12s;
   cursor: pointer;
 }}
-.mm-type-item a:hover {{ background: #eef2f7; }}
+.mm-type-item a:hover {{ background: var(--tint); }}
 .mm-type-item a.active {{ background: #ede9fe; color: var(--primary); font-weight: 600; }}
 .mm-type-dot {{ width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }}
 .mm-type-count {{
@@ -498,7 +498,7 @@ body.sidebar-open .admin-sidebar {{
   padding: .35rem .5rem; border-radius: 5px; font-size: 13px;
   color: var(--text); text-decoration: none; transition: background .12s;
 }}
-.mm-folder-item a:hover {{ background: #eef2f7; }}
+.mm-folder-item a:hover {{ background: var(--tint); }}
 .mm-folder-item a.active {{ background: #ede9fe; color: var(--primary); }}
 .mm-folder-item svg {{ flex-shrink: 0; color: var(--muted); }}
 .mm-folder-item a.active svg {{ color: var(--primary); }}
@@ -550,7 +550,7 @@ body.sidebar-open .admin-sidebar {{
 .mm-item {{
   position: relative; border-radius: var(--radius);
   border: 2px solid transparent; overflow: hidden;
-  cursor: pointer; background: #f1f5f9;
+  cursor: pointer; background: var(--tint);
   transition: border-color .15s, box-shadow .15s; aspect-ratio: 1;
 }}
 .mm-item:hover {{ border-color: #c7d2fe; box-shadow: 0 2px 8px rgba(79,70,229,.12); }}
@@ -598,16 +598,16 @@ body.sidebar-open .admin-sidebar {{
   text-align: left; padding: .5rem .75rem;
   font-size: 11px; font-weight: 700; text-transform: uppercase;
   letter-spacing: .05em; color: var(--muted);
-  border-bottom: 1px solid var(--border); background: #f8fafc; white-space: nowrap;
+  border-bottom: 1px solid var(--border); background: var(--tint); white-space: nowrap;
 }}
 .mm-list td {{ padding: .5rem .75rem; font-size: 13px; border-bottom: 1px solid var(--border); vertical-align: middle; }}
-.mm-list tr:hover td {{ background: #f8fafc; }}
+.mm-list tr:hover td {{ background: var(--tint); }}
 .mm-list tr.selected td {{ background: #ede9fe; }}
 .mm-list tr.hidden {{ display: none !important; }}
 /* Hide checkbox column in list view until Select mode is active */
 #mmLayout:not(.mm-bulk-mode) .mm-list thead th:first-child,
 #mmLayout:not(.mm-bulk-mode) .mm-list tbody td:first-child {{ display: none; }}
-.mm-list .mm-list-thumb {{ width: 40px; height: 40px; border-radius: 4px; object-fit: cover; display: block; background: #f1f5f9; }}
+.mm-list .mm-list-thumb {{ width: 40px; height: 40px; border-radius: 4px; object-fit: cover; display: block; background: var(--tint); }}
 .mm-list-type-pill {{ display: inline-block; padding: .15rem .45rem; border-radius: 99px; font-size: 11px; font-weight: 600; }}
 
 /* Empty state */
@@ -627,7 +627,7 @@ body.sidebar-open .admin-sidebar {{
 .mm-detail-header {{
   display: flex; align-items: center; justify-content: space-between;
   padding: .65rem .9rem; border-bottom: 1px solid var(--border);
-  background: #f8fafc; flex-shrink: 0;
+  background: var(--tint); flex-shrink: 0;
 }}
 .mm-detail-header span {{ font-size: 13px; font-weight: 600; color: var(--text); }}
 .mm-detail-close {{
@@ -635,17 +635,17 @@ body.sidebar-open .admin-sidebar {{
   padding: .2rem; border-radius: 4px;
   display: flex; align-items: center; justify-content: center;
 }}
-.mm-detail-close:hover {{ background: #f1f5f9; color: var(--text); }}
+.mm-detail-close:hover {{ background: var(--tint); color: var(--text); }}
 
 .mm-detail-body {{ flex: 1; overflow-y: auto; padding: .9rem; }}
 .mm-detail-preview {{
   width: 100%; aspect-ratio: 4/3; object-fit: contain;
-  border-radius: var(--radius); background: #f1f5f9; display: block; margin-bottom: .85rem;
+  border-radius: var(--radius); background: var(--tint); display: block; margin-bottom: .85rem;
 }}
 .mm-detail-preview-icon {{
   width: 100%; aspect-ratio: 4/3; display: flex;
   align-items: center; justify-content: center;
-  background: #f1f5f9; border-radius: var(--radius); margin-bottom: .85rem; color: var(--muted);
+  background: var(--tint); border-radius: var(--radius); margin-bottom: .85rem; color: var(--muted);
 }}
 .mm-detail-filename {{ font-weight: 600; font-size: 13px; color: var(--text); word-break: break-all; margin-bottom: .5rem; }}
 .mm-detail-stats {{ display: grid; grid-template-columns: auto 1fr; gap: .3rem .75rem; font-size: 12px; }}
@@ -672,7 +672,7 @@ body.sidebar-open .admin-sidebar {{
 
 .mm-detail-url {{
   display: flex; align-items: center; gap: .4rem;
-  background: #f1f5f9; border: 1px solid var(--border);
+  background: var(--tint); border: 1px solid var(--border);
   border-radius: var(--radius); padding: .35rem .6rem;
   font-size: 12px; color: var(--muted); word-break: break-all; margin-bottom: .65rem;
 }}
@@ -713,9 +713,20 @@ body.sidebar-open .admin-sidebar {{
 .mm-footer {{
   display: flex; align-items: center; justify-content: space-between;
   padding: .55rem 1rem; border-top: 1px solid var(--border);
-  background: #f8fafc; flex-shrink: 0; flex-wrap: wrap; gap: .5rem;
+  background: var(--tint); flex-shrink: 0; flex-wrap: wrap; gap: .5rem;
 }}
 .mm-footer-info {{ font-size: 13px; color: var(--muted); margin-left: auto; }}
+
+/* ── Dark mode — the neutral panel backgrounds above already switch via
+   var(--tint); these are the remaining one-off accent colors (purple
+   active/selected states, the neutral count pill, the danger hover) that
+   don't map onto an existing variable, so they need explicit dark values. */
+:root[data-theme="dark"] .mm-type-item a.active,
+:root[data-theme="dark"] .mm-folder-item a.active,
+:root[data-theme="dark"] .mm-list tr.selected td {{ background: rgba(129,140,248,.18); }}
+:root[data-theme="dark"] .mm-type-count {{ background: var(--tint); color: var(--muted); }}
+:root[data-theme="dark"] .mm-type-item a.active .mm-type-count {{ background: rgba(129,140,248,.28); color: var(--primary); }}
+:root[data-theme="dark"] .mm-bulk-action.danger:hover {{ background: rgba(248,113,113,.18); color: var(--danger); }}
 
 /* ── Responsive ───────────────────────────────────────────────────────── */
 @media (max-width: 900px) {{
@@ -917,7 +928,7 @@ body.sidebar-open .admin-sidebar {{
             <option value="">— No folder (All media) —</option>
           </select>
         </div>
-        <p id="mmMoveError" style="display:none;font-size:13px;color:#dc2626;margin:-.5rem 0 1rem">Move failed. Please try again.</p>
+        <p id="mmMoveError" style="display:none;font-size:13px;color:var(--danger);margin:-.5rem 0 1rem">Move failed. Please try again.</p>
         <div style="display:flex;gap:.5rem;justify-content:flex-end">
           <button class="btn btn-secondary" onclick="document.getElementById('mmMoveModal').style.display='none'">Cancel</button>
           <button class="btn btn-primary" onclick="bulkMoveConfirm()">Move</button>

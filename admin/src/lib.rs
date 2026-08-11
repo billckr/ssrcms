@@ -418,6 +418,20 @@ pub fn picker_page(content: &str) -> String {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Media Library</title>
+  <script>
+    // Same pre-paint theme detection as admin_page (see lib.rs) — this iframe
+    // gets its own document, so without this it always renders light mode
+    // regardless of what the parent admin page (and localStorage) say.
+    (function() {{
+      try {{
+        var pref = localStorage.getItem('admin-theme') || 'system';
+        var dark = pref === 'dark' || (pref === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        if (dark) {{
+          document.documentElement.setAttribute('data-theme', 'dark');
+        }}
+      }} catch (e) {{}}
+    }})();
+  </script>
   <style>{css}</style>
   <style>
     html, body {{ height: 100%; margin: 0; overflow: hidden; background: var(--surface); }}
