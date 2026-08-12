@@ -237,7 +237,9 @@ pub fn render_form_detail(
     </dl>
     <form method="POST" action="/admin/form-data-analytics/{fname}/{id}/delete"
           onsubmit="return confirm('Delete this submission?')" style="margin-top:.75rem">
-      <button class="btn btn-sm btn-danger" type="submit">Delete</button>
+      <div class="icon-pill">
+        <button class="icon-btn icon-danger" type="submit" title="Delete" aria-label="Delete"><img src="/admin/static/icons/trash.svg" alt=""></button>
+      </div>
     </form>
   </div>
 </details>"#,
@@ -264,7 +266,7 @@ pub fn render_form_detail(
         r#"<style>
 .submission-list .card-boxed {{ margin-bottom: .6rem; }}
 .submission-row summary.card-boxed-header {{ transition: background-color .1s ease; }}
-.submission-row summary.card-boxed-header:hover {{ background: #eef1f5; }}
+.submission-row summary.card-boxed-header:hover {{ background: var(--border); }}
 .submission-summary-date {{
   flex-shrink: 0;
   font-variant-numeric: tabular-nums;
@@ -287,13 +289,12 @@ pub fn render_form_detail(
   <div style="display:flex;align-items:center;gap:.75rem">
     {search_box}
   </div>
-  <div style="display:flex;align-items:center;gap:.5rem">
+  <div class="icon-pill">
     <a href="/admin/form-data-analytics/{fname}/export" class="icon-btn" title="Export CSV" aria-label="Export CSV"><img src="/admin/static/icons/download.svg" alt=""></a>
     <form method="POST" action="/admin/form-data-analytics/{fname}/delete-all" style="display:inline"
           onsubmit="return confirm('Delete ALL submissions for this form?')">
       <button class="icon-btn icon-danger" type="submit" title="Delete All" aria-label="Delete All"><img src="/admin/static/icons/trash.svg" alt=""></button>
     </form>
-    <a href="/admin/form-data-analytics" class="btn btn-secondary">← All Forms</a>
   </div>
 </div>
 <div class="submission-list">

@@ -415,9 +415,9 @@ pub fn render_settings(data: &SiteSettingsData, flash: Option<&str>, ctx: &crate
         <input type="text" id="mailgun_domain" name="mailgun_domain" value="{mailgun_domain}" placeholder="e.g. mg.example.com">
       </div>
       <div class="form-group">
-        <label for="mailgun_api_key">Mailgun API key</label>
+        <label for="mailgun_api_key">Mailgun sending key</label>
         <input type="password" id="mailgun_api_key" name="mailgun_api_key" autocomplete="off" placeholder="{mailgun_key_placeholder}">
-        <small>{mailgun_key_hint}</small>
+        <small>{mailgun_key_hint} Use the domain's Sending key (Domains &rarr; select domain &rarr; Sending Keys), not the account-wide Private API key.</small>
       </div>
     </div>
     <p class="field-hint" id="mail-config-error" style="color:var(--danger);display:none;margin:0 0 .75rem"></p>
