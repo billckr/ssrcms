@@ -24,7 +24,7 @@ fn display_or_placeholder(value: &str) -> String {
     if value.trim().is_empty() {
         r#"<span class="profile-summary-empty">&quot;The future has yet to be written...&quot;</span>"#.to_string()
     } else {
-        crate::html_escape(value)
+        format!("&quot;{}&quot;", crate::html_escape(value))
     }
 }
 
