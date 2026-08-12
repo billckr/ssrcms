@@ -12,6 +12,7 @@ use uuid::Uuid;
 use crate::app_state::AppState;
 use crate::middleware::admin_auth::AdminUser;
 use crate::models::form_def::{self, CreateFormDef, FormField, FormSettings, UpdateFormDef};
+use crate::models::mail_log;
 
 use admin::pages::form_designer::{forms_list_fragment, render_editor, render_list, FieldRow, FormEditData, FormRow};
 
@@ -120,9 +121,85 @@ pub async fn edit_form(State(state): State<AppState>, admin: AdminUser, Path(id)
         button_label: form.settings.button_label,
         include_honeypot: form.settings.include_honeypot,
         notify_email: form.settings.notify_email.unwrap_or_default(),
+        confirm_submitter: form.settings.confirm_submitter,
+        confirm_subject: form.settings.confirm_subject,
+        confirm_body: form.settings.confirm_body,
     };
 
     Html(render_editor(&data, &ctx, None)).into_response()
+}
+
+// ── analytics (placeholder) ──────────────────────────────────────────────────
+
+pub async fn analytics(
+    State(state): State<AppState>,
+    admin: AdminUser,
+    Path(id): Path<Uuid>,
+    Query(params): Query<HashMap<String, String>>,
+) -> Response {
+    if let Err(e) = require_forms_cap(&admin) { return e; }
+    let site_id = match require_site_id(&admin) { Ok(id) => id, Err(e) => return e };
+
+    let cs = state.site_hostname(admin.site_id);
+    let ctx = super::page_ctx_full(&state, &admin, &cs).await;
+
+    let Ok(Some(form)) = form_def::get_by_id(&state.db, site_id, id).await else {
+        return Redirect::to("/admin/form-designer").into_response();
+    };
+
+    let (total_sent, succeeded, failed) = mail_log::counts_for_form(&state.db, id).await.unwrap_or((0, 0, 0));
+    let recent = mail_log::list_for_form(&state.db, id, 50).await.unwrap_or_default();
+
+    let mut recent: Vec<admin::pages::form_designer::MailLogRow> = recent.into_iter().map(|r| admin::pages::form_designer::MailLogRow {
+        to_email: r.to_email,
+        subject: r.subject,
+        success: r.success,
+        mailgun_message_id: r.mailgun_message_id,
+        error: r.error,
+        sent_at: r.created_at.format("%Y-%m-%d %H:%M UTC").to_string(),
+    }).collect();
+
+    let search = params.get("search").map(|s| s.trim()).unwrap_or("");
+    if !search.is_empty() {
+        let needle = search.to_lowercase();
+        recent.retain(|r| {
+            r.to_email.to_lowercase().contains(&needle)
+                || r.subject.to_lowercase().contains(&needle)
+                || r.mailgun_message_id.as_deref().unwrap_or("").to_lowercase().contains(&needle)
+                || r.error.as_deref().unwrap_or("").to_lowercase().contains(&needle)
+        });
+    }
+
+    let sort = params.get("sort").map(|s| s.as_str()).unwrap_or("");
+    let dir = params.get("dir").map(|s| s.as_str()).unwrap_or("");
+    match sort {
+        "to"      => recent.sort_by(|a, b| a.to_email.to_lowercase().cmp(&b.to_email.to_lowercase())),
+        "subject" => recent.sort_by(|a, b| a.subject.to_lowercase().cmp(&b.subject.to_lowercase())),
+        "status"  => recent.sort_by(|a, b| a.success.cmp(&b.success)),
+        "sent"    => recent.sort_by(|a, b| a.sent_at.cmp(&b.sent_at)),
+        _ => {}
+    }
+    // Sorts above are ascending by default; reverse for dir=desc. No sort
+    // param at all leaves the list in its DB order (newest-first).
+    if !sort.is_empty() && dir == "desc" {
+        recent.reverse();
+    }
+
+    let data = admin::pages::form_designer::FormAnalyticsData {
+        id: id.to_string(),
+        form_name: form.name,
+        total_sent,
+        succeeded,
+        failed,
+        recent,
+    };
+
+    if params.contains_key("partial") {
+        let search_qs = if search.is_empty() { String::new() } else { format!("&search={}", admin::html_escape(search)) };
+        return Html(admin::pages::form_designer::render_analytics_table(&data, sort, dir, &search_qs)).into_response();
+    }
+
+    Html(admin::pages::form_designer::render_analytics(&data, sort, dir, search, &ctx)).into_response()
 }
 
 // ── create / update ──────────────────────────────────────────────────────────
@@ -135,6 +212,9 @@ pub struct SaveFormForm {
     pub button_label: String,
     pub include_honeypot: Option<String>,
     pub notify_email: Option<String>,
+    pub confirm_submitter: Option<String>,
+    pub confirm_subject: String,
+    pub confirm_body: String,
 }
 
 /// Raw shape of one field as JSON-encoded by the editor's submit handler —
@@ -181,6 +261,17 @@ fn settings_from_form(form: &SaveFormForm) -> FormSettings {
             .map(str::trim)
             .filter(|s| !s.is_empty())
             .map(str::to_string),
+        confirm_submitter: form.confirm_submitter.as_deref() == Some("true"),
+        confirm_subject: if form.confirm_subject.trim().is_empty() {
+            "We've received your submission".to_string()
+        } else {
+            form.confirm_subject.clone()
+        },
+        confirm_body: if form.confirm_body.trim().is_empty() {
+            "Thanks for reaching out! We've received your submission and will follow up soon.".to_string()
+        } else {
+            form.confirm_body.clone()
+        },
     }
 }
 

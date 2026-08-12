@@ -3,6 +3,7 @@ pub mod comment;
 pub mod page_composition;
 pub mod form_def;
 pub mod form_submission;
+pub mod mail_log;
 pub mod media;
 pub mod media_folder;
 pub mod nav_menu;

@@ -72,6 +72,7 @@ pub async fn request_post(
                         to: &target.email,
                         subject: "Reset your password",
                         text: &text,
+                        form_id: None,
                     },
                 )
                 .await

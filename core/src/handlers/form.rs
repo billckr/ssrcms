@@ -66,10 +66,24 @@ pub async fn submit(
             .collect::<Vec<_>>()
             .join("\n");
 
+        // Fetched before `data` moves below — needed for both the
+        // admin-notify email and the submitter-confirmation email.
+        let form = form_def::get_by_slug(&state.db, current_site.site.id, &name).await.ok().flatten();
+
+        // The submitter's own address, if this form collects one: the
+        // submitted value of its first `email`-type field.
+        let submitter_email = form.as_ref().and_then(|f| {
+            f.fields.iter()
+                .find(|field| field.field_type == "email")
+                .and_then(|field| data.get(&field.name))
+                .filter(|v| !v.trim().is_empty())
+                .cloned()
+        });
+
         let input = CreateFormSubmission {
             site_id: current_site.site.id,
             form_name: name.clone(),
-            data: serde_json::to_value(data).unwrap_or(serde_json::Value::Object(Default::default())),
+            data: serde_json::to_value(&data).unwrap_or(serde_json::Value::Object(Default::default())),
             ip_address: ip,
         };
 
@@ -79,17 +93,38 @@ pub async fn submit(
 
         // Fire-and-forget: don't make the visitor's redirect wait on an
         // outbound HTTP call to Mailgun.
-        if let Ok(Some(form)) = form_def::get_by_slug(&state.db, current_site.site.id, &name).await {
+        if let Some(form) = form {
+            let site_id = current_site.site.id;
+            let form_id = form.id;
+
             if let Some(to) = form.settings.notify_email {
                 let state = state.clone();
                 let subject = format!("New submission: {}", form.name);
-                let site_id = current_site.site.id;
                 tokio::spawn(async move {
-                    let msg = EmailMessage { to: &to, subject: &subject, text: &notify_body };
+                    let msg = EmailMessage { to: &to, subject: &subject, text: &notify_body, form_id: Some(form_id) };
                     if let Err(e) = mail::send_for_site(&state, site_id, msg).await {
                         tracing::error!("form notify email failed: {e:?}");
                     }
                 });
+            }
+
+            if form.settings.confirm_submitter {
+                if let Some(to) = submitter_email {
+                    let state = state.clone();
+                    let subject = fill_template(&form.settings.confirm_subject, &data);
+                    let body = fill_template(&form.settings.confirm_body, &data);
+                    tokio::spawn(async move {
+                        let msg = EmailMessage { to: &to, subject: &subject, text: &body, form_id: Some(form_id) };
+                        if let Err(e) = mail::send_for_site(&state, site_id, msg).await {
+                            tracing::error!("form confirmation email failed: {e:?}");
+                        }
+                    });
+                } else {
+                    tracing::warn!(
+                        "form '{}' has confirm_submitter enabled but no email-type field value was submitted",
+                        name
+                    );
+                }
             }
         }
     }
@@ -114,4 +149,16 @@ pub async fn submit(
         base,
         crate::handlers::admin::appearance::url_encode_param(&name)
     ))
+}
+
+/// Replace `{{field_name}}` tokens in a confirmation subject/body with the
+/// matching submitted value. Unknown tokens are left as-is rather than
+/// blanked out, so a typo'd field name is obvious to the admin instead of
+/// silently disappearing from the email.
+fn fill_template(template: &str, data: &HashMap<String, String>) -> String {
+    let mut out = template.to_string();
+    for (key, value) in data {
+        out = out.replace(&format!("{{{{{key}}}}}"), value);
+    }
+    out
 }

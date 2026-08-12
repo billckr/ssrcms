@@ -15,11 +15,15 @@ use uuid::Uuid;
 
 use crate::app_state::{get_site_setting, AppState};
 use crate::config::AppConfig;
+use crate::models::mail_log::{self, RecordSend};
 
 pub struct EmailMessage<'a> {
     pub to: &'a str,
     pub subject: &'a str,
     pub text: &'a str,
+    /// The form (if any) this send was triggered by — recorded on the
+    /// mail_log row so a form's analytics page can show just its own sends.
+    pub form_id: Option<Uuid>,
 }
 
 /// site_settings keys for a site's own Mailgun account. The API key is
@@ -51,20 +55,71 @@ pub async fn send_for_site(state: &AppState, site_id: Uuid, msg: EmailMessage<'_
         .text("subject", msg.subject.to_string())
         .text("text", msg.text.to_string());
 
-    let resp = reqwest::Client::new()
+    let sent = reqwest::Client::new()
         .post(&url)
         .basic_auth("api", Some(&creds.api_key))
         .multipart(form)
         .send()
-        .await?;
+        .await;
+
+    let resp = match sent {
+        Ok(resp) => resp,
+        Err(e) => {
+            let error = format!("request to mailgun failed: {e}");
+            record_attempt(state, site_id, &msg, false, None, Some(&error)).await;
+            return Err(e.into());
+        }
+    };
 
     if !resp.status().is_success() {
         let status = resp.status();
         let body = resp.text().await.unwrap_or_default();
-        anyhow::bail!("mailgun send failed ({status}): {body}");
+        let error = format!("mailgun send failed ({status}): {body}");
+        record_attempt(state, site_id, &msg, false, None, Some(&error)).await;
+        anyhow::bail!(error);
     }
 
+    // Mailgun's success body is `{"id": "<message-id>", "message": "Queued. Thank you."}`.
+    // The id is worth logging: it's the key to look up this exact send in
+    // Mailgun's own dashboard/logs if the recipient later says they never got it.
+    let body = resp.text().await.unwrap_or_default();
+    let message_id = serde_json::from_str::<serde_json::Value>(&body)
+        .ok()
+        .and_then(|v| v.get("id").and_then(|id| id.as_str()).map(str::to_string));
+    tracing::info!(
+        "mailgun accepted email to {} for site {} (message id: {})",
+        msg.to,
+        site_id,
+        message_id.as_deref().unwrap_or("unknown"),
+    );
+    record_attempt(state, site_id, &msg, true, message_id.as_deref(), None).await;
+
     Ok(())
+}
+
+/// Best-effort: a mail_log write failure shouldn't mask the send's own
+/// success/failure, so this only ever logs — never returns an error to the
+/// caller.
+async fn record_attempt(
+    state: &AppState,
+    site_id: Uuid,
+    msg: &EmailMessage<'_>,
+    success: bool,
+    mailgun_message_id: Option<&str>,
+    error: Option<&str>,
+) {
+    let result = mail_log::record(&state.db, RecordSend {
+        site_id,
+        form_id: msg.form_id,
+        to_email: msg.to,
+        subject: msg.subject,
+        success,
+        mailgun_message_id,
+        error,
+    }).await;
+    if let Err(e) = result {
+        tracing::error!("failed to write mail_log entry for site {}: {:?}", site_id, e);
+    }
 }
 
 async fn resolve_creds(state: &AppState, site_id: Uuid) -> Option<MailgunCreds> {

@@ -40,11 +40,25 @@ pub struct FormSettings {
     /// (the default) means no notification is sent.
     #[serde(default)]
     pub notify_email: Option<String>,
+    /// When true, auto-reply to whichever submitted value came from the
+    /// form's first `email`-type field, confirming receipt. Off by default —
+    /// most forms don't need it, and it only fires when the form actually
+    /// has an email field to reply to.
+    #[serde(default)]
+    pub confirm_submitter: bool,
+    #[serde(default = "default_confirm_subject")]
+    pub confirm_subject: String,
+    #[serde(default = "default_confirm_body")]
+    pub confirm_body: String,
 }
 
 fn default_success_message() -> String { "Thank you for your submission!".to_string() }
 fn default_button_label() -> String { "Submit".to_string() }
 fn default_true() -> bool { true }
+fn default_confirm_subject() -> String { "We've received your submission".to_string() }
+fn default_confirm_body() -> String {
+    "Thanks for reaching out! We've received your submission and will follow up soon.".to_string()
+}
 
 impl Default for FormSettings {
     fn default() -> Self {
@@ -53,6 +67,9 @@ impl Default for FormSettings {
             button_label: default_button_label(),
             include_honeypot: true,
             notify_email: None,
+            confirm_submitter: false,
+            confirm_subject: default_confirm_subject(),
+            confirm_body: default_confirm_body(),
         }
     }
 }

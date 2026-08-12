@@ -258,6 +258,7 @@ pub fn build(
         .route("/admin/form-designer/new", get(admin_form_designer::new_form))
         .route("/admin/form-designer/{id}", get(admin_form_designer::edit_form).post(admin_form_designer::update))
         .route("/admin/form-designer/{id}/delete", post(admin_form_designer::delete))
+        .route("/admin/form-analytics/{id}", get(admin_form_designer::analytics))
         .route("/admin/form-data-analytics", get(admin_forms::list_forms))
         .route("/admin/form-data-analytics/{name}", get(admin_forms::view_form))
         .route("/admin/form-data-analytics/{name}/{id}/delete", post(admin_forms::delete_submission))

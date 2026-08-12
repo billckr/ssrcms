@@ -433,7 +433,7 @@ tr.muted td { opacity: .55; }
 .badge-admin       { background: #e2e8f0; color: #64748b; }
 /* Page tabs */
 .page-tabs { display: flex; gap: 0; border-bottom: 2px solid var(--border); margin-bottom: 1.25rem; }
-.page-tab  { position: relative; padding: .5rem 1.1rem; font-size: .9rem; font-weight: 500; color: var(--muted); text-decoration: none; border-bottom: 2px solid transparent; margin-bottom: -2px; transition: color .15s; white-space: nowrap; }
+.page-tab  { position: relative; padding: .5rem 1.1rem; font-size: .9rem; font-family: inherit; font-weight: 500; color: var(--muted); background: none; border: none; border-bottom: 2px solid transparent; margin-bottom: -2px; cursor: pointer; text-decoration: none; transition: color .15s; white-space: nowrap; }
 .page-tab:hover { color: var(--text); }
 .page-tab.active  { color: var(--primary); }
 .page-tab.active::after {
