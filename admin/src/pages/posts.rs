@@ -1217,6 +1217,53 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
     }}, 0);
   }});
 
+  // ── AJAX save ────────────────────────────────────────────────────────
+  // A native submit reloads the whole editor, including tearing down and
+  // re-initializing Quill — this is the single most frequent action on
+  // the single most-used admin page, so that reload cost is paid a lot.
+  // Reuses the same fetch + follow-redirect technique as
+  // deletePostConfirm below: save_edit/save_new are completely untouched
+  // server-side, we just choose whether to act on the redirect they
+  // already send back.
+  postForm.addEventListener('submit', function(e) {{
+    e.preventDefault();
+    fetch(postForm.action, {{ method: 'POST', body: new FormData(postForm) }}).then(function(r) {{
+      if (r.redirected) {{
+        var landedPath = new URL(r.url).pathname;
+        if (landedPath === location.pathname) {{
+          // Common case: editing an existing post lands back on the same
+          // page (just gains a ?success=saved query string) — stay put.
+          formDirty = false;
+          var saveBtn = document.getElementById('save-btn');
+          if (saveBtn) {{
+            saveBtn.disabled = true;
+            saveBtn.classList.remove('icon-btn-save-dirty');
+          }}
+          document.querySelectorAll('.unsaved-indicator').forEach(function(el) {{
+            el.textContent = 'Saved ✓';
+            el.style.display = '';
+          }});
+          setTimeout(function() {{
+            document.querySelectorAll('.unsaved-indicator').forEach(function(el) {{
+              el.style.display = 'none';
+              el.textContent = 'Save Changes';
+            }});
+          }}, 2000);
+        }} else {{
+          // New-post-created, or any other server-decided redirect target —
+          // the same one-time navigation that already happens today.
+          formDirty = false; // intentional navigation away — don't warn
+          window.location.href = r.url;
+        }}
+      }} else {{
+        // Validation/DB error: the server rendered the edit page directly
+        // with a flash message, no redirect. Reuse that exact rendering —
+        // a real native submit — instead of duplicating error display here.
+        postForm.submit();
+      }}
+    }});
+  }});
+
   // Delete button uses fetch instead of a nested <form> — the whole editor
   // is already one big <form>, and nested forms are invalid HTML.
   window.deletePostConfirm = function(path, label) {{

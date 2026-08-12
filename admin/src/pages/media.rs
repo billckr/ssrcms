@@ -318,9 +318,6 @@ pub fn render_list(
     } else {
         frame_base.to_string()
     };
-    // ── Redirect targets for folder create/delete forms ───────────────────────
-    let new_folder_redirect    = frame_base;
-    let delete_folder_redirect = frame_base;
     // ── Detail actions HTML (differs in picker/select mode) ───────────────────
     let detail_actions_html = if select_mode {
         r#"    <div class="mm-detail-actions" id="mmDetailActions" style="display:none">
@@ -364,11 +361,8 @@ pub fn render_list(
     };
 
     // ── Delete-folder button (only when a folder is active) ──────────────────
-    let delete_folder_btn_html = if let Some(fid) = active_folder {
-        format!(
-            r##"<button class="btn btn-danger mm-new-folder-btn" style="margin-top:.3rem" onclick="promptDeleteFolder('{}')"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>Delete folder</button>"##,
-            html_escape(fid)
-        )
+    let delete_folder_btn_html = if active_folder.is_some() {
+        r##"<button class="btn btn-danger mm-new-folder-btn" style="margin-top:.3rem" disabled title="Requires JavaScript"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>Delete folder</button>"##.to_string()
     } else {
         String::new()
     };
@@ -841,10 +835,12 @@ body.sidebar-open .admin-sidebar {{
         {folder_items}
       </select>
       </div>
-      <button class="btn btn-primary mm-new-folder-btn" onclick="promptNewFolder()">
+      <div id="mm-new-folder-btn-app" style="display:contents">
+      <button class="btn btn-primary mm-new-folder-btn" disabled title="Requires JavaScript">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></svg>
         Folder +
       </button>
+      </div>
       <div id="mm-delete-folder-app" style="display:contents">{delete_folder_btn}</div>
     </div>
   </div>
@@ -914,22 +910,9 @@ body.sidebar-open .admin-sidebar {{
     <button class="btn btn-danger mm-bulk-btn" onclick="bulkDelete()">Delete</button>
   </div>
 
-  <!-- Delete folder modal -->
-  <div id="mmDeleteFolderModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;align-items:center;justify-content:center">
-    <div class="modal-card" style="max-width:400px;width:90%">
-      <h3 class="modal-card-header">Delete folder</h3>
-      <div class="modal-card-body">
-        <p id="mmDeleteFolderMsg" style="font-size:14px;color:var(--muted);margin-bottom:1rem"></p>
-        <div id="mmDeleteFolderActions" style="display:flex;flex-direction:column;gap:.5rem">
-          <button class="btn btn-secondary" id="mmDeleteFolderMoveBtn" onclick="confirmDeleteFolder(false)" style="justify-content:center">Move files to All Media, then delete folder</button>
-          <button class="btn btn-danger" onclick="confirmDeleteFolder(true)" style="justify-content:center">Delete folder and all its files permanently</button>
-        </div>
-        <div style="margin-top:.75rem;text-align:right">
-          <button class="btn btn-secondary" onclick="document.getElementById('mmDeleteFolderModal').style.display='none'">Cancel</button>
-        </div>
-      </div>
-    </div>
-  </div>
+  <!-- Delete folder modal — owned entirely by the WASM island (renders
+       nothing until opened), see media-app/src/components.rs DeleteFolderModal -->
+  <div id="mm-delete-folder-modal-app"></div>
 
   <!-- Move-to folder modal -->
   <div id="mmMoveModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;align-items:center;justify-content:center">
@@ -964,26 +947,9 @@ body.sidebar-open .admin-sidebar {{
     </div>
   </div>
 
-  <!-- New folder modal -->
-  <div id="mmNewFolderModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;align-items:center;justify-content:center">
-    <div class="modal-card" style="max-width:360px;width:90%">
-      <h3 class="modal-card-header">New folder</h3>
-      <div class="modal-card-body">
-        <div class="form-group" style="margin-bottom:.35rem">
-          <input type="text" id="mmNewFolderInput" placeholder="Folder name" maxlength="25"
-                 style="width:100%;padding:.35rem .6rem;border:1px solid var(--border);border-radius:var(--radius);font-size:14px;background:var(--field-bg);color:var(--field-text);box-sizing:border-box"
-                 oninput="validateNewFolderName()" onkeydown="if(event.key==='Enter'){{event.preventDefault();submitNewFolder();}}">
-        </div>
-        <p id="mmNewFolderHint" style="font-size:12px;color:var(--muted);margin:0 0 1rem">
-          4–25 characters: letters, numbers, and hyphens only.
-        </p>
-        <div style="display:flex;gap:.5rem;justify-content:flex-end">
-          <button class="btn btn-secondary" onclick="document.getElementById('mmNewFolderModal').style.display='none'">Cancel</button>
-          <button class="btn btn-primary" id="mmNewFolderBtn" onclick="submitNewFolder()" disabled>Create</button>
-        </div>
-      </div>
-    </div>
-  </div>
+  <!-- New folder modal — owned entirely by the WASM island (renders
+       nothing until opened), see media-app/src/components.rs NewFolderModal -->
+  <div id="mm-new-folder-modal-app"></div>
 
 </div>
 
@@ -996,7 +962,6 @@ body.sidebar-open .admin-sidebar {{
   // `FOLDERS` references, which resolve up the scope chain to `window`.
   window.ITEMS   = {items_json};
   window.FOLDERS = {folders_json};
-  var FOLDER_TOTAL = {total_count};
   var selected = new Set();
   var bulkMode = false;
 
@@ -1287,93 +1252,11 @@ body.sidebar-open .admin-sidebar {{
     }});
   }};
 
-  /* ── New folder ───────────────────────────────────────────────────── */
-  // Mirrors the server's sanitization/length rule in create_folder() —
-  // letters, numbers, and hyphens only, 4-25 chars after trimming leading/
-  // trailing hyphens — so the Create button only enables when the name the
-  // server will actually accept and store matches what's typed.
-  function sanitizeNewFolderName(raw) {{
-    var clean = raw.replace(/[^a-zA-Z0-9\-]/g, '').slice(0, 25);
-    clean = clean.replace(/^-+|-+$/g, '');
-    return clean;
-  }}
-
-  // Strips disallowed characters as the user types, without trimming
-  // leading/trailing hyphens (that only happens on submit) so typing
-  // isn't disrupted mid-word.
-  function stripDisallowedChars(raw) {{
-    return raw.replace(/[^a-zA-Z0-9\-]/g, '').slice(0, 25);
-  }}
-
-  window.validateNewFolderName = function() {{
-    var input = document.getElementById('mmNewFolderInput');
-    var btn = document.getElementById('mmNewFolderBtn');
-    var pos = input.selectionStart;
-    var before = input.value;
-    var stripped = stripDisallowedChars(before);
-    if (stripped !== before) {{
-      var removedBeforeCursor = before.slice(0, pos).length - stripDisallowedChars(before.slice(0, pos)).length;
-      input.value = stripped;
-      input.setSelectionRange(pos - removedBeforeCursor, pos - removedBeforeCursor);
-    }}
-    var clean = sanitizeNewFolderName(input.value);
-    btn.disabled = clean.length < 4;
-  }};
-
-  window.promptNewFolder = function() {{
-    var input = document.getElementById('mmNewFolderInput');
-    input.value = '';
-    document.getElementById('mmNewFolderBtn').disabled = true;
-    document.getElementById('mmNewFolderModal').style.display = 'flex';
-    input.focus();
-  }};
-
-  window.submitNewFolder = function() {{
-    var input = document.getElementById('mmNewFolderInput');
-    var name = sanitizeNewFolderName(input.value);
-    if (name.length < 4) return;
-    var form = document.createElement('form');
-    form.method = 'POST';
-    form.action = '/admin/media/folders/new';
-    var inp = document.createElement('input');
-    inp.name = 'name'; inp.value = name;
-    form.appendChild(inp);
-    var redir = document.createElement('input');
-    redir.name = 'redirect'; redir.value = '{new_folder_redirect}';
-    form.appendChild(redir);
-    document.body.appendChild(form);
-    form.submit();
-  }};
-
-  /* ── Delete folder ─────────────────────────────────────────────── */
-  var pendingDeleteFolderId = null;
-
-  window.promptDeleteFolder = function(folderId) {{
-    pendingDeleteFolderId = folderId;
-    var msg     = document.getElementById('mmDeleteFolderMsg');
-    var moveBtn = document.getElementById('mmDeleteFolderMoveBtn');
-    if (FOLDER_TOTAL > 0) {{
-      msg.textContent = 'This folder contains ' + FOLDER_TOTAL + ' file(s). What would you like to do with them?';
-      moveBtn.style.display = '';
-    }} else {{
-      msg.textContent = 'Are you sure you want to delete this empty folder?';
-      moveBtn.style.display = 'none';
-    }}
-    document.getElementById('mmDeleteFolderModal').style.display = 'flex';
-  }};
-
-  window.confirmDeleteFolder = function(deleteMedia) {{
-    document.getElementById('mmDeleteFolderModal').style.display = 'none';
-    if (!pendingDeleteFolderId) return;
-    var form = document.createElement('form');
-    form.method = 'POST';
-    form.action = '/admin/media/folders/' + pendingDeleteFolderId + '/delete';
-    var dm = document.createElement('input'); dm.type='hidden'; dm.name='delete_media'; dm.value=deleteMedia?'true':'false';
-    var rd = document.createElement('input'); rd.type='hidden'; rd.name='redirect'; rd.value='{delete_folder_redirect}';
-    form.appendChild(dm); form.appendChild(rd);
-    document.body.appendChild(form);
-    form.submit();
-  }};
+  // New folder / delete folder are now owned entirely by the WASM island
+  // (media-app/src/components.rs: NewFolderButton, NewFolderModal,
+  // DeleteFolderButton, DeleteFolderModal) — the legacy prompt/submit/
+  // confirm functions and their form.submit()-triggered full reloads were
+  // removed in favor of fetch + in-place refresh.
 
   function escHtml(s) {{
     return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -1398,6 +1281,15 @@ body.sidebar-open .admin-sidebar {{
     var btn = document.getElementById('mmPickerSetBtn');
     if (btn) btn.textContent = e.data.label;
   }});
+
+  // Lets the parent page reuse an already-warm picker iframe on subsequent
+  // opens instead of reloading the whole page (see admin/src/lib.rs's
+  // openMediaPicker) — resets to a fresh "All Media" view scoped to the
+  // requested type filter, in place, without re-running the WASM bootstrap.
+  window.addEventListener('message', function(e) {{
+    if (!e.data || e.data.type !== 'resetPickerFilter') return;
+    if (window.mediaAppResetForPicker) {{ window.mediaAppResetForPicker(e.data.typeFilter || undefined); }}
+  }});
 }})();
 </script>
 <script type="module">
@@ -1405,12 +1297,15 @@ body.sidebar-open .admin-sidebar {{
   // and upload from the static SSR fallback above once it loads. The
   // legacy detail-panel/bulk-action JS in the block above is untouched —
   // it just keeps reading whatever the island puts at window.ITEMS.
-  import init, {{ mount, refresh_grid }} from '/admin/static/media-app/media_app.js';
+  import init, {{ mount, refresh_grid, reset_for_picker }} from '/admin/static/media-app/media_app.js';
   init('/admin/static/media-app/media_app_bg.wasm').then(function() {{
     mount();
     // Lets the legacy (non-module) script below re-fetch the grid in place
     // after bulk move/delete instead of a full window.location.reload().
     window.mediaAppRefresh = refresh_grid;
+    // Lets the parent page reset filters on an already-warm picker iframe —
+    // see the resetPickerFilter message listener above.
+    window.mediaAppResetForPicker = reset_for_picker;
   }});
 </script>
 "##,
@@ -1423,7 +1318,6 @@ body.sidebar-open .admin-sidebar {{
         count_audio  = count_audio,
         count_doc    = count_doc,
         delete_folder_btn = delete_folder_btn_html,
-        total_count  = total,
         folder_items = folder_items_html,
         folder_onchange = folder_onchange,
         type_all_url  = type_all_url,
@@ -1443,8 +1337,6 @@ body.sidebar-open .admin-sidebar {{
         footer_info  = footer_info,
         pagination   = pagination_html,
         detail_actions       = detail_actions_html,
-        new_folder_redirect  = new_folder_redirect,
-        delete_folder_redirect = delete_folder_redirect,
         picker_js    = picker_js,
     );
 

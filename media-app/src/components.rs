@@ -91,12 +91,117 @@ pub fn DeleteFolderButton() -> impl IntoView {
     let s = state();
     view! {
         {move || {
-            s.folder_id.get().map(|fid| {
-                let onclick = format!("promptDeleteFolder('{}')", fid.replace('\'', ""));
+            s.folder_id.get().map(|_fid| {
                 view! {
-                    <button class="btn btn-danger mm-new-folder-btn" style="margin-top:.3rem" onclick=onclick>
+                    <button class="btn btn-danger mm-new-folder-btn" style="margin-top:.3rem"
+                        on:click=move |_| state::open_delete_folder_modal()>
                         "Delete folder"
                     </button>
+                }
+            })
+        }}
+    }
+}
+
+/// Mounted in place of the old "Folder +" button — just opens the modal
+/// below (its own separate mount point, sharing state).
+#[component]
+pub fn NewFolderButton() -> impl IntoView {
+    view! {
+        <button class="btn btn-primary mm-new-folder-btn" on:click=move |_| state::open_new_folder_modal()>
+            "Folder +"
+        </button>
+    }
+}
+
+/// Mounted inside `#mm-new-folder-modal-app`. Renders nothing when closed —
+/// unlike the other mount points, this one owns its own visibility rather
+/// than toggling a pre-existing SSR wrapper's display style, since the
+/// modal only ever needs to exist once JS has taken over anyway.
+#[component]
+pub fn NewFolderModal() -> impl IntoView {
+    let s = state();
+    view! {
+        {move || {
+            s.show_new_folder_modal.get().then(|| view! {
+                <div style="position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;display:flex;align-items:center;justify-content:center">
+                    <div class="modal-card" style="max-width:360px;width:90%">
+                        <h3 class="modal-card-header">"New folder"</h3>
+                        <div class="modal-card-body">
+                            <div class="form-group" style="margin-bottom:.35rem">
+                                <input type="text" placeholder="Folder name" maxlength="25"
+                                    style="width:100%;padding:.35rem .6rem;border:1px solid var(--border);border-radius:var(--radius);font-size:14px;background:var(--field-bg);color:var(--field-text);box-sizing:border-box"
+                                    prop:value=move || s.new_folder_name.get()
+                                    on:input=move |ev| s.new_folder_name.set(event_target_value(&ev))
+                                    on:keydown=move |ev| { if ev.key() == "Enter" { ev.prevent_default(); state::submit_new_folder(); } }
+                                />
+                            </div>
+                            <p style="font-size:12px;color:var(--muted);margin:0 0 1rem">
+                                "4\u{2013}25 characters: letters, numbers, and hyphens only."
+                            </p>
+                            {move || s.new_folder_error.get().map(|e| view! {
+                                <p style="font-size:13px;color:var(--danger);margin:-.5rem 0 1rem">{e}</p>
+                            })}
+                            <div style="display:flex;gap:.5rem;justify-content:flex-end">
+                                <button class="btn btn-secondary" on:click=move |_| s.show_new_folder_modal.set(false)>"Cancel"</button>
+                                <button class="btn btn-primary"
+                                    disabled=move || state::sanitize_folder_name(&s.new_folder_name.get()).len() < 4
+                                    on:click=move |_| state::submit_new_folder()>
+                                    "Create"
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            })
+        }}
+    }
+}
+
+/// Mounted inside `#mm-delete-folder-modal-app`. Message/button layout
+/// driven by the live `grid.total` for the currently-selected folder — the
+/// legacy version read a `FOLDER_TOTAL` var frozen at page load, which went
+/// stale the moment folder switching stopped reloading the page.
+#[component]
+pub fn DeleteFolderModal() -> impl IntoView {
+    let s = state();
+    view! {
+        {move || {
+            s.show_delete_folder_modal.get().then(|| {
+                let total = s.grid.get().map(|g| g.total).unwrap_or(0);
+                view! {
+                    <div style="position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;display:flex;align-items:center;justify-content:center">
+                        <div class="modal-card" style="max-width:400px;width:90%">
+                            <h3 class="modal-card-header">"Delete folder"</h3>
+                            <div class="modal-card-body">
+                                <p style="font-size:14px;color:var(--muted);margin-bottom:1rem">
+                                    {if total > 0 {
+                                        format!("This folder contains {total} file(s). What would you like to do with them?")
+                                    } else {
+                                        "Are you sure you want to delete this empty folder?".to_string()
+                                    }}
+                                </p>
+                                <div style="display:flex;flex-direction:column;gap:.5rem">
+                                    {(total > 0).then(|| view! {
+                                        <button class="btn btn-secondary" style="justify-content:center"
+                                            on:click=move |_| state::confirm_delete_folder(false)>
+                                            "Move files to All Media, then delete folder"
+                                        </button>
+                                    })}
+                                    <button class="btn btn-danger" style="justify-content:center"
+                                        on:click=move |_| state::confirm_delete_folder(true)>
+                                        "Delete folder and all its files permanently"
+                                    </button>
+                                </div>
+                                {move || s.delete_folder_error.get().map(|e| view! {
+                                    <p style="font-size:13px;color:var(--danger);margin-top:.75rem">{e}</p>
+                                })}
+                                <div style="margin-top:.75rem;text-align:right">
+                                    <button class="btn btn-secondary" on:click=move |_| s.show_delete_folder_modal.set(false)>"Cancel"</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 }
             })
         }}

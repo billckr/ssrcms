@@ -310,16 +310,21 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
     function openMediaBrowser() {{
       var frame = document.getElementById('media-browser-frame');
       if (frame.getAttribute('data-loaded') !== '1') {{
+        // First open this session — full page load, including the WASM
+        // island's own bootstrap. Only paid once; see the else branch.
         frame.src = '/admin/media?browser=1';
         frame.setAttribute('data-loaded', '1');
+      }} else {{
+        // Already warm from a previous open — reuse it, just refresh the
+        // data in place instead of reloading the whole page.
+        try {{ frame.contentWindow.postMessage({{ type: 'resetPickerFilter', typeFilter: null }}, '*'); }} catch(e) {{}}
       }}
       document.getElementById('media-browser-modal').style.display = '';
     }}
     function closeMediaBrowser() {{
       document.getElementById('media-browser-modal').style.display = 'none';
-      var frame = document.getElementById('media-browser-frame');
-      frame.src = 'about:blank';
-      frame.removeAttribute('data-loaded');
+      // Deliberately NOT resetting frame.src/data-loaded here — keeping the
+      // iframe (and its already-booted WASM island) warm is the whole point.
     }}
     (function() {{
       var flash = document.querySelector('.flash');
@@ -528,25 +533,39 @@ pub fn media_picker_modal_html() -> String {
     pickerMode = mode || 'featured';
     currentTargetId = targetId || null;
     var frame = document.getElementById('media-picker-frame');
-    // Always reload so the correct type filter and fresh state is applied.
-    var src = '/admin/media?picker=1';
-    if (pickerMode === 'audio') src += '&type=audio';
-    frame.src = src;
-    frame.setAttribute('data-loaded', '1');
-    // After the iframe loads, push the localised button label into it.
+    var typeFilter = pickerMode === 'audio' ? 'audio' : null;
     var label = pickerMode === 'audio' ? 'Insert Audio' : 'Set Image';
-    frame.addEventListener('load', function onLoad() {
-      frame.removeEventListener('load', onLoad);
-      try { frame.contentWindow.postMessage({ type: 'pickerSetLabel', label: label }, '*'); } catch(e) {}
-    });
+
+    if (frame.getAttribute('data-loaded') !== '1') {
+      // First open this session — full page load, including the WASM
+      // island's own bootstrap (download + instantiate + initial fetch).
+      // That cost only has to be paid once: see the 'else' branch below.
+      var src = '/admin/media?picker=1';
+      if (typeFilter) src += '&type=' + typeFilter;
+      frame.src = src;
+      frame.setAttribute('data-loaded', '1');
+      frame.addEventListener('load', function onLoad() {
+        frame.removeEventListener('load', onLoad);
+        try { frame.contentWindow.postMessage({ type: 'pickerSetLabel', label: label }, '*'); } catch(e) {}
+      });
+    } else {
+      // Already warm from a previous open — reuse it. Resets to a fresh
+      // "All Media" view scoped to the right type filter and re-fetches,
+      // in place, instead of reloading the whole page (which would also
+      // mean re-running the WASM bootstrap from scratch every single open).
+      try {
+        frame.contentWindow.postMessage({ type: 'resetPickerFilter', typeFilter: typeFilter }, '*');
+        frame.contentWindow.postMessage({ type: 'pickerSetLabel', label: label }, '*');
+      } catch(e) {}
+    }
     document.getElementById('media-picker-modal').style.display = '';
   };
 
   window.closeMediaPicker = function() {
     document.getElementById('media-picker-modal').style.display = 'none';
-    var frame = document.getElementById('media-picker-frame');
-    frame.src = 'about:blank';
-    frame.removeAttribute('data-loaded');
+    // Deliberately NOT resetting frame.src/data-loaded here — keeping the
+    // iframe (and its already-booted WASM island) warm is the whole point;
+    // see openMediaPicker's data-loaded branch above.
   };
 
   // Receive the selected media back from the picker iframe.
