@@ -588,7 +588,7 @@ document.addEventListener('click', function(e) {
 
     let content = if !is_subscribers {
         format!(
-            r#"<div style="display:flex;align-items:flex-end;justify-content:space-between;gap:.75rem;margin-bottom:.75rem;flex-wrap:wrap">
+            r#"<div style="display:flex;align-items:flex-end;justify-content:space-between;gap:.75rem;margin-top:.85rem;margin-bottom:.75rem;flex-wrap:wrap">
   {tabs}
   <div class="icon-pill" style="align-self:flex-end;margin-top:0">
     {search_toggle}
@@ -614,7 +614,7 @@ document.addEventListener('click', function(e) {
         )
     } else {
         format!(
-            r#"<div style="display:flex;align-items:flex-end;justify-content:space-between;gap:.75rem;margin-bottom:.75rem;flex-wrap:wrap">
+            r#"<div style="display:flex;align-items:flex-end;justify-content:space-between;gap:.75rem;margin-top:.85rem;margin-bottom:.75rem;flex-wrap:wrap">
   {tabs}
   {search_pill_standalone}
 </div>
