@@ -65,6 +65,7 @@ pub fn render(
 }}
 
 .settings-tab-btn {{
+  position: relative;
   padding: .55rem 1.1rem;
   background: none;
   border: none;
@@ -74,7 +75,7 @@ pub fn render(
   font-weight: 500;
   color: var(--muted);
   cursor: pointer;
-  transition: color .15s, border-color .15s;
+  transition: color .15s;
   white-space: nowrap;
 }}
 
@@ -84,8 +85,14 @@ pub fn render(
 
 .settings-tab-btn.active {{
   color: var(--primary);
-  border-bottom-color: var(--primary);
-  font-weight: 600;
+}}
+
+.settings-tab-btn.active::after {{
+  content: '';
+  position: absolute;
+  left: 0; right: 0; bottom: -2px;
+  height: 1.5px;
+  background: linear-gradient(90deg, transparent, var(--primary) 50%, transparent);
 }}
 
 .settings-panel {{
@@ -158,6 +165,7 @@ pub fn render(
   <button class="settings-tab-btn active" role="tab" aria-selected="true"  aria-controls="tab-general"  data-tab="general">General</button>
   <button class="settings-tab-btn"        role="tab" aria-selected="false" aria-controls="tab-security" data-tab="security">Security</button>
   <button class="settings-tab-btn"        role="tab" aria-selected="false" aria-controls="tab-advanced" data-tab="advanced">Advanced</button>
+  <button class="settings-tab-btn"        role="tab" aria-selected="false" aria-controls="tab-widgets"  data-tab="widgets">Widgets</button>
 </div>
 
 <!-- General -->
@@ -403,6 +411,18 @@ pub fn render(
       <pre id="dtClearResult" class="dt-result"></pre>
     </div>
   </div>
+    </div>
+  </div>
+</div>
+
+<!-- Widgets -->
+<div id="tab-widgets" class="settings-panel" role="tabpanel" style="max-width:720px">
+  <div class="card-boxed">
+    <h2 class="card-boxed-header">Widgets</h2>
+    <div class="card-boxed-body">
+      <p style="color:var(--muted);font-size:.875rem;font-style:italic;margin:0">
+        Widgets — coming soon.
+      </p>
     </div>
   </div>
 </div>
