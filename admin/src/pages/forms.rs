@@ -69,7 +69,7 @@ pub fn render_forms_list(
             let block_btn = if f.blocked {
                 format!(
                     r#"<form method="POST" action="/admin/form-data-analytics/{}/toggle-block" style="display:inline">
-  <button class="icon-btn" type="submit" title="Unblock" aria-label="Unblock"><img src="/admin/static/icons/unlock.svg" alt=""></button>
+  <button class="icon-btn" type="submit" title="Allow new submissions on this form" aria-label="Allow new submissions on this form"><img src="/admin/static/icons/unlock.svg" alt=""></button>
 </form>"#,
                     html_escape(&f.form_name)
                 )
@@ -77,16 +77,24 @@ pub fn render_forms_list(
                 format!(
                     r#"<form method="POST" action="/admin/form-data-analytics/{}/toggle-block" style="display:inline"
       onsubmit="return confirm('Block this form? New submissions will be silently discarded.')">
-  <button class="icon-btn icon-danger" type="submit" title="Block" aria-label="Block"><img src="/admin/static/icons/lock.svg" alt=""></button>
+  <button class="icon-btn icon-danger" type="submit" title="Suspend new submissions on this form" aria-label="Suspend new submissions on this form"><img src="/admin/static/icons/lock.svg" alt=""></button>
 </form>"#,
                     html_escape(&f.form_name)
                 )
             };
             let row_class = if f.blocked { " class=\"muted\"" } else { "" };
+            let unread_badge = if f.unread_count > 0 {
+                format!(
+                    r#" <span style="display:inline-block;background:var(--tint);color:var(--text);border-radius:4px;padding:.15rem .5rem;font-size:.78rem;font-weight:700" title="{n} unread">{n} new</span>"#,
+                    n = f.unread_count
+                )
+            } else {
+                String::new()
+            };
             format!(
                 r#"<tr{row_class}>
   <td><a href="/admin/form-data-analytics/{name}">{name}</a>{blocked_badge}{deleted_badge}</td>
-  <td>{count}</td>
+  <td><span style="display:inline-block;background:var(--tint);color:var(--text);border-radius:4px;padding:.15rem .5rem;font-size:.78rem;font-weight:500">{count}</span>{unread_badge}</td>
   <td>{last}</td>
   <td>
     <a href="/admin/form-data-analytics/{name}/export" class="icon-btn" title="Export CSV" aria-label="Export CSV"><img src="/admin/static/icons/download.svg" alt=""></a>
@@ -96,6 +104,7 @@ pub fn render_forms_list(
                 row_class = row_class,
                 name = html_escape(&f.form_name),
                 count = f.submission_count,
+                unread_badge = unread_badge,
                 last = html_escape(&f.last_submitted_at),
                 blocked_badge = blocked_badge,
                 deleted_badge = deleted_badge,
@@ -105,17 +114,10 @@ pub fn render_forms_list(
     };
 
     let content = format!(
-        r#"<div style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;margin-bottom:1rem;flex-wrap:wrap">
-  <div style="display:flex;align-items:center;gap:.75rem">
-    <div class="icon-search-box" style="margin-bottom:0">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-      <input id="forms-search" type="search" placeholder="Search forms&hellip;" autocomplete="off">
-    </div>
-  </div>
-  <div style="display:flex;align-items:center;gap:.5rem">
-    <div class="icon-pill">
-      <a href="/admin/form-designer/new" class="icon-btn" title="New Form" aria-label="New Form"><img src="/admin/static/icons/file-plus.svg" alt=""></a>
-    </div>
+        r#"<div style="display:flex;align-items:center;justify-content:flex-end;gap:.75rem;margin-bottom:1rem;flex-wrap:wrap">
+  <div class="icon-pill">
+    {search_toggle}
+    <a href="/admin/form-designer/new" class="icon-btn" title="New Form" aria-label="New Form"><img src="/admin/static/icons/file-plus.svg" alt=""></a>
   </div>
 </div>
 <div class="table-wrap">
@@ -145,11 +147,14 @@ pub fn render_forms_list(
     }});
   }});
 }})();
-</script>"#,
+</script>
+{pill_search_init}"#,
         rows = rows,
         name_th = sort_th("Form Name", "name"),
         submissions_th = sort_th("Submissions", "submissions"),
         last_th = sort_th("Last Submitted", "last"),
+        search_toggle = crate::pill_search_toggle("forms-search", "Search forms&hellip;", ""),
+        pill_search_init = crate::pill_search_init_script(),
     );
 
     admin_page("Forms", "/admin/form-data-analytics", flash, &content, ctx)
@@ -253,13 +258,10 @@ pub fn render_form_detail(
     };
 
     let has_submissions = !submissions.is_empty();
-    let search_box = if has_submissions {
-        r#"<div class="icon-search-box">
-  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-  <input type="search" id="submission-search" placeholder="Search responses…" autocomplete="off">
-</div>"#
+    let search_toggle = if has_submissions {
+        crate::pill_search_toggle("submission-search", "Search responses&hellip;", "")
     } else {
-        ""
+        String::new()
     };
 
     let content = format!(
@@ -285,11 +287,9 @@ pub fn render_form_detail(
 .submission-field dd {{ font-size: 13px; color: var(--text); word-break: break-word; }}
 #submission-no-matches {{ display: none; color: var(--muted); font-size: .9rem; padding: 1rem 0; }}
 </style>
-<div style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;margin-bottom:1rem;flex-wrap:wrap">
-  <div style="display:flex;align-items:center;gap:.75rem">
-    {search_box}
-  </div>
+<div style="display:flex;align-items:center;justify-content:flex-end;gap:.75rem;margin-bottom:1rem;flex-wrap:wrap">
   <div class="icon-pill">
+    {search_toggle}
     <a href="/admin/form-data-analytics/{fname}/export" class="icon-btn" title="Export CSV" aria-label="Export CSV"><img src="/admin/static/icons/download.svg" alt=""></a>
     <form method="POST" action="/admin/form-data-analytics/{fname}/delete-all" style="display:inline"
           onsubmit="return confirm('Delete ALL submissions for this form?')">
@@ -319,11 +319,13 @@ pub fn render_form_detail(
     noMatches.style.display = (q && visible === 0) ? '' : 'none';
   }});
 }})();
-</script>"#,
+</script>
+{pill_search_init}"#,
         fname = html_escape(form_name),
-        search_box = search_box,
+        search_toggle = search_toggle,
         rows = rows,
         pagination = submission_pagination(form_name, page, total_pages),
+        pill_search_init = crate::pill_search_init_script(),
     );
 
     let title = format!("Form: {}", form_name);

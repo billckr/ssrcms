@@ -618,13 +618,10 @@ document.addEventListener('click', function(e) {
 </div>"#;
 
     // ── Live search ──────────────────────────────────────────────────────────
-    let search_input = format!(
-        r#"<div class="icon-search-box" style="margin-bottom:0">
-  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-  <input id="user-search" type="search" placeholder="Search users&hellip;" value="{search_val}" autocomplete="off">
-</div>"#,
-        search_val = crate::html_escape(search),
-    );
+    let search_toggle = crate::pill_search_toggle("user-search", "Search users&hellip;", search);
+    // Staff tab already has a "New User" pill to merge the search icon into;
+    // the subscribers tab has no other pill, so it gets its own.
+    let search_pill_standalone = format!(r#"<div class="icon-pill">{search_toggle}</div>"#, search_toggle = search_toggle);
     let site_qs = if selected_site_id.is_empty() {
         String::new()
     } else {
@@ -643,11 +640,11 @@ document.addEventListener('click', function(e) {
   <div style="display:flex;align-items:center;gap:.75rem">
     <button id="bulk-delete-btn-staff" type="button" class="btn btn-danger" style="display:none"
             onclick="bulkDeleteUsers('site-users')">Delete Selected (<span id="bulk-count-staff">0</span>)</button>
-    {search_input}
     {site_filter_staff}
   </div>
   <div style="display:flex;align-items:center;gap:.5rem">
     <div class="icon-pill">
+      {search_toggle}
       <a href="/admin/users/new" class="icon-btn" title="New User" aria-label="New User"><img src="/admin/static/icons/file-plus.svg" alt=""></a>
     </div>
   </div>
@@ -655,14 +652,16 @@ document.addEventListener('click', function(e) {
 <div id="users-list">{fragment}</div>
 {sole_admin_modal}
 {bulk_script}
-{live_search}"#,
+{live_search}
+{pill_search_init}"#,
             tabs = tabs,
             site_filter_staff = site_filter_staff,
             fragment = fragment,
             sole_admin_modal = sole_admin_modal,
             bulk_script = bulk_script,
-            search_input = search_input,
+            search_toggle = search_toggle,
             live_search = live_search,
+            pill_search_init = crate::pill_search_init_script(),
         )
     } else {
         format!(
@@ -671,21 +670,25 @@ document.addEventListener('click', function(e) {
   <div style="display:flex;align-items:center;gap:.75rem">
     <button id="bulk-delete-btn-subs" type="button" class="btn btn-danger" style="display:none"
             onclick="bulkDeleteUsers('subscribers')">Delete Selected (<span id="bulk-count-subs">0</span>)</button>
-    {search_input}
     {site_filter_subs}
+  </div>
+  <div style="display:flex;align-items:center;gap:.5rem">
+    {search_pill_standalone}
   </div>
 </div>
 <div id="users-list">{fragment}</div>
 {sole_admin_modal}
 {bulk_script}
-{live_search}"#,
+{live_search}
+{pill_search_init}"#,
             tabs = tabs,
             site_filter_subs = site_filter_subs,
             fragment = fragment,
             sole_admin_modal = sole_admin_modal,
             bulk_script = bulk_script,
-            search_input = search_input,
+            search_pill_standalone = search_pill_standalone,
             live_search = live_search,
+            pill_search_init = crate::pill_search_init_script(),
         )
     };
 

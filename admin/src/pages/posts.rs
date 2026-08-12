@@ -370,36 +370,33 @@ pub fn render_list(posts: &[PostRow], post_type: &str, page: i64, total_pages: i
     // The live-search fetch URL includes status=/sort= so results stay scoped to the
     // current tab and column sort.
     let fetch_prefix = format!("{}?partial=1{}{}", base_path, status_qs, sort_qs);
+    let search_placeholder = format!("Search {}s&hellip;", post_type);
+    let search_toggle = crate::pill_search_toggle("post-search", &search_placeholder, search);
 
     let content = format!(
         r#"{tabs_html}
-<div style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;margin-bottom:.75rem;flex-wrap:wrap">
-  <div style="display:flex;align-items:center;gap:.75rem">
-    <button id="bulk-delete-btn" type="button" class="btn btn-danger" style="display:none"
-            onclick="bulkDelete()">Delete Selected (<span id="bulk-count">0</span>)</button>
-    <div class="icon-search-box" style="margin-bottom:0">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-      <input id="post-search" type="search" placeholder="Search {post_type}s&hellip;" value="{search_val}" autocomplete="off">
-    </div>
-  </div>
-  <div style="display:flex;align-items:center;gap:.5rem">
-    <div class="icon-pill">
-      <a href="{new_href}" class="icon-btn" title="{new_label}" aria-label="{new_label}"><img src="/admin/static/icons/file-plus.svg" alt=""></a>
-    </div>
+<div style="display:flex;align-items:center;justify-content:flex-end;gap:.75rem;margin-bottom:.75rem;flex-wrap:wrap">
+  <div class="icon-pill">
+    <button id="bulk-delete-btn" type="button" class="icon-btn icon-danger icon-danger-armed" style="display:none" title="Delete Selected" aria-label="Delete Selected" onclick="bulkDelete()">
+      <img src="/admin/static/icons/trash.svg" alt="">
+    </button>
+    {search_toggle}
+    <a href="{new_href}" class="icon-btn" title="{new_label}" aria-label="{new_label}"><img src="/admin/static/icons/file-plus.svg" alt=""></a>
   </div>
 </div>
 <div id="posts-list">{fragment}</div>
 {live_search}
+{pill_search_init}
 <script>
 (function() {{
   var btn     = document.getElementById('bulk-delete-btn');
-  var countEl = document.getElementById('bulk-count');
 
   function updateBtn() {{
     var checked = document.querySelectorAll('.bulk-cb:checked');
     var n = checked.length;
     var total = document.querySelectorAll('.bulk-cb').length;
-    countEl.textContent = n;
+    btn.title = 'Delete Selected (' + n + ')';
+    btn.setAttribute('aria-label', btn.title);
     btn.style.display = n > 0 ? '' : 'none';
     // Re-query select-all each call: after a live-search swap the element inside
     // div#posts-list is replaced, so the cached reference would be stale.
@@ -439,10 +436,10 @@ pub fn render_list(posts: &[PostRow], post_type: &str, page: i64, total_pages: i
         tabs_html      = tabs_html,
         new_href       = new_href,
         new_label      = new_label,
-        post_type      = post_type,
-        search_val     = crate::html_escape(search),
+        search_toggle  = search_toggle,
         fragment       = fragment,
         live_search    = crate::live_search_script("post-search", "posts-list", &fetch_prefix),
+        pill_search_init = crate::pill_search_init_script(),
         bulk_action    = bulk_action,
     );
 

@@ -239,10 +239,14 @@ pub fn render_list(
     dir: &str,
     ctx: &crate::PageContext,
 ) -> String {
-    let new_site_btn = if can_create {
-        r#"<div class="icon-pill"><a href="/admin/sites/new" class="icon-btn" title="New Site" aria-label="New Site"><img src="/admin/static/icons/file-plus.svg" alt=""></a></div>"#
+    let search_toggle = crate::pill_search_toggle("site-search", "Search sites&hellip;", search);
+    let action_pill = if can_create {
+        format!(
+            r#"<div class="icon-pill">{search_toggle}<a href="/admin/sites/new" class="icon-btn" title="New Site" aria-label="New Site"><img src="/admin/static/icons/file-plus.svg" alt=""></a></div>"#,
+            search_toggle = search_toggle,
+        )
     } else {
-        ""
+        format!(r#"<div class="icon-pill">{search_toggle}</div>"#, search_toggle = search_toggle)
     };
 
     let fragment = sites_list_fragment(sites, page, total_pages, search, sort, dir, ctx);
@@ -251,21 +255,16 @@ pub fn render_list(
     let live_search = crate::live_search_script("site-search", "sites-list", &fetch_prefix);
 
     let content = format!(
-        r#"<div style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;margin-bottom:1rem;flex-wrap:wrap">
-  <div class="icon-search-box" style="margin-bottom:0">
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-    <input id="site-search" type="search" placeholder="Search sites&hellip;" value="{search_val}" autocomplete="off">
-  </div>
-  <div style="display:flex;align-items:center;gap:.5rem">
-    {new_site_btn}
-  </div>
+        r#"<div style="display:flex;align-items:center;justify-content:flex-end;gap:.75rem;margin-bottom:1rem;flex-wrap:wrap">
+  {action_pill}
 </div>
 <div id="sites-list">{fragment}</div>
-{live_search}"#,
-        search_val = crate::html_escape(search),
-        new_site_btn = new_site_btn,
+{live_search}
+{pill_search_init}"#,
+        action_pill = action_pill,
         fragment = fragment,
         live_search = live_search,
+        pill_search_init = crate::pill_search_init_script(),
     );
 
     crate::admin_page("Sites", "/admin/sites", flash, &content, ctx)

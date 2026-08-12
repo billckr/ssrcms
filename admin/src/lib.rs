@@ -635,3 +635,47 @@ pub fn live_search_script(input_id: &str, list_id: &str, url_prefix: &str) -> St
         url_prefix = url_prefix,
     )
 }
+
+/// A search-icon `.icon-btn` paired with an input that expands inline when
+/// clicked, instead of a permanently-visible boxed search field. Meant to be
+/// dropped as the first item inside an existing `.icon-pill` — or its own
+/// standalone `.icon-pill` on a page/tab that doesn't already have one.
+/// Combine with the actual search wiring (`live_search_script`, or a custom
+/// client-side filter) targeting `input_id`, and include
+/// `pill_search_init_script()` once per page for the expand/collapse behavior.
+pub fn pill_search_toggle(input_id: &str, placeholder: &str, value: &str) -> String {
+    let expanded = if value.is_empty() { "" } else { " expanded" };
+    format!(
+        r#"<button type="button" class="icon-btn pill-search-toggle" data-target="{input_id}" title="Search" aria-label="Search">
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:var(--muted)"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+</button><input type="search" id="{input_id}" class="pill-search-input{expanded}" placeholder="{placeholder}" autocomplete="off" value="{value}">"#,
+        input_id = input_id,
+        placeholder = placeholder,
+        expanded = expanded,
+        value = html_escape(value),
+    )
+}
+
+/// Wires up every `.pill-search-toggle` button on the page (click to
+/// expand/focus its paired input; collapse again on blur if left empty).
+/// Safe to call once per page even with multiple search pills — each button
+/// is only wired once. Include alongside `pill_search_toggle`'s markup.
+pub fn pill_search_init_script() -> &'static str {
+    r#"<script>
+(function () {
+  document.querySelectorAll('.pill-search-toggle').forEach(function (btn) {
+    if (btn.dataset.pillSearchWired) return;
+    btn.dataset.pillSearchWired = '1';
+    var input = document.getElementById(btn.dataset.target);
+    if (!input) return;
+    btn.addEventListener('click', function () {
+      input.classList.toggle('expanded');
+      if (input.classList.contains('expanded')) input.focus();
+    });
+    input.addEventListener('blur', function () {
+      if (!input.value) input.classList.remove('expanded');
+    });
+  });
+})();
+</script>"#
+}

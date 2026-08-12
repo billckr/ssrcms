@@ -202,24 +202,22 @@ pub fn render_list(rows: &[FormRow], page: i64, total_pages: i64, search: &str, 
     let sort_qs = if sort.is_empty() { String::new() } else { format!("&sort={}&dir={}", sort, if dir == "desc" { "desc" } else { "asc" }) };
     let fetch_prefix = format!("/admin/form-designer?partial=1{}", sort_qs);
     let live_search = crate::live_search_script("form-search", "form-designer-list", &fetch_prefix);
+    let search_toggle = crate::pill_search_toggle("form-search", "Search forms&hellip;", search);
 
     let content = format!(
-        r#"<div style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;margin-bottom:1rem;flex-wrap:wrap">
-  <div class="icon-search-box" style="margin-bottom:0">
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-    <input id="form-search" type="search" placeholder="Search forms&hellip;" value="{search_val}" autocomplete="off">
-  </div>
-  <div style="display:flex;align-items:center;gap:.5rem">
-    <div class="icon-pill">
-      <a href="/admin/form-designer/new" class="icon-btn" title="New Form" aria-label="New Form"><img src="/admin/static/icons/file-plus.svg" alt=""></a>
-    </div>
+        r#"<div style="display:flex;align-items:center;justify-content:flex-end;gap:.75rem;margin-bottom:1rem;flex-wrap:wrap">
+  <div class="icon-pill">
+    {search_toggle}
+    <a href="/admin/form-designer/new" class="icon-btn" title="New Form" aria-label="New Form"><img src="/admin/static/icons/file-plus.svg" alt=""></a>
   </div>
 </div>
 <div id="form-designer-list">{fragment}</div>
-{live_search}"#,
-        search_val = html_escape(search),
+{live_search}
+{pill_search_init}"#,
+        search_toggle = search_toggle,
         fragment = fragment,
         live_search = live_search,
+        pill_search_init = crate::pill_search_init_script(),
     );
 
     admin_page("Form Designer", "/admin/form-designer", flash, &content, ctx)
@@ -368,14 +366,10 @@ pub fn render_analytics(data: &FormAnalyticsData, sort: &str, dir: &str, search:
     let table_html = render_analytics_table(data, sort, dir, &search_qs);
     let fetch_prefix = format!("/admin/form-analytics/{}?partial=1&sort={}&dir={}", data.id, sort, dir);
     let live_search = crate::live_search_script("analytics-search", "analytics-table", &fetch_prefix);
+    let search_toggle = crate::pill_search_toggle("analytics-search", "Search sends&hellip;", search);
 
     let content = format!(
-        r#"<style>
-.analytics-search-input {{ box-sizing: border-box; width: 0; padding: 0; margin: 0; border: none; outline: none; background: none; color: var(--text); font-size: 13px; transition: width .18s ease, padding .18s ease, margin .18s ease; }}
-.analytics-search-input.expanded {{ width: 180px; padding: .2rem .5rem; margin-right: .35rem; }}
-:root[data-theme="dark"] .analytics-search-input::-webkit-search-cancel-button {{ filter: invert(1); }}
-</style>
-<div class="card-boxed">
+        r#"<div class="card-boxed">
   <div class="card-boxed-body">
     <div style="display:flex;gap:2rem;flex-wrap:wrap;margin-bottom:1.5rem">
       <div><div style="font-size:1.6rem;font-weight:700">{total}</div><div class="field-hint">Total sent</div></div>
@@ -387,36 +381,21 @@ pub fn render_analytics(data: &FormAnalyticsData, sort: &str, dir: &str, search:
 </div>
 <div style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;margin:1.5rem 0 1rem">
   <h2 style="margin:0">Recent Sends</h2>
-  <div class="icon-pill" id="analytics-search-pill">
-    <button type="button" class="icon-btn" id="analytics-search-toggle" title="Search" aria-label="Search">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:var(--muted)"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-    </button>
-    <input type="search" id="analytics-search" class="analytics-search-input{search_expanded}" placeholder="Search sends&hellip;" autocomplete="off" value="{search_val}">
+  <div class="icon-pill">
+    {search_toggle}
   </div>
 </div>
 <div id="analytics-table">{table_html}</div>
 {live_search}
-<script>
-(function() {{
-  var toggle = document.getElementById('analytics-search-toggle');
-  var input = document.getElementById('analytics-search');
-  toggle.addEventListener('click', function() {{
-    input.classList.toggle('expanded');
-    if (input.classList.contains('expanded')) input.focus();
-  }});
-  input.addEventListener('blur', function() {{
-    if (!input.value) input.classList.remove('expanded');
-  }});
-}})();
-</script>"#,
+{pill_search_init}"#,
         total = data.total_sent,
         succeeded = data.succeeded,
         failed = data.failed,
         chart_html = chart_html,
         table_html = table_html,
         live_search = live_search,
-        search_val = html_escape(search),
-        search_expanded = if search.is_empty() { "" } else { " expanded" },
+        search_toggle = search_toggle,
+        pill_search_init = crate::pill_search_init_script(),
     );
 
     admin_page(&format!("Analytics - {}", html_escape(&data.form_name)), "/admin/form-designer", None, &content, ctx)

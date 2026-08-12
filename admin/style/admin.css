@@ -241,6 +241,13 @@ a.stat-cell-link:hover { background: var(--tint); }
 .icon-search-box input[type=search] { width: 100%; padding: .35rem .6rem .35rem 2.1rem; border: 1px solid var(--border); border-radius: var(--radius); font-size: 14px; background: var(--field-bg); color: var(--field-text); }
 .icon-search-box input[type=search]:focus { outline: none; border-color: var(--text); }
 
+/* Search-icon-in-pill: a .icon-btn that toggles a search input open inside
+   the same .icon-pill instead of a permanently-visible boxed search field.
+   Pair with the JS in `pill_search_init_script()` (admin::lib). */
+.pill-search-input { box-sizing: border-box; width: 0; padding: 0; margin: 0; border: none; outline: none; background: none; color: var(--text); font-size: 13px; transition: width .18s ease, padding .18s ease, margin .18s ease; }
+.pill-search-input.expanded { width: 180px; padding: .2rem .5rem; margin-right: .35rem; }
+:root[data-theme="dark"] .pill-search-input::-webkit-search-cancel-button { filter: invert(1); }
+
 /* Tinted box separating one distinct field/option from its neighbors within
    the same card body — used wherever a .card-boxed-body would otherwise
    stack several unrelated fields/rows with nothing visually telling them
@@ -509,6 +516,11 @@ tr.muted td { opacity: .55; }
 :root[data-theme="dark"] .icon-btn:hover img { filter: invert(36%) sepia(75%) saturate(252%) hue-rotate(197deg) brightness(133%) contrast(148%); }
 .icon-btn.icon-danger:hover img { filter: invert(43%) sepia(75%) saturate(563%) hue-rotate(311deg) brightness(75%) contrast(147%); }
 :root[data-theme="dark"] .icon-btn.icon-danger:hover img { filter: invert(56%) sepia(77%) saturate(287%) hue-rotate(311deg) brightness(83%) contrast(145%); }
+/* Same red as icon-danger:hover, but always-on — for a destructive action
+   that only appears once it's "armed" (e.g. bulk-delete after a selection),
+   where the red itself is the signal rather than something hover reveals. */
+.icon-btn.icon-danger-armed img { filter: invert(43%) sepia(75%) saturate(563%) hue-rotate(311deg) brightness(75%) contrast(147%); }
+:root[data-theme="dark"] .icon-btn.icon-danger-armed img { filter: invert(56%) sepia(77%) saturate(287%) hue-rotate(311deg) brightness(83%) contrast(145%); }
 .icon-btn:disabled { opacity: .4; cursor: not-allowed; }
 .icon-btn:disabled:hover img { filter: none; }
 :root[data-theme="dark"] .icon-btn:disabled:hover img { filter: invert(1); }
