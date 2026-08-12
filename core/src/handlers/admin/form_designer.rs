@@ -38,8 +38,10 @@ pub async fn list(State(state): State<AppState>, admin: AdminUser, Query(params)
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
 
     let forms = form_def::list_for_site(&state.db, site_id).await.unwrap_or_default();
+    let blocked = crate::models::form_submission::blocked_names(&state.db, site_id).await;
     let mut rows: Vec<FormRow> = forms.into_iter().map(|f| FormRow {
         id: f.id.to_string(),
+        blocked: blocked.contains(&f.name),
         name: f.name,
         slug: f.slug,
         field_count: f.fields.len(),

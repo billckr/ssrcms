@@ -11,6 +11,7 @@ pub struct FormRow {
     pub slug: String,
     pub field_count: usize,
     pub updated_at: String,
+    pub blocked: bool,
 }
 
 /// A single field, as rendered into the editor (both for existing fields on
@@ -151,6 +152,22 @@ pub fn forms_list_fragment(rows: &[FormRow], page: i64, total_pages: i64, search
         r#"<tr><td colspan="4" style="text-align:center;color:var(--muted)">No forms yet. Create one to get started.</td></tr>"#.to_string()
     } else {
         rows.iter().map(|f| {
+            let block_btn = if f.blocked {
+                format!(
+                    r#"<form method="POST" action="/admin/form-data-analytics/{name}/toggle-block" style="display:inline">
+        <button class="icon-btn" type="submit" title="Allow new submissions on this form" aria-label="Allow new submissions on this form"><img src="/admin/static/icons/unlock.svg" alt=""></button>
+      </form>"#,
+                    name = html_escape(&f.name),
+                )
+            } else {
+                format!(
+                    r#"<form method="POST" action="/admin/form-data-analytics/{name}/toggle-block" style="display:inline"
+            onsubmit="return confirm('Block this form? New submissions will be silently discarded.')">
+        <button class="icon-btn icon-danger" type="submit" title="Suspend new submissions on this form" aria-label="Suspend new submissions on this form"><img src="/admin/static/icons/lock.svg" alt=""></button>
+      </form>"#,
+                    name = html_escape(&f.name),
+                )
+            };
             format!(
                 r#"<tr>
   <td><a href="/admin/form-designer/{id}">{name}</a></td>
@@ -164,6 +181,10 @@ pub fn forms_list_fragment(rows: &[FormRow], page: i64, total_pages: i64, search
       <a href="/admin/form-analytics/{id}" class="icon-btn" title="Analytics">
         <img src="/admin/static/icons/bar-chart.svg" alt="Analytics">
       </a>
+      <a href="/admin/form-data-analytics/{name}/export" class="icon-btn" title="Export CSV" aria-label="Export CSV">
+        <img src="/admin/static/icons/download.svg" alt="">
+      </a>
+      {block_btn}
       <form method="POST" action="/admin/form-designer/{id}/delete" style="display:inline"
             onsubmit="return confirm('Delete the form \'{name_js}\'? This does not delete any submissions already collected under it.')">
         <button class="icon-btn icon-danger" title="Delete" type="submit">
@@ -178,6 +199,7 @@ pub fn forms_list_fragment(rows: &[FormRow], page: i64, total_pages: i64, search
                 name_js = f.name.replace('\'', "\\'"),
                 slug = html_escape(&f.slug),
                 count = f.field_count,
+                block_btn = block_btn,
             )
         }).collect::<Vec<_>>().join("\n")
     };

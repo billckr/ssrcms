@@ -239,6 +239,8 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
     function setTheme(pref) {{
       try {{ localStorage.setItem('admin-theme', pref); }} catch (e) {{}}
       applyTheme(pref);
+      document.getElementById('header-menu-dropdown').classList.remove('open');
+      document.getElementById('header-menu-btn').setAttribute('aria-expanded', 'false');
     }}
     applyTheme((function() {{
       try {{ return localStorage.getItem('admin-theme') || '{default_theme}'; }} catch (e) {{ return '{default_theme}'; }}
