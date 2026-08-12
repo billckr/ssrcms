@@ -914,7 +914,7 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
               <div class="form-group" style="margin:0">
                 <label for="title"><span style="display:inline-block;background:var(--tint);color:var(--text);border-radius:999px;padding:.15rem .65rem;font-size:.78rem;font-weight:600">Title</span> <span style="color:var(--danger);font-weight:700">*</span></label>
                 <input type="text" id="title" name="title" value="{title_val}" required class="title-input" maxlength="255"{autofocus}>
-                <small id="title-count" style="color:var(--muted)">255 remaining</small>
+                <small id="title-count" style="color:var(--muted)">255/255</small>
               </div>
               <div class="form-group" style="margin:0;min-width:200px;max-width:280px">
                 <label for="slug"><span style="display:inline-block;background:var(--tint);color:var(--text);border-radius:999px;padding:.15rem .65rem;font-size:.78rem;font-weight:600">Slug</span></label>
@@ -928,7 +928,7 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
             <div class="form-group">
               <label for="excerpt"><span style="display:inline-block;background:var(--tint);color:var(--text);border-radius:999px;padding:.15rem .65rem;font-size:.78rem;font-weight:600">Excerpt</span> <span style="color:var(--danger);font-weight:700">*</span> <small style="font-weight:400;color:var(--muted)">Used as meta description — required for SEO</small></label>
               <textarea id="excerpt" name="excerpt" rows="3" required maxlength="500" style="resize:none">{excerpt}</textarea>
-              <small id="excerpt-count" style="color:var(--muted)">500 remaining</small>
+              <small id="excerpt-count" style="color:var(--muted)">500/500</small>
             </div>
           </div>
           <div class="card-boxed-section">
@@ -1366,7 +1366,7 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
       if (!el || !counter) return;
       function update() {{
         var remaining = max - el.value.length;
-        counter.textContent = remaining + ' remaining';
+        counter.textContent = remaining + '/' + max;
         counter.style.color = remaining <= 20 ? 'var(--danger)' : 'var(--muted)';
       }}
       el.addEventListener('input', update);

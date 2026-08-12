@@ -1503,7 +1503,7 @@ pub fn render_site_access(
     let content = format!(
         r#"<div class="two-col">
   <div>
-    <h2>User Access + Role</h2>
+    <h2>Current Roles</h2>
     <table class="data-table">
       <thead><tr><th>Site</th><th>Role</th><th>Actions</th></tr></thead>
       <tbody>{rows}</tbody>
@@ -1521,7 +1521,7 @@ pub fn render_site_access(
     );
 
     crate::admin_page(
-        &data.display_name,
+        "User Access + Roles",
         "/admin/users",
         flash,
         &content,
