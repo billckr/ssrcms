@@ -66,14 +66,22 @@ pub async fn gate(State(state): State<AppState>, req: Request, next: Next) -> Re
     .flatten()
     .unwrap_or_else(|| "This site is currently undergoing scheduled maintenance. Please check back soon.".to_string());
 
-    render(&message)
+    let default_theme = state.app_settings.read().unwrap().default_theme.clone();
+    render(&message, &default_theme)
 }
 
-fn render(message: &str) -> Response {
+fn render(message: &str, default_theme: &str) -> Response {
     let escaped = message
         .replace('&', "&amp;")
         .replace('<', "&lt;")
         .replace('>', "&gt;");
+
+    // Already validated to one of these three literals when saved — safe to
+    // splice into JS, but re-checked here since callers pass it through untrusted.
+    let default_theme = match default_theme {
+        "light" | "dark" => default_theme,
+        _ => "system",
+    };
 
     let body = format!(
         r#"<!DOCTYPE html>
@@ -82,20 +90,51 @@ fn render(message: &str) -> Response {
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Maintenance</title>
+<script>
+  // Applies the saved/system theme before first paint (same key + logic as
+  // the admin login page) so this public-facing page matches whatever
+  // theme was last chosen instead of always rendering light.
+  (function() {{
+    try {{
+      var pref = localStorage.getItem('admin-theme') || '{default_theme}';
+      var dark = pref === 'dark' || (pref === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+      if (dark) {{
+        document.documentElement.setAttribute('data-theme', 'dark');
+      }}
+    }} catch (e) {{}}
+  }})();
+</script>
 <style>
+  :root {{
+    --bg: #f1f1f1;
+    --surface: #fff;
+    --border: #e2e8f0;
+    --text: #23282d;
+    --muted: #555;
+    --shadow: 0 1px 3px rgba(0,0,0,0.13);
+  }}
+  :root[data-theme="dark"] {{
+    --bg: #2d2d31;
+    --surface: #232326;
+    --border: #48484f;
+    --text: #e4e4e7;
+    --muted: #a1a1aa;
+    --shadow: 0 1px 3px rgba(0,0,0,.4);
+  }}
   html, body {{ height: 100%; margin: 0; }}
   body {{
     display: flex; align-items: center; justify-content: center;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    background: #f1f1f1; color: #23282d;
+    background: var(--bg); color: var(--text);
   }}
   .box {{
     max-width: 30rem; margin: 1.5rem; padding: 2rem 2.5rem;
-    background: #fff; border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.13);
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 6px; box-shadow: var(--shadow);
     text-align: center;
   }}
   h1 {{ font-size: 1.3rem; font-weight: 600; margin: 0 0 0.75rem; }}
-  p {{ font-size: 1rem; line-height: 1.5; color: #555; margin: 0; }}
+  p {{ font-size: 1rem; line-height: 1.5; color: var(--muted); margin: 0; }}
 </style>
 </head>
 <body>

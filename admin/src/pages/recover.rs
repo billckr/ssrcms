@@ -2,7 +2,7 @@
 //! confirmation, and the token-gated set-new-password form.
 
 /// GET /recover — request form (type in your email).
-pub fn render_request(error: Option<&str>, sent: bool) -> String {
+pub fn render_request(error: Option<&str>, sent: bool, default_theme: &str) -> String {
     let body = if sent {
         r#"<p style="color:var(--muted);margin-top:.5rem">
       If that email address has an account, we&rsquo;ve sent a link to reset
@@ -31,6 +31,11 @@ pub fn render_request(error: Option<&str>, sent: bool) -> String {
         )
     };
 
+    let default_theme = match default_theme {
+        "light" | "dark" => default_theme,
+        _ => "system",
+    };
+
     format!(
         r#"<!DOCTYPE html>
 <html lang="en">
@@ -38,6 +43,20 @@ pub fn render_request(error: Option<&str>, sent: bool) -> String {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Recover Login</title>
+  <script>
+    // Applies the saved/system theme before first paint (same key + logic as
+    // the admin shell in lib.rs) so this standalone page matches whatever
+    // theme the user last chose there instead of always rendering light.
+    (function() {{
+      try {{
+        var pref = localStorage.getItem('admin-theme') || '{default_theme}';
+        var dark = pref === 'dark' || (pref === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        if (dark) {{
+          document.documentElement.setAttribute('data-theme', 'dark');
+        }}
+      }} catch (e) {{}}
+    }})();
+  </script>
   <style>{css}</style>
 </head>
 <body class="login-body">
@@ -53,12 +72,13 @@ pub fn render_request(error: Option<&str>, sent: bool) -> String {
 </html>"#,
         css = crate::ADMIN_CSS,
         body = body,
+        default_theme = default_theme,
     )
 }
 
 /// GET /recover/{token} — set a new password. `valid` is false when the
 /// token is missing, expired, or already used.
-pub fn render_reset(token: &str, valid: bool, error: Option<&str>) -> String {
+pub fn render_reset(token: &str, valid: bool, error: Option<&str>, default_theme: &str) -> String {
     let body = if !valid {
         r#"<p style="color:var(--muted);margin-top:.5rem">
       This recovery link is invalid or has expired.
@@ -88,6 +108,11 @@ pub fn render_reset(token: &str, valid: bool, error: Option<&str>) -> String {
         )
     };
 
+    let default_theme = match default_theme {
+        "light" | "dark" => default_theme,
+        _ => "system",
+    };
+
     format!(
         r#"<!DOCTYPE html>
 <html lang="en">
@@ -95,6 +120,20 @@ pub fn render_reset(token: &str, valid: bool, error: Option<&str>) -> String {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Reset Password</title>
+  <script>
+    // Applies the saved/system theme before first paint (same key + logic as
+    // the admin shell in lib.rs) so this standalone page matches whatever
+    // theme the user last chose there instead of always rendering light.
+    (function() {{
+      try {{
+        var pref = localStorage.getItem('admin-theme') || '{default_theme}';
+        var dark = pref === 'dark' || (pref === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        if (dark) {{
+          document.documentElement.setAttribute('data-theme', 'dark');
+        }}
+      }} catch (e) {{}}
+    }})();
+  </script>
   <style>{css}</style>
 </head>
 <body class="login-body">
@@ -107,5 +146,6 @@ pub fn render_reset(token: &str, valid: bool, error: Option<&str>) -> String {
 </html>"#,
         css = crate::ADMIN_CSS,
         body = body,
+        default_theme = default_theme,
     )
 }

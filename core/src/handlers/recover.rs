@@ -29,8 +29,9 @@ pub struct ResetForm {
 }
 
 /// GET /recover — show the "type your email" request form.
-pub async fn request_form() -> Response {
-    Html(admin::pages::recover::render_request(None, false)).into_response()
+pub async fn request_form(State(state): State<AppState>) -> Response {
+    let default_theme = state.app_settings.read().unwrap().default_theme.clone();
+    Html(admin::pages::recover::render_request(None, false, &default_theme)).into_response()
 }
 
 /// POST /recover — always shows the same "check your email" message
@@ -41,9 +42,10 @@ pub async fn request_post(
     site: CurrentSite,
     Form(form): Form<RequestForm>,
 ) -> Response {
+    let default_theme = state.app_settings.read().unwrap().default_theme.clone();
     if !form.website.trim().is_empty() {
         // Bot caught by the honeypot — pretend success, don't tip it off.
-        return Html(admin::pages::recover::render_request(None, true)).into_response();
+        return Html(admin::pages::recover::render_request(None, true, &default_theme)).into_response();
     }
 
     let email = form.email.trim().to_lowercase();
@@ -84,14 +86,15 @@ pub async fn request_post(
         }
     }
 
-    Html(admin::pages::recover::render_request(None, true)).into_response()
+    Html(admin::pages::recover::render_request(None, true, &default_theme)).into_response()
 }
 
 /// GET /recover/{token} — show the "set a new password" form if the token
 /// is still valid (unexpired, unused).
 pub async fn reset_form(State(state): State<AppState>, Path(token): Path<String>) -> Response {
     let valid = password_reset::find_valid_user_id(&state.db, &token).await.is_some();
-    Html(admin::pages::recover::render_reset(&token, valid, None)).into_response()
+    let default_theme = state.app_settings.read().unwrap().default_theme.clone();
+    Html(admin::pages::recover::render_reset(&token, valid, None, &default_theme)).into_response()
 }
 
 /// POST /recover/{token} — validate the new password, consume the token,
@@ -101,9 +104,10 @@ pub async fn reset_post(
     Path(token): Path<String>,
     Form(form): Form<ResetForm>,
 ) -> Response {
+    let default_theme = state.app_settings.read().unwrap().default_theme.clone();
     macro_rules! invalid_form {
         ($msg:expr) => {
-            return Html(admin::pages::recover::render_reset(&token, true, Some($msg))).into_response()
+            return Html(admin::pages::recover::render_reset(&token, true, Some($msg), &default_theme)).into_response()
         };
     }
 
@@ -116,7 +120,7 @@ pub async fn reset_post(
 
     let Some(user_id) = password_reset::consume(&state.db, &token).await else {
         // Expired/used/invalid by the time of submission.
-        return Html(admin::pages::recover::render_reset(&token, false, None)).into_response();
+        return Html(admin::pages::recover::render_reset(&token, false, None, &default_theme)).into_response();
     };
 
     let password_hash = match user::hash_password(&form.password) {

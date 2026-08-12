@@ -55,8 +55,8 @@ pub fn is_unlocked(jar: &SignedCookieJar, post_id: uuid::Uuid, current_hash: &st
 }
 
 /// Return a full-page password gate `Response`.
-pub fn gate_response(post_title: &str, action: &str, error: Option<&str>) -> Response {
-    Html(gate_html(post_title, action, error)).into_response()
+pub fn gate_response(post_title: &str, action: &str, error: Option<&str>, default_theme: &str) -> Response {
+    Html(gate_html(post_title, action, error, default_theme)).into_response()
 }
 
 // ── Handlers ──────────────────────────────────────────────────────────────────
@@ -115,9 +115,11 @@ async fn unlock_inner(
     form_action: &str,
     redirect_to: &str,
 ) -> Response {
+    let default_theme = state.app_settings.read().unwrap().default_theme.clone();
+
     // Reject immediately if the human checkbox wasn't ticked.
     if human_check.as_deref() != Some("on") {
-        return gate_response("Protected Content", form_action, Some("Please confirm you are human."));
+        return gate_response("Protected Content", form_action, Some("Please confirm you are human."), &default_theme);
     }
     let site_id = current_site.site.id;
 
@@ -143,19 +145,26 @@ async fn unlock_inner(
             .build();
         (jar.add(cookie), Redirect::to(redirect_to)).into_response()
     } else {
-        gate_response(&post_record.title, form_action, Some("Incorrect password. Please try again."))
+        gate_response(&post_record.title, form_action, Some("Incorrect password. Please try again."), &default_theme)
     }
 }
 
 // ── Gate HTML ─────────────────────────────────────────────────────────────────
 
-fn gate_html(_post_title: &str, action: &str, error: Option<&str>) -> String {
+fn gate_html(_post_title: &str, action: &str, error: Option<&str>, default_theme: &str) -> String {
     let error_html = error.map(|e| {
         format!(
             r#"<div class="error">{}</div>"#,
             html_escape(e)
         )
     }).unwrap_or_default();
+
+    // Already validated to one of these three literals when saved — safe to
+    // splice into JS, but re-checked here since callers pass it through untrusted.
+    let default_theme = match default_theme {
+        "light" | "dark" => default_theme,
+        _ => "system",
+    };
 
     format!(
         r#"<!DOCTYPE html>
@@ -164,7 +173,47 @@ fn gate_html(_post_title: &str, action: &str, error: Option<&str>) -> String {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Protected Content</title>
+  <script>
+    // Applies the saved/system theme before first paint (same key + logic as
+    // the admin login page) so this public-facing page matches whatever
+    // theme was last chosen instead of always rendering light.
+    (function() {{
+      try {{
+        var pref = localStorage.getItem('admin-theme') || '{default_theme}';
+        var dark = pref === 'dark' || (pref === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        if (dark) {{
+          document.documentElement.setAttribute('data-theme', 'dark');
+        }}
+      }} catch (e) {{}}
+    }})();
+  </script>
   <style>
+    :root {{
+      --bg: #f4f5f7;
+      --surface: #fff;
+      --border: #d1d5db;
+      --text: #222;
+      --muted: #444;
+      --primary: #3b82f6;
+      --primary-dark: #2563eb;
+      --danger-bg: #fef2f2;
+      --danger-border: #fecaca;
+      --danger-text: #b91c1c;
+      --shadow: 0 4px 24px rgba(0,0,0,.10);
+    }}
+    :root[data-theme="dark"] {{
+      --bg: #2d2d31;
+      --surface: #232326;
+      --border: #48484f;
+      --text: #e4e4e7;
+      --muted: #a1a1aa;
+      --primary: #818cf8;
+      --primary-dark: #6366f1;
+      --danger-bg: #3f1d1d;
+      --danger-border: #7f1d1d;
+      --danger-text: #f87171;
+      --shadow: 0 4px 24px rgba(0,0,0,.4);
+    }}
     *, *::before, *::after {{ box-sizing: border-box; }}
     body {{
       margin: 0;
@@ -172,14 +221,15 @@ fn gate_html(_post_title: &str, action: &str, error: Option<&str>) -> String {
       display: flex;
       align-items: center;
       justify-content: center;
-      background: #f4f5f7;
+      background: var(--bg);
       font-family: system-ui, -apple-system, sans-serif;
-      color: #222;
+      color: var(--text);
     }}
     .gate {{
-      background: #fff;
+      background: var(--surface);
+      border: 1px solid var(--border);
       border-radius: 10px;
-      box-shadow: 0 4px 24px rgba(0,0,0,.10);
+      box-shadow: var(--shadow);
       padding: 2.5rem 2rem;
       width: 100%;
       max-width: 380px;
@@ -188,9 +238,9 @@ fn gate_html(_post_title: &str, action: &str, error: Option<&str>) -> String {
     .gate .lock {{ font-size: 2.5rem; margin-bottom: .5rem; }}
     .gate h1 {{ font-size: 1.25rem; margin: 0 0 1.5rem; }}
     .gate .error {{
-      color: #b91c1c;
-      background: #fef2f2;
-      border: 1px solid #fecaca;
+      color: var(--danger-text);
+      background: var(--danger-bg);
+      border: 1px solid var(--danger-border);
       border-radius: 5px;
       padding: .5rem .75rem;
       margin-bottom: 1rem;
@@ -199,14 +249,16 @@ fn gate_html(_post_title: &str, action: &str, error: Option<&str>) -> String {
     .gate input[type=password] {{
       width: 100%;
       padding: .65rem .9rem;
-      border: 1px solid #d1d5db;
+      border: 1px solid var(--border);
       border-radius: 6px;
       font-size: 1rem;
       margin-bottom: .75rem;
       outline: none;
+      background: var(--surface);
+      color: var(--text);
       transition: border-color .15s;
     }}
-    .gate input[type=password]:focus {{ border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,.15); }}
+    .gate input[type=password]:focus {{ border-color: var(--primary); box-shadow: 0 0 0 3px rgba(59,130,246,.15); }}
     .gate .human-row {{
       display: flex;
       align-items: center;
@@ -214,13 +266,13 @@ fn gate_html(_post_title: &str, action: &str, error: Option<&str>) -> String {
       justify-content: center;
       margin-bottom: .75rem;
       font-size: .9rem;
-      color: #444;
+      color: var(--muted);
     }}
-    .gate .human-row input[type=checkbox] {{ width: 1.1rem; height: 1.1rem; cursor: pointer; accent-color: #3b82f6; }}
+    .gate .human-row input[type=checkbox] {{ width: 1.1rem; height: 1.1rem; cursor: pointer; accent-color: var(--primary); }}
     .gate button {{
       width: 100%;
       padding: .65rem;
-      background: #3b82f6;
+      background: var(--primary);
       color: #fff;
       border: none;
       border-radius: 6px;
@@ -229,7 +281,7 @@ fn gate_html(_post_title: &str, action: &str, error: Option<&str>) -> String {
       font-weight: 500;
       transition: background .15s;
     }}
-    .gate button:hover {{ background: #2563eb; }}
+    .gate button:hover {{ background: var(--primary-dark); }}
   </style>
 </head>
 <body>

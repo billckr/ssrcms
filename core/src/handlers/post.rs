@@ -68,10 +68,12 @@ pub async fn single_post(
     if let Ok(post_record) = post::get_published_by_slug(&state.db, Some(site_id), &slug).await {
         if let Some(ref hash) = post_record.post_password {
             if !super::post_unlock::is_unlocked(&jar, post_record.id, hash) {
+                let default_theme = state.app_settings.read().unwrap().default_theme.clone();
                 return super::post_unlock::gate_response(
                     &post_record.title,
                     &format!("/{}/unlock", slug),
                     None,
+                    &default_theme,
                 );
             }
         }
