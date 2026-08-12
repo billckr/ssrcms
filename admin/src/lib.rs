@@ -154,9 +154,9 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
       <ul>
         {dash}
         {sites}
-        {users}
         {posts}
         {pages}
+        {users}
         {menus}
         {media}
         {cats}
