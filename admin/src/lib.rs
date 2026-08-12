@@ -146,6 +146,7 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
   <style>{css}</style>
 </head>
 <body>
+  <div class="nav-loading-overlay" id="nav-loading-overlay"><img src="/admin/static/icons/loader.svg" alt="" class="nav-loading-spinner"></div>
   <div class="sidebar-overlay" onclick="closeSidebar()"></div>
   <div class="admin-wrap">
     <nav class="admin-sidebar">
@@ -268,6 +269,29 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
       a.addEventListener('click', function(e) {{
         if (a.getAttribute('href') !== '#') closeSidebar();
       }});
+    }});
+    // Full-page nav spinner: admin pages are server-rendered (a click on a
+    // link is a real navigation, not a client-side route change). Most
+    // navigations finish well under a second, so showing the overlay
+    // instantly just reads as a flash — it's delayed and only appears if
+    // the page is still loading by then. No need to clear the timer on a
+    // normal navigation: the whole document (and its timers) gets torn
+    // down the moment the next page starts loading.
+    document.addEventListener('click', function(e) {{
+      if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+      var a = e.target.closest('a[href]');
+      if (!a || a.target === '_blank') return;
+      var href = a.getAttribute('href');
+      if (!href || href.charAt(0) === '#' || href.indexOf('javascript:') === 0) return;
+      setTimeout(function() {{
+        document.getElementById('nav-loading-overlay').classList.add('visible');
+      }}, 1000);
+    }});
+    // If the browser restores this page from bfcache (e.g. the back
+    // button), the overlay's 'visible' class would otherwise still be set
+    // from the moment the user navigated away.
+    window.addEventListener('pageshow', function(e) {{
+      if (e.persisted) document.getElementById('nav-loading-overlay').classList.remove('visible');
     }});
     function openMediaBrowser() {{
       var frame = document.getElementById('media-browser-frame');

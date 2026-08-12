@@ -218,6 +218,15 @@ a.stat-cell-link:hover { background: var(--tint); }
   .user-form-grid .span-2 { grid-column: 1; }
 }
 
+/* Shown for the duration of a full-page navigation — admin pages are
+   server-rendered, so there's no client-side router to hook into; this is
+   just immediate feedback that a link click registered. See the click
+   handler in lib.rs for how `.visible` gets toggled on. */
+.nav-loading-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.15); align-items: center; justify-content: center; z-index: 9999; }
+.nav-loading-overlay.visible { display: flex; }
+.nav-loading-spinner { width: 44px; height: 44px; animation: nav-spin 1.1s linear infinite; }
+@keyframes nav-spin { to { transform: rotate(360deg); } }
+
 /* Tables */
 .data-table { width: 100%; border-collapse: collapse; background: var(--surface); border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow); }
 .data-table th { background: var(--tint); text-align: left; padding: .48rem .8rem; font-size: 12px; color: var(--muted); border-bottom: 1px solid var(--border); }
