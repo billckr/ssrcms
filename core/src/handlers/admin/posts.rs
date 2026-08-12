@@ -277,6 +277,8 @@ async fn new_post_type(state: AppState, post_type: &str, site_id: Option<Uuid>, 
         live_url: None,
         preview_url: None,
         saved_forms: fetch_saved_forms(&state, site_id).await,
+        created_at: None,
+        updated_at: None,
     };
     Html(admin::pages::posts::render_editor(&edit, None, &ctx))
 }
@@ -425,6 +427,8 @@ async fn edit_post_type(state: AppState, id: Uuid, site_id: Option<Uuid>, is_aut
         live_url,
         preview_url,
         saved_forms: fetch_saved_forms(&state, site_id).await,
+        created_at: Some(post.created_at.format("%Y-%m-%d %H:%M UTC").to_string()),
+        updated_at: Some(post.updated_at.format("%Y-%m-%d %H:%M UTC").to_string()),
     };
 
     let flash = match success {
@@ -459,9 +463,8 @@ pub struct PostForm {
     pub post_protected: Option<String>,
     /// Plain-text password from the admin form (never stored; hashed before insert/update).
     pub post_password: Option<String>,
-    /// "true" when comments are enabled, "false" or absent to disable.
-    #[serde(default)]
-    pub comments_enabled: String,
+    /// "on" when the Allow Comments checkbox is ticked, absent to disable.
+    pub comments_enabled: Option<String>,
     /// UUID of the parent page, empty string = no parent.
     pub parent_id: Option<String>,
     /// JSON-encoded array of source URL strings, assembled by JS before submit.
@@ -499,7 +502,7 @@ pub async fn save_new(
     let post_type = if form.post_type == "page" { PostType::Page } else { PostType::Post };
     let published_at = parse_datetime(form.published_at.as_deref());
 
-    let form_comments_enabled = form.comments_enabled == "true";
+    let form_comments_enabled = form.comments_enabled.as_deref() == Some("on");
 
     let form_parent_id: Option<Uuid> = form.parent_id.as_deref()
         .filter(|s| !s.is_empty())
@@ -542,6 +545,8 @@ pub async fn save_new(
             live_url: None,
             preview_url: None,
             saved_forms: fetch_saved_forms(&state, admin.site_id).await,
+            created_at: None,
+            updated_at: None,
         };
         return Html(admin::pages::posts::render_editor(&edit, Some("Content is required before publishing."), &ctx)).into_response();
     }
@@ -620,6 +625,8 @@ pub async fn save_new(
                 live_url: None,
                 preview_url: None,
                 saved_forms: fetch_saved_forms(&state, admin.site_id).await,
+                created_at: None,
+                updated_at: None,
             };
             let msg = friendly_save_error(&e);
             Html(admin::pages::posts::render_editor(&edit, Some(&msg), &ctx)).into_response()
@@ -669,7 +676,7 @@ pub async fn save_edit(
         parse_status(&form.status)
     };
     let published_at = parse_datetime(form.published_at.as_deref());
-    let form_comments_enabled = form.comments_enabled == "true";
+    let form_comments_enabled = form.comments_enabled.as_deref() == Some("on");
     let form_parent_id: Option<Uuid> = form.parent_id.as_deref()
         .filter(|s| !s.is_empty())
         .and_then(|s| s.parse::<Uuid>().ok());
@@ -712,6 +719,8 @@ pub async fn save_edit(
             live_url: None,
             preview_url: None,
             saved_forms: fetch_saved_forms(&state, admin.site_id).await,
+            created_at: None,
+            updated_at: None,
         };
         return Html(admin::pages::posts::render_editor(&edit, Some("Content is required before publishing."), &ctx)).into_response();
     }
@@ -811,6 +820,8 @@ pub async fn save_edit(
                 live_url: None,
                 preview_url: None,
                 saved_forms: fetch_saved_forms(&state, admin.site_id).await,
+                created_at: None,
+                updated_at: None,
             };
             let msg = friendly_save_error(&e);
             Html(admin::pages::posts::render_editor(&edit, Some(&msg), &ctx)).into_response()

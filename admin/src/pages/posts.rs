@@ -67,6 +67,10 @@ pub struct PostEdit {
     /// (slug, name) pairs for every form defined in Form Designer — powers
     /// the editor's "Insert Form" picker.
     pub saved_forms: Vec<(String, String)>,
+    /// When this post/page was first created. None for a new, unsaved post.
+    pub created_at: Option<String>,
+    /// When it was last saved. None for a new, unsaved post.
+    pub updated_at: Option<String>,
 }
 
 pub struct TermOption {
@@ -498,11 +502,102 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
             format!(r#"<option value="{val}"{selected}>{label}</option>"#, val = val, label = label, selected = selected)
         }).collect::<Vec<_>>().join("")
     } else {
-        // Editors/admins: include pending so they can see/change it too
-        [("draft", "Draft"), ("pending", "Pending Review"), ("published", "Published"), ("scheduled", "Scheduled"), ("trashed", "Trashed")].iter().map(|(val, label)| {
+        // Editors/admins: include pending so they can see/change it too.
+        // Trashed only makes sense once a post exists to trash — a brand-new,
+        // never-saved post has nothing for it to do, and Delete already
+        // covers removing real content.
+        let mut opts: Vec<(&str, &str)> = vec![("draft", "Draft"), ("pending", "Pending Review"), ("published", "Published"), ("scheduled", "Scheduled")];
+        if !is_new {
+            opts.push(("trashed", "Trashed"));
+        }
+        opts.iter().map(|(val, label)| {
             let selected = if *val == post.status { " selected" } else { "" };
             format!(r#"<option value="{val}"{selected}>{label}</option>"#, val = val, label = label, selected = selected)
         }).collect::<Vec<_>>().join("")
+    };
+
+    let live_url_link = match &post.live_url {
+        Some(url) => format!(
+            r#"<a href="{url}" class="icon-btn" title="View live" aria-label="View live" target="_blank" rel="noopener"><img src="/admin/static/icons/eye.svg" alt=""></a>"#,
+            url = crate::html_escape(url),
+        ),
+        None => match &post.preview_url {
+            Some(url) => format!(
+                r#"<a href="{url}" class="icon-btn" title="Preview" aria-label="Preview" target="_blank" rel="noopener"><img src="/admin/static/icons/eye.svg" alt=""></a>"#,
+                url = crate::html_escape(url),
+            ),
+            None => String::new(),
+        },
+    };
+
+    // On an existing post, the status is usually left as-is — show it as
+    // plain text (matching the Originally posted/Last updated styling)
+    // instead of a dropdown that's always "armed" to be changed. Change
+    // Status/View, down by Save, reveal the real <select> when clicked. A
+    // brand-new post never had a prior status to fall back to display, and
+    // has nothing to view yet either, so it just shows the dropdown
+    // outright with no separate actions needed.
+    let status_select_display = if is_new { "" } else { "display:none" };
+    let status_readonly = if is_new {
+        String::new()
+    } else {
+        let label = match post.status.as_str() {
+            "draft" => "Draft",
+            "pending" => "Pending Review",
+            "published" => "Published",
+            "scheduled" => "Scheduled",
+            "trashed" => "Trashed",
+            other => other,
+        };
+        format!(
+            r#"<div id="status-readonly">
+            <label style="display:block;font-weight:500;margin-bottom:.35rem;font-size:13px">Status</label>
+            <div style="font-size:13px;color:var(--muted)">{label}</div>
+          </div>"#,
+            label = crate::html_escape(label),
+        )
+    };
+    // Shares the Save pill, only for an existing post (nothing to change
+    // status on or view/preview for a post that hasn't been saved yet).
+    let status_actions_pill = if is_new {
+        String::new()
+    } else {
+        format!(
+            r#"<button type="button" class="icon-btn" id="status-edit-btn" title="Change status" aria-label="Change status">
+              <img src="/admin/static/icons/edit.svg" alt="">
+            </button>
+            {live_url_link}"#,
+            live_url_link = live_url_link,
+        )
+    };
+
+    // Date/Time is only meaningful once Scheduled is picked — hidden the
+    // rest of the time to keep an infrequently-needed field from cluttering
+    // Publish Options on every post/page. When it's hidden, show the
+    // original-post/last-updated dates in its place instead of leaving the
+    // spot empty (nothing to show yet on a new, unsaved post).
+    let is_scheduled = post.status == "scheduled";
+    let datetime_picker_display = if is_scheduled { "" } else { "display:none" };
+    // Nothing to show at all yet on a brand-new, unsaved, non-scheduled
+    // post — hide the whole section rather than leaving an empty box.
+    let datetime_section_display = if !is_scheduled && post.created_at.is_none() { "display:none" } else { "" };
+    let post_dates_info = match (&post.created_at, &post.updated_at) {
+        (Some(created), Some(updated)) => format!(
+            r#"<div id="post-dates-info" style="{display}">
+            <div style="margin-bottom:.6rem">
+              <label style="display:block;font-weight:500;margin-bottom:.35rem;font-size:13px">Originally posted:</label>
+              <div style="font-size:13px;color:var(--muted)">{created}</div>
+            </div>
+            <div>
+              <label style="display:block;font-weight:500;margin-bottom:.35rem;font-size:13px">Last updated:</label>
+              <div style="font-size:13px;color:var(--muted)">{updated}</div>
+            </div>
+          </div>"#,
+            display = if is_scheduled { "display:none" } else { "" },
+            created = crate::html_escape(created),
+            updated = crate::html_escape(updated),
+        ),
+        _ => String::new(),
     };
 
     // Hint displayed below the status dropdown for authors
@@ -518,20 +613,6 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
 </script>"#
     } else {
         ""
-    };
-
-    let live_url_link = match &post.live_url {
-        Some(url) => format!(
-            r#"<div class="icon-pill" style="margin-top:.4rem"><a href="{url}" class="icon-btn" title="View live" aria-label="View live" target="_blank" rel="noopener"><img src="/admin/static/icons/eye.svg" alt=""></a></div>"#,
-            url = crate::html_escape(url),
-        ),
-        None => match &post.preview_url {
-            Some(url) => format!(
-                r#"<div class="icon-pill" style="margin-top:.4rem"><a href="{url}" class="icon-btn" title="Preview" aria-label="Preview" target="_blank" rel="noopener"><img src="/admin/static/icons/eye.svg" alt=""></a></div>"#,
-                url = crate::html_escape(url),
-            ),
-            None => String::new(),
-        },
     };
 
     // Default published_at:
@@ -731,11 +812,11 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
     let comments_section = if ctx.user_role.eq_ignore_ascii_case("author") {
         String::new()
     } else {
-        let enabled_sel  = if post.comments_enabled  { " selected" } else { "" };
-        let disabled_sel = if !post.comments_enabled { " selected" } else { "" };
+        let checked = if post.comments_enabled { "checked" } else { "" };
+        let label_text = if post.comments_enabled { "Disable Comments" } else { "Allow Comments" };
         let count_badge = if post.comment_count > 0 {
             format!(
-                r#" <span class="badge badge-pending" title="{n} comment{s}">{n}</span>"#,
+                r#" <span style="display:inline-block;background:var(--tint);color:var(--text);border-radius:4px;padding:.15rem .5rem;font-size:.78rem;font-weight:500" title="{n} comment{s}">{n}</span>"#,
                 n = post.comment_count,
                 s = if post.comment_count == 1 { "" } else { "s" },
             )
@@ -743,28 +824,30 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
             String::new()
         };
         format!(
-            r#"<div class="form-group">
-          <label for="comments-enabled" style="font-size:12px">Comments{count_badge}</label>
-          <select id="comments-enabled" name="comments_enabled" style="font-size:13px">
-            <option value="false"{disabled_sel}>Disabled</option>
-            <option value="true"{enabled_sel}>Allowed</option>
-          </select>
+            r#"<div class="form-group" style="margin-bottom:.5rem">
+          <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;font-weight:400">
+            <input type="checkbox" id="comments-enabled-cb" name="comments_enabled" value="on" {checked}
+              onchange="if(!this.checked){{if(!confirm('Disable comments on this post? Comments already posted are kept, but they\'ll stop showing on the page and no new comments will be allowed.')){{this.checked=true;return;}}}} document.getElementById('comments-enabled-label').textContent=this.checked?'Disable Comments':'Allow Comments';">
+            <span id="comments-enabled-label">{label_text}</span>{count_badge}
+          </label>
         </div>"#,
-            count_badge  = count_badge,
-            disabled_sel = disabled_sel,
-            enabled_sel  = enabled_sel,
+            checked = checked,
+            label_text = label_text,
+            count_badge = count_badge,
         )
     };
 
-    let comments_box = if comments_section.is_empty() {
+    // Comments + Password share one compact box rather than each getting
+    // their own — both are simple on/off checkboxes for the same audience
+    // (editors/admins), so splitting them added visual weight for no gain.
+    let comments_and_password_box = if comments_section.is_empty() && password_section.is_empty() {
         String::new()
     } else {
-        format!(r#"<div class="card-boxed-section">{comments_section}</div>"#, comments_section = comments_section)
-    };
-    let password_box = if password_section.is_empty() {
-        String::new()
-    } else {
-        format!(r#"<div class="card-boxed-section">{password_section}</div>"#, password_section = password_section)
+        format!(
+            r#"<div class="card-boxed-section">{comments_section}{password_section}</div>"#,
+            comments_section = comments_section,
+            password_section = password_section,
+        )
     };
 
     // Author card: shown to editors/admins when viewing an existing post written by someone else.
@@ -906,7 +989,7 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
           <div class="card-boxed-section">
             <div style="display:grid;grid-template-columns:1fr auto;gap:.75rem;align-items:start">
               <div class="form-group" style="margin:0">
-                <label for="title"><span style="display:inline-block;background:var(--tint);color:var(--text);border-radius:999px;padding:.15rem .65rem;font-size:.78rem;font-weight:600">Title</span> <span style="color:var(--danger);font-weight:700">*</span></label>
+                <label for="title"><span style="display:inline-block;background:var(--tint);color:var(--text);border-radius:999px;padding:.15rem .65rem;font-size:.78rem;font-weight:600">Title <span style="color:var(--danger)">*</span></span></label>
                 <input type="text" id="title" name="title" value="{title_val}" required class="title-input" maxlength="255"{autofocus}>
                 <small id="title-count" style="color:var(--muted)">255/255</small>
               </div>
@@ -915,19 +998,20 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
                 <input type="text" id="slug" name="slug" value="{slug}" maxlength="200"
                   onkeydown="if(event.key===' '){{ event.preventDefault(); var i=this.selectionStart; this.value=this.value.slice(0,i)+'-'+this.value.slice(this.selectionEnd); this.selectionStart=this.selectionEnd=i+1; }}"
                   onblur="this.value=this.value.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'');">
+                <small id="slug-mode" style="color:var(--muted)">Auto</small>
               </div>
             </div>
           </div>
           <div class="card-boxed-section">
             <div class="form-group">
-              <label for="excerpt"><span style="display:inline-block;background:var(--tint);color:var(--text);border-radius:999px;padding:.15rem .65rem;font-size:.78rem;font-weight:600">Excerpt</span> <span style="color:var(--danger);font-weight:700">*</span> <small style="font-weight:400;color:var(--muted)">Used as meta description — required for SEO</small></label>
+              <label for="excerpt"><span style="display:inline-block;background:var(--tint);color:var(--text);border-radius:999px;padding:.15rem .65rem;font-size:.78rem;font-weight:600">Excerpt <span style="color:var(--danger)">*</span></span> <small style="font-weight:400;color:var(--muted)">Used as meta description — required for SEO</small></label>
               <textarea id="excerpt" name="excerpt" rows="3" required maxlength="500" style="resize:none">{excerpt}</textarea>
               <small id="excerpt-count" style="color:var(--muted)">500/500</small>
             </div>
           </div>
           <div class="card-boxed-section">
             <div class="form-group">
-              <label><span style="display:inline-block;background:var(--tint);color:var(--text);border-radius:999px;padding:.15rem .65rem;font-size:.78rem;font-weight:600">Content</span> <span style="color:var(--danger);font-weight:700">*</span></label>
+              <label><span style="display:inline-block;background:var(--tint);color:var(--text);border-radius:999px;padding:.15rem .65rem;font-size:.78rem;font-weight:600">Content <span style="color:var(--danger)">*</span></span></label>
               <div id="quill-editor" style="height:620px;background:var(--field-bg);font-size:1rem"></div>
               <input type="hidden" id="content" name="content">
             </div>
@@ -945,28 +1029,29 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
         </h3>
         <div class="card-boxed-section">
           <div class="form-group">
-            <label for="status">Status</label>
-            <select id="status" name="status">{status_options}</select>
+            <label for="status" id="status-label" style="{status_select_display}">Status</label>
+            {status_readonly}
+            <select id="status" name="status" style="{status_select_display}">{status_options}</select>
             {status_hint}
-            {live_url_link}
           </div>
         </div>
         {template_section}
-        <div class="card-boxed-section">
-          <div class="form-group">
+        <div class="card-boxed-section" id="datetime-section" style="{datetime_section_display}">
+          <div class="form-group" id="datetime-picker-wrap" style="{datetime_picker_display}">
             {datetime_field}
           </div>
+          {post_dates_info}
         </div>
-        {comments_box}
-        {password_box}
+        {comments_and_password_box}
         <input type="hidden" name="post_type" value="{post_type}">
         <div style="display:flex;align-items:center;gap:.6rem">
           <div class="icon-pill">
             <button type="submit" class="icon-btn" id="save-btn" title="Save" aria-label="Save" disabled>
               <img src="/admin/static/icons/save.svg" alt="">
             </button>
+            <span class="unsaved-indicator" style="display:none;color:var(--success);font-weight:600;font-size:12px;padding:0 .3rem;white-space:nowrap">Save Changes</span>
+            {status_actions_pill}
           </div>
-          <span id="unsaved-indicator" style="display:none;color:var(--danger);font-size:12px;font-weight:600">Unsaved changes</span>
         </div>
       </div>
       {featured_image_section}
@@ -989,6 +1074,29 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
   if (editorForm) {{
     editorForm.addEventListener('keydown', function(e) {{
       if (e.key === 'Enter' && e.target.tagName === 'INPUT') e.preventDefault();
+    }});
+  }}
+  var statusSel = document.getElementById('status');
+  var statusLabel = document.getElementById('status-label');
+  var statusReadonly = document.getElementById('status-readonly');
+  var statusEditBtn = document.getElementById('status-edit-btn');
+  if (statusEditBtn && statusReadonly && statusSel) {{
+    statusEditBtn.addEventListener('click', function() {{
+      statusReadonly.style.display = 'none';
+      statusSel.style.display = '';
+      if (statusLabel) statusLabel.style.display = '';
+      statusSel.focus();
+    }});
+  }}
+  var dateSection = document.getElementById('datetime-section');
+  var datePicker = document.getElementById('datetime-picker-wrap');
+  var dateInfo = document.getElementById('post-dates-info');
+  if (statusSel && dateSection && datePicker) {{
+    statusSel.addEventListener('change', function() {{
+      var scheduled = statusSel.value === 'scheduled';
+      datePicker.style.display = scheduled ? '' : 'none';
+      if (dateInfo) dateInfo.style.display = scheduled ? 'none' : '';
+      dateSection.style.display = (scheduled || dateInfo) ? '' : 'none';
     }});
   }}
 }})();
@@ -1048,10 +1156,12 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
   var formDirty = false;
   function markDirty() {{
     formDirty = true;
-    var el = document.getElementById('unsaved-indicator');
-    if (el) el.style.display = '';
+    document.querySelectorAll('.unsaved-indicator').forEach(function(el) {{ el.style.display = ''; }});
     var saveBtn = document.getElementById('save-btn');
-    if (saveBtn) saveBtn.disabled = false;
+    if (saveBtn) {{
+      saveBtn.disabled = false;
+      saveBtn.classList.add('icon-btn-save-dirty');
+    }}
   }}
   window.markDirty = markDirty;
   var postForm = document.querySelector('form');
@@ -1396,6 +1506,7 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
   (function() {{
     var titleEl = document.getElementById('title');
     var slugEl  = document.getElementById('slug');
+    var modeEl  = document.getElementById('slug-mode');
     if (!titleEl || !slugEl) return;
 
     function slugify(s) {{
@@ -1404,12 +1515,18 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
         .replace(/^-+|-+$/g, '');
     }}
 
+    function setMode(isLocked) {{
+      if (modeEl) modeEl.textContent = isLocked ? 'Custom' : 'Auto';
+    }}
+
     // Lock if slug already has a value on load (existing post with a slug set)
     var locked = slugEl.value.trim() !== '';
+    setMode(locked);
 
     // User manually editing the slug locks it; clearing it unlocks
     slugEl.addEventListener('input', function() {{
       locked = slugEl.value.trim() !== '';
+      setMode(locked);
     }});
 
     titleEl.addEventListener('input', function() {{
@@ -1456,6 +1573,12 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
         excerpt = crate::html_escape(&post.excerpt),
         status_options = status_options,
         status_hint = status_hint,
+        status_readonly = status_readonly,
+        status_actions_pill = status_actions_pill,
+        status_select_display = status_select_display,
+        datetime_section_display = datetime_section_display,
+        datetime_picker_display = datetime_picker_display,
+        post_dates_info = post_dates_info,
         datetime_field = if ctx.user_role.eq_ignore_ascii_case("author") {
             format!(r#"<input type="hidden" name="published_at" value="{}">"#, crate::html_escape(&published_at))
         } else {
@@ -1471,11 +1594,9 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
         categories_section = categories_section,
         featured_image_section = featured_image_section,
         inline_media_section = inline_media_section,
-        comments_box = comments_box,
-        password_box = password_box,
+        comments_and_password_box = comments_and_password_box,
         author_card = author_card,
         sources_section = sources_section,
-        live_url_link = live_url_link,
         delete_btn_inline = delete_btn_inline,
     );
 

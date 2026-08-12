@@ -13,6 +13,11 @@
   --primary: #4f46e5;
   --primary-dark: #4338ca;
   --danger: #dc2626;
+  --success: #16a34a;
+  /* Turns a black icon (feather icons, loaded as <img>) green to match
+     --success — tuned the same way as the icon-btn hover/danger filters
+     below, since filter is the only way to recolor an <img>. */
+  --success-filter: invert(50%) sepia(50%) saturate(869%) hue-rotate(114deg) brightness(75%) contrast(204%);
   --text: #1e293b;
   --muted: #64748b;
   --radius: 6px;
@@ -40,6 +45,8 @@
   --primary: #818cf8;
   --primary-dark: #6366f1;
   --danger: #f87171;
+  --success: #4ade80;
+  --success-filter: invert(47%) sepia(47%) saturate(529%) hue-rotate(89deg) brightness(142%) contrast(93%);
   --text: #e4e4e7;
   --muted: #a1a1aa;
   --shadow: 0 1px 3px rgba(0,0,0,.4);
@@ -532,6 +539,11 @@ tr.muted td { opacity: .55; }
 .icon-btn:disabled { opacity: .4; cursor: not-allowed; }
 .icon-btn:disabled:hover img { filter: none; }
 :root[data-theme="dark"] .icon-btn:disabled:hover img { filter: invert(1); }
+/* Save button turns green once there are unsaved changes (see markDirty()
+   in the post/page editor). Needs the #save-btn id to out-specificity the
+   dark-mode img[src^=...] invert(1) rule above, which would otherwise win
+   and mask the green filter back to the default icon color. */
+#save-btn.icon-btn-save-dirty img { filter: var(--success-filter); }
 
 /* Rounded "pill" wrapper for one or more icon-btns living outside a header
    — e.g. a form's primary action placed below its last field instead of
