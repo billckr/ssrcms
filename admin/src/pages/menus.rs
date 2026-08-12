@@ -123,8 +123,10 @@ pub fn render_list(menus: &[MenuRow], sort: &str, dir: &str, ctx: &crate::PageCo
             <div class="form-group">
               <label for="new-menu-name">Menu Name</label>
               <input id="new-menu-name" type="text" name="name" required placeholder="e.g. Main Menu" maxlength="25">
-              <span class="form-hint char-count" id="new-menu-name-count">0/25</span>
+              <small id="new-menu-name-count" style="color:var(--muted)">25/25</small>
             </div>
+          </div>
+          <div class="card-boxed-section">
             <div class="form-group">
               <label for="new-menu-location">Location</label>
               <select id="new-menu-location" name="location">{location_opts}</select>
@@ -146,8 +148,14 @@ pub fn render_list(menus: &[MenuRow], sort: &str, dir: &str, ctx: &crate::PageCo
   var submitBtn = document.getElementById('create-menu-submit');
   var count = document.getElementById('new-menu-name-count');
   function update() {{
-    submitBtn.disabled = nameInput.value.trim().length === 0;
-    if (count) count.textContent = nameInput.value.length + '/25';
+    var active = nameInput.value.trim().length > 0;
+    submitBtn.disabled = !active;
+    submitBtn.classList.toggle('icon-btn-active-green', active);
+    if (count) {{
+      var remaining = 25 - nameInput.value.length;
+      count.textContent = remaining + '/25';
+      count.style.color = remaining <= 20 ? 'var(--danger)' : 'var(--muted)';
+    }}
   }}
   nameInput.addEventListener('input', update);
   update();

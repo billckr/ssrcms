@@ -27,24 +27,28 @@ pub fn render(terms: &[TermItem], taxonomy: &str, sort: &str, dir: &str, flash: 
       <h2 class="card-boxed-header">Add {title_s}</h2>
       <div class="card-boxed-body">
       <form method="POST" action="{path}/new" id="add-term-form">
-        <div class="form-group">
-          <label for="name">Name</label>
-          <input type="text" id="name" name="name" required oninput="onNameInput()">
+        <div class="card-boxed-section">
+          <div class="form-group">
+            <label for="name">Name</label>
+            <input type="text" id="name" name="name" required oninput="onNameInput()">
+          </div>
         </div>
-        <div class="form-group">
-          <label for="slug">Slug (optional)</label>
-          <input type="text" id="slug" name="slug" oninput="slugTouched = true"
-            onkeydown="if(event.key===' '){{ event.preventDefault(); var i=this.selectionStart; this.value=this.value.slice(0,i)+'-'+this.value.slice(this.selectionEnd); this.selectionStart=this.selectionEnd=i+1; }}"
-            onblur="this.value=this.value.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'');">
-          <small>Lowercase, hyphens only. Auto-filled from name as you type &mdash; edit it here to override.</small>
+        <div class="card-boxed-section">
+          <div class="form-group">
+            <label for="slug">Slug (optional)</label>
+            <input type="text" id="slug" name="slug" oninput="slugTouched = true"
+              onkeydown="if(event.key===' '){{ event.preventDefault(); var i=this.selectionStart; this.value=this.value.slice(0,i)+'-'+this.value.slice(this.selectionEnd); this.selectionStart=this.selectionEnd=i+1; }}"
+              onblur="this.value=this.value.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'');">
+            <small>Lowercase, hyphens only. Auto-filled from name as you type &mdash; edit it here to override.</small>
+          </div>
         </div>
         <input type="hidden" name="taxonomy" value="{taxonomy}">
-        <div class="icon-pill">
-          <button type="submit" form="add-term-form" id="add-term-btn" class="icon-btn" title="Add {title_s}" aria-label="Add {title_s}" disabled>
-            <img src="/admin/static/icons/file-plus.svg" alt="">
-          </button>
-        </div>
       </form>
+      <div class="icon-pill">
+        <button type="submit" form="add-term-form" id="add-term-btn" class="icon-btn" title="Add {title_s}" aria-label="Add {title_s}" disabled>
+          <img src="/admin/static/icons/file-plus.svg" alt="">
+        </button>
+      </div>
       </div>
       <script>
         var slugTouched = false;

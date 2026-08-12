@@ -418,7 +418,7 @@ pub fn render_list(
     let staff_active = if !is_subscribers { " active" } else { "" };
     let sub_active   = if  is_subscribers { " active" } else { "" };
     let tabs = format!(
-        r#"<div class="page-tabs">
+        r#"<div class="page-tabs" style="margin-bottom:0">
   <a href="/admin/users?tab=site-users" class="page-tab{staff_active}">Site Users <span class="badge" style="margin-left:.35rem;font-size:.75rem;padding:.1rem .45rem">{staff_count}</span></a>
   <a href="/admin/users?tab=subscribers" class="page-tab{sub_active}">Subscribers <span class="badge" style="margin-left:.35rem;font-size:.75rem;padding:.1rem .45rem">{sub_count}</span></a>
 </div>"#,
@@ -428,54 +428,7 @@ pub fn render_list(
         sub_count    = sub_total,
     );
 
-    // ── Site filter dropdowns (global admin only) ─────────────────────────────
-    let site_filter_staff = if ctx.is_global_admin && !available_sites.is_empty() {
-        let opts = available_sites.iter().map(|s| {
-            let sel = if s.id == selected_site_id { " selected" } else { "" };
-            format!(
-                r#"<option value="{id}"{sel}>{hostname}</option>"#,
-                id = crate::html_escape(&s.id),
-                hostname = crate::html_escape(&s.hostname),
-                sel = sel,
-            )
-        }).collect::<Vec<_>>().join("\n");
-        format!(
-            r#"<form method="GET" action="/admin/users" style="display:inline-flex;align-items:center;gap:.5rem;margin:0">
-  <input type="hidden" name="tab" value="site-users">
-  <select id="site-filter-staff" name="site" class="appearance-filter-select" onchange="this.form.submit()" aria-label="Filter users by site">
-    <option value="">site</option>
-    {opts}
-  </select>
-</form>"#,
-            opts = opts,
-        )
-    } else {
-        String::new()
-    };
-
-    let site_filter_subs = if ctx.is_global_admin && !available_sites.is_empty() {
-        let opts = available_sites.iter().map(|s| {
-            let sel = if s.id == selected_site_id { " selected" } else { "" };
-            format!(
-                r#"<option value="{id}"{sel}>{hostname}</option>"#,
-                id = crate::html_escape(&s.id),
-                hostname = crate::html_escape(&s.hostname),
-                sel = sel,
-            )
-        }).collect::<Vec<_>>().join("\n");
-        format!(
-            r#"<form method="GET" action="/admin/users" style="display:inline-flex;align-items:center;gap:.5rem;margin:0">
-  <input type="hidden" name="tab" value="subscribers">
-  <select id="site-filter-subs" name="site" class="appearance-filter-select" onchange="this.form.submit()" aria-label="Filter users by site">
-    <option value="">site</option>
-    {opts}
-  </select>
-</form>"#,
-            opts = opts,
-        )
-    } else {
-        String::new()
-    };
+    let _ = available_sites;
 
     // Shared bulk-delete + select-all script (handles both tabs).
     // Uses event delegation throughout — rows in tbody#users-tbody are replaced
@@ -621,7 +574,7 @@ document.addEventListener('click', function(e) {
     let search_toggle = crate::pill_search_toggle("user-search", "Search users&hellip;", search);
     // Staff tab already has a "New User" pill to merge the search icon into;
     // the subscribers tab has no other pill, so it gets its own.
-    let search_pill_standalone = format!(r#"<div class="icon-pill">{search_toggle}</div>"#, search_toggle = search_toggle);
+    let search_pill_standalone = format!(r#"<div class="icon-pill" style="align-self:flex-end;margin-top:0">{search_toggle}</div>"#, search_toggle = search_toggle);
     let site_qs = if selected_site_id.is_empty() {
         String::new()
     } else {
@@ -635,19 +588,16 @@ document.addEventListener('click', function(e) {
 
     let content = if !is_subscribers {
         format!(
-            r#"{tabs}
-<div style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;margin-bottom:1rem;flex-wrap:wrap">
-  <div style="display:flex;align-items:center;gap:.75rem">
-    <button id="bulk-delete-btn-staff" type="button" class="btn btn-danger" style="display:none"
-            onclick="bulkDeleteUsers('site-users')">Delete Selected (<span id="bulk-count-staff">0</span>)</button>
-    {site_filter_staff}
+            r#"<div style="display:flex;align-items:flex-end;justify-content:space-between;gap:.75rem;margin-bottom:.75rem;flex-wrap:wrap">
+  {tabs}
+  <div class="icon-pill" style="align-self:flex-end;margin-top:0">
+    {search_toggle}
+    <a href="/admin/users/new" class="icon-btn" title="New User" aria-label="New User"><img src="/admin/static/icons/file-plus.svg" alt=""></a>
   </div>
-  <div style="display:flex;align-items:center;gap:.5rem">
-    <div class="icon-pill">
-      {search_toggle}
-      <a href="/admin/users/new" class="icon-btn" title="New User" aria-label="New User"><img src="/admin/static/icons/file-plus.svg" alt=""></a>
-    </div>
-  </div>
+</div>
+<div style="margin-bottom:1rem">
+  <button id="bulk-delete-btn-staff" type="button" class="btn btn-danger" style="display:none"
+          onclick="bulkDeleteUsers('site-users')">Delete Selected (<span id="bulk-count-staff">0</span>)</button>
 </div>
 <div id="users-list">{fragment}</div>
 {sole_admin_modal}
@@ -655,7 +605,6 @@ document.addEventListener('click', function(e) {
 {live_search}
 {pill_search_init}"#,
             tabs = tabs,
-            site_filter_staff = site_filter_staff,
             fragment = fragment,
             sole_admin_modal = sole_admin_modal,
             bulk_script = bulk_script,
@@ -665,16 +614,13 @@ document.addEventListener('click', function(e) {
         )
     } else {
         format!(
-            r#"{tabs}
-<div style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;margin-bottom:1rem;flex-wrap:wrap">
-  <div style="display:flex;align-items:center;gap:.75rem">
-    <button id="bulk-delete-btn-subs" type="button" class="btn btn-danger" style="display:none"
-            onclick="bulkDeleteUsers('subscribers')">Delete Selected (<span id="bulk-count-subs">0</span>)</button>
-    {site_filter_subs}
-  </div>
-  <div style="display:flex;align-items:center;gap:.5rem">
-    {search_pill_standalone}
-  </div>
+            r#"<div style="display:flex;align-items:flex-end;justify-content:space-between;gap:.75rem;margin-bottom:.75rem;flex-wrap:wrap">
+  {tabs}
+  {search_pill_standalone}
+</div>
+<div style="margin-bottom:1rem">
+  <button id="bulk-delete-btn-subs" type="button" class="btn btn-danger" style="display:none"
+          onclick="bulkDeleteUsers('subscribers')">Delete Selected (<span id="bulk-count-subs">0</span>)</button>
 </div>
 <div id="users-list">{fragment}</div>
 {sole_admin_modal}
@@ -682,7 +628,6 @@ document.addEventListener('click', function(e) {
 {live_search}
 {pill_search_init}"#,
             tabs = tabs,
-            site_filter_subs = site_filter_subs,
             fragment = fragment,
             sole_admin_modal = sole_admin_modal,
             bulk_script = bulk_script,

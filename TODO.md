@@ -18,6 +18,7 @@ done.
 - [ ] consider change the text field colors on post page. They are white and are very bright for a dark theme.
 - [ ] consiider adding clerk-rs as account creation option. It's not offical but appears to be well maintained.
 - [ ] add Google login via OAuth2 (oauth2 crate) as an account creation/sign-in option.
+- [ ] need to think about how we're going to relay via docs about all the possible data points that can be displayed for a site for users who want to build or customize their own themes. example Posts, pages, etc etc.
 
 ## Done
 

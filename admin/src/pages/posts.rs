@@ -178,11 +178,18 @@ pub fn posts_list_fragment(
         // Authors cannot edit scheduled or published posts — show view only.
         let author_read_only = ctx.user_role.eq_ignore_ascii_case("author")
             && (p.status == "scheduled" || p.status == "published");
-        let title_cell = if author_read_only {
-            format!(r#"<span>{}</span>"#, crate::html_escape(&p.title))
+        let display_title = if p.title.chars().count() > 100 {
+            format!("{}...", p.title.chars().take(100).collect::<String>())
         } else {
-            format!(r#"<a href="{prefix}/{id}/edit">{title}</a>"#,
-                prefix = edit_prefix, id = crate::html_escape(&p.id), title = crate::html_escape(&p.title))
+            p.title.clone()
+        };
+        let title_cell = if author_read_only {
+            format!(r#"<span title="{full}">{title}</span>"#,
+                full = crate::html_escape(&p.title), title = crate::html_escape(&display_title))
+        } else {
+            format!(r#"<a href="{prefix}/{id}/edit" title="{full}">{title}</a>"#,
+                prefix = edit_prefix, id = crate::html_escape(&p.id),
+                full = crate::html_escape(&p.title), title = crate::html_escape(&display_title))
         };
         let edit_btn = if author_read_only {
             String::new()
@@ -366,7 +373,7 @@ pub fn render_list(posts: &[PostRow], post_type: &str, page: i64, total_pages: i
         };
         format!(r#"<a href="{}" class="page-tab{}">{}{}</a>"#, href, active_class, label, extra)
     }).collect();
-    let tabs_html = format!(r#"<div class="page-tabs" style="margin-bottom:1.25rem">{}</div>"#, tabs);
+    let tabs_html = format!(r#"<div class="page-tabs" style="margin-bottom:0">{}</div>"#, tabs);
 
     // Fragment: table + bottom pagination — swapped by the live-search JS.
     let fragment = posts_list_fragment(posts, post_type, page, total_pages, ctx, status_filter, search, sort, dir);
@@ -378,9 +385,9 @@ pub fn render_list(posts: &[PostRow], post_type: &str, page: i64, total_pages: i
     let search_toggle = crate::pill_search_toggle("post-search", &search_placeholder, search);
 
     let content = format!(
-        r#"{tabs_html}
-<div style="display:flex;align-items:center;justify-content:flex-end;gap:.75rem;margin-bottom:.75rem;flex-wrap:wrap">
-  <div class="icon-pill">
+        r#"<div style="display:flex;align-items:flex-end;justify-content:space-between;gap:.75rem;margin-bottom:1.25rem;flex-wrap:wrap">
+  {tabs_html}
+  <div class="icon-pill" style="align-self:flex-end;margin-top:0">
     <button id="bulk-delete-btn" type="button" class="icon-btn icon-danger icon-danger-armed" style="display:none" title="Delete Selected" aria-label="Delete Selected" onclick="bulkDelete()">
       <img src="/admin/static/icons/trash.svg" alt="">
     </button>
@@ -456,8 +463,17 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
     let title = if is_new {
         if post.post_type == "page" { "New Page".to_string() } else { "New Post".to_string() }
     } else {
-        if post.post_type == "page" { "Edit Page".to_string() } else { "Edit Post".to_string() }
+        let display_title = if post.title.chars().count() > 150 {
+            format!("{}...", post.title.chars().take(150).collect::<String>())
+        } else {
+            post.title.clone()
+        };
+        // Not escaped here — admin_page() escapes the whole title once
+        // already (for both <title> and <h1>); escaping it again here would
+        // double-escape entities like &#x27; into literal text.
+        format!("Editing - {}", display_title)
     };
+    let publish_options_label = if post.post_type == "page" { "Page Options" } else { "Post Options" };
 
     let action = match &post.id {
         Some(id) => {
@@ -1024,7 +1040,7 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
       {author_card}
       <div class="form-section">
         <h3 style="display:flex;align-items:center;justify-content:space-between;gap:.5rem">
-          <span>Publish Options</span>
+          <span>{publish_options_label}</span>
           {delete_btn_inline}
         </h3>
         <div class="card-boxed-section">
@@ -1573,6 +1589,7 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
         excerpt = crate::html_escape(&post.excerpt),
         status_options = status_options,
         status_hint = status_hint,
+        publish_options_label = publish_options_label,
         status_readonly = status_readonly,
         status_actions_pill = status_actions_pill,
         status_select_display = status_select_display,

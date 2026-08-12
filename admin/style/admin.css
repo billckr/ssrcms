@@ -544,6 +544,12 @@ tr.muted td { opacity: .55; }
    dark-mode img[src^=...] invert(1) rule above, which would otherwise win
    and mask the green filter back to the default icon color. */
 #save-btn.icon-btn-save-dirty img { filter: var(--success-filter); }
+/* Same idea, generalized for any other icon-btn that should turn green
+   once it becomes an actionable/enabled primary action (e.g. Create Menu)
+   — still needs its own id for the same specificity reason as above, so
+   pair this class with a `#some-id.icon-btn-active-green` rule per button
+   rather than relying on the class alone. */
+#create-menu-submit.icon-btn-active-green img { filter: var(--success-filter); }
 
 /* Rounded "pill" wrapper for one or more icon-btns living outside a header
    — e.g. a form's primary action placed below its last field instead of
