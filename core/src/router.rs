@@ -167,6 +167,7 @@ pub fn build(
         .route("/admin/pages/bulk-delete", post(posts::bulk_delete_pages))
         // ── Admin media API (JSON) ─────────────────────────────────────────
         .route("/admin/api/media", get(media::api_list))
+        .route("/admin/api/media/grid", get(media::api_grid))
         .route("/admin/api/media/{id}/meta", post(media::api_update_meta))
         .route("/admin/api/media/{id}/folder", post(media::api_update_folder))
         // ── Admin media ────────────────────────────────────────────────────

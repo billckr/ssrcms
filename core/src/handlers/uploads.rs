@@ -1,15 +1,21 @@
 //! Unified upload file handler.
 //!
-//! Serves files at `/uploads/{key}/{*rest}` where `key` is either:
-//! - A site UUID: served from `uploads/{uuid}/{rest}`
-//! - A site hostname: resolved via the `uploads/{hostname}/` symlink to `uploads/{uuid}/`
+//! Serves files at two URL shapes:
+//! - `/uploads/{filename}` (current `Media::url()` output) — site resolved
+//!   from the Host header, same as everywhere else site context is derived
+//!   from the request. In production this shape never reaches Axum at all —
+//!   Caddy serves it directly, rooted at that domain's own symlinked folder.
+//! - `/uploads/{key}/{*rest}` (legacy — links generated before the hostname
+//!   segment was dropped) where `key` is a site UUID or hostname, kept
+//!   working indefinitely so already-published content doesn't break.
 //!
-//! In production (Caddy) the hostname symlink is served by Caddy's file_server directly.
-//! In development (Axum only) this handler serves both UUID and hostname paths.
+//! In development (Axum only, no Caddy in front) this handler serves both
+//! shapes; in production only the legacy shape can reach here, since the new
+//! shape is intercepted by Caddy before it does.
 
 use axum::{
     extract::{Path, State},
-    http::{header, StatusCode},
+    http::{header, HeaderMap, StatusCode},
     response::{IntoResponse, Response},
 };
 
@@ -17,27 +23,33 @@ use crate::app_state::AppState;
 
 /// GET /uploads/{*path}
 ///
-/// First path segment is a UUID or hostname; the rest is the filename.
-/// Hostname → UUID resolution happens via OS symlinks or the site cache fallback.
+/// A bare filename (no `/`) resolves the site from the Host header. A path
+/// with a `/` is treated as the legacy `{key}/{rest}` shape, where the first
+/// segment is a UUID or hostname and hostname → UUID resolution happens via
+/// OS symlinks or the site cache fallback.
 pub async fn serve(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Path(path): Path<String>,
 ) -> Response {
-    let parts: Vec<&str> = path.splitn(2, '/').collect();
-    let (key, rest) = match parts.as_slice() {
-        [k, r] => (k.to_string(), r.to_string()),
-        _      => return StatusCode::NOT_FOUND.into_response(),
-    };
-
-    if rest.is_empty() {
-        return StatusCode::NOT_FOUND.into_response();
-    }
-
-    // Resolve the filesystem path. Try the key as-is first (works for UUIDs and
-    // symlinked hostnames). Fall back to site-cache lookup for hostnames without
-    // a symlink (e.g. newly created sites before app restart creates the symlink).
     let uploads_dir = &state.config.uploads_dir;
-    let file_path = resolve_file_path(uploads_dir, &key, &rest, &state);
+
+    let file_path = match path.split_once('/') {
+        Some((key, rest)) if !rest.is_empty() => resolve_file_path(uploads_dir, key, rest, &state),
+        Some(_) => None, // trailing slash with empty rest — not a real file
+        None => {
+            // Bare filename: resolve the site from the Host header, same as
+            // every other host-derived lookup (see admin_auth.rs).
+            let host = headers
+                .get(header::HOST)
+                .and_then(|v| v.to_str().ok())
+                .map(|raw| raw.split(':').next().unwrap_or(raw));
+            match host.and_then(|h| state.resolve_site(h)) {
+                Some((site, _)) => resolve_file_path(uploads_dir, &site.id.to_string(), &path, &state),
+                None => None,
+            }
+        }
+    };
 
     let file_path = match file_path {
         Some(p) => p,

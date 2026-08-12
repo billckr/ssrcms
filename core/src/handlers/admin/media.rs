@@ -125,11 +125,13 @@ pub async fn list(
     let cs = state.site_hostname(admin.site_id);
 
     let items: Vec<admin::pages::media::MediaItem> = raw.iter().map(|m| {
-        // Replace the UUID prefix in the stored path with the site hostname so
-        // public-facing paths read /uploads/{hostname}/file instead of /uploads/{uuid}/file.
+        // Strip the UUID prefix from the stored path — matches Media::url()'s
+        // convention (bare filename for real domains; production Caddy is
+        // already scoped to this site's own uploads/{host}/ root, so
+        // repeating the hostname in the path is both unnecessary and, since
+        // that Caddy root is scoped per-domain, actually unresolvable.
         let display_path = if !cs.is_empty() {
-            let filename = m.path.splitn(2, '/').nth(1).unwrap_or(&m.path);
-            format!("{}/{}", cs, filename)
+            m.path.splitn(2, '/').nth(1).unwrap_or(&m.path).to_string()
         } else {
             m.path.clone()
         };
@@ -171,6 +173,223 @@ pub async fn list(
         select_mode,
         &ctx,
     ))
+}
+
+/// GET /admin/api/media/grid — JSON data for the media-app WASM island:
+/// items (same shape as the legacy `ITEMS` JS array), folder list, per-type
+/// counts, and pagination info. Mirrors `list()`'s query/filter logic but
+/// returns JSON instead of a rendered page, so folder/type/page switching
+/// can happen client-side without a full page reload.
+pub async fn api_grid(
+    State(state): State<AppState>,
+    admin: AdminUser,
+    Query(params): Query<std::collections::HashMap<String, String>>,
+) -> impl IntoResponse {
+    #[derive(serde::Serialize)]
+    struct GridItem {
+        id: String,
+        filename: String,
+        #[serde(rename = "type")]
+        type_key: String,
+        #[serde(rename = "isImage")]
+        is_image: bool,
+        path: String,
+        alt: String,
+        title: String,
+        caption: String,
+        size: String,
+        dims: String,
+        uploader: String,
+        uploaded_at: String,
+        folder_id: Option<String>,
+    }
+    #[derive(serde::Serialize)]
+    struct GridFolder {
+        id: String,
+        name: String,
+    }
+    #[derive(serde::Serialize)]
+    struct GridTypeCounts {
+        all: i64,
+        image: i64,
+        video: i64,
+        audio: i64,
+        document: i64,
+    }
+    #[derive(serde::Serialize)]
+    struct GridResponse {
+        items: Vec<GridItem>,
+        folders: Vec<GridFolder>,
+        type_counts: GridTypeCounts,
+        total: i64,
+        page: i64,
+        page_size: i64,
+        total_pages: i64,
+    }
+
+    fn media_type_key(mime: &str) -> &'static str {
+        if mime.starts_with("image/") { "image" }
+        else if mime.starts_with("video/") { "video" }
+        else if mime.starts_with("audio/") { "audio" }
+        else { "document" }
+    }
+    fn format_bytes(b: i64) -> String {
+        if b < 1024 { format!("{} B", b) }
+        else if b < 1024 * 1024 { format!("{:.1} KB", b as f64 / 1024.0) }
+        else { format!("{:.1} MB", b as f64 / (1024.0 * 1024.0)) }
+    }
+
+    let folder_id: Option<Uuid> = params.get("folder_id").and_then(|s| s.parse().ok());
+    let page_raw: i64 = params.get("page").and_then(|s| s.parse().ok()).unwrap_or(1).max(1);
+    let active_type: Option<&str> = params.get("type")
+        .map(|s| s.as_str())
+        .filter(|s| ["image", "video", "audio", "document"].contains(s));
+
+    let uploaded_by = if admin.site_role == "author" { Some(admin.user.id) } else { None };
+
+    let folders = if let Some(sid) = admin.site_id {
+        crate::models::media_folder::list(&state.db, sid).await.unwrap_or_default()
+    } else {
+        vec![]
+    };
+
+    let type_sql = match active_type {
+        Some("image")    => " AND mime_type LIKE 'image/%'",
+        Some("video")    => " AND mime_type LIKE 'video/%'",
+        Some("audio")    => " AND mime_type LIKE 'audio/%'",
+        Some("document") => " AND mime_type NOT LIKE 'image/%' AND mime_type NOT LIKE 'video/%' AND mime_type NOT LIKE 'audio/%'",
+        _                => "",
+    };
+
+    let total = {
+        let sql = format!(
+            "SELECT COUNT(*) FROM media \
+             WHERE ($1::uuid IS NULL OR site_id = $1) \
+               AND ($2::uuid IS NULL OR uploaded_by = $2) \
+               AND ($3::uuid IS NULL OR folder_id = $3){}",
+            type_sql
+        );
+        sqlx::query(&sql)
+            .bind(admin.site_id)
+            .bind(uploaded_by)
+            .bind(folder_id)
+            .fetch_one(&state.db)
+            .await
+            .map(|r: sqlx::postgres::PgRow| { use sqlx::Row as _; r.get::<i64, _>(0) })
+            .unwrap_or(0)
+    };
+
+    let total_pages = ((total as f64) / (PAGE_SIZE as f64)).ceil() as i64;
+    let page = if total_pages > 0 { page_raw.min(total_pages) } else { 1 };
+    let offset = (page - 1) * PAGE_SIZE;
+
+    let type_counts = {
+        use sqlx::Row as _;
+        let rows = sqlx::query(
+            "SELECT mime_type, COUNT(*) AS n FROM media \
+             WHERE ($1::uuid IS NULL OR site_id = $1) \
+               AND ($2::uuid IS NULL OR uploaded_by = $2) \
+               AND ($3::uuid IS NULL OR folder_id = $3) \
+             GROUP BY mime_type",
+        )
+        .bind(admin.site_id)
+        .bind(uploaded_by)
+        .bind(folder_id)
+        .fetch_all(&state.db)
+        .await
+        .unwrap_or_default();
+        let mut tc = GridTypeCounts { all: 0, image: 0, video: 0, audio: 0, document: 0 };
+        for r in rows {
+            let mime: String = r.get("mime_type");
+            let n: i64 = r.get("n");
+            if mime.starts_with("image/")      { tc.image    += n; }
+            else if mime.starts_with("video/") { tc.video    += n; }
+            else if mime.starts_with("audio/") { tc.audio    += n; }
+            else                               { tc.document += n; }
+        }
+        tc.all = tc.image + tc.video + tc.audio + tc.document;
+        tc
+    };
+
+    let raw = {
+        let sql = format!(
+            "SELECT * FROM media \
+             WHERE ($1::uuid IS NULL OR site_id = $1) \
+               AND ($2::uuid IS NULL OR uploaded_by = $2) \
+               AND ($3::uuid IS NULL OR folder_id = $3){} \
+             ORDER BY created_at DESC LIMIT $4 OFFSET $5",
+            type_sql
+        );
+        sqlx::query_as::<_, crate::models::media::Media>(&sql)
+            .bind(admin.site_id)
+            .bind(uploaded_by)
+            .bind(folder_id)
+            .bind(PAGE_SIZE)
+            .bind(offset)
+            .fetch_all(&state.db)
+            .await
+            .unwrap_or_default()
+    };
+
+    let uploader_ids: Vec<Uuid> = raw.iter().map(|m| m.uploaded_by).collect::<std::collections::HashSet<_>>().into_iter().collect();
+    let uploader_names: std::collections::HashMap<Uuid, String> = sqlx::query_as::<_, (Uuid, String)>(
+        "SELECT id, display_name FROM users WHERE id = ANY($1)"
+    )
+    .bind(&uploader_ids[..])
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_default()
+    .into_iter()
+    .collect();
+
+    let cs = state.site_hostname(admin.site_id);
+
+    let items: Vec<GridItem> = raw.iter().map(|m| {
+        // Strip the UUID prefix from the stored path — matches Media::url()'s
+        // convention (bare filename for real domains; production Caddy is
+        // already scoped to this site's own uploads/{host}/ root, so
+        // repeating the hostname in the path is both unnecessary and, since
+        // that Caddy root is scoped per-domain, actually unresolvable.
+        let display_path = if !cs.is_empty() {
+            m.path.splitn(2, '/').nth(1).unwrap_or(&m.path).to_string()
+        } else {
+            m.path.clone()
+        };
+        let dims = match (m.width, m.height) {
+            (Some(w), Some(h)) => format!("{}\u{d7}{}", w, h),
+            _ => String::from("\u{2014}"),
+        };
+        GridItem {
+            id: m.id.to_string(),
+            filename: m.filename.clone(),
+            type_key: media_type_key(&m.mime_type).to_string(),
+            is_image: m.mime_type.starts_with("image/"),
+            path: display_path,
+            alt: m.alt_text.clone(),
+            title: m.title.clone(),
+            caption: m.caption.clone(),
+            size: format_bytes(m.file_size),
+            dims,
+            uploader: uploader_names.get(&m.uploaded_by).cloned().unwrap_or_else(|| "Unknown".to_string()),
+            uploaded_at: m.created_at.format("%b %-d, %Y").to_string(),
+            folder_id: m.folder_id.map(|u| u.to_string()),
+        }
+    }).collect();
+
+    let folder_items: Vec<GridFolder> = folders.iter().map(|f| GridFolder {
+        id: f.id.to_string(),
+        name: f.name.clone(),
+    }).collect();
+
+    axum::Json(GridResponse {
+        items,
+        folders: folder_items,
+        type_counts,
+        total,
+        page,
+        page_size: PAGE_SIZE,
+        total_pages: total_pages.max(1),
+    })
 }
 
 pub async fn delete(

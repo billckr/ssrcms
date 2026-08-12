@@ -475,6 +475,16 @@ check_requirements() {
   else
     req_check "Local: Rust toolchain" FAIL "cargo/rustc not found — install from https://rustup.rs"
   fi
+  if rustup target list --installed 2>/dev/null | grep -q wasm32-unknown-unknown; then
+    req_check "Local: wasm32-unknown-unknown target" PASS ""
+  else
+    req_check "Local: wasm32-unknown-unknown target" FAIL "run: rustup target add wasm32-unknown-unknown"
+  fi
+  if command -v wasm-bindgen >/dev/null 2>&1; then
+    req_check "Local: wasm-bindgen-cli" PASS "$(wasm-bindgen --version 2>/dev/null)"
+  else
+    req_check "Local: wasm-bindgen-cli" FAIL "run: cargo install wasm-bindgen-cli --version <matching leptos's wasm-bindgen>"
+  fi
   command -v ssh  >/dev/null 2>&1 && req_check "Local: ssh"     PASS "" || req_check "Local: ssh"     FAIL "not found"
   command -v scp  >/dev/null 2>&1 && req_check "Local: scp"     PASS "" || req_check "Local: scp"     FAIL "not found"
   command -v openssl >/dev/null 2>&1 && req_check "Local: openssl" PASS "" || req_check "Local: openssl" FAIL "not found"
@@ -577,6 +587,17 @@ do_build() {
   BIN_SYNAPTIC="$REPO_DIR/target/release/synaptic"
   BIN_CLI="$REPO_DIR/target/release/synap"
   [[ -f "$BIN_SYNAPTIC" && -f "$BIN_CLI" ]] || { echo "Build did not produce expected binaries." >&2; return 1; }
+
+  # media-app (media library WASM island) — built locally like everything
+  # else here; only the resulting JS/WASM output ships to the VPS as static
+  # assets, so the remote host needs no wasm toolchain of its own.
+  cargo build -p media-app --target wasm32-unknown-unknown --release
+  mkdir -p "$REPO_DIR/admin/static/media-app"
+  wasm-bindgen --target web --out-dir "$REPO_DIR/admin/static/media-app" --out-name media_app \
+    "$REPO_DIR/target/wasm32-unknown-unknown/release/media_app.wasm"
+  [[ -f "$REPO_DIR/admin/static/media-app/media_app.js" ]] \
+    || { echo "media-app wasm build did not produce expected output." >&2; return 1; }
+
   MIGRATION_COUNT=$(find "$REPO_DIR/migrations" -name '*.sql' | wc -l | tr -d ' ')
   echo "Built. $MIGRATION_COUNT migrations embedded."
 }

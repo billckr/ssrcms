@@ -26,21 +26,25 @@ pub struct Media {
 impl Media {
     /// Build the public URL for this media item.
     ///
-    /// In production (real hostname with a dot), generates a hostname-based URL
-    /// (`/uploads/{hostname}/{filename}`) so the site UUID is never exposed in
-    /// page source. In development with `localhost` or bare hostnames, falls back
-    /// to the UUID-based path which the Axum handler serves directly.
+    /// In production (real hostname with a dot), generates a bare filename URL
+    /// (`/uploads/{filename}`, no hostname or UUID segment) — production Caddy
+    /// scopes each site's `/uploads/*` root to that site's own symlinked
+    /// folder (see `Caddyfile.template`), so the site is already implied by
+    /// which domain served the request; repeating it in the path was
+    /// redundant (`pong.com/uploads/pong.com/...`). In development with
+    /// `localhost` or bare hostnames, falls back to the UUID-based path,
+    /// which the dev Axum handler serves directly (no Caddy in front).
     pub fn url(&self, base_url: &str) -> String {
         let stripped = base_url
             .trim_start_matches("https://")
             .trim_start_matches("http://");
         let hostname = stripped.split(':').next().unwrap_or(stripped);
 
-        // Use hostname-based URL only for real domains (contains a dot and isn't localhost).
+        // Use the bare-filename form only for real domains (contains a dot and isn't localhost).
         if hostname.contains('.') && hostname != "localhost" {
             // self.path is "{uuid}/{filename}" — extract just the filename part.
             let filename = self.path.splitn(2, '/').nth(1).unwrap_or(&self.path);
-            format!("{}/uploads/{}/{}", base_url, hostname, filename)
+            format!("{}/uploads/{}", base_url, filename)
         } else {
             // Dev/local fallback: UUID-based path.
             format!("{}/uploads/{}", base_url, self.path)

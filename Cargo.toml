@@ -1,5 +1,5 @@
 [workspace]
-members = ["core", "admin", "cli"]
+members = ["core", "admin", "cli", "media-app"]
 resolver = "2"
 
 [workspace.package]

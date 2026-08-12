@@ -240,6 +240,7 @@ cmd_build() {
     log "Building (debug)..."
     cd "$SCRIPT_DIR"
     cargo build --bin synaptic
+    build_wasm
     log "Build complete: $BINARY"
 }
 
@@ -247,8 +248,27 @@ cmd_build_release() {
     log "Building (release)..."
     cd "$SCRIPT_DIR"
     cargo build --release --bin synaptic
+    build_wasm
     BINARY="$SCRIPT_DIR/target/release/synaptic"
     log "Build complete: $BINARY"
+}
+
+# Compiles the media-app WASM island (media library grid/filters/upload) and
+# regenerates its JS bindings into admin/static/media-app/, served at
+# /admin/static/media-app/*. Always rebuilds — it's a ~20s release build, not
+# worth staleness-checking like the CLI reinstall below.
+build_wasm() {
+    if ! command -v wasm-bindgen &>/dev/null; then
+        echo "WARNING: wasm-bindgen not found — skipping media-app WASM build." >&2
+        echo "  Install with: cargo install wasm-bindgen-cli --version \$(grep -m1 'name = \"wasm-bindgen\"' -A1 Cargo.lock | grep version | cut -d'\"' -f2)" >&2
+        return 0
+    fi
+    log "Building media-app (wasm32)..."
+    cd "$SCRIPT_DIR"
+    cargo build -p media-app --target wasm32-unknown-unknown --release
+    mkdir -p admin/static/media-app
+    wasm-bindgen --target web --out-dir admin/static/media-app --out-name media_app \
+        target/wasm32-unknown-unknown/release/media_app.wasm
 }
 
 cmd_update_cli() {

@@ -778,6 +778,7 @@ body.sidebar-open .admin-sidebar {{
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
         </button>
       </div>
+      <div id="mm-toolbar-app" style="display:contents">
       <form method="POST" action="/admin/media/upload" enctype="multipart/form-data" id="mm2UploadForm" style="display:contents">
         <input type="hidden" name="redirect" value="{redirect_url}">
         {folder_hidden}
@@ -788,13 +789,14 @@ body.sidebar-open .admin-sidebar {{
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></svg>
         </div>
       </form>
+      </div>
     </div>
   </div>
 
   <!-- Left sidebar -->
   <div class="mm-sidebar">
     <div class="mm-panel-section">
-      <ul class="mm-type-list">
+      <ul class="mm-type-list" id="mm-type-tabs-app">
         <li class="mm-type-item">
           <a href="{type_all_url}" class="{type_all_active}" data-type="all">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
@@ -834,14 +836,16 @@ body.sidebar-open .admin-sidebar {{
     </div>
 
     <div class="mm-panel-section" style="flex:1">
+      <div id="mm-folder-select-app" style="display:contents">
       <select class="mm-folder-select" onchange="{folder_onchange}">
         {folder_items}
       </select>
+      </div>
       <button class="btn btn-primary mm-new-folder-btn" onclick="promptNewFolder()">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></svg>
         Folder +
       </button>
-      {delete_folder_btn}
+      <div id="mm-delete-folder-app" style="display:contents">{delete_folder_btn}</div>
     </div>
   </div>
 
@@ -985,8 +989,13 @@ body.sidebar-open .admin-sidebar {{
 
 <script>
 (function() {{
-  var ITEMS        = {items_json};
-  var FOLDERS      = {folders_json};
+  // Deliberately NOT `var` — these must be real `window` properties, not
+  // closures-local bindings, so the media-app WASM island's refreshes
+  // (window.ITEMS/window.FOLDERS reassignment on every folder/type/page
+  // change) are actually visible to this legacy script's bare `ITEMS`/
+  // `FOLDERS` references, which resolve up the scope chain to `window`.
+  window.ITEMS   = {items_json};
+  window.FOLDERS = {folders_json};
   var FOLDER_TOTAL = {total_count};
   var selected = new Set();
   var bulkMode = false;
@@ -1222,7 +1231,13 @@ body.sidebar-open .admin-sidebar {{
     ids.forEach(function(id) {{
       chain = chain.then(function() {{ return fetch('/admin/media/' + id + '/delete', {{method:'POST'}}); }});
     }});
-    chain.then(function() {{ window.location.reload(); }});
+    chain.then(function() {{
+      // selected stores idx (array positions) — after refresh the grid array
+      // can shrink/reorder, so stale idx must not survive to the next action.
+      selected.clear();
+      syncBulkBar();
+      if (window.mediaAppRefresh) {{ window.mediaAppRefresh(); }} else {{ window.location.reload(); }}
+    }});
   }};
 
   window.bulkDownload = function() {{
@@ -1262,7 +1277,11 @@ body.sidebar-open .admin-sidebar {{
     }});
     chain.then(function() {{
       document.getElementById('mmMoveModal').style.display = 'none';
-      window.location.reload();
+      // selected stores idx (array positions) — after refresh the grid array
+      // can shrink/reorder, so stale idx must not survive to the next action.
+      selected.clear();
+      syncBulkBar();
+      if (window.mediaAppRefresh) {{ window.mediaAppRefresh(); }} else {{ window.location.reload(); }}
     }}).catch(function() {{
       document.getElementById('mmMoveError').style.display = '';
     }});
@@ -1380,6 +1399,19 @@ body.sidebar-open .admin-sidebar {{
     if (btn) btn.textContent = e.data.label;
   }});
 }})();
+</script>
+<script type="module">
+  // media-app WASM island: takes over folder/type filtering, pagination,
+  // and upload from the static SSR fallback above once it loads. The
+  // legacy detail-panel/bulk-action JS in the block above is untouched —
+  // it just keeps reading whatever the island puts at window.ITEMS.
+  import init, {{ mount, refresh_grid }} from '/admin/static/media-app/media_app.js';
+  init('/admin/static/media-app/media_app_bg.wasm').then(function() {{
+    mount();
+    // Lets the legacy (non-module) script below re-fetch the grid in place
+    // after bulk move/delete instead of a full window.location.reload().
+    window.mediaAppRefresh = refresh_grid;
+  }});
 </script>
 "##,
         flash         = flash_html,

@@ -1,8 +1,9 @@
 # >>> SynapCMS managed block: {DOMAIN} >>>
 {DOMAIN} {
-    # Serve uploads directly — bypass Axum. Safe because Caddy serves via the
-    # uploads/{hostname}/ -> uploads/{site-uuid}/ symlink the app maintains,
-    # so the flat file_server root resolves correctly without any app logic.
+    # Serve uploads directly — bypass Axum. Rooted at THIS site's own
+    # uploads/{DOMAIN}/ -> uploads/{site-uuid}/ symlink (the app maintains
+    # one per site), so URLs are just /uploads/{filename} — no need to repeat
+    # the domain in the path, since this block is already scoped to it.
     #
     # /theme/static/*path is NOT handled here — it deliberately falls through
     # to Axum below. The URL never includes a theme name (every theme's
@@ -13,7 +14,7 @@
     # no way to do that resolution, so bypassing Axum here 404s for any theme
     # whose assets aren't coincidentally reachable at the literal request path.
     handle_path /uploads/* {
-        root * {UPLOADS_DIR}
+        root * {UPLOADS_DIR}/{DOMAIN}
         file_server
     }
 

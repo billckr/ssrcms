@@ -57,3 +57,6 @@ search-index/
 # Compiled WASM (Phase 4)
 pkg/
 backups/
+
+# wasm-bindgen output for media-app (built by app.sh, not source)
+admin/static/media-app/
