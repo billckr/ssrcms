@@ -277,13 +277,27 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
     // the page is still loading by then. No need to clear the timer on a
     // normal navigation: the whole document (and its timers) gets torn
     // down the moment the next page starts loading.
+    //
+    // If a page has its own unsaved-changes guard (a beforeunload handler,
+    // e.g. the post/page editor), the browser's "leave site?" dialog can
+    // interrupt this: the click already armed the timer below, but if the
+    // user cancels the dialog, the navigation never happens and nothing
+    // would otherwise clear it. Exposed here as window.cancelNavSpinner so
+    // that guard can call it — see its own beforeunload handler for how it
+    // detects a cancel via the dialog's blocking behavior.
+    var navSpinnerTimer = null;
+    window.cancelNavSpinner = function() {{
+      if (navSpinnerTimer) {{ clearTimeout(navSpinnerTimer); navSpinnerTimer = null; }}
+      document.getElementById('nav-loading-overlay').classList.remove('visible');
+    }};
     document.addEventListener('click', function(e) {{
       if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
       var a = e.target.closest('a[href]');
       if (!a || a.target === '_blank') return;
       var href = a.getAttribute('href');
       if (!href || href.charAt(0) === '#' || href.indexOf('javascript:') === 0) return;
-      setTimeout(function() {{
+      navSpinnerTimer = setTimeout(function() {{
+        navSpinnerTimer = null;
         document.getElementById('nav-loading-overlay').classList.add('visible');
       }}, 1000);
     }});

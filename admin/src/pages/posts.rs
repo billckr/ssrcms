@@ -565,14 +565,12 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
                     selected = selected)
             })
             .collect::<Vec<_>>().join("");
-        format!(r#"<div class="form-section">
-      <h3>Template</h3>
-      <div class="form-group">
-          <label for="template">Template</label>
-          <select id="template" name="template">{opts}</select>
-          <small>Templates in the active theme's templates/ directory.</small>
-        </div>
-    </div>"#, opts = opts)
+        format!(r#"<div class="card-boxed-section">
+          <div class="form-group">
+            <label for="template">Template</label>
+            <select id="template" name="template">{opts}</select>
+          </div>
+        </div>"#, opts = opts)
     } else {
         String::new()
     };
@@ -745,7 +743,7 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
             String::new()
         };
         format!(
-            r#"<div class="form-group" style="margin-top:.75rem">
+            r#"<div class="form-group">
           <label for="comments-enabled" style="font-size:12px">Comments{count_badge}</label>
           <select id="comments-enabled" name="comments_enabled" style="font-size:13px">
             <option value="false"{disabled_sel}>Disabled</option>
@@ -758,16 +756,15 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
         )
     };
 
-    // Wrapped together (both hidden for authors) so the box doesn't render
-    // empty when neither control is shown.
-    let password_and_comments_box = if password_section.is_empty() && comments_section.is_empty() {
+    let comments_box = if comments_section.is_empty() {
         String::new()
     } else {
-        format!(
-            r#"<div class="card-boxed-section">{password_section}{comments_section}</div>"#,
-            password_section = password_section,
-            comments_section = comments_section,
-        )
+        format!(r#"<div class="card-boxed-section">{comments_section}</div>"#, comments_section = comments_section)
+    };
+    let password_box = if password_section.is_empty() {
+        String::new()
+    } else {
+        format!(r#"<div class="card-boxed-section">{password_section}</div>"#, password_section = password_section)
     };
 
     // Author card: shown to editors/admins when viewing an existing post written by someone else.
@@ -900,7 +897,7 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
   .ql-snow .ql-picker-options {{ background: var(--field-bg); color: var(--field-text); border-color: var(--border); }}
   .ql-snow .ql-picker.ql-expanded .ql-picker-label {{ color: var(--field-text); }}
 </style>
-<form method="POST" action="{action}">
+<form method="POST" action="{action}" id="post-editor-form">
   <div class="editor-layout">
     <div class="editor-main">
       <div class="card-boxed">
@@ -941,10 +938,9 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
     </div>
     <div class="editor-sidebar">
       {author_card}
-      {template_section}
       <div class="form-section">
         <h3 style="display:flex;align-items:center;justify-content:space-between;gap:.5rem">
-          <span>Publish</span>
+          <span>Publish Options</span>
           {delete_btn_inline}
         </h3>
         <div class="card-boxed-section">
@@ -955,12 +951,14 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
             {live_url_link}
           </div>
         </div>
+        {template_section}
         <div class="card-boxed-section">
           <div class="form-group">
             {datetime_field}
           </div>
         </div>
-        {password_and_comments_box}
+        {comments_box}
+        {password_box}
         <input type="hidden" name="post_type" value="{post_type}">
         <div style="display:flex;align-items:center;gap:.6rem">
           <div class="icon-pill">
@@ -980,6 +978,20 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
 </form>
 <script src="/admin/static/quill/quill.min.js"></script>
 <script>
+(function() {{
+  // Enter in any single-line field (title, slug, password, etc.) would
+  // otherwise submit the whole form via the browser's default behavior —
+  // surprising here since Save is a deliberate icon-button action, and
+  // (if title/excerpt are still empty) it just triggers their native
+  // required-field validation instead of doing anything useful. Textareas
+  // keep normal Enter-for-newline behavior.
+  var editorForm = document.getElementById('post-editor-form');
+  if (editorForm) {{
+    editorForm.addEventListener('keydown', function(e) {{
+      if (e.key === 'Enter' && e.target.tagName === 'INPUT') e.preventDefault();
+    }});
+  }}
+}})();
 (function() {{
   // Register a custom Quill format for <audio controls> embeds.
   // BlockEmbed is an ES6 class; must use 'class extends' — calling it via
@@ -1061,6 +1073,13 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
     if (!formDirty) return;
     e.preventDefault();
     e.returnValue = '';
+    // Cancelling this dialog leaves the nav-loading overlay (lib.rs) stuck
+    // on, since nothing else clears it. Queuing the clear only lets it run
+    // once the (thread-blocking) dialog closes, and only on this page if
+    // the user chose Cancel — a confirmed "leave" unloads first instead.
+    setTimeout(function() {{
+      if (window.cancelNavSpinner) window.cancelNavSpinner();
+    }}, 0);
   }});
 
   // Delete button uses fetch instead of a nested <form> — the whole editor
@@ -1452,7 +1471,8 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
         categories_section = categories_section,
         featured_image_section = featured_image_section,
         inline_media_section = inline_media_section,
-        password_and_comments_box = password_and_comments_box,
+        comments_box = comments_box,
+        password_box = password_box,
         author_card = author_card,
         sources_section = sources_section,
         live_url_link = live_url_link,
