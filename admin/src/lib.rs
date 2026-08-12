@@ -89,7 +89,9 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
   <div class="mpicker-dialog" style="display:flex;flex-direction:column">
     <div class="mpicker-header">
       <span class="mpicker-title">Media Library</span>
-      <button type="button" class="btn btn-primary" style="font-size:13px;padding:.3rem .85rem" onclick="closeMediaBrowser()">Close</button>
+      <div class="icon-pill" style="margin-top:0">
+        <button type="button" class="icon-btn" title="Close" aria-label="Close" onclick="closeMediaBrowser()"><img src="/admin/static/icons/x.svg" alt=""></button>
+      </div>
     </div>
     <iframe id="media-browser-frame" src="about:blank" style="flex:1;width:100%;border:none;display:block;min-height:0"></iframe>
   </div>
@@ -515,7 +517,9 @@ pub fn media_picker_modal_html() -> String {
   <div class="mpicker-dialog" style="display:flex;flex-direction:column">
     <div class="mpicker-header">
       <span class="mpicker-title">Media Library</span>
-      <button type="button" class="btn btn-primary" style="font-size:13px;padding:.3rem .85rem" onclick="closeMediaPicker()">Close</button>
+      <div class="icon-pill" style="margin-top:0">
+        <button type="button" class="icon-btn" title="Close" aria-label="Close" onclick="closeMediaPicker()"><img src="/admin/static/icons/x.svg" alt=""></button>
+      </div>
     </div>
     <iframe id="media-picker-frame" src="about:blank" style="flex:1;width:100%;border:none;display:block;min-height:0"></iframe>
   </div>
@@ -704,21 +708,29 @@ pub fn live_search_script(input_id: &str, list_id: &str, url_prefix: &str) -> St
 /// `pill_search_init_script()` once per page for the expand/collapse behavior.
 pub fn pill_search_toggle(input_id: &str, placeholder: &str, value: &str) -> String {
     let expanded = if value.is_empty() { "" } else { " expanded" };
+    let clear_display = if value.is_empty() { "display:none" } else { "" };
     format!(
         r#"<button type="button" class="icon-btn pill-search-toggle" data-target="{input_id}" title="Search" aria-label="Search">
   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:var(--muted)"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-</button><input type="search" id="{input_id}" class="pill-search-input{expanded}" placeholder="{placeholder}" autocomplete="off" value="{value}">"#,
+</button><input type="search" id="{input_id}" class="pill-search-input{expanded}" placeholder="{placeholder}" autocomplete="off" value="{value}"><button type="button" class="icon-btn pill-search-clear" data-target="{input_id}" title="Clear search" aria-label="Clear search" style="{clear_display}">
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color:var(--muted)"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+</button>"#,
         input_id = input_id,
         placeholder = placeholder,
         expanded = expanded,
+        clear_display = clear_display,
         value = html_escape(value),
     )
 }
 
 /// Wires up every `.pill-search-toggle` button on the page (click to
-/// expand/focus its paired input; collapse again on blur if left empty).
-/// Safe to call once per page even with multiple search pills — each button
-/// is only wired once. Include alongside `pill_search_toggle`'s markup.
+/// expand/focus its paired input; collapses again on blur/click-outside
+/// regardless of content — clearing while it stays open is the paired
+/// `.pill-search-clear` X button's job, not blur's) plus the clear button
+/// itself (shown only once there's text, clears + refocuses + fires a
+/// synthetic `input` event so any live-filter listener re-runs).
+/// Safe to call once per page even with multiple search pills — each
+/// button is only wired once. Include alongside `pill_search_toggle`'s markup.
 pub fn pill_search_init_script() -> &'static str {
     r#"<script>
 (function () {
@@ -732,7 +744,25 @@ pub fn pill_search_init_script() -> &'static str {
       if (input.classList.contains('expanded')) input.focus();
     });
     input.addEventListener('blur', function () {
-      if (!input.value) input.classList.remove('expanded');
+      input.classList.remove('expanded');
+    });
+  });
+  document.querySelectorAll('.pill-search-clear').forEach(function (btn) {
+    if (btn.dataset.pillClearWired) return;
+    btn.dataset.pillClearWired = '1';
+    var input = document.getElementById(btn.dataset.target);
+    if (!input) return;
+    // Clicking this button would otherwise blur the input first (collapsing
+    // the pill before the click even registers) — stop that.
+    btn.addEventListener('mousedown', function (ev) { ev.preventDefault(); });
+    btn.addEventListener('click', function () {
+      input.value = '';
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      btn.style.display = 'none';
+      input.focus();
+    });
+    input.addEventListener('input', function () {
+      btn.style.display = input.value ? '' : 'none';
     });
   });
 })();

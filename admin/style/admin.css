@@ -1261,7 +1261,7 @@ legend {
   gap: 1rem;
   padding: 1rem 1.25rem;
   border-bottom: 1px solid var(--border);
-  background: var(--tint);
+  background: var(--surface);
   flex-shrink: 0;
 }
 .mpicker-title { font-size: 1rem; font-weight: 600; flex: 1; }

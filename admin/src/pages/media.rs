@@ -360,6 +360,12 @@ pub fn render_list(
         None => String::new(),
     };
 
+    // Collapsed search-icon-in-pill, expands on click — same pattern used
+    // for search on /admin/users etc. filterItems() (below) already reads
+    // from #mmSearch, so the input id here has to stay "mmSearch".
+    let search_pill = crate::pill_search_toggle("mmSearch", "Search files\u{2026}", "");
+    let pill_search_init = crate::pill_search_init_script();
+
     // ── Delete-folder button (only when a folder is active) ──────────────────
     let delete_folder_btn_html = if active_folder.is_some() {
         r##"<button class="btn btn-danger mm-new-folder-btn" style="margin-top:.3rem" disabled title="Requires JavaScript"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>Delete folder</button>"##.to_string()
@@ -388,15 +394,6 @@ body.sidebar-open .admin-sidebar {{
   display: flex !important;
 }}
 /* ── Media Manager 2 — page-scoped styles ────────────────────────────── */
-/* Media-manager-only dark-mode override: --surface/--tint swapped from the
-   rest of the admin so the toolbar/sidebar/table-header "tint" areas sit
-   darker/recessed than the main content surface, instead of the global
-   dark palette's tint being lighter than surface. Scoped to .mm-layout so
-   it doesn't affect any other admin page. */
-:root[data-theme="dark"] .mm-layout {{
-  --surface: #38383d;
-  --tint: #232326;
-}}
 .mm-layout {{
   display: grid;
   grid-template-columns: 220px 1fr;
@@ -404,7 +401,15 @@ body.sidebar-open .admin-sidebar {{
   gap: 0;
   height: calc(100vh - 120px);
   min-height: 500px;
-  background: var(--surface);
+  /* Deliberately no background here — .mm-content-area/.mm-grid-wrap/.mm-main
+     are all transparent (confirmed live), so whatever shows through is
+     .mm-layout's own background. This component renders inside two
+     different wrappers with two different body backgrounds: the standalone
+     /admin/media page (admin_page(), body = var(--bg)) and the picker/
+     browser iframe (picker_page(), body explicitly set to var(--surface)).
+     Hardcoding either token here is only ever right in one of those two
+     contexts — staying transparent means it always matches whichever body
+     is actually underneath it, in both. */
   border: 1px solid var(--border);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
@@ -419,48 +424,34 @@ body.sidebar-open .admin-sidebar {{
   align-items: center;
   gap: .6rem;
   padding: .65rem 1rem;
-  background: var(--tint);
+  background: var(--surface);
   border-bottom: 1px solid var(--border);
   flex-wrap: wrap;
 }}
 .mm-toolbar-left  {{ display: flex; align-items: center; gap: .5rem; flex: 1; min-width: 0; flex-wrap: wrap; }}
 .mm-toolbar-right {{ display: flex; align-items: center; gap: .5rem; flex-shrink: 0; }}
 
-.mm-search {{
-  display: flex;
-  align-items: center;
-  gap: .4rem;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: .3rem .6rem;
-  min-width: 130px;
-  max-width: 190px;
-  flex: 1;
-}}
-.mm-search svg {{ color: var(--muted); flex-shrink: 0; }}
-.mm-search input {{
-  border: none; outline: none; font-size: 13px;
-  background: transparent; width: 100%; color: var(--text);
-}}
-.mm-search input::placeholder {{ color: var(--muted); }}
+/* Generic "this toggle is on" state — grid/list view + the bulk-select
+   toggle. Icon turns the same blue .icon-btn already uses on hover
+   (reusing that exact filter value rather than inventing a new blue), so
+   "active" reads as a persistent version of the hover color, not a new
+   background/pill treatment. */
+.icon-btn-active img {{ filter: invert(24%) sepia(94%) saturate(300%) hue-rotate(204deg) brightness(145%) contrast(193%); }}
+:root[data-theme="dark"] .icon-btn-active img {{ filter: invert(36%) sepia(75%) saturate(252%) hue-rotate(197deg) brightness(133%) contrast(148%); }}
 
-.mm-view-toggle {{ display: flex; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }}
-.mm-view-btn {{
-  width: 32px; height: 32px;
-  display: flex; align-items: center; justify-content: center;
-  background: var(--surface); border: none; cursor: pointer;
-  color: var(--muted); transition: background .15s, color .15s;
-}}
-.mm-view-btn.active {{ background: var(--primary); color: #fff; }}
-.mm-view-btn:hover:not(.active) {{ background: var(--tint); color: var(--text); }}
-
-.mm-bulk-btn {{ font-size: 12px; padding: .3rem .65rem; }}
+/* .icon-pill's own background is var(--tint) — invisible against
+   .mm-toolbar/.mm-sidebar, which use that same var(--tint) as their base
+   panel color. Give pills sitting on top of them the contrasting surface
+   color instead. Applies equally to the WASM-rendered New Folder/Delete
+   Folder pills in the sidebar, since this is a plain selector match against
+   whatever ends up in the DOM, not tied to where the markup came from. */
+.mm-toolbar .icon-pill {{ background: var(--tint); }}
+.mm-sidebar .icon-pill {{ background: var(--surface); }}
 
 /* ── Left panel ───────────────────────────────────────────────────────── */
 .mm-sidebar {{
   border-right: 1px solid var(--border);
-  background: var(--tint);
+  background: var(--surface);
   overflow-y: auto;
   display: flex;
   flex-direction: column;
@@ -530,20 +521,11 @@ body.sidebar-open .admin-sidebar {{
   min-height: 0;
 }}
 
-.mm-dropzone {{
-  width: 2rem; height: 2rem; flex-shrink: 0;
-  border: none;
-  border-radius: var(--radius);
-  display: flex; align-items: center; justify-content: center;
-  background: var(--primary); cursor: pointer;
-  color: #fff;
-  transition: background .2s, opacity .2s;
-}}
-.mm-dropzone:hover, .mm-dropzone.drag-over {{
-  opacity: .82;
-}}
+/* Drag-over feedback for the upload icon-btn — toggled by the same JS that
+   used to target .mm-dropzone, now just an .icon-btn like its siblings. */
+.icon-btn.drag-over {{ background: var(--tint); }}
 
-.mm-grid-wrap {{ flex: 1; overflow-y: auto; padding: 0 .85rem .85rem; min-width: 0; }}
+.mm-grid-wrap {{ flex: 1; overflow-y: auto; padding: 0 .85rem .85rem; min-width: 0; background: var(--tint); }}
 
 .mm-grid {{
   display: grid;
@@ -716,7 +698,7 @@ body.sidebar-open .admin-sidebar {{
 .mm-footer {{
   display: flex; align-items: center; justify-content: space-between;
   padding: .55rem 1rem; border-top: 1px solid var(--border);
-  background: var(--tint); flex-shrink: 0; flex-wrap: wrap; gap: .5rem;
+  background: var(--surface); flex-shrink: 0; flex-wrap: wrap; gap: .5rem;
 }}
 .mm-footer-info {{ font-size: 13px; color: var(--muted); margin-left: auto; }}
 
@@ -742,7 +724,6 @@ body.sidebar-open .admin-sidebar {{
 }}
 @media (max-width: 600px) {{
   .mm-toolbar {{ gap: .4rem; }}
-  .mm-search {{ min-width: 86px; }}
   .mm-sidebar {{ grid-template-columns: 1fr; }}
   .mm-sidebar .mm-panel-section + .mm-panel-section {{ border-left: none; border-top: 1px solid var(--border); }}
   .mm-grid {{ grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); }}
@@ -753,36 +734,23 @@ body.sidebar-open .admin-sidebar {{
 
   <!-- Toolbar -->
   <div class="mm-toolbar">
-    <div class="mm-toolbar-left">
-      <div class="mm-search">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-        <input type="text" placeholder="Search files…" id="mmSearch" oninput="filterItems()">
-      </div>
-    </div>
+    <div class="mm-toolbar-left"></div>
     <div class="mm-toolbar-right">
-      <button class="btn btn-secondary mm-bulk-btn" id="mmBulkToggle" onclick="toggleBulkMode()">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:.3rem"><rect x="3" y="5" width="4" height="4" rx="1"/><rect x="3" y="12" width="4" height="4" rx="1"/><rect x="3" y="19" width="4" height="4" rx="1"/><line x1="10" y1="7" x2="21" y2="7"/><line x1="10" y1="14" x2="21" y2="14"/><line x1="10" y1="21" x2="21" y2="21"/></svg>
-        Select
-      </button>
-      <div class="mm-view-toggle">
-        <button class="mm-view-btn active" id="viewGrid" onclick="setView('grid')" title="Grid view">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
-        </button>
-        <button class="mm-view-btn" id="viewList" onclick="setView('list')" title="List view">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
-        </button>
-      </div>
-      <div id="mm-toolbar-app" style="display:contents">
-      <form method="POST" action="/admin/media/upload" enctype="multipart/form-data" id="mm2UploadForm" style="display:contents">
-        <input type="hidden" name="redirect" value="{redirect_url}">
-        {folder_hidden}
-        <input type="file" id="mm2FileInput" name="file" accept="image/*,application/pdf,video/*,audio/*"
-               style="position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;pointer-events:none"
-               onchange="mm2Submit()">
-        <div class="mm-dropzone" id="mmDropzone" title="Upload file">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/></svg>
+      <div class="icon-pill" style="margin-top:0">
+        {search_pill}
+        <button class="icon-btn" id="mmBulkToggle" title="Select" aria-label="Select" onclick="toggleBulkMode()"><img src="/admin/static/icons/check-square.svg" alt=""></button>
+        <button class="icon-btn icon-btn-active" id="viewGrid" onclick="setView('grid')" title="Grid view" aria-label="Grid view"><img src="/admin/static/icons/grid.svg" alt=""></button>
+        <button class="icon-btn" id="viewList" onclick="setView('list')" title="List view" aria-label="List view"><img src="/admin/static/icons/list.svg" alt=""></button>
+        <div id="mm-toolbar-app" style="display:contents">
+        <form method="POST" action="/admin/media/upload" enctype="multipart/form-data" id="mm2UploadForm" style="display:contents">
+          <input type="hidden" name="redirect" value="{redirect_url}">
+          {folder_hidden}
+          <input type="file" id="mm2FileInput" name="file" accept="image/*,application/pdf,video/*,audio/*"
+                 style="position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;pointer-events:none"
+                 onchange="mm2Submit()">
+          <button type="button" class="icon-btn" id="mmDropzone" title="Upload file" aria-label="Upload file"><img src="/admin/static/icons/upload.svg" alt=""></button>
+        </form>
         </div>
-      </form>
       </div>
     </div>
   </div>
@@ -902,12 +870,12 @@ body.sidebar-open .admin-sidebar {{
   </div>
 
   <!-- Bulk action bar -->
-  <div class="mm-bulk-bar" id="mmBulkBar">
+  <div class="mm-bulk-bar icon-pill" id="mmBulkBar">
     <span class="mm-bulk-bar-count"><span class="mm-type-count" id="mmBulkCount">0</span> files</span>
     <div class="mm-bulk-bar-sep"></div>
-    <button class="btn btn-primary mm-bulk-btn" onclick="bulkMoveTo()">Move</button>
-    <button class="btn btn-primary mm-bulk-btn" onclick="bulkDownload()">Download</button>
-    <button class="btn btn-danger mm-bulk-btn" onclick="bulkDelete()">Delete</button>
+    <button class="icon-btn" title="Move" aria-label="Move" onclick="bulkMoveTo()"><img src="/admin/static/icons/move.svg" alt=""></button>
+    <button class="icon-btn" title="Download" aria-label="Download" onclick="bulkDownload()"><img src="/admin/static/icons/download.svg" alt=""></button>
+    <button class="icon-btn icon-danger" title="Delete" aria-label="Delete" onclick="bulkDelete()"><img src="/admin/static/icons/trash.svg" alt=""></button>
   </div>
 
   <!-- Delete folder modal — owned entirely by the WASM island (renders
@@ -925,9 +893,9 @@ body.sidebar-open .admin-sidebar {{
           </select>
         </div>
         <p id="mmMoveError" style="display:none;font-size:13px;color:var(--danger);margin:-.5rem 0 1rem">Move failed. Please try again.</p>
-        <div style="display:flex;gap:.5rem;justify-content:flex-end">
-          <button class="btn btn-secondary" onclick="document.getElementById('mmMoveModal').style.display='none'">Cancel</button>
-          <button class="btn btn-primary" onclick="bulkMoveConfirm()">Move</button>
+        <div class="icon-pill" style="margin-top:0;justify-content:flex-end">
+          <button class="icon-btn" title="Cancel" aria-label="Cancel" onclick="document.getElementById('mmMoveModal').style.display='none'"><img src="/admin/static/icons/x.svg" alt=""></button>
+          <button class="icon-btn" title="Move" aria-label="Move" onclick="bulkMoveConfirm()"><img src="/admin/static/icons/move.svg" alt=""></button>
         </div>
       </div>
     </div>
@@ -939,9 +907,9 @@ body.sidebar-open .admin-sidebar {{
       <h3 class="modal-card-header">Delete files</h3>
       <div class="modal-card-body">
         <p id="mmDeleteMediaMsg" style="font-size:14px;color:var(--muted);margin-bottom:1rem;white-space:pre-line"></p>
-        <div style="display:flex;gap:.5rem;justify-content:flex-end">
-          <button class="btn btn-secondary" onclick="document.getElementById('mmDeleteMediaModal').style.display='none'">Cancel</button>
-          <button class="btn btn-danger" onclick="confirmBulkDelete()">Delete</button>
+        <div class="icon-pill" style="margin-top:0;justify-content:flex-end">
+          <button class="icon-btn" title="Cancel" aria-label="Cancel" onclick="document.getElementById('mmDeleteMediaModal').style.display='none'"><img src="/admin/static/icons/x.svg" alt=""></button>
+          <button class="icon-btn icon-danger" title="Delete" aria-label="Delete" onclick="confirmBulkDelete()"><img src="/admin/static/icons/trash.svg" alt=""></button>
         </div>
       </div>
     </div>
@@ -970,12 +938,12 @@ body.sidebar-open .admin-sidebar {{
     var main = document.getElementById('mmMain');
     if (v === 'list') {{
       main.classList.add('mm-view-list');
-      document.getElementById('viewGrid').classList.remove('active');
-      document.getElementById('viewList').classList.add('active');
+      document.getElementById('viewGrid').classList.remove('icon-btn-active');
+      document.getElementById('viewList').classList.add('icon-btn-active');
     }} else {{
       main.classList.remove('mm-view-list');
-      document.getElementById('viewGrid').classList.add('active');
-      document.getElementById('viewList').classList.remove('active');
+      document.getElementById('viewGrid').classList.add('icon-btn-active');
+      document.getElementById('viewList').classList.remove('icon-btn-active');
     }}
   }};
 
@@ -998,19 +966,22 @@ body.sidebar-open .admin-sidebar {{
     // Show empty state
     document.getElementById('mmEmpty').classList.toggle('visible', visible === 0);
 
-    // Update footer
+    // Update footer while actively searching; clearing the search leaves it
+    // alone rather than resetting to a stale page-load string — the WASM
+    // FooterInfo component (media-app) already keeps it current whenever
+    // the grid itself refreshes.
     var info = document.getElementById('mmFooterInfo');
-    if (info) {{
-      if (q) {{
-        info.textContent = visible + ' of ' + total + ' files shown';
-      }} else {{
-        info.textContent = '{footer_info}';
-      }}
+    if (info && q) {{
+      info.textContent = visible + ' of ' + total + ' files shown';
     }}
     // Hide pagination when searching
     var pg = document.getElementById('mmPagination');
     if (pg) pg.style.display = q ? 'none' : '';
   }};
+  // pill_search_toggle's generated input has no built-in oninput hook (it's
+  // a generic shared helper) — wire it here instead of a per-page attribute.
+  var mmSearchInput = document.getElementById('mmSearch');
+  if (mmSearchInput) mmSearchInput.addEventListener('input', filterItems);
 
   /* ── Item selection ──────────────────────────────────────────────── */
   window.selectItem = function(el) {{
@@ -1110,11 +1081,7 @@ body.sidebar-open .admin-sidebar {{
     var layout = document.getElementById('mmLayout');
     var btn = document.getElementById('mmBulkToggle');
     layout.classList.toggle('mm-bulk-mode', bulkMode);
-    if (bulkMode) {{
-      btn.textContent = 'Done';
-    }} else {{
-      btn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:.3rem"><rect x="3" y="5" width="4" height="4" rx="1"/><rect x="3" y="12" width="4" height="4" rx="1"/><rect x="3" y="19" width="4" height="4" rx="1"/><line x1="10" y1="7" x2="21" y2="7"/><line x1="10" y1="14" x2="21" y2="14"/><line x1="10" y1="21" x2="21" y2="21"/></svg>Select';
-    }}
+    btn.classList.toggle('icon-btn-active', bulkMode);
   }};
 
   window.clearSelection = function() {{
@@ -1292,6 +1259,7 @@ body.sidebar-open .admin-sidebar {{
   }});
 }})();
 </script>
+{pill_search_init}
 <script type="module">
   // media-app WASM island: takes over folder/type filtering, pagination,
   // and upload from the static SSR fallback above once it loads. The
@@ -1310,6 +1278,8 @@ body.sidebar-open .admin-sidebar {{
 </script>
 "##,
         flash         = flash_html,
+        search_pill   = search_pill,
+        pill_search_init = pill_search_init,
         redirect_url  = redirect_url,
         folder_hidden = folder_hidden,
         count_all    = count_all,

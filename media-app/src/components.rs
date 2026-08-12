@@ -93,10 +93,12 @@ pub fn DeleteFolderButton() -> impl IntoView {
         {move || {
             s.folder_id.get().map(|_fid| {
                 view! {
-                    <button class="btn btn-danger mm-new-folder-btn" style="margin-top:.3rem"
-                        on:click=move |_| state::open_delete_folder_modal()>
-                        "Delete folder"
-                    </button>
+                    <div class="icon-pill" style="margin-top:.3rem">
+                        <button class="icon-btn icon-danger" title="Delete folder" aria-label="Delete folder"
+                            on:click=move |_| state::open_delete_folder_modal()>
+                            <img src="/admin/static/icons/trash.svg" alt="" />
+                        </button>
+                    </div>
                 }
             })
         }}
@@ -108,9 +110,11 @@ pub fn DeleteFolderButton() -> impl IntoView {
 #[component]
 pub fn NewFolderButton() -> impl IntoView {
     view! {
-        <button class="btn btn-primary mm-new-folder-btn" on:click=move |_| state::open_new_folder_modal()>
-            "Folder +"
-        </button>
+        <div class="icon-pill" style="margin-top:0">
+            <button class="icon-btn" title="New folder" aria-label="New folder" on:click=move |_| state::open_new_folder_modal()>
+                <img src="/admin/static/icons/folder-plus.svg" alt="" />
+            </button>
+        </div>
     }
 }
 
@@ -142,12 +146,14 @@ pub fn NewFolderModal() -> impl IntoView {
                             {move || s.new_folder_error.get().map(|e| view! {
                                 <p style="font-size:13px;color:var(--danger);margin:-.5rem 0 1rem">{e}</p>
                             })}
-                            <div style="display:flex;gap:.5rem;justify-content:flex-end">
-                                <button class="btn btn-secondary" on:click=move |_| s.show_new_folder_modal.set(false)>"Cancel"</button>
-                                <button class="btn btn-primary"
+                            <div class="icon-pill" style="margin-top:0;justify-content:flex-end">
+                                <button class="icon-btn" title="Cancel" aria-label="Cancel" on:click=move |_| s.show_new_folder_modal.set(false)>
+                                    <img src="/admin/static/icons/x.svg" alt="" />
+                                </button>
+                                <button class="icon-btn" title="Create" aria-label="Create"
                                     disabled=move || state::sanitize_folder_name(&s.new_folder_name.get()).len() < 4
                                     on:click=move |_| state::submit_new_folder()>
-                                    "Create"
+                                    <img src="/admin/static/icons/check.svg" alt="" />
                                 </button>
                             </div>
                         </div>
@@ -181,24 +187,24 @@ pub fn DeleteFolderModal() -> impl IntoView {
                                         "Are you sure you want to delete this empty folder?".to_string()
                                     }}
                                 </p>
-                                <div style="display:flex;flex-direction:column;gap:.5rem">
+                                <div class="icon-pill" style="margin-top:0;justify-content:center">
                                     {(total > 0).then(|| view! {
-                                        <button class="btn btn-secondary" style="justify-content:center"
+                                        <button class="icon-btn" title="Move files to All Media, then delete folder" aria-label="Move files to All Media, then delete folder"
                                             on:click=move |_| state::confirm_delete_folder(false)>
-                                            "Move files to All Media, then delete folder"
+                                            <img src="/admin/static/icons/folder-minus.svg" alt="" />
                                         </button>
                                     })}
-                                    <button class="btn btn-danger" style="justify-content:center"
+                                    <button class="icon-btn icon-danger" title="Delete folder and all its files permanently" aria-label="Delete folder and all its files permanently"
                                         on:click=move |_| state::confirm_delete_folder(true)>
-                                        "Delete folder and all its files permanently"
+                                        <img src="/admin/static/icons/trash.svg" alt="" />
+                                    </button>
+                                    <button class="icon-btn" title="Cancel" aria-label="Cancel" on:click=move |_| s.show_delete_folder_modal.set(false)>
+                                        <img src="/admin/static/icons/x.svg" alt="" />
                                     </button>
                                 </div>
                                 {move || s.delete_folder_error.get().map(|e| view! {
                                     <p style="font-size:13px;color:var(--danger);margin-top:.75rem">{e}</p>
                                 })}
-                                <div style="margin-top:.75rem;text-align:right">
-                                    <button class="btn btn-secondary" on:click=move |_| s.show_delete_folder_modal.set(false)>"Cancel"</button>
-                                </div>
                             </div>
                         </div>
                     </div>
@@ -250,9 +256,11 @@ pub fn Toolbar() -> impl IntoView {
             style="position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;pointer-events:none"
             on:change=on_input_change
         />
-        <div
-            class="mm-dropzone"
+        <button
+            type="button"
+            class="icon-btn"
             title="Upload file"
+            aria-label="Upload file"
             on:click=move |_| {
                 if let Some(doc) = leptos::web_sys::window().and_then(|w| w.document()) {
                     if let Some(el) = doc.get_element_by_id("mm2FileInput") {
@@ -264,10 +272,10 @@ pub fn Toolbar() -> impl IntoView {
             on:drop=on_drop
         >
             {move || match progress.get() {
-                Some(p) if p < 100 => format!("{p}%"),
-                _ => "\u{2b06}".to_string(),
+                Some(p) if p < 100 => view! { <span style="font-size:11px">{format!("{p}%")}</span> }.into_any(),
+                _ => view! { <img src="/admin/static/icons/upload.svg" alt="" /> }.into_any(),
             }}
-        </div>
+        </button>
     }
 }
 
