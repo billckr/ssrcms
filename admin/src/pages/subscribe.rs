@@ -43,11 +43,16 @@ pub fn render(error: Option<&str>, site_name: &str, default_theme: &str) -> Stri
     <h2>Create an account</h2>
     {error_html}
     <form method="POST" action="/subscribe">
-      <label for="display_name">Display Name</label>
-      <input type="text" id="display_name" name="display_name" required autofocus autocomplete="name" maxlength="60">
-
-      <label for="email">Email</label>
-      <input type="email" id="email" name="email" required autocomplete="email">
+      <div style="display:flex;gap:.75rem">
+        <div style="flex:1;min-width:0">
+          <label for="display_name">Display Name</label>
+          <input type="text" id="display_name" name="display_name" required autofocus autocomplete="name" maxlength="60">
+        </div>
+        <div style="flex:1;min-width:0">
+          <label for="email">Email</label>
+          <input type="email" id="email" name="email" required autocomplete="email">
+        </div>
+      </div>
 
       <div style="display:flex;gap:.75rem">
         <div style="flex:1;min-width:0">
@@ -66,16 +71,6 @@ pub fn render(error: Option<&str>, site_name: &str, default_theme: &str) -> Stri
         <input type="text" id="website" name="website" tabindex="-1" autocomplete="off">
       </div>
 
-      <label style="display:flex;align-items:center;gap:.5rem;font-weight:400;margin-top:1rem;cursor:pointer">
-        <input type="checkbox" id="human_check" name="human_check" value="on" required style="width:auto;flex-shrink:0;margin:0">
-        <span>I&#x2019;m Human</span>
-      </label>
-
-      <label style="display:flex;align-items:center;gap:.5rem;font-weight:400;margin-top:.6rem;cursor:pointer">
-        <input type="checkbox" name="terms" value="on" required style="width:auto;flex-shrink:0;margin:0">
-        <span>Agree to <a href="/terms" target="_blank" rel="noopener noreferrer">Terms of Service</a></span>
-      </label>
-
       <div class="form-note" style="margin-top:1rem;margin-bottom:0;font-size:12px">
         <p style="margin-bottom:.35rem"><strong>Requirements:</strong></p>
         <ul style="list-style:none;padding-left:0;margin:0;display:grid;gap:.15rem">
@@ -88,6 +83,16 @@ pub fn render(error: Option<&str>, site_name: &str, default_theme: &str) -> Stri
           <li id="human-req"><span class="pw-dot" style="display:inline-block;width:1.1rem;font-style:normal">·</span>&#x201c;I&#x2019;m Human&#x201d; confirmed</li>
         </ul>
       </div>
+
+      <label style="display:flex;align-items:center;gap:.5rem;font-weight:400;margin-top:1rem;cursor:pointer">
+        <input type="checkbox" id="human_check" name="human_check" value="on" required style="width:auto;flex-shrink:0;margin:0">
+        <span>I&#x2019;m Human</span>
+      </label>
+
+      <label style="display:flex;align-items:center;gap:.5rem;font-weight:400;margin-top:.6rem;cursor:pointer">
+        <input type="checkbox" name="terms" value="on" required style="width:auto;flex-shrink:0;margin:0">
+        <span>Agree to <a href="/terms" target="_blank" rel="noopener noreferrer">Terms of Service</a></span>
+      </label>
 
       <button type="submit" style="margin-top:1rem">Subscribe</button>
     </form>
@@ -133,7 +138,7 @@ pub fn render(error: Option<&str>, site_name: &str, default_theme: &str) -> Stri
         setDot(req[0], pw ? req[1](pw) : null);
       }});
 
-      setDot('human-req', humanEl ? humanEl.checked : null);
+      setDot('human-req', humanEl ? (humanEl.checked ? true : null) : null);
     }}
 
     [dnameEl, emailEl, pwEl].forEach(function(el) {{

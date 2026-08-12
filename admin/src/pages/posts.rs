@@ -48,6 +48,9 @@ pub struct PostEdit {
     pub author_id: String,
     /// Hostname of the site this post belongs to (empty for new posts / global admin context).
     pub site_name: String,
+    /// UUID of the site this post belongs to (empty for new posts / global admin
+    /// context), used to link the Author card's site name to that site's settings.
+    pub site_id: String,
     /// UUID of the parent page (pages only). None = top-level.
     pub parent_id: Option<String>,
     /// (id, title) pairs of published pages on this site, excluding self. For parent dropdown.
@@ -809,11 +812,11 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
           <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;font-weight:400">
             <input type="checkbox" id="post-protected-cb" name="post_protected" value="on" {protected_checked}
               onchange="document.getElementById('post-pw-group').style.display=this.checked?'':'none'">
-            Password Protected
+            Password Protect
           </label>
         </div>
         <div class="form-group" id="post-pw-group" style="{pw_group_display}">
-          <label for="post-password" style="font-size:12px">Password</label>
+          <label for="post-password" class="sr-only">Password</label>
           <input type="password" id="post-password" name="post_password" autocomplete="new-password" placeholder="{pw_placeholder}" style="font-size:13px">
           {pw_hint}
         </div>"#,
@@ -868,13 +871,19 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
 
     // Author card: shown to editors/admins when viewing an existing post written by someone else.
     let author_card = if !ctx.user_role.eq_ignore_ascii_case("author") && !post.author_name.is_empty() {
-        let site_line = if !post.site_name.is_empty() {
+        let site_line = if post.site_name.is_empty() {
+            String::new()
+        } else if post.site_id.is_empty() {
             format!(
                 r#"<div class="author-card-site">{}</div>"#,
                 crate::html_escape(&post.site_name)
             )
         } else {
-            String::new()
+            format!(
+                r#"<a class="author-card-site" href="/admin/sites/{id}/settings" target="_blank" rel="noopener">{name}</a>"#,
+                id = crate::html_escape(&post.site_id),
+                name = crate::html_escape(&post.site_name),
+            )
         };
         let suspended_badge = if !post.author_is_active {
             r#" <span class="badge" style="background:#fee2e2;color:#991b1b" title="Login blocked until reactivated">Suspended</span>"#

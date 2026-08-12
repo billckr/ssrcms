@@ -19,6 +19,9 @@ done.
 - [ ] consiider adding clerk-rs as account creation option. It's not offical but appears to be well maintained.
 - [ ] add Google login via OAuth2 (oauth2 crate) as an account creation/sign-in option.
 - [ ] need to think about how we're going to relay via docs about all the possible data points that can be displayed for a site for users who want to build or customize their own themes. example Posts, pages, etc etc.
+- [ ] consider adding an owner column on the sites page to clearly show the top level domain this site belongs to
+- [ ] consider a byline for the SynapCMS name. Something like "words have life" or something deep and thoughtful
+- [ ] consider adding a link back to the main site on the subscribe form.
 
 ## Done
 
