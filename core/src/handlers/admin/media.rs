@@ -122,19 +122,17 @@ pub async fn list(
     .into_iter()
     .collect();
 
-    let cs = state.site_hostname(admin.site_id);
-
     let items: Vec<admin::pages::media::MediaItem> = raw.iter().map(|m| {
-        // Strip the UUID prefix from the stored path — matches Media::url()'s
-        // convention (bare filename for real domains; production Caddy is
-        // already scoped to this site's own uploads/{host}/ root, so
-        // repeating the hostname in the path is both unnecessary and, since
-        // that Caddy root is scoped per-domain, actually unresolvable.
-        let display_path = if !cs.is_empty() {
-            m.path.splitn(2, '/').nth(1).unwrap_or(&m.path).to_string()
-        } else {
-            m.path.clone()
-        };
+        // Keep the UUID-prefixed path (not the bare-filename shape
+        // Media::url() uses for public pages) — admin is browsed through a
+        // shared host (bckr.local) that isn't any site's own domain, so a
+        // Host-scoped bare-filename lookup can never resolve here regardless
+        // of which site's media is being viewed. The UUID-prefixed shape
+        // resolves directly off disk (uploads_dir/{uuid}/{filename}),
+        // independent of Host. Dev Caddy's bckr.local vhost no longer
+        // intercepts /uploads/* with a per-host root — it falls through to
+        // Axum's uploads.rs, which handles this shape natively.
+        let display_path = m.path.clone();
         admin::pages::media::MediaItem {
         id: m.id.to_string(),
         filename: m.filename.clone(),
@@ -158,6 +156,7 @@ pub async fn list(
 
     let active_folder_id = params.get("folder_id").map(|s| s.as_str());
 
+    let cs = state.site_hostname(admin.site_id);
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
     Html(admin::pages::media::render_list(
         &items,
@@ -342,19 +341,9 @@ pub async fn api_grid(
     .into_iter()
     .collect();
 
-    let cs = state.site_hostname(admin.site_id);
-
     let items: Vec<GridItem> = raw.iter().map(|m| {
-        // Strip the UUID prefix from the stored path — matches Media::url()'s
-        // convention (bare filename for real domains; production Caddy is
-        // already scoped to this site's own uploads/{host}/ root, so
-        // repeating the hostname in the path is both unnecessary and, since
-        // that Caddy root is scoped per-domain, actually unresolvable.
-        let display_path = if !cs.is_empty() {
-            m.path.splitn(2, '/').nth(1).unwrap_or(&m.path).to_string()
-        } else {
-            m.path.clone()
-        };
+        // Keep the UUID-prefixed path — see comment in `list` above.
+        let display_path = m.path.clone();
         let dims = match (m.width, m.height) {
             (Some(w), Some(h)) => format!("{}\u{d7}{}", w, h),
             _ => String::from("\u{2014}"),

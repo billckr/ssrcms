@@ -356,18 +356,13 @@ async fn edit_post_type(state: AppState, id: Uuid, site_id: Option<Uuid>, is_aut
         .map(|t| t.id.to_string())
         .collect();
 
-    // Strip the UUID prefix — matches Media::url()'s convention (bare
-    // filename), which is what the media grid, detail panel, and public
-    // pages all already use. This is the one other place that reconstructs
-    // an /uploads/ URL from a stored media row rather than reusing that
-    // convention, so it had drifted onto the old {uuid}/{filename} shape.
+    // Keep the UUID-prefixed path — this is admin (browsed via the shared
+    // bckr.local host, not the site's own domain), so a bare-filename URL
+    // can't resolve; see the comment in handlers/admin/media.rs::list.
     let featured_image_url = if let Some(img_id) = post.featured_image_id {
         crate::models::media::get_by_id(&state.db, img_id).await
             .ok()
-            .map(|m| {
-                let filename = m.path.splitn(2, '/').nth(1).unwrap_or(&m.path);
-                format!("/uploads/{}", filename)
-            })
+            .map(|m| format!("/uploads/{}", m.path))
     } else {
         None
     };
