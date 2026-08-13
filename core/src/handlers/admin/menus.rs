@@ -117,6 +117,7 @@ pub async fn create(
 #[derive(Deserialize)]
 pub struct EditMenuQuery {
     pub error: Option<String>,
+    pub saved: Option<String>,
 }
 
 pub async fn edit(
@@ -156,7 +157,13 @@ pub async fn edit(
 
     let flash = match q.error.as_deref() {
         Some("duplicate_name") => Some("A menu with that name already exists."),
-        _ => None,
+        _ => match q.saved.as_deref() {
+            Some("menu") => Some("Menu saved."),
+            Some("item_added") => Some("Menu item added."),
+            Some("item_updated") => Some("Menu item saved."),
+            Some("item_deleted") => Some("Menu item deleted."),
+            _ => None,
+        },
     };
 
     Html(admin::pages::menus::render_edit(&menu_edit, &item_rows, &pages, &ctx, flash)).into_response()
@@ -203,7 +210,7 @@ pub async fn update(
         tracing::error!("update menu {} error: {:?}", id, e);
     }
 
-    Redirect::to(&format!("/admin/menus/{}", id)).into_response()
+    Redirect::to(&format!("/admin/menus/{}?saved=menu", id)).into_response()
 }
 
 // ── Delete ────────────────────────────────────────────────────────────────────
@@ -290,7 +297,7 @@ pub async fn add_item(
         tracing::error!("add nav item error: {:?}", e);
     }
 
-    Redirect::to(&format!("/admin/menus/{}", id)).into_response()
+    Redirect::to(&format!("/admin/menus/{}?saved=item_added", id)).into_response()
 }
 
 // ── Item: Edit ────────────────────────────────────────────────────────────────
@@ -346,7 +353,7 @@ pub async fn edit_item(
         tracing::error!("edit nav item {} error: {:?}", item_id, e);
     }
 
-    Redirect::to(&format!("/admin/menus/{}", menu_id)).into_response()
+    Redirect::to(&format!("/admin/menus/{}?saved=item_updated", menu_id)).into_response()
 }
 
 // ── Item: Delete ──────────────────────────────────────────────────────────────
@@ -373,7 +380,7 @@ pub async fn delete_item(
         tracing::error!("delete nav item {} error: {:?}", item_id, e);
     }
 
-    Redirect::to(&format!("/admin/menus/{}", menu_id)).into_response()
+    Redirect::to(&format!("/admin/menus/{}?saved=item_deleted", menu_id)).into_response()
 }
 
 // ── Item: Reorder (drag-and-drop) ───────────────────────────────────────────

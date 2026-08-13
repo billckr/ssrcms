@@ -322,9 +322,13 @@ pub fn render_edit(
           <input type="number" name="sort_order" value="{sort_order}" style="width:100px">
         </div>
       </div>
-      <div class="form-actions">
-        <button type="submit" class="btn btn-primary">Save Changes</button>
-        <label for="edit-toggle-{item_id}" class="btn" style="cursor:pointer">Cancel</label>
+      <div class="icon-pill">
+        <button type="submit" class="icon-btn" title="Save Changes" aria-label="Save Changes">
+          <img src="/admin/static/icons/save.svg" alt="">
+        </button>
+        <label for="edit-toggle-{item_id}" class="icon-btn" title="Cancel" aria-label="Cancel" style="cursor:pointer">
+          <img src="/admin/static/icons/x.svg" alt="">
+        </label>
       </div>
     </form>
   </div>
