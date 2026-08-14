@@ -394,9 +394,25 @@ async fn edit_post_type(state: AppState, id: Uuid, site_id: Option<Uuid>, is_aut
     } else {
         format!("/{}", post.slug)
     };
-    let live_url = if post.status == "published" { Some(post_path.clone()) } else { None };
+    // Absolute, not relative: admin for a site other than the one currently
+    // in the address bar is routine here (super admin browsing another
+    // site's content, or admin reached via the shared bckr.local host) — a
+    // relative href would resolve against whatever origin the admin page
+    // itself loaded from instead of the post's own site.
+    let post_base_url = post.site_id
+        .and_then(|sid| state.get_site_by_id(sid))
+        .map(|(site, settings)| {
+            if settings.base_url != "http://localhost:3000" {
+                settings.base_url
+            } else {
+                format!("http://{}", site.hostname)
+            }
+        })
+        .unwrap_or_default();
+    let post_url = format!("{}{}", post_base_url, post_path);
+    let live_url = if post.status == "published" { Some(post_url.clone()) } else { None };
     let preview_url = match post.status.as_str() {
-        "draft" | "pending" | "scheduled" => Some(post_path),
+        "draft" | "pending" | "scheduled" => Some(post_url),
         _ => None,
     };
 
