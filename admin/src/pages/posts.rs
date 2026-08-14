@@ -1013,13 +1013,12 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
     let mut content = format!(
         r#"<link rel="stylesheet" href="/admin/static/quill/quill.snow.css">
 <style>
-  /* Quill's vendored Snow theme is light-only (icon strokes/fills hardcoded
-     to #444, dropdown backgrounds to #fff, etc.) — rather than patch the
-     vendored file, treat the whole toolbar+editor as one "field" that's
-     always light (var(--field-bg)/var(--field-text), same as every other
-     text input) regardless of theme, so its hardcoded icon/text colors
-     stay legible in both light and dark mode without needing their own
-     dark-mode variants. */
+  /* Quill's vendored Snow theme hardcodes its own colors (icon strokes/
+     fills to #444, dropdown backgrounds to #fff, etc.) with no dark-mode
+     awareness of its own — rather than patch the vendored file, every one
+     of those is overridden here to the same var(--field-bg)/var(--field-text)
+     every other input/select/textarea uses (see admin.css), so the toolbar
+     and editor follow theme changes exactly like the rest of the form. */
   .ql-toolbar.ql-snow {{ background: var(--field-bg); color: var(--field-text); border-color: var(--border); }}
   .ql-container.ql-snow {{ border-color: var(--border); }}
   .ql-editor {{ color: var(--field-text); }}
