@@ -424,6 +424,7 @@ img { max-width: 100%; height: auto; display: block; }
   position: relative;
   padding: 6rem 0;
   text-align: center;
+  border-bottom: 1px solid var(--navy);
 }
 
 /* Dark overlay when a background image is present — customizer-toggleable,
