@@ -173,6 +173,12 @@ a:hover { text-decoration: underline; }
 .flash.success { background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
 .flash.error { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
 .error { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; padding: .75rem 1rem; border-radius: var(--radius); margin-bottom: 1rem; }
+:root[data-theme="dark"] .badge-published { color: #86efac; }
+:root[data-theme="dark"] .badge-draft { color: #cbd5e1; }
+:root[data-theme="dark"] .badge-pending { color: #fbbf24; }
+:root[data-theme="dark"] .badge-trashed { color: #fca5a5; }
+:root[data-theme="dark"] .badge-scheduled { color: #93c5fd; }
+:root[data-theme="dark"] .badge-protected { color: #d8b4fe; }
 :root[data-theme="dark"] .flash.success { background: rgba(74,222,128,.12); color: #86efac; border-color: rgba(74,222,128,.3); }
 :root[data-theme="dark"] .flash.error,
 :root[data-theme="dark"] .error { background: rgba(248,113,113,.12); color: #fca5a5; border-color: rgba(248,113,113,.3); }
@@ -454,12 +460,17 @@ tr.muted td { opacity: .55; }
 .customizer-header-actions { display: flex; align-items: center; gap: .5rem; flex-shrink: 0; }
 .customizer-restore-form { display: flex; flex-shrink: 0; }
 .editor-color-hint { margin: .6rem 0 0; font-size: .75rem; color: var(--muted); }
-.badge-published { background: #dcfce7; color: #166534; }
-.badge-draft { background: #fef9c3; color: #854d0e; }
-.badge-pending { background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; }
-.badge-trashed { background: #fee2e2; color: #991b1b; }
-.badge-scheduled { background: #dbeafe; color: #1e40af; }
-.badge-protected { background: #f3e8ff; color: #6b21a8; }
+/* Post status badges: same neutral background as the default .badge (so
+   they read as one consistent badge system rather than a wall of pastel
+   chips, and stay theme-aware for free) — status is distinguished by text
+   color alone. See the :root[data-theme="dark"] block below for the
+   lighter variants each needs to stay legible on the dark --tint. */
+.badge-published { color: #166534; }
+.badge-draft { color: #475569; }
+.badge-pending { color: #92400e; }
+.badge-trashed { color: #991b1b; }
+.badge-scheduled { color: #1e40af; }
+.badge-protected { color: #6b21a8; }
 .badge-in-use   { background: #fef3c7; color: #92400e; cursor: help; }
 .badge-private  { background: #e0e7ff; color: #3730a3; }
 .badge-super-admin { background: #1e293b; color: #f8fafc; }

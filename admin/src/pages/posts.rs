@@ -274,7 +274,9 @@ pub fn posts_list_fragment(
             title_cell    = title_cell,
             status_cls    = crate::html_escape(&p.status),
             status_label  = crate::html_escape(if p.status == "pending" { "Pending Review" } else { &p.status }),
-            protected_badge = if p.post_password_set { r#" <span class="badge badge-protected" title="Protected">&#x1F512;</span>"# } else { "" },
+            protected_badge = if p.post_password_set {
+                r#" <span class="badge badge-protected" title="This post is password protected"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg></span>"#
+            } else { "" },
             middle_tds    = middle_tds,
             view_btn      = view_btn,
             edit_btn      = edit_btn,
@@ -799,10 +801,33 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
 
     let protected_checked = if post.post_password_set { "checked" } else { "" };
     let pw_group_display  = if post.post_password_set { "" } else { "display:none" };
-    let pw_placeholder = if post.post_password_set { "Leave blank to keep current password" } else { "Enter password" };
-    let pw_hint = if post.post_password_set {
-        r#"<small style="color:var(--muted)">Leave blank to keep existing password.</small>"#
-    } else { "" };
+
+    // A post that already has a password shows a compact "Password set ·
+    // Change" row instead of an empty field with "leave blank to keep it"
+    // placeholder text — clicking Change swaps in the real input so a new
+    // password can be typed. Leaving it alone (not saving) intentionally
+    // keeps the existing password: no change link click means no new
+    // value gets submitted, and the backend already treats a blank
+    // post_password as "keep existing" (see save_edit in posts.rs).
+    let pw_input_row = format!(
+        r#"<div class="form-group" id="post-pw-input-row" style="{display}">
+          <label for="post-password" class="sr-only">Password</label>
+          <input type="password" id="post-password" name="post_password" autocomplete="new-password" placeholder="{placeholder}" style="font-size:13px">
+        </div>"#,
+        display = if post.post_password_set { "display:none" } else { "" },
+        placeholder = if post.post_password_set { "Enter new password" } else { "Enter password" },
+    );
+    let pw_set_row = if post.post_password_set {
+        r#"<div class="form-group" id="post-pw-set-row" style="display:flex;align-items:center;gap:.4rem">
+          <span style="font-size:13px;color:var(--muted)">Password set</span>
+          <button type="button" class="icon-btn" title="Change password" aria-label="Change password"
+            onclick="document.getElementById('post-pw-set-row').style.display='none';document.getElementById('post-pw-input-row').style.display='';document.getElementById('post-password').focus()">
+            <img src="/admin/static/icons/edit.svg" alt="">
+          </button>
+        </div>"#.to_string()
+    } else {
+        String::new()
+    };
 
     let password_section = if ctx.user_role.eq_ignore_ascii_case("author") {
         String::new()
@@ -815,15 +840,14 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
             Password Protect
           </label>
         </div>
-        <div class="form-group" id="post-pw-group" style="{pw_group_display}">
-          <label for="post-password" class="sr-only">Password</label>
-          <input type="password" id="post-password" name="post_password" autocomplete="new-password" placeholder="{pw_placeholder}" style="font-size:13px">
-          {pw_hint}
+        <div id="post-pw-group" style="{pw_group_display}">
+          {pw_set_row}
+          {pw_input_row}
         </div>"#,
             protected_checked = protected_checked,
             pw_group_display = pw_group_display,
-            pw_placeholder = pw_placeholder,
-            pw_hint = pw_hint,
+            pw_set_row = pw_set_row,
+            pw_input_row = pw_input_row,
         )
     };
 
