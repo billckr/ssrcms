@@ -539,7 +539,22 @@ body.sidebar-open .admin-sidebar {{
 .mm-new-folder-btn {{ margin: .5rem .85rem .65rem; font-size: 12px; width: calc(100% - 1.7rem); justify-content: flex-start; gap: .4rem; }}
 
 /* ── Main ─────────────────────────────────────────────────────────────── */
-.mm-main {{ display: flex; flex-direction: column; overflow: hidden; min-width: 0; }}
+.mm-main {{ display: flex; flex-direction: column; overflow: hidden; min-width: 0; position: relative; }}
+/* Same fading accent line as .admin-header::after, but scoped to just the
+   main content column's width (not the sidebar's) — .mm-main starts right
+   of the sidebar, so anchoring this to its own top edge keeps the line
+   centered over the content area only. */
+.mm-main::before {{
+  content: '';
+  position: absolute;
+  left: 0; right: 0; top: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--primary) 50%, transparent);
+  /* .mm-content-area is also position:relative (z-index:auto) and comes
+     later in DOM order, so without this it paints over this 1px line
+     instead of the line showing on top. */
+  z-index: 1;
+}}
 
 /* Content area: sits below the drop zone, holds grid + detail panel */
 .mm-content-area {{
