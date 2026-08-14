@@ -319,15 +319,18 @@ pub fn render_list(
         frame_base.to_string()
     };
     // ── Detail actions HTML (differs in picker/select mode) ───────────────────
+    let save_pill = r##"<div class="icon-pill" style="margin-top:.3rem;justify-content:center">
+        <button id="mmSaveBtn" class="icon-btn" title="Save changes" aria-label="Save changes" onclick="saveDetail()"><img src="/admin/static/icons/save.svg" alt=""></button>
+      </div>"##;
     let detail_actions_html = if select_mode {
-        r#"    <div class="mm-detail-actions" id="mmDetailActions" style="display:none">
+        format!(r#"    <div class="mm-detail-actions" id="mmDetailActions" style="display:none">
       <button id="mmPickerSetBtn" class="btn btn-primary" style="width:100%;justify-content:center" onclick="pickerSelectImage()">Set Image</button>
-      <button id="mmSaveBtn" class="btn btn-secondary" style="width:100%;justify-content:center;margin-top:.3rem" onclick="saveDetail()">Save changes</button>
-    </div>"#.to_string()
+      {save_pill}
+    </div>"#)
     } else {
-        r#"    <div class="mm-detail-actions" id="mmDetailActions" style="display:none">
-      <button id="mmSaveBtn" class="btn btn-primary" style="width:100%;justify-content:center" onclick="saveDetail()">Save changes</button>
-    </div>"#.to_string()
+        format!(r#"    <div class="mm-detail-actions" id="mmDetailActions" style="display:none">
+      {save_pill}
+    </div>"#)
     };
     // ── JS bridge for picker/select mode ─────────────────────────────────────
     let picker_js = if select_mode {
@@ -365,6 +368,27 @@ pub fn render_list(
     // from #mmSearch, so the input id here has to stay "mmSearch".
     let search_pill = crate::pill_search_toggle("mmSearch", "Search files\u{2026}", "");
     let pill_search_init = crate::pill_search_init_script();
+
+    // When rendered inside the picker/browser iframe, put the modal's own
+    // title and close button in the toolbar row instead of a separate
+    // header bar above it (which would live in the parent document, one
+    // iframe boundary away) — this keeps the whole modal chrome to one
+    // row without crossing into the parent's DOM. The close button posts a
+    // message up to whichever of openMediaPicker/openMediaBrowser's modals
+    // is currently showing this iframe; see the matching listeners in
+    // admin/src/lib.rs.
+    let toolbar_title = if picker_mode {
+        r#"<span class="mpicker-title">Media Library</span>"#.to_string()
+    } else {
+        String::new()
+    };
+    let toolbar_close = if picker_mode {
+        r##"<div class="icon-pill" style="margin-top:0">
+        <button type="button" class="icon-btn" title="Close" aria-label="Close" onclick="window.parent.postMessage({type:'closeMediaFrame'}, '*')"><img src="/admin/static/icons/x.svg" alt=""></button>
+      </div>"##.to_string()
+    } else {
+        String::new()
+    };
 
     // ── Delete-folder button (only when a folder is active) ──────────────────
     let delete_folder_btn_html = if active_folder.is_some() {
@@ -425,7 +449,6 @@ body.sidebar-open .admin-sidebar {{
   gap: .6rem;
   padding: .65rem 1rem;
   background: var(--surface);
-  border-bottom: 1px solid var(--border);
   flex-wrap: wrap;
 }}
 .mm-toolbar-left  {{ display: flex; align-items: center; gap: .5rem; flex: 1; min-width: 0; flex-wrap: wrap; }}
@@ -439,6 +462,13 @@ body.sidebar-open .admin-sidebar {{
 .icon-btn-active img {{ filter: invert(24%) sepia(94%) saturate(300%) hue-rotate(204deg) brightness(145%) contrast(193%); }}
 :root[data-theme="dark"] .icon-btn-active img {{ filter: invert(36%) sepia(75%) saturate(252%) hue-rotate(197deg) brightness(133%) contrast(148%); }}
 
+/* Brief post-save confirmation on the detail panel's Save button — same
+   green-on-success convention as #save-btn.icon-btn-save-dirty on the post
+   editor; needs the #mmSaveBtn id for the same specificity reason (out-wins
+   the dark-mode img[src^=...] invert(1) rule). Error reuses the existing
+   always-on danger red. */
+#mmSaveBtn.icon-btn-active-green img {{ filter: var(--success-filter); }}
+
 /* .icon-pill's own background is var(--tint) — invisible against
    .mm-toolbar/.mm-sidebar, which use that same var(--tint) as their base
    panel color. Give pills sitting on top of them the contrasting surface
@@ -450,7 +480,6 @@ body.sidebar-open .admin-sidebar {{
 
 /* ── Left panel ───────────────────────────────────────────────────────── */
 .mm-sidebar {{
-  border-right: 1px solid var(--border);
   background: var(--surface);
   overflow-y: auto;
   display: flex;
@@ -609,19 +638,6 @@ body.sidebar-open .admin-sidebar {{
 }}
 .mm-detail-panel.open {{ transform: translateX(0); }}
 
-.mm-detail-header {{
-  display: flex; align-items: center; justify-content: space-between;
-  padding: .65rem .9rem; border-bottom: 1px solid var(--border);
-  background: var(--tint); flex-shrink: 0;
-}}
-.mm-detail-header span {{ font-size: 13px; font-weight: 600; color: var(--text); }}
-.mm-detail-close {{
-  background: none; border: none; cursor: pointer; color: var(--muted);
-  padding: .2rem; border-radius: 4px;
-  display: flex; align-items: center; justify-content: center;
-}}
-.mm-detail-close:hover {{ background: var(--tint); color: var(--text); }}
-
 .mm-detail-body {{ flex: 1; overflow-y: auto; padding: .9rem; }}
 .mm-detail-preview {{
   width: 100%; aspect-ratio: 4/3; object-fit: contain;
@@ -697,7 +713,7 @@ body.sidebar-open .admin-sidebar {{
 /* ── Footer / pagination ──────────────────────────────────────────────── */
 .mm-footer {{
   display: flex; align-items: center; justify-content: space-between;
-  padding: .55rem 1rem; border-top: 1px solid var(--border);
+  padding: .55rem 1rem;
   background: var(--surface); flex-shrink: 0; flex-wrap: wrap; gap: .5rem;
 }}
 .mm-footer-info {{ font-size: 13px; color: var(--muted); margin-left: auto; }}
@@ -734,7 +750,7 @@ body.sidebar-open .admin-sidebar {{
 
   <!-- Toolbar -->
   <div class="mm-toolbar">
-    <div class="mm-toolbar-left"></div>
+    <div class="mm-toolbar-left">{toolbar_title}</div>
     <div class="mm-toolbar-right">
       <div class="icon-pill" style="margin-top:0">
         {search_pill}
@@ -752,6 +768,7 @@ body.sidebar-open .admin-sidebar {{
         </form>
         </div>
       </div>
+      {toolbar_close}
     </div>
   </div>
 
@@ -849,9 +866,6 @@ body.sidebar-open .admin-sidebar {{
 
   <!-- Detail panel — now inside mm-content-area, never overlaps drop zone -->
   <div class="mm-detail-panel" id="mmDetail">
-    <div class="mm-detail-header">
-      <span>File details</span>
-    </div>
     <div class="mm-detail-body" id="mmDetailBody">
       <p style="color:var(--muted);font-size:13px;text-align:center;padding:2rem 0">Select a file to see details.</p>
     </div>
@@ -1017,7 +1031,17 @@ body.sidebar-open .admin-sidebar {{
     var title   = (document.getElementById('mmDetailTitle')   || {{}}).value || '';
     var caption = (document.getElementById('mmDetailCaption') || {{}}).value || '';
     var btn = document.getElementById('mmSaveBtn');
-    if (btn) {{ btn.disabled = true; btn.textContent = 'Saving…'; }}
+    if (btn) btn.disabled = true;
+    var flashResult = function(ok) {{
+      if (!btn) return;
+      btn.disabled = false;
+      btn.classList.add(ok ? 'icon-btn-active-green' : 'icon-danger-armed');
+      btn.title = ok ? 'Saved' : 'Error';
+      setTimeout(function() {{
+        btn.classList.remove('icon-btn-active-green', 'icon-danger-armed');
+        btn.title = 'Save changes';
+      }}, 2000);
+    }};
     fetch('/admin/api/media/' + activeDetailId + '/meta', {{
       method: 'POST',
       headers: {{'Content-Type': 'application/json'}},
@@ -1027,9 +1051,9 @@ body.sidebar-open .admin-sidebar {{
         var item = ITEMS[activeDetailIdx];
         if (item) {{ item.alt = alt.trim(); item.title = title.trim(); item.caption = caption.trim(); }}
       }}
-      if (btn) {{ btn.disabled = false; btn.textContent = res.ok ? 'Saved ✓' : 'Error'; setTimeout(function(){{ if(btn) btn.textContent='Save changes'; }}, 2000); }}
+      flashResult(!!res.ok);
     }}).catch(function() {{
-      if (btn) {{ btn.disabled = false; btn.textContent = 'Error'; setTimeout(function(){{ if(btn) btn.textContent='Save changes'; }}, 2000); }}
+      flashResult(false);
     }});
   }};
 
@@ -1278,6 +1302,8 @@ body.sidebar-open .admin-sidebar {{
 </script>
 "##,
         flash         = flash_html,
+        toolbar_title = toolbar_title,
+        toolbar_close = toolbar_close,
         search_pill   = search_pill,
         pill_search_init = pill_search_init,
         redirect_url  = redirect_url,

@@ -1255,15 +1255,9 @@ legend {
   max-height: 900px;
   overflow: hidden;
 }
-.mpicker-header {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  padding: 1rem 1.25rem;
-  border-bottom: 1px solid var(--border);
-  background: var(--surface);
-  flex-shrink: 0;
-}
+/* .mpicker-title is used inside the iframe's own toolbar row now (see
+   admin/src/pages/media.rs's picker_mode toolbar_title) — there's no
+   separate .mpicker-header bar in the parent modal chrome anymore. */
 .mpicker-title { font-size: 1rem; font-weight: 600; flex: 1; }
 .mpicker-search {
   padding: .4rem .75rem;

@@ -85,14 +85,15 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
 
     let media_nav = "<li><a href=\"#\" onclick=\"openMediaBrowser();return false;\">Media</a></li>".to_string();
 
+    // No separate .mpicker-header row here — the iframe's own toolbar
+    // (admin/src/pages/media.rs, picker_mode branch) renders the "Media
+    // Library" title and Close button itself, in the same row as its other
+    // toolbar icons. Close posts a 'closeMediaFrame' message up to the
+    // listener below rather than calling closeMediaBrowser() directly,
+    // since that button lives one iframe boundary away in a separate
+    // document.
     let media_browser_modal = r#"<div id="media-browser-modal" class="mpicker-overlay" style="display:none" onclick="if(event.target===this)closeMediaBrowser()">
   <div class="mpicker-dialog" style="display:flex;flex-direction:column">
-    <div class="mpicker-header">
-      <span class="mpicker-title">Media Library</span>
-      <div class="icon-pill" style="margin-top:0">
-        <button type="button" class="icon-btn" title="Close" aria-label="Close" onclick="closeMediaBrowser()"><img src="/admin/static/icons/x.svg" alt=""></button>
-      </div>
-    </div>
     <iframe id="media-browser-frame" src="about:blank" style="flex:1;width:100%;border:none;display:block;min-height:0"></iframe>
   </div>
 </div>"#;
@@ -328,6 +329,15 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
       // Deliberately NOT resetting frame.src/data-loaded here — keeping the
       // iframe (and its already-booted WASM island) warm is the whole point.
     }}
+    // The iframe's own Close button (in its toolbar row) can't call
+    // closeMediaBrowser() directly — it's a separate document — so it posts
+    // this message instead. e.source check keeps this from reacting to the
+    // media-picker iframe's own identical message (see media_picker_modal_html).
+    window.addEventListener('message', function(e) {{
+      if (!e.data || e.data.type !== 'closeMediaFrame') return;
+      var frame = document.getElementById('media-browser-frame');
+      if (frame && e.source === frame.contentWindow) closeMediaBrowser();
+    }});
     (function() {{
       var flash = document.querySelector('.flash');
       if (flash) {{
@@ -513,14 +523,10 @@ pub fn picker_page(content: &str) -> String {
 /// Supports pickerMode: 'featured' (set featured image), 'inline' (Quill image insert),
 /// and 'audio' (Quill audio insert).
 pub fn media_picker_modal_html() -> String {
+    // No separate .mpicker-header row here — see the matching comment on
+    // media_browser_modal above; the iframe renders its own title/Close.
     String::from(r#"<div id="media-picker-modal" class="mpicker-overlay" style="display:none" onclick="if(event.target===this)closeMediaPicker()">
   <div class="mpicker-dialog" style="display:flex;flex-direction:column">
-    <div class="mpicker-header">
-      <span class="mpicker-title">Media Library</span>
-      <div class="icon-pill" style="margin-top:0">
-        <button type="button" class="icon-btn" title="Close" aria-label="Close" onclick="closeMediaPicker()"><img src="/admin/static/icons/x.svg" alt=""></button>
-      </div>
-    </div>
     <iframe id="media-picker-frame" src="about:blank" style="flex:1;width:100%;border:none;display:block;min-height:0"></iframe>
   </div>
 </div>
@@ -571,6 +577,16 @@ pub fn media_picker_modal_html() -> String {
     // iframe (and its already-booted WASM island) warm is the whole point;
     // see openMediaPicker's data-loaded branch above.
   };
+
+  // The iframe's own Close button posts this instead of calling
+  // closeMediaPicker() directly — see the matching listener on
+  // media-browser-frame in admin_page's own script, and the comment on
+  // media_browser_modal above.
+  window.addEventListener('message', function(e) {
+    if (!e.data || e.data.type !== 'closeMediaFrame') return;
+    var frame = document.getElementById('media-picker-frame');
+    if (frame && e.source === frame.contentWindow) closeMediaPicker();
+  });
 
   // Receive the selected media back from the picker iframe.
   window.addEventListener('message', function(e) {
