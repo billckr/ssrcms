@@ -24,6 +24,7 @@ done.
 - [ ] consider adding a link back to the main site on the subscribe form.
 - [ ] media manager/picker WASM island only stays "warm" within a single admin page — navigating to a new page and reopening pays the full bootstrap + fetch delay again. Real-world gain from the keep-warm fix is smaller than a quick same-page test suggests. Revisit with sessionStorage-cached initial data (cheap, partial fix) or as part of a future whole-admin WASM SPA conversion (real fix, bigger project) if this keeps being noticeable.
 - [ ] Media manager dark-mode color scheme (sidebar/toolbar/content/footer backgrounds) still isn't right after several passes — revisit from scratch with a clearer reference/screenshot before making more changes.
+- [ ] in appearance editor, when you change a color, trying to revert back to original doesn't work.
 
 ## Done
 

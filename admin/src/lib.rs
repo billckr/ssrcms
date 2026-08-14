@@ -172,9 +172,6 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
         {documentation}
         {settings}
       </ul>
-      <div class="sidebar-footer">
-        <a href="{profile_or_home}" class="sidebar-user-email">{user_email}</a>
-      </div>
     </nav>
     <main class="admin-main">
       <header class="admin-header">
@@ -397,7 +394,6 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
         visiting_badge = visiting_badge,
         site_indicator = site_indicator,
         profile_or_home = if ctx.is_impersonating { "/admin/sites/go-home?next=/admin/profile" } else { "/admin/profile" },
-        user_email = html_escape(&ctx.user_email),
         media_browser_modal = media_browser_modal,
     )
 }

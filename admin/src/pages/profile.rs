@@ -24,7 +24,11 @@ fn display_or_placeholder(value: &str) -> String {
     if value.trim().is_empty() {
         r#"<span class="profile-summary-empty">&quot;The future has yet to be written...&quot;</span>"#.to_string()
     } else {
-        format!("&quot;{}&quot;", crate::html_escape(value))
+        // Trim before quoting — .profile-bio uses white-space: pre-wrap, so
+        // a trailing newline from the textarea (very easy to leave in,
+        // e.g. hitting Enter at the end) would otherwise push the closing
+        // quote onto its own line.
+        format!("&quot;{}&quot;", crate::html_escape(value.trim()))
     }
 }
 
@@ -170,7 +174,9 @@ document.getElementById('change-password-dialog').addEventListener('close', func
     var changed = emailInput.value !== original.email
       || displayNameInput.value !== original.display_name
       || bioInput.value !== original.bio;
-    saveBtn.disabled = !changed || !emailInput.checkValidity();
+    var active = changed && emailInput.checkValidity();
+    saveBtn.disabled = !active;
+    saveBtn.classList.toggle('icon-btn-active-blue', active);
   }};
 
   [emailInput, displayNameInput, bioInput].forEach(function(el) {{
@@ -225,7 +231,11 @@ document.getElementById('change-password-dialog').addEventListener('close', func
 
     var meetsAllReqs = npReqs.every(function(req) {{ return req.test(pw); }});
     var currentPw = currentPwInput ? currentPwInput.value : '';
-    if (saveBtn) saveBtn.disabled = !(currentPw && meetsAllReqs && matches);
+    var active = !!(currentPw && meetsAllReqs && matches);
+    if (saveBtn) {{
+      saveBtn.disabled = !active;
+      saveBtn.classList.toggle('icon-btn-active-blue', active);
+    }}
   }};
 
   if (currentPwInput) currentPwInput.addEventListener('input', updateFeedback);

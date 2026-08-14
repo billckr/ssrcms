@@ -319,18 +319,19 @@ pub fn render_list(
         frame_base.to_string()
     };
     // ── Detail actions HTML (differs in picker/select mode) ───────────────────
-    let save_pill = r##"<div class="icon-pill" style="margin-top:.3rem;justify-content:center">
-        <button id="mmSaveBtn" class="icon-btn" title="Save changes" aria-label="Save changes" onclick="saveDetail()"><img src="/admin/static/icons/save.svg" alt=""></button>
-      </div>"##;
     let detail_actions_html = if select_mode {
-        format!(r#"    <div class="mm-detail-actions" id="mmDetailActions" style="display:none">
-      <button id="mmPickerSetBtn" class="btn btn-primary" style="width:100%;justify-content:center" onclick="pickerSelectImage()">Set Image</button>
-      {save_pill}
-    </div>"#)
+        r##"    <div class="mm-detail-actions" id="mmDetailActions" style="display:none">
+      <div class="icon-pill" style="margin-top:.3rem;justify-content:center">
+        <button id="mmPickerSetBtn" class="icon-btn" title="Set Image" aria-label="Set Image" onclick="pickerSelectImage()"><img src="/admin/static/icons/check.svg" alt=""></button>
+        <button id="mmSaveBtn" class="icon-btn" title="Save changes" aria-label="Save changes" onclick="saveDetail()"><img src="/admin/static/icons/save.svg" alt=""></button>
+      </div>
+    </div>"##.to_string()
     } else {
-        format!(r#"    <div class="mm-detail-actions" id="mmDetailActions" style="display:none">
-      {save_pill}
-    </div>"#)
+        r##"    <div class="mm-detail-actions" id="mmDetailActions" style="display:none">
+      <div class="icon-pill" style="margin-top:.3rem;justify-content:center">
+        <button id="mmSaveBtn" class="icon-btn" title="Save changes" aria-label="Save changes" onclick="saveDetail()"><img src="/admin/static/icons/save.svg" alt=""></button>
+      </div>
+    </div>"##.to_string()
     };
     // ── JS bridge for picker/select mode ─────────────────────────────────────
     let picker_js = if select_mode {
@@ -1281,11 +1282,13 @@ body.sidebar-open .admin-sidebar {{
   }}, true);
 {picker_js}
 
-  // Allow the parent page to relabel the Set/Insert button after load.
+  // Allow the parent page to relabel the Set/Insert button after load —
+  // it's icon-only now, so this updates the tooltip/aria-label rather
+  // than textContent (which would wipe out the <img> entirely).
   window.addEventListener('message', function(e) {{
     if (!e.data || e.data.type !== 'pickerSetLabel') return;
     var btn = document.getElementById('mmPickerSetBtn');
-    if (btn) btn.textContent = e.data.label;
+    if (btn) {{ btn.title = e.data.label; btn.setAttribute('aria-label', e.data.label); }}
   }});
 
   // Lets the parent page reuse an already-warm picker iframe on subsequent
