@@ -15,6 +15,10 @@
 # SQLx offline query cache (commit sqlx-data.json for offline mode)
 # .sqlx/
 
+# Claude Code local settings (session/environment-specific, not shareable —
+# has contained live DB credentials in its Bash permission allowlist)
+.claude/settings.local.json
+
 # Editor / IDE
 .vscode/
 .idea/
