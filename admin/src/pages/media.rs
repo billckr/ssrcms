@@ -569,7 +569,7 @@ body.sidebar-open .admin-sidebar {{
    used to target .mm-dropzone, now just an .icon-btn like its siblings. */
 .icon-btn.drag-over {{ background: var(--tint); }}
 
-.mm-grid-wrap {{ flex: 1; overflow-y: auto; padding: 0 .85rem .85rem; min-width: 0; background: var(--tint); }}
+.mm-grid-wrap {{ flex: 1; overflow-y: auto; padding: .85rem; min-width: 0; background: var(--tint); }}
 
 .mm-grid {{
   display: grid;

@@ -290,14 +290,58 @@ pub fn render_settings(data: &SiteSettingsData, flash: Option<&str>, ctx: &crate
     let content = format!(
         r#"<div style="max-width:720px">
 <div class="card-boxed">
-  <h2 class="card-boxed-header">Domain</h2>
+  <h2 class="card-boxed-header">Support</h2>
   <div class="card-boxed-body">
-    <p class="form-note" style="margin:0">
-      To rename the domain, use the CLI from the server:<br>
-      <code style="font-size:.8rem;background:var(--tint);padding:.15rem .4rem;border-radius:4px;">synap site rename --id {id} --hostname &lt;new-domain&gt;</code>
+    <p class="form-note" style="margin:0 0 .6rem">
+      Include this Site ID when contacting support or troubleshooting an
+      issue with this site.
     </p>
+    <div style="display:flex;align-items:center;gap:.6rem">
+      <div class="icon-pill" style="margin-top:0">
+        <button type="button" class="icon-btn" id="site-id-toggle" title="Show Site ID" aria-label="Show Site ID" onclick="toggleSiteId()"><img src="/admin/static/icons/eye.svg" alt=""></button>
+      </div>
+      <code id="site-id-value" title="Click to copy" onclick="copySiteId()" style="display:none;cursor:pointer;font-size:.8rem;background:var(--tint);padding:.3rem .6rem;border-radius:4px">{id}</code>
+    </div>
   </div>
 </div>
+<script>
+function toggleSiteId() {{
+  var val    = document.getElementById('site-id-value');
+  var toggle = document.getElementById('site-id-toggle');
+  var shown  = val.style.display !== 'none';
+  val.style.display = shown ? 'none' : '';
+  toggle.title = shown ? 'Show Site ID' : 'Hide Site ID';
+  toggle.setAttribute('aria-label', toggle.title);
+  toggle.querySelector('img').src = '/admin/static/icons/' + (shown ? 'eye.svg' : 'eye-off.svg');
+}}
+function copySiteId() {{
+  var val = document.getElementById('site-id-value');
+  var markCopied = function() {{
+    // Stays green until the page reloads — re-clicking just re-copies.
+    val.style.color = getComputedStyle(document.documentElement).getPropertyValue('--success');
+  }};
+  // navigator.clipboard requires a secure context (https, or localhost) —
+  // on a plain http:// origin (common in dev, e.g. pong.com/bckr.local)
+  // it's undefined or its promise silently rejects, so this always falls
+  // back to the older execCommand technique rather than doing nothing.
+  if (navigator.clipboard && window.isSecureContext) {{
+    navigator.clipboard.writeText(val.textContent).then(markCopied, function() {{ legacyCopy(val, markCopied); }});
+  }} else {{
+    legacyCopy(val, markCopied);
+  }}
+}}
+function legacyCopy(el, onDone) {{
+  var ta = document.createElement('textarea');
+  ta.value = el.textContent;
+  ta.style.position = 'fixed';
+  ta.style.opacity = '0';
+  document.body.appendChild(ta);
+  ta.focus();
+  ta.select();
+  try {{ document.execCommand('copy'); onDone(); }} catch (e) {{}}
+  document.body.removeChild(ta);
+}}
+</script>
 
 <div class="card-boxed">
   <h2 class="card-boxed-header">Settings</h2>
