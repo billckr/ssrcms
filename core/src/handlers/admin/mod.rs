@@ -1,6 +1,36 @@
 use crate::middleware::admin_auth::AdminUser;
 use crate::app_state::AppState;
 
+/// Records an account/site lifecycle event to the persistent audit_log
+/// table (who did what, to what, when) — see core/src/models/audit_log.rs.
+/// Never fails the caller's action: logs a warning and swallows the error
+/// instead of propagating it, since audit logging is a side effect, not a
+/// precondition of the action it's recording.
+pub async fn audit(
+    state: &AppState,
+    admin: &AdminUser,
+    action: &str,
+    target_type: &str,
+    target_id: Option<uuid::Uuid>,
+    target_label: &str,
+    site_id: Option<uuid::Uuid>,
+) {
+    let actor_role = if admin.caps.is_global_admin { "super_admin" } else { "site_admin" };
+    if let Err(e) = crate::models::audit_log::record(&state.db, crate::models::audit_log::NewAuditLog {
+        actor_user_id: Some(admin.user.id),
+        actor_email: &admin.user.email,
+        actor_role,
+        action,
+        target_type,
+        target_id,
+        target_label,
+        site_id,
+        details: None,
+    }).await {
+        tracing::warn!("audit log failed: action={} target_type={} target_id={:?}: {:?}", action, target_type, target_id, e);
+    }
+}
+
 fn role_display_name(role: &str) -> String {
     match role {
         "super_admin" => "Super Admin",
@@ -84,6 +114,7 @@ pub fn sanitize_media_text(input: &str) -> String {
     clean.trim().chars().take(35).collect()
 }
 
+pub mod activity_log;
 pub mod appearance;
 pub mod appearance_editor;
 pub mod appearance_publish;

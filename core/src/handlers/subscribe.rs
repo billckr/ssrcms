@@ -129,7 +129,7 @@ pub async fn subscribe_post(
         }
         Err(_) => {
             // New user — generate a username from display name and create the account.
-            let username = generate_username(&state.db, form.display_name.trim()).await;
+            let username = generate_username(&state.db, site_id, form.display_name.trim()).await;
             let create = CreateUser {
                 username,
                 email: email.clone(),
@@ -176,13 +176,18 @@ pub async fn subscribe_post(
 }
 
 /// Derive a unique username from a display name that also satisfies
-/// [`validate_username`] (8–15 chars, lowercase/digits/hyphens, no leading or
+/// [`validate_username`] (5–15 chars, lowercase/digits/hyphens, no leading or
 /// trailing hyphen) — since this username is never shown to or confirmed by
 /// the user, it must be generated valid rather than relying on them to fix it.
 /// e.g. "Steve Miller" → "steve-miller", then "steve-miller2" if taken;
-/// "Bo" → too short alone, padded with hex to clear the 8-char minimum.
-async fn generate_username(pool: &sqlx::PgPool, display_name: &str) -> String {
-    const MIN: usize = 8;
+/// "Bo" → too short alone, padded with hex to clear the 5-char minimum.
+/// Uniqueness is checked against `site_id` only (usernames aren't globally
+/// unique — see `user::username_available`), since that's the only site this
+/// new subscriber is about to be linked to. `site_id == Uuid::nil()` (the
+/// single-site-mode fallback) skips the check entirely, same as the caller's
+/// own nil check before linking `site_users`.
+async fn generate_username(pool: &sqlx::PgPool, site_id: Uuid, display_name: &str) -> String {
+    const MIN: usize = 5;
     const MAX: usize = 15;
 
     // slug::slugify already lowercases and restricts to [a-z0-9-], collapsing
@@ -195,14 +200,14 @@ async fn generate_username(pool: &sqlx::PgPool, display_name: &str) -> String {
     }
     if base.len() < MIN {
         // Too short (or empty) to stand alone — pad with hex from a fresh
-        // UUID so the base itself clears the 8-char floor before any
+        // UUID so the base itself clears the 5-char floor before any
         // uniqueness suffix is appended below.
         base.push_str(&Uuid::new_v4().simple().to_string());
         base.truncate(MAX);
         base = base.trim_end_matches('-').to_string();
     }
 
-    if validate_username(&base).is_ok() && !username_taken(pool, &base).await {
+    if validate_username(&base).is_ok() && !username_taken(pool, site_id, &base).await {
         return base;
     }
 
@@ -214,7 +219,7 @@ async fn generate_username(pool: &sqlx::PgPool, display_name: &str) -> String {
         let mut candidate: String = base.chars().take(keep).collect();
         candidate = candidate.trim_end_matches('-').to_string();
         candidate.push_str(&suffix);
-        if validate_username(&candidate).is_ok() && !username_taken(pool, &candidate).await {
+        if validate_username(&candidate).is_ok() && !username_taken(pool, site_id, &candidate).await {
             return candidate;
         }
     }
@@ -223,10 +228,11 @@ async fn generate_username(pool: &sqlx::PgPool, display_name: &str) -> String {
     format!("user{}", &Uuid::new_v4().simple().to_string()[..11])
 }
 
-async fn username_taken(pool: &sqlx::PgPool, username: &str) -> bool {
-    sqlx::query_scalar::<_, bool>("SELECT EXISTS(SELECT 1 FROM users WHERE username = $1)")
-        .bind(username)
-        .fetch_one(pool)
+async fn username_taken(pool: &sqlx::PgPool, site_id: Uuid, username: &str) -> bool {
+    if site_id == Uuid::nil() {
+        return false;
+    }
+    !crate::models::user::username_available(pool, username, &[site_id], None)
         .await
-        .unwrap_or(true)
+        .unwrap_or(false)
 }

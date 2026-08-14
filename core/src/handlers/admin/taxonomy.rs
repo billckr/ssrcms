@@ -140,16 +140,17 @@ pub async fn delete_category(
     if !admin.caps.can_manage_taxonomies {
         return (StatusCode::FORBIDDEN, "Forbidden").into_response();
     }
+    let term = crate::models::taxonomy::get_by_id(&state.db, id).await.ok();
     if !admin.caps.is_global_admin {
-        let belongs = crate::models::taxonomy::get_by_id(&state.db, id).await
-            .map(|t| t.site_id == admin.site_id)
-            .unwrap_or(false);
+        let belongs = term.as_ref().map(|t| t.site_id == admin.site_id).unwrap_or(false);
         if !belongs {
             return Redirect::to("/admin/categories").into_response();
         }
     }
     if let Err(e) = crate::models::taxonomy::delete(&state.db, id).await {
         tracing::error!("failed to delete category {}: {:?}", id, e);
+    } else if let Some(t) = &term {
+        super::audit(&state, &admin, "category.deleted", "category", Some(id), &t.name, t.site_id).await;
     }
     Redirect::to("/admin/categories").into_response()
 }
@@ -162,16 +163,17 @@ pub async fn delete_tag(
     if !admin.caps.can_manage_taxonomies {
         return (StatusCode::FORBIDDEN, "Forbidden").into_response();
     }
+    let term = crate::models::taxonomy::get_by_id(&state.db, id).await.ok();
     if !admin.caps.is_global_admin {
-        let belongs = crate::models::taxonomy::get_by_id(&state.db, id).await
-            .map(|t| t.site_id == admin.site_id)
-            .unwrap_or(false);
+        let belongs = term.as_ref().map(|t| t.site_id == admin.site_id).unwrap_or(false);
         if !belongs {
             return Redirect::to("/admin/tags").into_response();
         }
     }
     if let Err(e) = crate::models::taxonomy::delete(&state.db, id).await {
         tracing::error!("failed to delete tag {}: {:?}", id, e);
+    } else if let Some(t) = &term {
+        super::audit(&state, &admin, "tag.deleted", "tag", Some(id), &t.name, t.site_id).await;
     }
     Redirect::to("/admin/tags").into_response()
 }

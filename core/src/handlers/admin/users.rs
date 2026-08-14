@@ -439,7 +439,7 @@ pub async fn save_new(
         }
     };
 
-    // Validate username: 8-15 chars, lowercase letters, numbers and hyphens only.
+    // Validate username: 5-15 chars, lowercase letters, numbers and hyphens only.
     if let Err(msg) = crate::models::user::validate_username(form.username.trim()) {
         let sites = fetch_sites_for_admin(&state, &admin).await;
         let edit = UserEdit {
@@ -508,6 +508,36 @@ pub async fn save_new(
             return Html(admin::pages::users::render_editor(
                 &edit,
                 Some("Invalid hostname. Use a format like example.com or sub.example.com."),
+                &ctx,
+            )).into_response();
+        }
+    }
+
+    // Validate username availability, scoped to whichever site this user is
+    // about to be assigned to — usernames are no longer globally unique, see
+    // user::username_available's doc comment.
+    let check_site_id = resolve_site_for_username_check(&state, &admin, &form).await;
+    let check_site_ids: Vec<Uuid> = check_site_id.into_iter().collect();
+    match crate::models::user::username_available(&state.db, form.username.trim(), &check_site_ids, None).await {
+        Ok(true) => {}
+        _ => {
+            let sites = fetch_sites_for_admin(&state, &admin).await;
+            let edit = UserEdit {
+                id: None,
+                username: form.username.clone(),
+                email: form.email.clone(),
+                display_name: form.display_name.clone().unwrap_or_default(),
+                role: form.role.clone(),
+                bio: form.bio.clone().unwrap_or_default(),
+                sites,
+                is_super_admin_target: false,
+                site_roles: vec![],
+                is_active: true,
+                is_protected: false,
+            };
+            return Html(admin::pages::users::render_editor(
+                &edit,
+                Some("That username is already taken on this site."),
                 &ctx,
             )).into_response();
         }
@@ -601,6 +631,7 @@ pub async fn save_new(
                                         .execute(&state.db)
                                         .await;
                                     }
+                                    super::audit(&state, &admin, "site.created", "site", Some(site.id), &site.hostname, Some(site.id)).await;
                                     Some(site.id)
                                 }
                                 Err(e) => {
@@ -634,6 +665,7 @@ pub async fn save_new(
                         let _ = crate::models::user::set_default_site(&state.db, new_user.id, Some(sid)).await;
                     }
                 }
+                super::audit(&state, &admin, "user.created", "user", Some(new_user.id), &new_user.username, site_id).await;
             } else {
                 // Site admin: handle same assignment options as global admin,
                 // but scoped to sites they own.
@@ -672,6 +704,7 @@ pub async fn save_new(
                                             let _ = crate::handlers::admin::appearance::copy_dir_all(&src, &dst);
                                         }
                                     });
+                                    super::audit(&state, &admin, "site.created", "site", Some(site.id), &site.hostname, Some(site.id)).await;
                                     Some(site.id)
                                 }
                                 Err(e) => {
@@ -701,6 +734,7 @@ pub async fn save_new(
                         let _ = crate::models::user::set_default_site(&state.db, new_user.id, Some(site_id)).await;
                     }
                 }
+                super::audit(&state, &admin, "user.created", "user", Some(new_user.id), &new_user.username, target_site_id).await;
             }
             Redirect::to("/admin/users").into_response()
         }
@@ -761,6 +795,58 @@ pub async fn save_edit(
     // Site admins may not edit super_admin accounts.
     if !admin.caps.is_global_admin && is_super_admin_target {
         return (axum::http::StatusCode::FORBIDDEN, "Forbidden").into_response();
+    }
+
+    // Validate username format.
+    if let Err(msg) = crate::models::user::validate_username(form.username.trim()) {
+        let edit = UserEdit {
+            id: Some(id.to_string()),
+            username: form.username.clone(),
+            email: form.email.clone(),
+            display_name: form.display_name.clone().unwrap_or_default(),
+            role: form.role.clone(),
+            bio: form.bio.clone().unwrap_or_default(),
+            sites: vec![],
+            is_super_admin_target,
+            site_roles: vec![],
+            is_active: target_is_active,
+            is_protected: target_is_protected,
+        };
+        return Html(admin::pages::users::render_editor(&edit, Some(msg), &ctx)).into_response();
+    }
+
+    // Validate username availability against every site this user belongs
+    // to — a rename must not collide with a co-member on any of them (see
+    // user::username_available's doc comment for why this is per-site, not
+    // a plain global uniqueness check).
+    let member_site_ids: Vec<Uuid> = crate::models::site_user::list_for_user(&state.db, id)
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .map(|(site, _)| site.id)
+        .collect();
+    match crate::models::user::username_available(&state.db, form.username.trim(), &member_site_ids, Some(id)).await {
+        Ok(true) => {}
+        _ => {
+            let edit = UserEdit {
+                id: Some(id.to_string()),
+                username: form.username.clone(),
+                email: form.email.clone(),
+                display_name: form.display_name.clone().unwrap_or_default(),
+                role: form.role.clone(),
+                bio: form.bio.clone().unwrap_or_default(),
+                sites: vec![],
+                is_super_admin_target,
+                site_roles: vec![],
+                is_active: target_is_active,
+                is_protected: target_is_protected,
+            };
+            return Html(admin::pages::users::render_editor(
+                &edit,
+                Some("That username is already taken on one of this user's sites."),
+                &ctx,
+            )).into_response();
+        }
     }
 
     // Validate display name length.
@@ -994,6 +1080,8 @@ pub async fn delete_user(
         tracing::error!("delete user {} error: {:?}", id, e);
         deny!("Failed to delete user. Please try again.");
     }
+    let target_label = target.as_ref().map(|t| t.username.as_str()).unwrap_or("(unknown)");
+    super::audit(&state, &admin, "user.deleted", "user", Some(id), target_label, admin.site_id).await;
     Redirect::to(&redirect_url).into_response()
 }
 
@@ -1042,6 +1130,8 @@ pub async fn suspend_user(
 
     if let Err(e) = crate::models::user::deactivate(&state.db, id).await {
         tracing::error!("suspend user {} error: {:?}", id, e);
+    } else {
+        super::audit(&state, &admin, "user.suspended", "user", Some(id), &target.username, admin.site_id).await;
     }
     Redirect::to(&redirect_url).into_response()
 }
@@ -1061,6 +1151,10 @@ pub async fn reactivate_user(
 
     if let Err(e) = crate::models::user::reactivate(&state.db, id).await {
         tracing::error!("reactivate user {} error: {:?}", id, e);
+    } else {
+        let label = crate::models::user::get_by_id_include_inactive(&state.db, id).await
+            .map(|u| u.username).unwrap_or_else(|_| "(unknown)".to_string());
+        super::audit(&state, &admin, "user.reactivated", "user", Some(id), &label, admin.site_id).await;
     }
     Redirect::to(&redirect_url).into_response()
 }
@@ -1108,9 +1202,44 @@ pub async fn bulk_delete_users(
         if !sole_admin_of.is_empty() { continue; }
         if let Err(e) = crate::models::user::delete_and_reassign(&state.db, id, admin.user.id).await {
             tracing::error!("bulk delete users: failed to delete {}: {:?}", id, e);
+        } else {
+            super::audit(&state, &admin, "user.deleted", "user", Some(id), &target.username, admin.site_id).await;
         }
     }
     Redirect::to(&redirect_url).into_response()
+}
+
+/// Determines which site (if any) a new user's username should be checked
+/// for availability against, mirroring the site-assignment resolution later
+/// in `save_new` — but without that logic's side effects (creating a new
+/// site, claiming ownership, etc). A "new" site assignment always checks
+/// clean since nothing exists there yet to collide with.
+async fn resolve_site_for_username_check(
+    state: &AppState,
+    admin: &AdminUser,
+    form: &UserForm,
+) -> Option<Uuid> {
+    if admin.caps.is_global_admin {
+        match form.site_assignment.as_deref() {
+            Some("none") | None | Some("new") => None,
+            _ => form.existing_site_id.as_deref().and_then(|s| s.parse::<Uuid>().ok()),
+        }
+    } else {
+        match form.site_assignment.as_deref() {
+            Some("none") | Some("new") => None,
+            None => admin.site_id,
+            _ => {
+                if let Some(Ok(sid)) = form.existing_site_id.as_deref().map(|s| s.parse::<Uuid>()) {
+                    let is_owner = crate::models::site::get_by_id(&state.db, sid).await
+                        .map(|s| s.owner_user_id == Some(admin.user.id))
+                        .unwrap_or(false);
+                    if is_owner { Some(sid) } else { admin.site_id }
+                } else {
+                    admin.site_id
+                }
+            }
+        }
+    }
 }
 
 fn friendly_user_error(e: &crate::errors::AppError) -> String {
@@ -1512,6 +1641,10 @@ pub async fn add_site_access(
         tracing::warn!("site cache reload failed after site-access add: {:?}", e);
     }
 
+    let target_label = crate::models::user::get_by_id_include_inactive(&state.db, user_id).await
+        .map(|u| u.username).unwrap_or_else(|_| "(unknown)".to_string());
+    super::audit(&state, &admin, "site_user.added", "user", Some(user_id), &target_label, Some(site_uuid)).await;
+
     Redirect::to(&format!("/admin/users/{}/site-access?success=assigned", user_id)).into_response()
 }
 
@@ -1553,6 +1686,10 @@ pub async fn remove_site_access(
 
     if let Err(e) = crate::models::site_user::remove(&state.db, site_uuid, user_id).await {
         tracing::warn!("failed to remove user {} from site {}: {:?}", user_id, site_uuid, e);
+    } else {
+        let target_label = crate::models::user::get_by_id_include_inactive(&state.db, user_id).await
+            .map(|u| u.username).unwrap_or_else(|_| "(unknown)".to_string());
+        super::audit(&state, &admin, "site_user.removed", "user", Some(user_id), &target_label, Some(site_uuid)).await;
     }
 
     // If this user was the site owner, clear owner_user_id so the site

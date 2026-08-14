@@ -1,3 +1,4 @@
+pub mod audit_log;
 pub mod builder_project;
 pub mod comment;
 pub mod page_composition;

@@ -619,8 +619,8 @@ pub fn render_new(data: &NewSiteData, flash: Option<&str>, ctx: &crate::PageCont
         <div class="form-group">
           <label for="new_username">Username</label>
           <input type="text" id="new_username" name="new_username" value="{new_username}" autocomplete="off"
-                 pattern="[a-z0-9][a-z0-9\-]{{6,13}}[a-z0-9]" minlength="8" maxlength="15"
-                 title="8-15 characters: lowercase letters, numbers and hyphens only, cannot start or end with a hyphen">
+                 pattern="[a-z0-9][a-z0-9\-]{{3,13}}[a-z0-9]" minlength="5" maxlength="15"
+                 title="5-15 characters: lowercase letters, numbers and hyphens only, cannot start or end with a hyphen">
         </div>
         <div class="form-group">
           <label for="new_display_name">Display Name</label>
@@ -639,7 +639,7 @@ pub fn render_new(data: &NewSiteData, flash: Option<&str>, ctx: &crate::PageCont
       <div class="form-note" style="margin-bottom:.75rem">
         <p><strong>Username requirements:</strong></p>
         <ul style="list-style:none;padding-left:0;margin:0.25rem 0 0">
-          <li id="new-uname-req-len"><span class="pw-dot" style="display:inline-block;width:1.1rem;font-style:normal">·</span>8–15 characters</li>
+          <li id="new-uname-req-len"><span class="pw-dot" style="display:inline-block;width:1.1rem;font-style:normal">·</span>5–15 characters</li>
           <li id="new-uname-req-chars"><span class="pw-dot" style="display:inline-block;width:1.1rem;font-style:normal">·</span>Lowercase letters, numbers, and hyphens only</li>
         </ul>
       </div>
@@ -679,7 +679,7 @@ pub fn render_new(data: &NewSiteData, flash: Option<&str>, ctx: &crate::PageCont
     {{ id: 'new-pw-req-sym',   test: function(p) {{ return /[!@#$%&]/.test(p); }} }},
   ];
   var unameReqs = [
-    {{ id: 'new-uname-req-len',    test: function(u) {{ return u.length >= 8 && u.length <= 15; }} }},
+    {{ id: 'new-uname-req-len',    test: function(u) {{ return u.length >= 5 && u.length <= 15; }} }},
     {{ id: 'new-uname-req-chars',  test: function(u) {{ return /^[a-z0-9-]+$/.test(u); }} }},
   ];
   var slugPattern = /^[a-z0-9][a-z0-9\-]{{6,13}}[a-z0-9]$/;

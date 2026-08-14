@@ -156,7 +156,7 @@ impl TemplateEngine {
         }
         drop(plugin_templates);
 
-        self.register_on_tera(&mut tera);
+        self.register_on_tera(&mut tera, site_id);
 
         self.engines.write().unwrap().insert(cache_key.clone(), tera);
         info!("loaded theme '{}' from {}", theme_name, cache_key);
@@ -193,7 +193,7 @@ impl TemplateEngine {
         }
     }
 
-    fn register_on_tera(&self, tera: &mut Tera) {
+    fn register_on_tera(&self, tera: &mut Tera, site_id: Option<Uuid>) {
         tera.register_filter("date_format", filters::date_format);
         tera.register_filter("excerpt", filters::excerpt);
         tera.register_filter("strip_html", filters::strip_html);
@@ -214,6 +214,7 @@ impl TemplateEngine {
             GetPostsFunction {
                 pool: self.db.clone(),
                 base_url: self.base_url.clone(),
+                site_id,
             },
         );
         tera.register_function(

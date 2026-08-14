@@ -1299,6 +1299,22 @@ body.sidebar-open .admin-sidebar {{
     if (!e.data || e.data.type !== 'resetPickerFilter') return;
     if (window.mediaAppResetForPicker) {{ window.mediaAppResetForPicker(e.data.typeFilter || undefined); }}
   }});
+
+  // This frame only re-reads the admin-theme localStorage value (shared
+  // with the parent, same origin) on its own initial load. Once warm, it's
+  // kept alive across opens/closes (see openMediaBrowser/openMediaPicker in
+  // admin/src/lib.rs) instead of reloading, so a theme switch made while
+  // this frame isn't showing would otherwise never reach its DOM. The
+  // parent posts this on every open (and live, if the frame is open when
+  // the switch happens) to keep it in sync without a reload.
+  window.addEventListener('message', function(e) {{
+    if (!e.data || e.data.type !== 'setTheme') return;
+    if (e.data.dark) {{
+      document.documentElement.setAttribute('data-theme', 'dark');
+    }} else {{
+      document.documentElement.removeAttribute('data-theme');
+    }}
+  }});
 }})();
 </script>
 {pill_search_init}

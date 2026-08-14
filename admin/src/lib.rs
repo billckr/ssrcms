@@ -171,6 +171,7 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
         {builder}
         {documentation}
         {settings}
+        {activity_log}
       </ul>
     </nav>
     <main class="admin-main">
@@ -242,6 +243,21 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
       applyTheme(pref);
       document.getElementById('header-menu-dropdown').classList.remove('open');
       document.getElementById('header-menu-btn').setAttribute('aria-expanded', 'false');
+      broadcastThemeToMediaFrames();
+    }}
+    // The media browser/picker iframes are kept warm across opens (see
+    // openMediaBrowser/openMediaPicker below) instead of reloading, so they
+    // only pick up localStorage's theme on their own initial load. Push the
+    // current theme in whenever it changes, so an already-open frame updates
+    // live instead of staying stuck until the next full reload.
+    function broadcastThemeToMediaFrames() {{
+      var dark = document.documentElement.getAttribute('data-theme') === 'dark';
+      ['media-browser-frame', 'media-picker-frame'].forEach(function(id) {{
+        var frame = document.getElementById(id);
+        if (frame && frame.getAttribute('data-loaded') === '1') {{
+          try {{ frame.contentWindow.postMessage({{ type: 'setTheme', dark: dark }}, '*'); }} catch (e) {{}}
+        }}
+      }});
     }}
     applyTheme((function() {{
       try {{ return localStorage.getItem('admin-theme') || '{default_theme}'; }} catch (e) {{ return '{default_theme}'; }}
@@ -293,7 +309,7 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
     document.addEventListener('click', function(e) {{
       if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
       var a = e.target.closest('a[href]');
-      if (!a || a.target === '_blank') return;
+      if (!a || a.target === '_blank' || a.hasAttribute('download')) return;
       var href = a.getAttribute('href');
       if (!href || href.charAt(0) === '#' || href.indexOf('javascript:') === 0) return;
       navSpinnerTimer = setTimeout(function() {{
@@ -316,8 +332,11 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
         frame.setAttribute('data-loaded', '1');
       }} else {{
         // Already warm from a previous open — reuse it, just refresh the
-        // data in place instead of reloading the whole page.
+        // data in place instead of reloading the whole page. Also re-sync
+        // the theme (see broadcastThemeToMediaFrames) in case it changed
+        // while this frame wasn't showing.
         try {{ frame.contentWindow.postMessage({{ type: 'resetPickerFilter', typeFilter: null }}, '*'); }} catch(e) {{}}
+        broadcastThemeToMediaFrames();
       }}
       document.getElementById('media-browser-modal').style.display = '';
     }}
@@ -389,6 +408,7 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
         menus = if ctx.can_manage_appearance { nav_link("/admin/menus", "Menus") } else { String::new() },
         builder = if ctx.can_manage_appearance { nav_link("/admin/builder", "Page Builder") } else { String::new() },
         settings = if ctx.can_manage_settings { nav_link("/admin/settings", "System Settings") } else { String::new() },
+        activity_log = if ctx.can_manage_users { nav_link("/admin/activity-log", "Activity Log") } else { String::new() },
         flash_html = flash_html,
         content = content,
         visiting_badge = visiting_badge,
@@ -559,10 +579,13 @@ pub fn media_picker_modal_html() -> String {
       // "All Media" view scoped to the right type filter and re-fetches,
       // in place, instead of reloading the whole page (which would also
       // mean re-running the WASM bootstrap from scratch every single open).
+      // Also re-syncs the theme (see broadcastThemeToMediaFrames in
+      // admin_page's script) in case it changed since this frame last loaded.
       try {
         frame.contentWindow.postMessage({ type: 'resetPickerFilter', typeFilter: typeFilter }, '*');
         frame.contentWindow.postMessage({ type: 'pickerSetLabel', label: label }, '*');
       } catch(e) {}
+      if (window.broadcastThemeToMediaFrames) window.broadcastThemeToMediaFrames();
     }
     document.getElementById('media-picker-modal').style.display = '';
   };

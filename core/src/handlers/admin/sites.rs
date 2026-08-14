@@ -424,6 +424,7 @@ pub async fn create(
                 hostname = %hostname,
                 "site created",
             );
+            super::audit(&state, &admin, "site.created", "site", Some(site.id), &hostname, Some(site.id)).await;
 
             // Seed the new site's directories and copy the default theme so it
             // appears immediately in the site admin's "My Themes" view.
@@ -615,6 +616,11 @@ pub async fn delete(
             hostname = %site.hostname,
             "site deleted",
         );
+        // site_id is None here (not Some(id)) — the site row is already
+        // gone by this point, so a per-site audit view scoped by site_id
+        // could never surface its own deletion event anyway; this still
+        // shows up in the global admin's unfiltered view via target_id.
+        super::audit(&state, &admin, "site.deleted", "site", Some(id), &site.hostname, None).await;
         // Remove the site's data directory (themes + uploads) so no orphaned dirs accumulate.
         let site_data_dir = std::path::Path::new(&state.config.sites_dir).join(id.to_string());
         if site_data_dir.exists() {

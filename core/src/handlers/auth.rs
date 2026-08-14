@@ -13,6 +13,35 @@ use crate::app_state::AppState;
 use crate::middleware::account_auth::SESSION_ACCOUNT_USER_ID_KEY;
 use crate::middleware::admin_auth::{SESSION_CURRENT_SITE_KEY, SESSION_USER_ID_KEY};
 
+/// Records a staff (/admin/login) login attempt to the audit log — subscriber
+/// logins at the public /login form are intentionally not logged here, same
+/// reasoning as excluding them from failed-login tracking: high volume, low
+/// security stakes compared to staff access. `actor_user_id` is None when the
+/// email didn't match any account, since there's no user row to attribute it to.
+async fn log_staff_login(
+    state: &AppState,
+    actor_user_id: Option<uuid::Uuid>,
+    email: &str,
+    role: &str,
+    site_id: Option<uuid::Uuid>,
+    success: bool,
+) {
+    let action = if success { "auth.login_succeeded" } else { "auth.login_failed" };
+    if let Err(e) = crate::models::audit_log::record(&state.db, crate::models::audit_log::NewAuditLog {
+        actor_user_id,
+        actor_email: email,
+        actor_role: role,
+        action,
+        target_type: "session",
+        target_id: None,
+        target_label: email,
+        site_id,
+        details: None,
+    }).await {
+        tracing::warn!("audit log failed: action={} email={}: {:?}", action, email, e);
+    }
+}
+
 /// Extract bare hostname from a Host header value (strips port if present).
 fn host_to_hostname(raw: &str) -> String {
     if let Some(pos) = raw.rfind(':') {
@@ -56,12 +85,14 @@ pub async fn login_post(
     let user = match crate::models::user::get_by_email(&state.db, &form.email).await {
         Ok(u) => u,
         Err(_) => {
+            log_staff_login(&state, None, &form.email, "unknown", None, false).await;
             return Html(admin::pages::login::render(Some("Invalid email or password."), &default_theme)).into_response();
         }
     };
 
     // Verify password.
     if !user.verify_password(&form.password) {
+        log_staff_login(&state, Some(user.id), &user.email, &user.role, None, false).await;
         return Html(admin::pages::login::render(Some("Invalid email or password."), &default_theme)).into_response();
     }
 
@@ -102,6 +133,7 @@ pub async fn login_post(
                 match crate::models::site_user::get_role(&state.db, site.id, user.id).await {
                     Ok(Some(_)) => {} // has access — continue
                     _ => {
+                        log_staff_login(&state, Some(user.id), &user.email, &user.role, Some(site.id), false).await;
                         return Html(admin::pages::login::render(
                             Some("Your account does not have access to this site."), &default_theme,
                         )).into_response();
@@ -109,6 +141,7 @@ pub async fn login_post(
                 }
             }
             None => {
+                log_staff_login(&state, Some(user.id), &user.email, &user.role, None, false).await;
                 return Html(admin::pages::login::render(
                     Some("No site found for this domain."), &default_theme,
                 )).into_response();
@@ -125,12 +158,14 @@ pub async fn login_post(
 
     // Store the resolved site in the session immediately so the AdminUser
     // extractor doesn't have to re-derive it from scratch on the next request.
+    let login_site_id = resolved_site.as_ref().map(|(site, _)| site.id);
     if let Some((site, _)) = resolved_site {
         tracing::info!("login: site_id stored in session: {} ({})", site.hostname, site.id);
         let _ = session.insert(SESSION_CURRENT_SITE_KEY, site.id.to_string()).await;
     } else {
         tracing::warn!("login: no site resolved for hostname '{}' — session will have no site_id", hostname);
     }
+    log_staff_login(&state, Some(user.id), &user.email, &user.role, login_site_id, true).await;
 
     Redirect::to("/admin").into_response()
 }

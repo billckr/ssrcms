@@ -13,7 +13,7 @@ use tower_sessions_sqlx_store::PostgresStore;
 
 use crate::app_state::AppState;
 use crate::handlers::{account, archive, auth, comment as comment_handler, form as form_handler, home, metrics as metrics_handler, page, plugin_route, post as post_handler, post_unlock, recover, search, subscribe, theme_static, uploads};
-use crate::handlers::admin::{appearance, appearance_editor, appearance_publish, appearance_upload, builder as admin_builder, comments as admin_comments, dashboard, dev_tools, documentation as admin_documentation, form_designer as admin_form_designer, forms as admin_forms, media, menus as admin_menus, posts, profile, settings, sites as admin_sites, taxonomy, upload, users};
+use crate::handlers::admin::{activity_log, appearance, appearance_editor, appearance_publish, appearance_upload, builder as admin_builder, comments as admin_comments, dashboard, dev_tools, documentation as admin_documentation, form_designer as admin_form_designer, forms as admin_forms, media, menus as admin_menus, posts, profile, settings, sites as admin_sites, taxonomy, upload, users};
 
 /// Prevent browsers from caching admin and account pages.
 ///
@@ -195,6 +195,7 @@ pub fn build(
         .route("/admin/users/{id}/site-access", get(users::site_access_page))
         .route("/admin/users/{id}/site-access/add", post(users::add_site_access))
         .route("/admin/users/{id}/site-access/remove", post(users::remove_site_access))
+        .route("/admin/activity-log", get(activity_log::list))
         // ── Admin plugins — disabled pre-launch, re-enable post-launch ────
         // ── Admin documentation ────────────────────────────────────────────
         .route("/admin/documentation", get(admin_documentation::list))

@@ -1,4 +1,5 @@
 pub mod account;
+pub mod activity_log;
 pub mod appearance;
 pub mod builder;
 pub mod dashboard;

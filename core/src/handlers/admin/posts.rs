@@ -965,9 +965,10 @@ pub async fn delete_post(
     admin: AdminUser,
     Path(id): Path<Uuid>,
 ) -> impl IntoResponse {
+    let post = crate::models::post::get_by_id(&state.db, id).await.ok();
     if !admin.caps.is_global_admin {
-        match crate::models::post::get_by_id(&state.db, id).await {
-            Ok(p) => {
+        match &post {
+            Some(p) => {
                 if p.site_id != admin.site_id {
                     return Redirect::to("/admin/posts").into_response();
                 }
@@ -978,11 +979,13 @@ pub async fn delete_post(
                     return Redirect::to("/admin/posts").into_response();
                 }
             }
-            Err(_) => return Redirect::to("/admin/posts").into_response(),
+            None => return Redirect::to("/admin/posts").into_response(),
         }
     }
     if let Err(e) = crate::models::post::delete(&state.db, id).await {
         tracing::error!("failed to delete post {}: {:?}", id, e);
+    } else if let Some(p) = &post {
+        super::audit(&state, &admin, "post.deleted", "post", Some(id), &p.title, p.site_id).await;
     }
     crate::search::indexer::delete_post(&state.search_index, &id.to_string());
     Redirect::to("/admin/posts").into_response()
@@ -996,9 +999,10 @@ pub async fn delete_page(
     if !admin.caps.can_manage_pages {
         return Redirect::to("/admin").into_response();
     }
+    let page = crate::models::post::get_by_id(&state.db, id).await.ok();
     if !admin.caps.is_global_admin {
-        match crate::models::post::get_by_id(&state.db, id).await {
-            Ok(p) => {
+        match &page {
+            Some(p) => {
                 if p.site_id != admin.site_id {
                     return Redirect::to("/admin/pages").into_response();
                 }
@@ -1009,11 +1013,13 @@ pub async fn delete_page(
                     return Redirect::to("/admin/pages").into_response();
                 }
             }
-            Err(_) => return Redirect::to("/admin/pages").into_response(),
+            None => return Redirect::to("/admin/pages").into_response(),
         }
     }
     if let Err(e) = crate::models::post::delete(&state.db, id).await {
         tracing::error!("failed to delete page {}: {:?}", id, e);
+    } else if let Some(p) = &page {
+        super::audit(&state, &admin, "page.deleted", "page", Some(id), &p.title, p.site_id).await;
     }
     crate::search::indexer::delete_post(&state.search_index, &id.to_string());
     Redirect::to("/admin/pages").into_response()
@@ -1047,26 +1053,31 @@ pub async fn bulk_delete_pages(
 }
 
 async fn bulk_delete_type(state: AppState, admin: AdminUser, ids: Vec<String>, redirect: &str) -> impl IntoResponse {
+    let kind = if redirect == "/admin/pages" { "page" } else { "post" };
     for raw_id in &ids {
         let id = match raw_id.parse::<Uuid>() {
             Ok(u) => u,
             Err(_) => continue,
         };
+        let post = crate::models::post::get_by_id(&state.db, id).await.ok();
         // Apply same per-post permission checks as single delete.
         if !admin.caps.is_global_admin {
-            match crate::models::post::get_by_id(&state.db, id).await {
-                Ok(p) => {
+            match &post {
+                Some(p) => {
                     if p.site_id != admin.site_id { continue; }
                     if admin.site_role == "author" && p.author_id != admin.user.id { continue; }
                     if admin.site_role == "author" && p.status == "published" { continue; }
                 }
-                Err(_) => continue,
+                None => continue,
             }
         }
         if let Err(e) = crate::models::post::delete(&state.db, id).await {
             tracing::error!("bulk delete: failed to delete post {}: {:?}", id, e);
         } else {
             crate::search::indexer::delete_post(&state.search_index, &id.to_string());
+            if let Some(p) = &post {
+                super::audit(&state, &admin, &format!("{kind}.deleted"), kind, Some(id), &p.title, p.site_id).await;
+            }
         }
     }
     Redirect::to(redirect).into_response()

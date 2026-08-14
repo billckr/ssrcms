@@ -410,6 +410,8 @@ pub async fn delete(
             }
             if let Err(e) = crate::models::media::delete(&state.db, id).await {
                 tracing::error!("failed to delete media record {}: {:?}", id, e);
+            } else {
+                super::audit(&state, &admin, "media.deleted", "media", Some(id), &media.filename, media.site_id).await;
             }
         }
         Err(e) => {
@@ -581,6 +583,12 @@ pub async fn delete_folder(
 ) -> impl IntoResponse {
     let delete_media = body.get("delete_media").map(|s| s == "true").unwrap_or(false);
     if let Some(site_id) = admin.site_id {
+        let folder_name = crate::models::media_folder::list(&state.db, site_id).await
+            .unwrap_or_default()
+            .into_iter()
+            .find(|f| f.id == id)
+            .map(|f| f.name)
+            .unwrap_or_else(|| "(unknown folder)".to_string());
         if delete_media {
             // Delete all media files and DB records belonging to this folder.
             let items = crate::models::media::list(&state.db, Some(site_id), None, Some(id), 10_000, 0)
@@ -591,13 +599,17 @@ pub async fn delete_folder(
                 if let Err(e) = std::fs::remove_file(&path) {
                     tracing::warn!("delete_folder: could not remove file {:?}: {:?}", path, e);
                 }
-                let _ = crate::models::media::delete(&state.db, m.id).await;
+                if crate::models::media::delete(&state.db, m.id).await.is_ok() {
+                    super::audit(&state, &admin, "media.deleted", "media", Some(m.id), &m.filename, Some(site_id)).await;
+                }
             }
         } else {
             // Unassign folder from all images so they appear in All Media.
             let _ = crate::models::media::unassign_folder(&state.db, id, site_id).await;
         }
-        let _ = crate::models::media_folder::delete(&state.db, id, site_id).await;
+        if crate::models::media_folder::delete(&state.db, id, site_id).await.is_ok() {
+            super::audit(&state, &admin, "media_folder.deleted", "media_folder", Some(id), &folder_name, Some(site_id)).await;
+        }
     }
     let redirect_to = body.get("redirect").map(|s| s.as_str()).unwrap_or("/admin/media");
     Redirect::to(redirect_to).into_response()

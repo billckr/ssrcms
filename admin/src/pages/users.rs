@@ -903,7 +903,7 @@ function toggleSiteFields() {{
     <div class="form-note" style="margin-bottom:.75rem">
       <p><strong>Username requirements:</strong></p>
       <ul style="list-style:none;padding-left:0;margin:0.25rem 0 0">
-        <li id="uname-req-len"><span class="pw-dot" style="display:inline-block;width:1.1rem;font-style:normal">·</span>8–15 characters</li>
+        <li id="uname-req-len"><span class="pw-dot" style="display:inline-block;width:1.1rem;font-style:normal">·</span>5–15 characters</li>
         <li id="uname-req-chars"><span class="pw-dot" style="display:inline-block;width:1.1rem;font-style:normal">·</span>Lowercase letters, numbers, and hyphens only</li>
       </ul>
     </div>
@@ -947,8 +947,8 @@ function toggleSiteFields() {{
       <div class="form-group">
         <label for="username">Username</label>
         <input type="text" id="username" name="username" value="{username}" required autocomplete="off"
-               pattern="[a-z0-9][a-z0-9\-]{{6,13}}[a-z0-9]" minlength="8" maxlength="15"
-               title="8-15 characters: lowercase letters, numbers and hyphens only, cannot start or end with a hyphen">
+               pattern="[a-z0-9][a-z0-9\-]{{3,13}}[a-z0-9]" minlength="5" maxlength="15"
+               title="5-15 characters: lowercase letters, numbers and hyphens only, cannot start or end with a hyphen">
       </div>
       <div class="form-group">
         <label for="email">Email</label>
@@ -1009,7 +1009,7 @@ function toggleSiteFields() {{
     ];
     // Username requirements checklist.
     var unameReqs = [
-      {{ id: 'uname-req-len',    test: function(u) {{ return u.length >= 8 && u.length <= 15; }} }},
+      {{ id: 'uname-req-len',    test: function(u) {{ return u.length >= 5 && u.length <= 15; }} }},
       {{ id: 'uname-req-chars',  test: function(u) {{ return /^[a-z0-9-]+$/.test(u); }} }},
     ];
     var updateFeedback = function() {{

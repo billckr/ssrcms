@@ -43,7 +43,7 @@ async fn create(admin_password: Option<String>) -> anyhow::Result<()> {
 
     let username: String = loop {
         let candidate: String = Input::new()
-            .with_prompt("Username (8-15 chars, lowercase letters, numbers, hyphens)")
+            .with_prompt("Username (5-15 chars, lowercase letters, numbers, hyphens)")
             .interact_text()?;
         match validate_username(&candidate) {
             Ok(()) => break candidate,
@@ -115,6 +115,27 @@ async fn create(admin_password: Option<String>) -> anyhow::Result<()> {
         }
     };
 
+    // Usernames aren't globally unique anymore (DB has no UNIQUE constraint
+    // on users.username) — only within a site's membership, since two
+    // independent site owners' accounts shouldn't collide over a username
+    // neither knows the other is using. Unassigned users have no site to
+    // collide within, so nothing to check. Mirrors
+    // synaptic_core::models::user::username_available.
+    if let Some((site_id, hostname)) = &assigned_site {
+        let taken: bool = sqlx::query_scalar(
+            "SELECT EXISTS (SELECT 1 FROM users u JOIN site_users su ON su.user_id = u.id \
+             WHERE u.username = $1 AND su.site_id = $2)"
+        )
+        .bind(&username)
+        .bind(site_id)
+        .fetch_one(&pool)
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to check username availability: {e}"))?;
+        if taken {
+            anyhow::bail!("Username '{}' is already taken on site '{}'.", username, hostname);
+        }
+    }
+
     // Hash password with Argon2
     let hash = hash_password(&password)?;
 
@@ -150,6 +171,19 @@ async fn create(admin_password: Option<String>) -> anyhow::Result<()> {
         .await
         .map_err(|e| anyhow::anyhow!("User created, but failed to assign site: {e}"))?;
     }
+
+    // Record to audit_log same as the web admin's "create user" flow —
+    // there's no logged-in actor here (just the super-admin password gate),
+    // so actor_user_id is NULL and actor_email/role are a "cli" sentinel.
+    let _ = sqlx::query(
+        "INSERT INTO audit_log (actor_user_id, actor_email, actor_role, action, target_type, target_id, target_label, site_id)
+         VALUES (NULL, 'cli', 'cli', 'user.created', 'user', $1, $2, $3)"
+    )
+    .bind(id)
+    .bind(&username)
+    .bind(assigned_site.as_ref().map(|(sid, _)| *sid))
+    .execute(&pool)
+    .await;
 
     println!("\nUser created successfully.");
     println!("  ID:       {}", id);
@@ -263,8 +297,8 @@ fn validate_password(password: &str) -> Result<(), &'static str> {
 /// CLI doesn't depend on the core crate). Keep in sync if the web rule changes.
 fn validate_username(username: &str) -> Result<(), &'static str> {
     let len = username.len();
-    if len < 8 {
-        return Err("Username must be at least 8 characters");
+    if len < 5 {
+        return Err("Username must be at least 5 characters");
     }
     if len > 15 {
         return Err("Username must be no more than 15 characters");

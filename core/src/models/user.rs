@@ -83,12 +83,12 @@ pub fn validate_password(password: &str) -> std::result::Result<(), &'static str
 
 /// Validate a username against site-wide requirements.
 ///
-/// Rules: 8–15 characters, lowercase letters/digits/hyphens only, and cannot
+/// Rules: 5–15 characters, lowercase letters/digits/hyphens only, and cannot
 /// start or end with a hyphen (the only symbol the character set allows).
 pub fn validate_username(username: &str) -> std::result::Result<(), &'static str> {
     let len = username.len();
-    if len < 8 {
-        return Err("Username must be at least 8 characters");
+    if len < 5 {
+        return Err("Username must be at least 5 characters");
     }
     if len > 15 {
         return Err("Username must be no more than 15 characters");
@@ -267,6 +267,66 @@ pub async fn get_by_username_include_inactive(pool: &PgPool, username: &str) -> 
         .fetch_optional(pool)
         .await?
         .ok_or_else(|| AppError::NotFound(format!("user '{username}'")))
+}
+
+/// Like `get_by_username_include_inactive`, but scoped to members of one site.
+/// Usernames are only unique *within* a site's membership (see
+/// `username_available`), so a global-only lookup could resolve to the wrong
+/// same-named user on a different site — this is what public author pages
+/// (`/author/{{username}}`) must use instead.
+pub async fn get_by_username_in_site(pool: &PgPool, site_id: Uuid, username: &str) -> Result<User> {
+    sqlx::query_as::<_, User>(
+        r#"
+        SELECT u.* FROM users u
+        JOIN site_users su ON su.user_id = u.id
+        WHERE su.site_id = $1 AND u.username = $2 AND u.deleted_at IS NULL
+        "#,
+    )
+    .bind(site_id)
+    .bind(username)
+    .fetch_optional(pool)
+    .await?
+    .ok_or_else(|| AppError::NotFound(format!("user '{username}'")))
+}
+
+/// Returns true if `username` is free to use by a user who belongs (or is
+/// about to belong) to any of `site_ids`. Usernames are no longer globally
+/// unique — `users.username` has no DB uniqueness constraint — since two
+/// independent site owners' accounts shouldn't have to fight over a shared
+/// namespace they don't know exists. Instead, a username only needs to be
+/// unique among users who actually share a site: that's what disambiguates
+/// public author pages and admin user lists within one site's context.
+/// `exclude_user_id` skips the user's own current row (for edits — renaming
+/// yourself to your own existing username, or leaving it unchanged, isn't a
+/// collision). An empty `site_ids` means the user isn't tied to any site yet,
+/// so there's nothing to collide with.
+pub async fn username_available(
+    pool: &PgPool,
+    username: &str,
+    site_ids: &[Uuid],
+    exclude_user_id: Option<Uuid>,
+) -> Result<bool> {
+    if site_ids.is_empty() {
+        return Ok(true);
+    }
+    let taken: bool = sqlx::query_scalar(
+        r#"
+        SELECT EXISTS (
+            SELECT 1 FROM users u
+            JOIN site_users su ON su.user_id = u.id
+            WHERE u.username = $1
+              AND su.site_id = ANY($2)
+              AND u.deleted_at IS NULL
+              AND ($3::uuid IS NULL OR u.id != $3)
+        )
+        "#,
+    )
+    .bind(username)
+    .bind(site_ids)
+    .bind(exclude_user_id)
+    .fetch_one(pool)
+    .await?;
+    Ok(!taken)
 }
 
 pub async fn get_by_email(pool: &PgPool, email: &str) -> Result<User> {

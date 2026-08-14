@@ -181,7 +181,7 @@ pub fn forms_list_fragment(rows: &[FormRow], page: i64, total_pages: i64, search
       <a href="/admin/form-analytics/{id}" class="icon-btn" title="Analytics">
         <img src="/admin/static/icons/bar-chart.svg" alt="Analytics">
       </a>
-      <a href="/admin/form-data-analytics/{name}/export" class="icon-btn" title="Export CSV" aria-label="Export CSV">
+      <a href="/admin/form-data-analytics/{name}/export" download class="icon-btn" title="Export CSV" aria-label="Export CSV">
         <img src="/admin/static/icons/download.svg" alt="">
       </a>
       {block_btn}

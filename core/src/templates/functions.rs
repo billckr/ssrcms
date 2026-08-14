@@ -4,6 +4,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 use tera::{Function, Result, Value};
+use uuid::Uuid;
 
 use crate::plugins::HookRegistry;
 
@@ -89,6 +90,12 @@ impl Function for UrlForFunction {
 pub struct GetPostsFunction {
     pub pool: sqlx::PgPool,
     pub base_url: String,
+    /// Scopes `author="username"` lookups to this site's members — usernames
+    /// aren't globally unique (see user::username_available), so an
+    /// unscoped lookup could resolve to the wrong same-named author on
+    /// another site. `None` (legacy/no-site-context engines) falls back to
+    /// a global lookup.
+    pub site_id: Option<Uuid>,
 }
 
 impl Function for GetPostsFunction {
@@ -119,11 +126,12 @@ impl Function for GetPostsFunction {
 
         let pool = self.pool.clone();
         let base_url = self.base_url.clone();
+        let site_id = self.site_id;
 
         // Tera functions are synchronous; run the async query on the current Tokio runtime.
         let posts = tokio::task::block_in_place(|| {
             tokio::runtime::Handle::current().block_on(async move {
-                fetch_posts_for_function(&pool, &base_url, limit, offset, category, tag, author, &order).await
+                fetch_posts_for_function(&pool, &base_url, limit, offset, category, tag, author, &order, site_id).await
             })
         })
         .map_err(|e| tera::Error::msg(format!("get_posts() error: {e}")))?;
@@ -146,74 +154,85 @@ async fn fetch_posts_for_function(
     tag: Option<String>,
     author: Option<String>,
     order: &str,
+    site_id: Option<Uuid>,
 ) -> anyhow::Result<Vec<crate::models::post::PostContext>> {
     use crate::models::{media, post, taxonomy, user};
 
     let order_clause = if order == "asc" { "ASC" } else { "DESC" };
+    // Every branch below must filter to this site — posts, and the taxonomy
+    // terms categories/tags resolve through, are only unique *within* a
+    // site (see e.g. taxonomies_site_slug_tax_unique), so an unscoped query
+    // would join in another tenant's same-slugged category/tag and its
+    // posts. `site_id` is only ever None on the unused legacy `render()`
+    // path (nothing calls it) — real page rendering always resolves one.
+    let site_filter = if site_id.is_some() { "AND p.site_id = $4" } else { "" };
+    let tax_site_filter = if site_id.is_some() { "AND t.site_id = $4" } else { "" };
 
     let posts_raw: Vec<post::Post> = if let Some(cat_slug) = &category {
-        sqlx::query_as::<_, post::Post>(&format!(
+        let query = format!(
             r#"SELECT p.* FROM posts p
                JOIN post_taxonomies pt ON pt.post_id = p.id
                JOIN taxonomies t ON t.id = pt.taxonomy_id
-               WHERE t.slug = $1 AND t.taxonomy = 'category' AND p.status = 'published'
+               WHERE t.slug = $1 AND t.taxonomy = 'category' AND p.status = 'published' {site_filter} {tax_site_filter}
                ORDER BY p.published_at {order_clause} NULLS LAST
                LIMIT $2 OFFSET $3"#
-        ))
-        .bind(cat_slug)
-        .bind(limit)
-        .bind(offset)
-        .fetch_all(pool)
-        .await?
+        );
+        let mut q = sqlx::query_as::<_, post::Post>(&query).bind(cat_slug).bind(limit).bind(offset);
+        if let Some(sid) = site_id { q = q.bind(sid); }
+        q.fetch_all(pool).await?
     } else if let Some(tag_slug) = &tag {
-        sqlx::query_as::<_, post::Post>(&format!(
+        let query = format!(
             r#"SELECT p.* FROM posts p
                JOIN post_taxonomies pt ON pt.post_id = p.id
                JOIN taxonomies t ON t.id = pt.taxonomy_id
-               WHERE t.slug = $1 AND t.taxonomy = 'tag' AND p.status = 'published'
+               WHERE t.slug = $1 AND t.taxonomy = 'tag' AND p.status = 'published' {site_filter} {tax_site_filter}
                ORDER BY p.published_at {order_clause} NULLS LAST
                LIMIT $2 OFFSET $3"#
-        ))
-        .bind(tag_slug)
-        .bind(limit)
-        .bind(offset)
-        .fetch_all(pool)
-        .await?
+        );
+        let mut q = sqlx::query_as::<_, post::Post>(&query).bind(tag_slug).bind(limit).bind(offset);
+        if let Some(sid) = site_id { q = q.bind(sid); }
+        q.fetch_all(pool).await?
     } else if let Some(username) = &author {
-        let author_row = sqlx::query_as::<_, user::User>(
-            "SELECT * FROM users WHERE username = $1 AND deleted_at IS NULL",
-        )
-        .bind(username)
-        .fetch_optional(pool)
-        .await?;
+        // Usernames aren't globally unique — scope to this site's members
+        // when we have a site_id, so this doesn't resolve to the wrong
+        // same-named author on another site.
+        let author_row = if let Some(sid) = site_id {
+            user::get_by_username_in_site(pool, sid, username).await.ok()
+        } else {
+            sqlx::query_as::<_, user::User>(
+                "SELECT * FROM users WHERE username = $1 AND deleted_at IS NULL",
+            )
+            .bind(username)
+            .fetch_optional(pool)
+            .await?
+        };
 
         match author_row {
             None => Vec::new(),
             Some(u) => {
-                sqlx::query_as::<_, post::Post>(&format!(
+                let author_site_filter = if site_id.is_some() { "AND site_id = $4" } else { "" };
+                let query = format!(
                     r#"SELECT * FROM posts
-                       WHERE status = 'published' AND post_type = 'post' AND author_id = $1
+                       WHERE status = 'published' AND post_type = 'post' AND author_id = $1 {author_site_filter}
                        ORDER BY published_at {order_clause} NULLS LAST
                        LIMIT $2 OFFSET $3"#
-                ))
-                .bind(u.id)
-                .bind(limit)
-                .bind(offset)
-                .fetch_all(pool)
-                .await?
+                );
+                let mut q = sqlx::query_as::<_, post::Post>(&query).bind(u.id).bind(limit).bind(offset);
+                if let Some(sid) = site_id { q = q.bind(sid); }
+                q.fetch_all(pool).await?
             }
         }
     } else {
-        sqlx::query_as::<_, post::Post>(&format!(
+        let default_site_filter = if site_id.is_some() { "AND site_id = $3" } else { "" };
+        let query = format!(
             r#"SELECT * FROM posts
-               WHERE status = 'published' AND post_type = 'post'
+               WHERE status = 'published' AND post_type = 'post' {default_site_filter}
                ORDER BY published_at {order_clause} NULLS LAST
                LIMIT $1 OFFSET $2"#
-        ))
-        .bind(limit)
-        .bind(offset)
-        .fetch_all(pool)
-        .await?
+        );
+        let mut q = sqlx::query_as::<_, post::Post>(&query).bind(limit).bind(offset);
+        if let Some(sid) = site_id { q = q.bind(sid); }
+        q.fetch_all(pool).await?
     };
 
     let mut result = Vec::with_capacity(posts_raw.len());
