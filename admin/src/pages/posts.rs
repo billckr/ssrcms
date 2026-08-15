@@ -395,7 +395,7 @@ pub fn render_list(posts: &[PostRow], post_type: &str, page: i64, total_pages: i
     let search_toggle = crate::pill_search_toggle("post-search", &search_placeholder, search);
 
     let content = format!(
-        r#"<div style="display:flex;align-items:flex-end;justify-content:space-between;gap:.75rem;margin-top:.85rem;margin-bottom:1.25rem;flex-wrap:wrap">
+        r#"<div style="display:flex;align-items:flex-end;justify-content:space-between;gap:.75rem;margin-bottom:1.25rem;flex-wrap:wrap">
   {tabs_html}
   <div class="icon-pill" style="align-self:flex-end;margin-top:0">
     <button id="bulk-delete-btn" type="button" class="icon-btn icon-danger icon-danger-armed" style="display:none" title="Delete Selected" aria-label="Delete Selected" onclick="bulkDelete()">

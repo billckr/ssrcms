@@ -242,11 +242,11 @@ pub fn render_list(
     let search_toggle = crate::pill_search_toggle("site-search", "Search sites&hellip;", search);
     let action_pill = if can_create {
         format!(
-            r#"<div class="icon-pill">{search_toggle}<a href="/admin/sites/new" class="icon-btn" title="New Site" aria-label="New Site"><img src="/admin/static/icons/file-plus.svg" alt=""></a></div>"#,
+            r#"<div class="icon-pill" style="align-self:flex-end;margin-top:0">{search_toggle}<a href="/admin/sites/new" class="icon-btn" title="New Site" aria-label="New Site"><img src="/admin/static/icons/file-plus.svg" alt=""></a></div>"#,
             search_toggle = search_toggle,
         )
     } else {
-        format!(r#"<div class="icon-pill">{search_toggle}</div>"#, search_toggle = search_toggle)
+        format!(r#"<div class="icon-pill" style="align-self:flex-end;margin-top:0">{search_toggle}</div>"#, search_toggle = search_toggle)
     };
 
     let fragment = sites_list_fragment(sites, page, total_pages, search, sort, dir, ctx);

@@ -119,9 +119,8 @@ pub fn render_project_list(projects: &[ProjectRow], sort: &str, dir: &str, flash
     };
 
     let content = format!(
-        r#"{flash_html}<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.5rem">
-  <p style="margin:0;color:var(--muted)">Organise your site pages into projects. One project can be live at a time.</p>
-  <div class="icon-pill">
+        r#"{flash_html}<div style="display:flex;justify-content:flex-end;align-items:center;margin-bottom:1.5rem">
+  <div class="icon-pill" style="align-self:flex-end;margin-top:0">
     <button type="button" class="icon-btn" title="New Project" aria-label="New Project" onclick="document.getElementById('new-project-dialog').showModal();document.querySelector('.admin-content').style.filter='blur(1.5px)'"><img src="/admin/static/icons/file-plus.svg" alt=""></button>
   </div>
 </div>

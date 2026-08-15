@@ -148,11 +148,14 @@ pub fn forms_list_fragment(rows: &[FormRow], page: i64, total_pages: i64, search
         )
     };
 
-    // Edit/Analytics/Export/Block/Delete all now live on the Forms tab of
+    // Edit/Export/Block/Delete all now live on the Forms tab of
     // /admin/analytics instead — this list is just for managing form
-    // structure (create/rename/reorder fields), reached by clicking the name.
+    // structure (create/rename/reorder fields), reached by clicking the
+    // name. Analytics stays here too, as a direct link to this specific
+    // form's stats (bar-chart-2 — same icon as the "back to Analytics"
+    // link in this form's own editor pill).
     let body = if rows.is_empty() {
-        r#"<tr><td colspan="3" style="text-align:center;color:var(--muted)">No forms yet. Create one to get started.</td></tr>"#.to_string()
+        r#"<tr><td colspan="4" style="text-align:center;color:var(--muted)">No forms yet. Create one to get started.</td></tr>"#.to_string()
     } else {
         rows.iter().map(|f| {
             format!(
@@ -160,6 +163,13 @@ pub fn forms_list_fragment(rows: &[FormRow], page: i64, total_pages: i64, search
   <td><a href="/admin/form-designer/{id}">{name}</a></td>
   <td><code>{slug}</code></td>
   <td><span style="display:inline-block;background:var(--tint);color:var(--text);border-radius:4px;padding:.15rem .5rem;font-size:.78rem;font-weight:500">{count}</span></td>
+  <td class="actions">
+    <div class="icon-pill-actionbuttons">
+      <a href="/admin/analytics/form/{id}" class="icon-btn" title="Analytics" aria-label="Analytics">
+        <img src="/admin/static/icons/bar-chart-2.svg" alt="">
+      </a>
+    </div>
+  </td>
 </tr>"#,
                 id = html_escape(&f.id),
                 name = html_escape(&f.name),
@@ -171,7 +181,7 @@ pub fn forms_list_fragment(rows: &[FormRow], page: i64, total_pages: i64, search
 
     format!(
         r#"<table class="data-table">
-  <thead><tr>{name_th}{slug_th}{fields_th}</tr></thead>
+  <thead><tr>{name_th}{slug_th}{fields_th}<th>Actions</th></tr></thead>
   <tbody>{body}</tbody>
 </table>
 {pagination}"#,

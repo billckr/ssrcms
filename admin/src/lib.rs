@@ -398,7 +398,7 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
             let active = if current_path.starts_with("/admin/analytics") || current_path.starts_with("/admin/form-data-analytics") { " class=\"active\"" } else { "" };
             format!(r#"<li><a href="/admin/analytics?tab=forms"{}>{}</a></li>"#,
                 active,
-                format!("Data - Analytics{}", badge)
+                format!("Analytics{}", badge)
             )
         } else { String::new() },
         form_designer = if ctx.can_manage_forms { nav_link("/admin/form-designer", "Forms") } else { String::new() },
