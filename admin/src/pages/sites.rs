@@ -311,18 +311,30 @@ fn provider_type_label(provider_type: &str) -> &'static str {
     }
 }
 
-/// A provider row's type badge — the Mailgun brand mark for Mailgun
-/// providers (no equivalent icon on hand for the other types yet), plain
-/// text otherwise.
+/// A provider row's type badge — a small brand mark, shared 16x16
+/// dimensions across all four provider types so the row stays visually
+/// consistent regardless of which icon has more/less native whitespace.
+/// Mailgun/SendGrid/Postmark are their own full-color brand icons (opted
+/// out of the admin's dark-mode icon-invert rule via `.brand-icon`, since
+/// that rule assumes monochrome feather icons); SMTP has no brand mark, so
+/// it uses feather's at-sign glyph instead.
 fn provider_type_badge_html(provider_type: &str) -> String {
-    if provider_type == "mailgun" {
-        r#"<img src="/admin/static/icons/mailgun.svg" alt="Mailgun" title="Mailgun" style="height:16px;width:16px;vertical-align:middle">"#.to_string()
-    } else {
-        format!(
+    let (src, alt, brand) = match provider_type {
+        "mailgun" => ("/admin/static/icons/mailgun.svg", "Mailgun", true),
+        "sendgrid" => ("/admin/static/icons/sendgrid.svg", "SendGrid", true),
+        "postmark" => ("/admin/static/icons/postmark.svg", "Postmark", true),
+        "smtp" => ("/admin/static/icons/at-sign.svg", "SMTP", false),
+        _ => return format!(
             r#"<span class="form-note" style="margin:0">{}</span>"#,
             provider_type_label(provider_type)
-        )
-    }
+        ),
+    };
+    format!(
+        r#"<img src="{src}" alt="{alt}" title="{alt}" class="{class}" style="height:16px;width:16px;vertical-align:middle">"#,
+        src = src,
+        alt = alt,
+        class = if brand { "brand-icon" } else { "" },
+    )
 }
 
 /// The credential fields for one provider type, used both by the Add form
@@ -448,7 +460,7 @@ pub fn render_settings(data: &SiteSettingsData, flash: Option<&str>, ctx: &crate
     </div>
     <div class="icon-pill-actionbuttons">
       <button type="button" class="icon-btn" title="Edit Provider" aria-label="Edit Provider"
-              onclick="var f=document.getElementById('{edit_id}');f.style.display=(f.style.display==='none'?'block':'none');">
+              onclick="toggleProviderEdit('{edit_id}')">
         <img src="/admin/static/icons/edit.svg" alt="">
       </button>
       <form method="post" action="/admin/sites/{site_id}/email-providers/{id}/test" style="display:inline">
@@ -459,7 +471,7 @@ pub fn render_settings(data: &SiteSettingsData, flash: Option<&str>, ctx: &crate
       </form>
     </div>
   </div>
-  <form method="post" action="/admin/sites/{site_id}/email-providers/{id}" id="{edit_id}" style="display:none;margin-top:.75rem;padding-top:.75rem;border-top:1px solid var(--border)">
+  <form method="post" action="/admin/sites/{site_id}/email-providers/{id}" id="{edit_id}" class="provider-edit-form" style="display:none;margin-top:.75rem;padding-top:.75rem;border-top:1px solid var(--border)">
     <input type="hidden" name="provider_type" value="{provider_type}">
     <div class="form-group">
       <label for="{field_prefix}label">Label</label>
@@ -677,6 +689,16 @@ function legacyCopy(el, onDone) {{
   </div>
 </div>
 </div>
+<script>
+function toggleProviderEdit(id) {{
+  var target = document.getElementById(id);
+  var opening = target.style.display === 'none';
+  document.querySelectorAll('.provider-edit-form').forEach(function(f) {{
+    f.style.display = 'none';
+  }});
+  if (opening) target.style.display = 'block';
+}}
+</script>
 
 <div>
 <div class="card-boxed">

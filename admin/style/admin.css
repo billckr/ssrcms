@@ -70,6 +70,13 @@
   filter: invert(1);
 }
 
+/* Full-color brand marks (Mailgun/SendGrid/Postmark provider badges) carry
+   their own fixed colors, unlike the monochrome feather icons above — the
+   blanket invert would wreck them, so opt them back out. */
+:root[data-theme="dark"] img.brand-icon {
+  filter: none;
+}
+
 /* The sidebar/brand are hardcoded dark in light mode too (an intentional
    permanent-dark-rail look), so in dark mode fold them into the same
    surface/border variables as the rest of the page instead of leaving them
