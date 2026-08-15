@@ -98,7 +98,7 @@ fn config_from_form(form: &ProviderForm) -> Result<ProviderConfig, &'static str>
 
 fn flash_redirect(site_id: Uuid, msg: &str) -> Redirect {
     let msg = crate::handlers::admin::appearance::url_encode_param(msg);
-    Redirect::to(&format!("/admin/sites/{}/settings?flash={}", site_id, msg))
+    Redirect::to(&format!("/admin/sites/{}/settings?flash={}&tab=email", site_id, msg))
 }
 
 /// POST /admin/sites/{id}/email-providers — add a new provider.
@@ -129,7 +129,7 @@ pub async fn create(
         return flash_redirect(id, "Failed to save provider.").into_response();
     }
 
-    Redirect::to(&format!("/admin/sites/{}/settings?flash=Provider added. Send a test email to verify it.", id)).into_response()
+    Redirect::to(&format!("/admin/sites/{}/settings?flash=Provider added. Send a test email to verify it.&tab=email", id)).into_response()
 }
 
 /// POST /admin/sites/{id}/email-providers/{provider_id} — update an
@@ -161,7 +161,7 @@ pub async fn update(
     };
 
     match email_provider::update(&state.db, provider_id, id, form.label.trim(), &config, &state.config.secret_key).await {
-        Ok(Some(_)) => Redirect::to(&format!("/admin/sites/{}/settings?flash=Provider updated. Send a test email to re-verify it.", id)).into_response(),
+        Ok(Some(_)) => Redirect::to(&format!("/admin/sites/{}/settings?flash=Provider updated. Send a test email to re-verify it.&tab=email", id)).into_response(),
         Ok(None) => flash_redirect(id, "Provider not found.").into_response(),
         Err(e) => {
             tracing::error!("failed to update email provider {}: {:?}", provider_id, e);
@@ -188,7 +188,7 @@ pub async fn delete(
         tracing::error!("failed to delete email provider {}: {:?}", provider_id, e);
     }
 
-    Redirect::to(&format!("/admin/sites/{}/settings?flash=Provider deleted.", id)).into_response()
+    Redirect::to(&format!("/admin/sites/{}/settings?flash=Provider deleted.&tab=email", id)).into_response()
 }
 
 /// POST /admin/sites/{id}/email-providers/{provider_id}/test — send a test
@@ -220,7 +220,7 @@ pub async fn test(
             if let Err(e) = email_provider::mark_verified(&state.db, provider_id).await {
                 tracing::error!("failed to mark email provider {} verified: {:?}", provider_id, e);
             }
-            Redirect::to(&format!("/admin/sites/{}/settings?flash=Test email sent to {} — provider verified.", id, admin.user.email)).into_response()
+            Redirect::to(&format!("/admin/sites/{}/settings?flash=Test email sent to {} — provider verified.&tab=email", id, admin.user.email)).into_response()
         }
         Err(e) => {
             tracing::error!("test email failed for provider {}: {:?}", provider_id, e);

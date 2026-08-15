@@ -575,11 +575,20 @@ pub async fn site_settings(
         .unwrap_or_else(|| DEFAULT_MAINTENANCE_MESSAGE.to_string());
     let providers = crate::models::email_provider::list_for_site(&state.db, id).await.unwrap_or_default()
         .into_iter()
-        .map(|p| admin::pages::sites::EmailProviderSummary {
-            id: p.id.to_string(),
-            label: p.label,
-            provider_type: p.provider_type,
-            verified: p.verified,
+        .map(|p| {
+            let config = crate::models::email_provider::decrypt_config(&state.config.secret_key, &p);
+            let hint = config.as_ref().map(|c| c.display_hint());
+            let field_placeholders = config
+                .map(|c| c.field_placeholders().into_iter().map(|(k, v)| (k.to_string(), v)).collect())
+                .unwrap_or_default();
+            admin::pages::sites::EmailProviderSummary {
+                id: p.id.to_string(),
+                label: p.label,
+                provider_type: p.provider_type,
+                verified: p.verified,
+                hint,
+                field_placeholders,
+            }
         })
         .collect();
     let data = SiteSettingsData {

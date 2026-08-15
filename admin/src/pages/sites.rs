@@ -291,6 +291,14 @@ pub struct EmailProviderSummary {
     /// "mailgun" | "smtp" | "sendgrid" | "postmark"
     pub provider_type: String,
     pub verified: bool,
+    /// A short, non-sensitive identifying string (domain + masked key, etc.)
+    /// so an admin can tell providers of the same type apart. `None` if the
+    /// stored credentials couldn't be decrypted (e.g. a `SECRET_KEY` rotation).
+    pub hint: Option<String>,
+    /// Per-field placeholder text for this provider's Edit form (real value
+    /// for non-secret fields, masked for secrets) — never a value attribute,
+    /// so the edit form stays a full overwrite rather than a prefill.
+    pub field_placeholders: std::collections::HashMap<String, String>,
 }
 
 fn provider_type_label(provider_type: &str) -> &'static str {
@@ -303,33 +311,61 @@ fn provider_type_label(provider_type: &str) -> &'static str {
     }
 }
 
+/// A provider row's type badge — the Mailgun brand mark for Mailgun
+/// providers (no equivalent icon on hand for the other types yet), plain
+/// text otherwise.
+fn provider_type_badge_html(provider_type: &str) -> String {
+    if provider_type == "mailgun" {
+        r#"<img src="/admin/static/icons/mailgun.svg" alt="Mailgun" title="Mailgun" style="height:16px;width:16px;vertical-align:middle">"#.to_string()
+    } else {
+        format!(
+            r#"<span class="form-note" style="margin:0">{}</span>"#,
+            provider_type_label(provider_type)
+        )
+    }
+}
+
 /// The credential fields for one provider type, used both by the Add form
 /// (all four, toggled by the type `<select>`) and by a provider row's Edit
 /// form (just the one matching its own type). `id_prefix` keeps element ids
 /// unique when the same fields appear more than once on the page (one Edit
 /// form per row, plus the Add form).
-fn provider_fields_html(provider_type: &str, id_prefix: &str) -> String {
+fn provider_fields_html(
+    provider_type: &str,
+    id_prefix: &str,
+    placeholders: Option<&std::collections::HashMap<String, String>>,
+) -> String {
+    let ph = |field: &str, default: &str| -> String {
+        crate::html_escape(
+            placeholders
+                .and_then(|m| m.get(field))
+                .map(|s| s.as_str())
+                .unwrap_or(default),
+        )
+    };
     match provider_type {
         "mailgun" => format!(
             r#"<div class="form-group">
   <label for="{p}mailgun_domain">Mailgun domain</label>
-  <input type="text" id="{p}mailgun_domain" name="mailgun_domain" placeholder="e.g. mg.example.com">
+  <input type="text" id="{p}mailgun_domain" name="mailgun_domain" placeholder="{domain_ph}">
 </div>
 <div class="form-group">
   <label for="{p}mailgun_api_key">Sending key</label>
-  <input type="password" id="{p}mailgun_api_key" name="mailgun_api_key" autocomplete="off" placeholder="e.g. key-xxxxxxxx">
+  <input type="password" id="{p}mailgun_api_key" name="mailgun_api_key" autocomplete="off" placeholder="{key_ph}">
   <small>Use the domain's Sending key (Domains &rarr; select domain &rarr; Sending Keys), not the account-wide Private API key.</small>
 </div>"#,
-            p = id_prefix
+            p = id_prefix,
+            domain_ph = ph("mailgun_domain", "e.g. mg.example.com"),
+            key_ph = ph("mailgun_api_key", "e.g. key-xxxxxxxx"),
         ),
         "smtp" => format!(
             r#"<div class="form-group">
   <label for="{p}smtp_host">Host</label>
-  <input type="text" id="{p}smtp_host" name="smtp_host" placeholder="e.g. smtp.example.com">
+  <input type="text" id="{p}smtp_host" name="smtp_host" placeholder="{host_ph}">
 </div>
 <div class="form-group">
   <label for="{p}smtp_port">Port</label>
-  <input type="number" id="{p}smtp_port" name="smtp_port" placeholder="587">
+  <input type="number" id="{p}smtp_port" name="smtp_port" placeholder="{port_ph}">
 </div>
 <div class="form-group">
   <label for="{p}smtp_tls_mode">TLS</label>
@@ -341,41 +377,50 @@ fn provider_fields_html(provider_type: &str, id_prefix: &str) -> String {
 </div>
 <div class="form-group">
   <label for="{p}smtp_username">Username</label>
-  <input type="text" id="{p}smtp_username" name="smtp_username" autocomplete="off">
+  <input type="text" id="{p}smtp_username" name="smtp_username" autocomplete="off" placeholder="{username_ph}">
 </div>
 <div class="form-group">
   <label for="{p}smtp_password">Password</label>
-  <input type="password" id="{p}smtp_password" name="smtp_password" autocomplete="off">
+  <input type="password" id="{p}smtp_password" name="smtp_password" autocomplete="off" placeholder="{password_ph}">
 </div>"#,
-            p = id_prefix
+            p = id_prefix,
+            host_ph = ph("smtp_host", "e.g. smtp.example.com"),
+            port_ph = ph("smtp_port", "587"),
+            username_ph = ph("smtp_username", ""),
+            password_ph = ph("smtp_password", ""),
         ),
         "sendgrid" => format!(
             r#"<div class="form-group">
   <label for="{p}sendgrid_api_key">API key</label>
-  <input type="password" id="{p}sendgrid_api_key" name="sendgrid_api_key" autocomplete="off">
+  <input type="password" id="{p}sendgrid_api_key" name="sendgrid_api_key" autocomplete="off" placeholder="{key_ph}">
 </div>
 <div class="form-group">
   <label for="{p}sendgrid_from_email">From address</label>
-  <input type="text" id="{p}sendgrid_from_email" name="sendgrid_from_email" placeholder="e.g. noreply@example.com">
+  <input type="text" id="{p}sendgrid_from_email" name="sendgrid_from_email" placeholder="{from_ph}">
   <small>Must be a verified sender or domain in your SendGrid account.</small>
 </div>"#,
-            p = id_prefix
+            p = id_prefix,
+            key_ph = ph("sendgrid_api_key", ""),
+            from_ph = ph("sendgrid_from_email", "e.g. noreply@example.com"),
         ),
         "postmark" => format!(
             r#"<div class="form-group">
   <label for="{p}postmark_server_token">Server API token</label>
-  <input type="password" id="{p}postmark_server_token" name="postmark_server_token" autocomplete="off">
+  <input type="password" id="{p}postmark_server_token" name="postmark_server_token" autocomplete="off" placeholder="{token_ph}">
 </div>
 <div class="form-group">
   <label for="{p}postmark_message_stream">Message stream</label>
-  <input type="text" id="{p}postmark_message_stream" name="postmark_message_stream" value="outbound">
+  <input type="text" id="{p}postmark_message_stream" name="postmark_message_stream" placeholder="{stream_ph}">
 </div>
 <div class="form-group">
   <label for="{p}postmark_from_email">From address</label>
-  <input type="text" id="{p}postmark_from_email" name="postmark_from_email" placeholder="e.g. noreply@example.com">
+  <input type="text" id="{p}postmark_from_email" name="postmark_from_email" placeholder="{from_ph}">
   <small>Must be a verified sender signature in your Postmark account.</small>
 </div>"#,
-            p = id_prefix
+            p = id_prefix,
+            token_ph = ph("postmark_server_token", ""),
+            stream_ph = ph("postmark_message_stream", "outbound"),
+            from_ph = ph("postmark_from_email", "e.g. noreply@example.com"),
         ),
         _ => String::new(),
     }
@@ -387,9 +432,9 @@ pub fn render_settings(data: &SiteSettingsData, flash: Option<&str>, ctx: &crate
     } else {
         data.providers.iter().map(|p| {
             let status = if p.verified {
-                r#"<span class="badge-unread" style="background:var(--success);box-shadow:none">Verified</span>"#.to_string()
+                r#"<span class="badge badge-published">Verified</span>"#.to_string()
             } else {
-                r#"<span class="badge-unread" style="background:var(--muted);box-shadow:none">Unverified</span>"#.to_string()
+                r#"<span class="badge">Unverified</span>"#.to_string()
             };
             let edit_id = format!("edit-provider-{}", p.id);
             let field_prefix = format!("edit-{}-", p.id);
@@ -398,10 +443,10 @@ pub fn render_settings(data: &SiteSettingsData, flash: Option<&str>, ctx: &crate
   <div style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;flex-wrap:wrap">
     <div style="display:flex;align-items:center;gap:.6rem">
       <strong>{label}</strong>
-      <span class="form-note" style="margin:0">{type_label}</span>
+      {type_badge}
       {status}
     </div>
-    <div style="display:flex;gap:.4rem">
+    <div class="icon-pill-actionbuttons">
       <button type="button" class="icon-btn" title="Edit Provider" aria-label="Edit Provider"
               onclick="var f=document.getElementById('{edit_id}');f.style.display=(f.style.display==='none'?'block':'none');">
         <img src="/admin/static/icons/edit.svg" alt="">
@@ -430,14 +475,14 @@ pub fn render_settings(data: &SiteSettingsData, flash: Option<&str>, ctx: &crate
   </form>
 </div>"#,
                 label = crate::html_escape(&p.label),
-                type_label = provider_type_label(&p.provider_type),
+                type_badge = provider_type_badge_html(&p.provider_type),
                 status = status,
                 site_id = crate::html_escape(&data.id),
                 id = crate::html_escape(&p.id),
                 edit_id = edit_id,
                 provider_type = crate::html_escape(&p.provider_type),
                 field_prefix = field_prefix,
-                fields_html = provider_fields_html(&p.provider_type, &field_prefix),
+                fields_html = provider_fields_html(&p.provider_type, &field_prefix, Some(&p.field_placeholders)),
             )
         }).collect::<Vec<_>>().join("\n")
     };
@@ -745,18 +790,24 @@ function legacyCopy(el, onDone) {{
 (function() {{
   var settingsTabs = document.querySelectorAll('.page-tab[data-tab]');
   var settingsPanels = document.querySelectorAll('.settings-tab-panel');
-  settingsTabs.forEach(function(btn) {{
-    btn.addEventListener('click', function() {{
-      settingsTabs.forEach(function(b) {{
-        var on = b === btn;
-        b.classList.toggle('active', on);
-        b.setAttribute('aria-selected', on ? 'true' : 'false');
-      }});
-      settingsPanels.forEach(function(panel) {{
-        panel.classList.toggle('active', panel.id === 'tab-' + btn.dataset.tab);
-      }});
+  function activate(btn) {{
+    settingsTabs.forEach(function(b) {{
+      var on = b === btn;
+      b.classList.toggle('active', on);
+      b.setAttribute('aria-selected', on ? 'true' : 'false');
     }});
+    settingsPanels.forEach(function(panel) {{
+      panel.classList.toggle('active', panel.id === 'tab-' + btn.dataset.tab);
+    }});
+  }}
+  settingsTabs.forEach(function(btn) {{
+    btn.addEventListener('click', function() {{ activate(btn); }});
   }});
+  var wantedTab = new URLSearchParams(window.location.search).get('tab');
+  if (wantedTab) {{
+    var wantedBtn = document.querySelector('.page-tab[data-tab="' + wantedTab + '"]');
+    if (wantedBtn) activate(wantedBtn);
+  }}
 }})();
 </script>
 </div>"#,
