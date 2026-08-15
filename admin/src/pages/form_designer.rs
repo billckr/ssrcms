@@ -323,6 +323,18 @@ pub fn render_editor(data: &FormEditData, ctx: &PageContext, flash: Option<&str>
         String::new()
     };
 
+    // Only a saved form has anywhere to go back to — a new, not-yet-created
+    // form has no row on the Forms tab yet. bar-chart-2 (not bar-chart, which
+    // is already the per-form "view metrics" icon on the Forms tab itself)
+    // keeps the two visually distinct despite both being analytics-related.
+    let analytics_link = if data.id.is_some() {
+        r#"<a href="/admin/analytics?tab=forms" class="icon-btn" title="Back to Analytics" aria-label="Back to Analytics">
+    <img src="/admin/static/icons/bar-chart-2.svg" alt="">
+  </a>"#.to_string()
+    } else {
+        String::new()
+    };
+
     let content = format!(
         r#"<style>
 .field-hint {{ font-size: 11px; color: var(--muted); font-weight: 400; }}
@@ -410,6 +422,7 @@ pub fn render_editor(data: &FormEditData, ctx: &PageContext, flash: Option<&str>
                     onclick="event.preventDefault();event.stopPropagation();document.getElementById('form-designer-form').requestSubmit();">
               <img src="/admin/static/icons/save.svg" alt="">
             </button>
+            {analytics_link}
             {delete_btn}
           </div>
           </div>
@@ -735,6 +748,7 @@ pub fn render_editor(data: &FormEditData, ctx: &PageContext, flash: Option<&str>
         action = action,
         name = html_escape(&data.name),
         rows_html = rows_html,
+        analytics_link = analytics_link,
         delete_btn = delete_btn,
         success_message = html_escape(&data.success_message),
         button_label = html_escape(&data.button_label),

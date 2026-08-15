@@ -152,14 +152,8 @@ pub fn forms_tab_content(
         }).collect::<Vec<_>>().join("\n")
     };
 
-    let content = format!(
-        r#"<div style="display:flex;align-items:center;justify-content:flex-end;gap:.75rem;margin-bottom:1rem;flex-wrap:wrap">
-  <div class="icon-pill">
-    {search_toggle}
-    <a href="/admin/form-designer/new" class="icon-btn" title="New Form" aria-label="New Form"><img src="/admin/static/icons/file-plus.svg" alt=""></a>
-  </div>
-</div>
-<div class="table-wrap">
+    format!(
+        r#"<div class="table-wrap">
 <table class="data-table">
   <thead>
     <tr>
@@ -192,11 +186,22 @@ pub fn forms_tab_content(
         name_th = sort_th("Form Name", "name"),
         submissions_th = sort_th("Submissions", "submissions"),
         last_th = sort_th("Last Submitted", "last"),
-        search_toggle = crate::pill_search_toggle("forms-search", "Search forms&hellip;", ""),
         pill_search_init = crate::pill_search_init_script(),
-    );
+    )
+}
 
-    content
+/// The Forms tab's search+New Form controls — rendered on the same
+/// horizontal row as the tab bar (see pages::analytics::render), not
+/// stacked below it, matching the layout convention used on /admin/pages.
+pub fn forms_tab_controls() -> String {
+    let search_toggle = crate::pill_search_toggle("forms-search", "Search forms&hellip;", "");
+    format!(
+        r#"<div class="icon-pill" style="align-self:flex-end;margin-top:0">
+  {search_toggle}
+  <a href="/admin/form-designer/new" class="icon-btn" title="New Form" aria-label="New Form"><img src="/admin/static/icons/file-plus.svg" alt=""></a>
+</div>"#,
+        search_toggle = search_toggle,
+    )
 }
 
 // ── Submission detail ─────────────────────────────────────────────────────────

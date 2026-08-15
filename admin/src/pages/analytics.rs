@@ -4,7 +4,7 @@
 //! form submission pages still live at their own /admin/form-data-analytics/
 //! {name} URLs, unchanged for now).
 
-use crate::pages::forms::{forms_tab_content, FormSummaryRow};
+use crate::pages::forms::{forms_tab_content, forms_tab_controls, FormSummaryRow};
 use crate::{admin_page, html_escape, PageContext};
 
 pub fn render(
@@ -20,13 +20,18 @@ pub fn render(
     let forms_active = if is_forms { " active" } else { "" };
 
     let tabs = format!(
-        r#"<div class="page-tabs">
+        r#"<div class="page-tabs" style="margin-bottom:0">
   <a href="/admin/analytics?tab=general" class="page-tab{general_active}">General</a>
   <a href="/admin/analytics?tab=forms" class="page-tab{forms_active}">Forms</a>
 </div>"#,
         general_active = general_active,
         forms_active = forms_active,
     );
+
+    // Each tab supplies its own controls on this same row (search, New
+    // Form, etc.) — same layout convention as /admin/pages: tabs and
+    // controls side by side, not controls stacked below the tab bar.
+    let controls = if is_forms { forms_tab_controls() } else { String::new() };
 
     let tab_body = if is_forms {
         forms_tab_content(forms, sort, dir)
@@ -35,7 +40,16 @@ pub fn render(
         r#"<div class="empty-state">General analytics are coming soon.</div>"#.to_string()
     };
 
-    let content = format!("{tabs}\n{tab_body}", tabs = tabs, tab_body = tab_body);
+    let content = format!(
+        r#"<div style="display:flex;align-items:flex-end;justify-content:space-between;gap:.75rem;margin-bottom:1.25rem;flex-wrap:wrap">
+  {tabs}
+  {controls}
+</div>
+{tab_body}"#,
+        tabs = tabs,
+        controls = controls,
+        tab_body = tab_body,
+    );
     admin_page("Analytics", "/admin/analytics", flash, &content, ctx)
 }
 
@@ -159,37 +173,67 @@ pub fn render_analytics_table(data: &FormAnalyticsData, sort: &str, dir: &str, s
 /// a recent-sends table. Reads straight from `mail_log`, scoped to this form.
 /// `sort`/`dir` reflect the current sort (rows are pre-filtered/sorted by the
 /// caller) and are only used here to render the column headers' state/links.
-pub fn render_analytics(data: &FormAnalyticsData, sort: &str, dir: &str, search: &str, ctx: &PageContext) -> String {
-    let chart_html = if data.total_sent == 0 {
-        r#"<p class="field-hint" style="padding:1.5rem 0;text-align:center">No emails sent for this form yet.</p>"#.to_string()
+pub fn render_analytics(data: &FormAnalyticsData, active_tab: &str, sort: &str, dir: &str, search: &str, ctx: &PageContext) -> String {
+    let is_results = active_tab == "results";
+    let stats_active = if is_results { "" } else { " active" };
+    let results_active = if is_results { " active" } else { "" };
+    let id = html_escape(&data.id);
+
+    let tabs = format!(
+        r#"<div class="page-tabs" style="margin-bottom:0">
+  <a href="/admin/analytics/form/{id}?tab=stats" class="page-tab{stats_active}">Stats</a>
+  <a href="/admin/analytics/form/{id}?tab=results" class="page-tab{results_active}">Delivery Results</a>
+</div>"#,
+        id = id, stats_active = stats_active, results_active = results_active,
+    );
+
+    // Search only makes sense against the Delivery Results table — same
+    // layout convention as elsewhere: tab bar and controls on one row (see
+    // pages::analytics::render for the tabs list, and forms_tab_controls).
+    let search_toggle = crate::pill_search_toggle("analytics-search", "Search sends&hellip;", search);
+    let controls = if is_results {
+        format!(r#"<div class="icon-pill" style="align-self:flex-end;margin-top:0">{search_toggle}</div>"#, search_toggle = search_toggle)
     } else {
-        use charts_rs::{BarChart, Color, Series};
-        let values = vec![data.succeeded as f32, data.failed as f32];
-        let (y_max, y_splits) = integer_y_axis(&values);
-        let mut chart = BarChart::new(
-            vec![Series::new("Emails".to_string(), values)],
-            vec!["Delivered".to_string(), "Failed".to_string()],
-        );
-        chart.background_color = Color::transparent();
-        chart.width = 600.0;
-        chart.height = 220.0;
-        chart.legend_show = Some(false);
-        chart.font_family = "system-ui, -apple-system, sans-serif".to_string();
-        chart.series_colors = vec![Color::from("#16a34a"), Color::from("#dc2626")];
-        chart.y_axis_configs[0].axis_min = Some(0.0);
-        chart.y_axis_configs[0].axis_max = Some(y_max);
-        chart.y_axis_configs[0].axis_split_number = y_splits;
-        responsive_svg(chart.svg().unwrap_or_default(), 600, 220)
+        String::new()
     };
 
-    let search_qs = if search.is_empty() { String::new() } else { format!("&search={}", html_escape(search)) };
-    let table_html = render_analytics_table(data, sort, dir, &search_qs);
-    let fetch_prefix = format!("/admin/analytics/form/{}?partial=1&sort={}&dir={}", data.id, sort, dir);
-    let live_search = crate::live_search_script("analytics-search", "analytics-table", &fetch_prefix);
-    let search_toggle = crate::pill_search_toggle("analytics-search", "Search sends&hellip;", search);
-
-    let content = format!(
-        r#"<div class="card-boxed">
+    let tab_body = if is_results {
+        let search_qs = if search.is_empty() { String::new() } else { format!("&search={}", html_escape(search)) };
+        let table_html = render_analytics_table(data, sort, dir, &search_qs);
+        let fetch_prefix = format!("/admin/analytics/form/{}?tab=results&partial=1&sort={}&dir={}", data.id, sort, dir);
+        let live_search = crate::live_search_script("analytics-search", "analytics-table", &fetch_prefix);
+        format!(
+            r#"<div id="analytics-table">{table_html}</div>
+{live_search}
+{pill_search_init}"#,
+            table_html = table_html,
+            live_search = live_search,
+            pill_search_init = crate::pill_search_init_script(),
+        )
+    } else {
+        let chart_html = if data.total_sent == 0 {
+            r#"<p class="field-hint" style="padding:1.5rem 0;text-align:center">No emails sent for this form yet.</p>"#.to_string()
+        } else {
+            use charts_rs::{BarChart, Color, Series};
+            let values = vec![data.succeeded as f32, data.failed as f32];
+            let (y_max, y_splits) = integer_y_axis(&values);
+            let mut chart = BarChart::new(
+                vec![Series::new("Emails".to_string(), values)],
+                vec!["Delivered".to_string(), "Failed".to_string()],
+            );
+            chart.background_color = Color::transparent();
+            chart.width = 600.0;
+            chart.height = 220.0;
+            chart.legend_show = Some(false);
+            chart.font_family = "system-ui, -apple-system, sans-serif".to_string();
+            chart.series_colors = vec![Color::from("#16a34a"), Color::from("#dc2626")];
+            chart.y_axis_configs[0].axis_min = Some(0.0);
+            chart.y_axis_configs[0].axis_max = Some(y_max);
+            chart.y_axis_configs[0].axis_split_number = y_splits;
+            responsive_svg(chart.svg().unwrap_or_default(), 600, 220)
+        };
+        format!(
+            r#"<div class="card-boxed">
   <div class="card-boxed-body">
     <div style="display:flex;gap:2rem;flex-wrap:wrap;margin-bottom:1.5rem">
       <div><div style="font-size:1.6rem;font-weight:700">{total}</div><div class="field-hint">Total sent</div></div>
@@ -198,24 +242,23 @@ pub fn render_analytics(data: &FormAnalyticsData, sort: &str, dir: &str, search:
     </div>
     <div style="max-width:420px">{chart_html}</div>
   </div>
+</div>"#,
+            total = data.total_sent,
+            succeeded = data.succeeded,
+            failed = data.failed,
+            chart_html = chart_html,
+        )
+    };
+
+    let content = format!(
+        r#"<div style="display:flex;align-items:flex-end;justify-content:space-between;gap:.75rem;margin-bottom:1.25rem;flex-wrap:wrap">
+  {tabs}
+  {controls}
 </div>
-<div style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;margin:1.5rem 0 1rem">
-  <h2 style="margin:0">Recent Sends</h2>
-  <div class="icon-pill">
-    {search_toggle}
-  </div>
-</div>
-<div id="analytics-table">{table_html}</div>
-{live_search}
-{pill_search_init}"#,
-        total = data.total_sent,
-        succeeded = data.succeeded,
-        failed = data.failed,
-        chart_html = chart_html,
-        table_html = table_html,
-        live_search = live_search,
-        search_toggle = search_toggle,
-        pill_search_init = crate::pill_search_init_script(),
+{tab_body}"#,
+        tabs = tabs,
+        controls = controls,
+        tab_body = tab_body,
     );
 
     admin_page(&format!("Analytics - {}", html_escape(&data.form_name)), "/admin/analytics", None, &content, ctx)

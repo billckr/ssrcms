@@ -166,5 +166,6 @@ pub async fn form_detail(
         return Html(admin::pages::analytics::render_analytics_table(&data, sort, dir, &search_qs)).into_response();
     }
 
-    Html(admin::pages::analytics::render_analytics(&data, sort, dir, search, &ctx)).into_response()
+    let tab = if params.get("tab").map(|s| s.as_str()) == Some("results") { "results" } else { "stats" };
+    Html(admin::pages::analytics::render_analytics(&data, tab, sort, dir, search, &ctx)).into_response()
 }
