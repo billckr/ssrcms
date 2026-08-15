@@ -13,7 +13,7 @@ use crate::app_state::AppState;
 use crate::middleware::admin_auth::AdminUser;
 use crate::models::form_def::{self, CreateFormDef, FormField, FormSettings, UpdateFormDef};
 
-use admin::pages::form_designer::{forms_list_fragment, render_editor, render_list, FieldRow, FormEditData, FormRow};
+use admin::pages::form_designer::{forms_list_fragment, render_editor, render_list, FieldRow, FormEditData, FormRow, ProviderOption};
 
 fn require_forms_cap(admin: &AdminUser) -> Result<(), Response> {
     if !admin.caps.can_manage_forms {
@@ -87,12 +87,18 @@ pub async fn list(State(state): State<AppState>, admin: AdminUser, Query(params)
 
 pub async fn new_form(State(state): State<AppState>, admin: AdminUser) -> Response {
     if let Err(e) = require_forms_cap(&admin) { return e; }
-    if let Err(e) = require_site_id(&admin) { return e; }
+    let site_id = match require_site_id(&admin) { Ok(id) => id, Err(e) => return e };
 
     let cs = state.site_hostname(admin.site_id);
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
 
-    Html(render_editor(&FormEditData::default(), &ctx, None)).into_response()
+    let providers = crate::models::email_provider::list_verified_for_site(&state.db, site_id).await.unwrap_or_default();
+    let data = FormEditData {
+        provider_options: providers.into_iter().map(|p| ProviderOption { id: p.id.to_string(), label: p.label }).collect(),
+        ..FormEditData::default()
+    };
+
+    Html(render_editor(&data, &ctx, None)).into_response()
 }
 
 pub async fn edit_form(State(state): State<AppState>, admin: AdminUser, Path(id): Path<Uuid>) -> Response {
@@ -105,6 +111,8 @@ pub async fn edit_form(State(state): State<AppState>, admin: AdminUser, Path(id)
     let Ok(Some(form)) = form_def::get_by_id(&state.db, site_id, id).await else {
         return Redirect::to("/admin/form-designer").into_response();
     };
+
+    let providers = crate::models::email_provider::list_verified_for_site(&state.db, site_id).await.unwrap_or_default();
 
     let data = FormEditData {
         id: Some(form.id.to_string()),
@@ -125,6 +133,8 @@ pub async fn edit_form(State(state): State<AppState>, admin: AdminUser, Path(id)
         confirm_submitter: form.settings.confirm_submitter,
         confirm_subject: form.settings.confirm_subject,
         confirm_body: form.settings.confirm_body,
+        email_provider_id: form.email_provider_id.map(|id| id.to_string()).unwrap_or_default(),
+        provider_options: providers.into_iter().map(|p| ProviderOption { id: p.id.to_string(), label: p.label }).collect(),
     };
 
     Html(render_editor(&data, &ctx, None)).into_response()
@@ -143,6 +153,8 @@ pub struct SaveFormForm {
     pub confirm_submitter: Option<String>,
     pub confirm_subject: String,
     pub confirm_body: String,
+    #[serde(default)]
+    pub email_provider_id: Option<String>,
 }
 
 /// Raw shape of one field as JSON-encoded by the editor's submit handler —
@@ -170,6 +182,13 @@ fn parse_fields(raw: &str) -> Vec<FormField> {
             options: f.options,
         })
         .collect()
+}
+
+fn parse_provider_id(form: &SaveFormForm) -> Option<Uuid> {
+    form.email_provider_id.as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .and_then(|s| Uuid::parse_str(s).ok())
 }
 
 fn settings_from_form(form: &SaveFormForm) -> FormSettings {
@@ -212,9 +231,10 @@ pub async fn create(
     let site_id = match require_site_id(&admin) { Ok(id) => id, Err(e) => return e };
 
     let fields = parse_fields(&form.fields_json);
+    let email_provider_id = parse_provider_id(&form);
     let settings = settings_from_form(&form);
 
-    if let Err(e) = form_def::create(&state.db, CreateFormDef { site_id, name: form.name, fields, settings }).await {
+    if let Err(e) = form_def::create(&state.db, CreateFormDef { site_id, name: form.name, fields, settings, email_provider_id }).await {
         tracing::error!("form_designer::create failed: {e}");
     }
     Redirect::to("/admin/form-designer").into_response()
@@ -230,9 +250,10 @@ pub async fn update(
     let site_id = match require_site_id(&admin) { Ok(id) => id, Err(e) => return e };
 
     let fields = parse_fields(&form.fields_json);
+    let email_provider_id = parse_provider_id(&form);
     let settings = settings_from_form(&form);
 
-    if let Err(e) = form_def::update(&state.db, site_id, id, UpdateFormDef { name: form.name, fields, settings }).await {
+    if let Err(e) = form_def::update(&state.db, site_id, id, UpdateFormDef { name: form.name, fields, settings, email_provider_id }).await {
         tracing::error!("form_designer::update failed: {e}");
     }
 

@@ -83,6 +83,7 @@ pub struct FormDefRow {
     pub slug: String,
     pub fields: serde_json::Value,
     pub settings: serde_json::Value,
+    pub email_provider_id: Option<Uuid>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -98,6 +99,9 @@ pub struct FormDef {
     pub slug: String,
     pub fields: Vec<FormField>,
     pub settings: FormSettings,
+    /// Which configured `email_providers` row this form's notify/confirm
+    /// emails send through. `None` falls back to the install-wide account.
+    pub email_provider_id: Option<Uuid>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -111,6 +115,7 @@ impl From<FormDefRow> for FormDef {
             slug: row.slug,
             fields: serde_json::from_value(row.fields).unwrap_or_default(),
             settings: serde_json::from_value(row.settings).unwrap_or_default(),
+            email_provider_id: row.email_provider_id,
             created_at: row.created_at,
             updated_at: row.updated_at,
         }
@@ -178,6 +183,7 @@ pub struct CreateFormDef {
     pub name: String,
     pub fields: Vec<FormField>,
     pub settings: FormSettings,
+    pub email_provider_id: Option<Uuid>,
 }
 
 pub async fn create(pool: &PgPool, input: CreateFormDef) -> Result<FormDef> {
@@ -185,8 +191,8 @@ pub async fn create(pool: &PgPool, input: CreateFormDef) -> Result<FormDef> {
     let fields_json = serde_json::to_value(&input.fields).unwrap_or_default();
     let settings_json = serde_json::to_value(&input.settings).unwrap_or_default();
     let row = sqlx::query_as::<_, FormDefRow>(
-        "INSERT INTO forms (site_id, name, slug, fields, settings)
-         VALUES ($1, $2, $3, $4, $5)
+        "INSERT INTO forms (site_id, name, slug, fields, settings, email_provider_id)
+         VALUES ($1, $2, $3, $4, $5, $6)
          RETURNING *",
     )
     .bind(input.site_id)
@@ -194,6 +200,7 @@ pub async fn create(pool: &PgPool, input: CreateFormDef) -> Result<FormDef> {
     .bind(&slug)
     .bind(&fields_json)
     .bind(&settings_json)
+    .bind(input.email_provider_id)
     .fetch_one(pool)
     .await?;
     Ok(row.into())
@@ -203,6 +210,7 @@ pub struct UpdateFormDef {
     pub name: String,
     pub fields: Vec<FormField>,
     pub settings: FormSettings,
+    pub email_provider_id: Option<Uuid>,
 }
 
 /// Update a form's name/fields/settings. The slug is intentionally never
@@ -213,13 +221,14 @@ pub async fn update(pool: &PgPool, site_id: Uuid, id: Uuid, input: UpdateFormDef
     let fields_json = serde_json::to_value(&input.fields).unwrap_or_default();
     let settings_json = serde_json::to_value(&input.settings).unwrap_or_default();
     let row = sqlx::query_as::<_, FormDefRow>(
-        "UPDATE forms SET name = $1, fields = $2, settings = $3, updated_at = NOW()
-         WHERE site_id = $4 AND id = $5
+        "UPDATE forms SET name = $1, fields = $2, settings = $3, email_provider_id = $4, updated_at = NOW()
+         WHERE site_id = $5 AND id = $6
          RETURNING *",
     )
     .bind(&input.name)
     .bind(&fields_json)
     .bind(&settings_json)
+    .bind(input.email_provider_id)
     .bind(site_id)
     .bind(id)
     .fetch_optional(pool)

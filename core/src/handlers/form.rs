@@ -96,12 +96,13 @@ pub async fn submit(
         if let Some(form) = form {
             let site_id = current_site.site.id;
             let form_id = form.id;
+            let provider_id = form.email_provider_id;
 
             if let Some(to) = form.settings.notify_email {
                 let state = state.clone();
                 let subject = format!("New submission: {}", form.name);
                 tokio::spawn(async move {
-                    let msg = EmailMessage { to: &to, subject: &subject, text: &notify_body, form_id: Some(form_id) };
+                    let msg = EmailMessage { to: &to, subject: &subject, text: &notify_body, form_id: Some(form_id), provider_id };
                     if let Err(e) = mail::send_for_site(&state, site_id, msg).await {
                         tracing::error!("form notify email failed: {e:?}");
                     }
@@ -114,7 +115,7 @@ pub async fn submit(
                     let subject = fill_template(&form.settings.confirm_subject, &data);
                     let body = fill_template(&form.settings.confirm_body, &data);
                     tokio::spawn(async move {
-                        let msg = EmailMessage { to: &to, subject: &subject, text: &body, form_id: Some(form_id) };
+                        let msg = EmailMessage { to: &to, subject: &subject, text: &body, form_id: Some(form_id), provider_id };
                         if let Err(e) = mail::send_for_site(&state, site_id, msg).await {
                             tracing::error!("form confirmation email failed: {e:?}");
                         }

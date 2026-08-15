@@ -27,6 +27,8 @@ done.
 
 - [ ] revisit whether anyone who can edit a post (not just users with can_manage_forms) should be able to see the embedded form's submission count in the post editor sidebar and the "view form metrics" link — currently no permission gate on that, only the destination /admin/form-analytics page itself enforces can_manage_forms.
 
+- [ ] decide how (or whether) to surface the install-wide (.env MAILGUN_*) email fallback account on a site's Email Settings tab — right now it's active but invisible in the UI when a form has no provider selected.
+
 ## Done
 
 - [x] change the text field colors on post page — they were white/bright for a dark theme; rolled out site-wide via --field-bg/--field-text

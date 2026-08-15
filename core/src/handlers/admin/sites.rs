@@ -3,6 +3,18 @@
 const DEFAULT_MAINTENANCE_MESSAGE: &str =
     "This site is currently undergoing scheduled maintenance. Please check back soon.";
 
+/// Owner, site_admin/admin role, or global admin — the bar for managing a
+/// site's own settings (config, maintenance mode, email providers).
+pub(crate) async fn require_site_manager(state: &AppState, admin: &AdminUser, site: &crate::models::site::Site, ) -> bool {
+    let is_owner = site.owner_user_id == Some(admin.user.id);
+    let has_role = matches!(
+        crate::models::site_user::get_role(&state.db, site.id, admin.user.id)
+            .await.ok().flatten().as_deref(),
+        Some("admin" | "site_admin")
+    );
+    admin.caps.is_global_admin || is_owner || has_role
+}
+
 /// Returns true if `h` is a plausibly valid hostname with a real TLD.
 /// Labels must be alphanumeric + hyphens, not start/end with a hyphen.
 /// TLD must be at least 2 alphabetic characters.
@@ -561,12 +573,15 @@ pub async fn site_settings(
     let maintenance_message = crate::app_state::get_site_setting(&state.db, id, "maintenance_message")
         .await
         .unwrap_or_else(|| DEFAULT_MAINTENANCE_MESSAGE.to_string());
-    let mailgun_domain = crate::app_state::get_site_setting(&state.db, id, crate::mail::SETTING_DOMAIN)
-        .await
-        .unwrap_or_default();
-    let mailgun_key_set = crate::app_state::get_site_setting(&state.db, id, crate::mail::SETTING_API_KEY_ENCRYPTED)
-        .await
-        .is_some();
+    let providers = crate::models::email_provider::list_for_site(&state.db, id).await.unwrap_or_default()
+        .into_iter()
+        .map(|p| admin::pages::sites::EmailProviderSummary {
+            id: p.id.to_string(),
+            label: p.label,
+            provider_type: p.provider_type,
+            verified: p.verified,
+        })
+        .collect();
     let data = SiteSettingsData {
         id: site.id.to_string(),
         hostname: site.hostname.clone(),
@@ -577,8 +592,7 @@ pub async fn site_settings(
         date_format: cfg.date_format.clone(),
         maintenance_mode,
         maintenance_message,
-        mailgun_domain,
-        mailgun_key_set,
+        providers,
     };
     Html(admin::pages::sites::render_settings(&data, flash, &ctx)).into_response()
 }
@@ -750,81 +764,6 @@ pub async fn save_maintenance(
     }
     if let Err(e) = crate::app_state::set_site_setting(&state.db, id, "maintenance_message", message).await {
         tracing::error!("failed to save maintenance_message for site {}: {:?}", id, e);
-    }
-
-    Redirect::to(&format!("/admin/sites/{}/settings?flash=Saved.", id)).into_response()
-}
-
-#[derive(Deserialize)]
-pub struct MailConfigForm {
-    pub mailgun_domain: String,
-    #[serde(default)]
-    pub mailgun_api_key: String,
-}
-
-/// POST /admin/sites/{id}/mail-config — save (or clear) this site's own
-/// Mailgun account. An empty domain clears both settings, falling the site
-/// back to the install-wide Mailgun config. A blank API key with a non-empty
-/// domain keeps whatever key is already saved (the field is never
-/// pre-filled with the real key once encrypted, so "blank" can't mean
-/// "clear it" the way it does for domain).
-pub async fn save_mail_config(
-    State(state): State<AppState>,
-    admin: AdminUser,
-    Path(id): Path<Uuid>,
-    Form(form): Form<MailConfigForm>,
-) -> impl IntoResponse {
-    let site = match crate::models::site::get_by_id(&state.db, id).await {
-        Ok(s) => s,
-        Err(_) => return Redirect::to("/admin/sites").into_response(),
-    };
-    let is_owner = site.owner_user_id == Some(admin.user.id);
-    let has_role = matches!(
-        crate::models::site_user::get_role(&state.db, id, admin.user.id)
-            .await.ok().flatten().as_deref(),
-        Some("admin" | "site_admin")
-    );
-    if !admin.caps.is_global_admin && !is_owner && !has_role {
-        return (axum::http::StatusCode::FORBIDDEN, "Forbidden").into_response();
-    }
-
-    let domain = form.mailgun_domain.trim();
-    let api_key = form.mailgun_api_key.trim();
-    let key_already_set = crate::app_state::get_site_setting(&state.db, id, crate::mail::SETTING_API_KEY_ENCRYPTED)
-        .await
-        .is_some();
-
-    // A domain with no key (and none already saved) can't send anything; a
-    // key with no domain has nowhere to send to and would otherwise be
-    // silently discarded by the branch below. Both are almost certainly a
-    // mistake, so reject rather than save a half-configured, non-functional
-    // state that looks saved but silently falls back to the global account.
-    if !domain.is_empty() && api_key.is_empty() && !key_already_set {
-        let msg = crate::handlers::admin::appearance::url_encode_param(
-            "Enter an API key too - a domain alone can't send anything.",
-        );
-        return Redirect::to(&format!("/admin/sites/{}/settings?flash={}", id, msg)).into_response();
-    }
-    if domain.is_empty() && !api_key.is_empty() {
-        let msg = crate::handlers::admin::appearance::url_encode_param(
-            "Enter a domain too, or clear the API key as well.",
-        );
-        return Redirect::to(&format!("/admin/sites/{}/settings?flash={}", id, msg)).into_response();
-    }
-
-    if domain.is_empty() {
-        let _ = crate::app_state::delete_site_setting(&state.db, id, crate::mail::SETTING_DOMAIN).await;
-        let _ = crate::app_state::delete_site_setting(&state.db, id, crate::mail::SETTING_API_KEY_ENCRYPTED).await;
-    } else {
-        if let Err(e) = crate::app_state::set_site_setting(&state.db, id, crate::mail::SETTING_DOMAIN, domain).await {
-            tracing::error!("failed to save mailgun_domain for site {}: {:?}", id, e);
-        }
-        if !api_key.is_empty() {
-            let encrypted = crate::crypto::encrypt(&state.config.secret_key, api_key);
-            if let Err(e) = crate::app_state::set_site_setting(&state.db, id, crate::mail::SETTING_API_KEY_ENCRYPTED, &encrypted).await {
-                tracing::error!("failed to save mailgun_api_key for site {}: {:?}", id, e);
-            }
-        }
     }
 
     Redirect::to(&format!("/admin/sites/{}/settings?flash=Saved.", id)).into_response()

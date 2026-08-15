@@ -25,6 +25,13 @@ pub struct FieldRow {
     pub options_text: String,
 }
 
+/// One site-configured (and verified) email provider, offered as an option
+/// in a form's "Send via" dropdown.
+pub struct ProviderOption {
+    pub id: String,
+    pub label: String,
+}
+
 /// Data needed to render the create/edit form. `id` is `None` for create.
 pub struct FormEditData {
     pub id: Option<String>,
@@ -41,6 +48,11 @@ pub struct FormEditData {
     pub confirm_submitter: bool,
     pub confirm_subject: String,
     pub confirm_body: String,
+    /// Empty string means "use the install-wide account" — matches the
+    /// dropdown's own empty-option value.
+    pub email_provider_id: String,
+    /// The site's verified providers, to populate the dropdown.
+    pub provider_options: Vec<ProviderOption>,
 }
 
 impl Default for FormEditData {
@@ -62,6 +74,8 @@ impl Default for FormEditData {
             confirm_submitter: false,
             confirm_subject: "We've received your submission".to_string(),
             confirm_body: "Thanks for reaching out! We've received your submission and will follow up soon.".to_string(),
+            email_provider_id: String::new(),
+            provider_options: Vec::new(),
         }
     }
 }
@@ -317,6 +331,11 @@ pub fn render_editor(data: &FormEditData, ctx: &PageContext, flash: Option<&str>
         .collect::<Vec<_>>()
         .join("\n");
 
+    let provider_options_html: String = data.provider_options.iter().map(|p| {
+        let selected = if p.id == data.email_provider_id { " selected" } else { "" };
+        format!(r#"<option value="{id}"{selected}>{label}</option>"#, id = html_escape(&p.id), label = html_escape(&p.label))
+    }).collect();
+
     // Delete lives as an icon button next to Save (see below) rather than a
     // nested <form> — the whole editor is already one big <form>, and nested
     // forms are invalid HTML, so it goes through fetch() instead, same
@@ -373,6 +392,7 @@ pub fn render_editor(data: &FormEditData, ctx: &PageContext, flash: Option<&str>
         <div class="card-boxed-body">
           <div class="page-tabs" role="tablist" style="margin:0 0 1rem">
             <button type="button" class="page-tab active" role="tab" aria-selected="true" aria-controls="tab-general" data-tab="general">General Settings</button>
+            <button type="button" class="page-tab" role="tab" aria-selected="false" aria-controls="tab-mail" data-tab="mail">Mail Settings</button>
             <button type="button" class="page-tab" role="tab" aria-selected="false" aria-controls="tab-preview" data-tab="preview">Preview</button>
           </div>
           <div id="tab-general" class="form-tab-panel active" role="tabpanel">
@@ -395,36 +415,22 @@ pub fn render_editor(data: &FormEditData, ctx: &PageContext, flash: Option<&str>
             </div>
           </div>
           <div class="card-boxed-section">
-            <div class="form-group">
-              <label for="notify-email">Notify on new submission</label>
-              <input type="email" id="notify-email" name="notify_email" maxlength="255" value="{notify_email}" placeholder="you@example.com">
-              <p class="field-hint">Leave blank to disable. Sent via the site's configured Mailgun account.</p>
-            </div>
-          </div>
-          <div class="card-boxed-section">
             <label class="switch-toggle">
               <input type="checkbox" id="include-honeypot" name="include_honeypot" value="true"{honeypot_checked}>
               <span class="switch-slider"></span>
               <span>Include spam honeypot field</span>
             </label>
           </div>
-          <div class="card-boxed-section">
-            <label class="switch-toggle">
-              <input type="checkbox" id="confirm-submitter" name="confirm_submitter" value="true"{confirm_submitter_checked}>
-              <span class="switch-slider"></span>
-              <span>Email the submitter a confirmation</span>
-            </label>
-            <p class="field-hint">Sends to whatever the form's first Email-type field collects. Add one to the fields above if this form doesn't have one yet.</p>
-            <div id="confirm-fields" style="margin-top:.75rem;display:{confirm_fields_display}">
-              <div class="form-group">
-                <label for="confirm-subject">Confirmation subject</label>
-                <input type="text" id="confirm-subject" name="confirm_subject" maxlength="200" value="{confirm_subject}">
-              </div>
-              <div class="form-group" style="margin-top:.6rem">
-                <label for="confirm-body">Confirmation message</label>
-                <textarea id="confirm-body" name="confirm_body" rows="4" style="resize:vertical">{confirm_body}</textarea>
-                <p class="field-hint">Use <code>{{{{field_name}}}}</code> to insert a submitted value, e.g. <code>{{{{name}}}}</code>.</p>
-              </div>
+          <hr style="border:none;border-top:1px solid var(--border);margin:1rem 0">
+          <div class="card-boxed-section" id="confirm-fields" style="display:{confirm_fields_display}">
+            <div class="form-group">
+              <label for="confirm-subject">Confirmation subject</label>
+              <input type="text" id="confirm-subject" name="confirm_subject" maxlength="200" value="{confirm_subject}">
+            </div>
+            <div class="form-group" style="margin-top:.6rem">
+              <label for="confirm-body">Confirmation message</label>
+              <textarea id="confirm-body" name="confirm_body" rows="4" style="resize:vertical">{confirm_body}</textarea>
+              <p class="field-hint">Use <code>{{{{field_name}}}}</code> to insert a submitted value, e.g. <code>{{{{name}}}}</code>.</p>
             </div>
           </div>
           <div class="icon-pill">
@@ -434,6 +440,33 @@ pub fn render_editor(data: &FormEditData, ctx: &PageContext, flash: Option<&str>
             </button>
             {analytics_link}
             {delete_btn}
+          </div>
+          </div>
+          <div id="tab-mail" class="form-tab-panel" role="tabpanel">
+          <div class="card-boxed-section">
+            <div class="form-group">
+              <label for="email-provider">Send via</label>
+              <select id="email-provider" name="email_provider_id">
+                <option value="">Install-wide default account</option>
+                {provider_options_html}
+              </select>
+              <p class="field-hint">Configure providers on this site's Settings &rarr; Email Settings tab.</p>
+            </div>
+          </div>
+          <div class="card-boxed-section">
+            <div class="form-group">
+              <label for="notify-email">Notify on new submission</label>
+              <input type="email" id="notify-email" name="notify_email" maxlength="255" value="{notify_email}" placeholder="you@example.com">
+              <p class="field-hint">Leave blank to disable. Sent via the site's configured Mailgun account.</p>
+            </div>
+          </div>
+          <div class="card-boxed-section">
+            <label class="switch-toggle">
+              <input type="checkbox" id="confirm-submitter" name="confirm_submitter" value="true"{confirm_submitter_checked}>
+              <span class="switch-slider"></span>
+              <span>Email the submitter a confirmation</span>
+            </label>
+            <p class="field-hint">Sends to whatever the form's first Email-type field collects. Add one to the fields above if this form doesn't have one yet.</p>
           </div>
           </div>
           <div id="tab-preview" class="form-tab-panel" role="tabpanel">
@@ -628,6 +661,7 @@ pub fn render_editor(data: &FormEditData, ctx: &PageContext, flash: Option<&str>
   var formNameInput = document.getElementById('form-name');
   var successMessageInput = document.getElementById('success-message');
   var honeypotInput = document.getElementById('include-honeypot');
+  var emailProviderInput = document.getElementById('email-provider');
   var notifyEmailInput = document.getElementById('notify-email');
   var confirmSubmitterInput = document.getElementById('confirm-submitter');
   var confirmFieldsBox = document.getElementById('confirm-fields');
@@ -711,6 +745,7 @@ pub fn render_editor(data: &FormEditData, ctx: &PageContext, flash: Option<&str>
       success_message: successMessageInput.value,
       button_label: buttonLabelInput.value,
       include_honeypot: honeypotInput.checked,
+      email_provider_id: emailProviderInput.value,
       notify_email: notifyEmailInput.value,
       confirm_submitter: confirmSubmitterInput.checked,
       confirm_subject: confirmSubjectInput.value,
@@ -727,6 +762,7 @@ pub fn render_editor(data: &FormEditData, ctx: &PageContext, flash: Option<&str>
   formNameInput.addEventListener('input', checkDirty);
   successMessageInput.addEventListener('input', checkDirty);
   honeypotInput.addEventListener('change', checkDirty);
+  emailProviderInput.addEventListener('change', checkDirty);
   notifyEmailInput.addEventListener('input', checkDirty);
   confirmSubjectInput.addEventListener('input', checkDirty);
   confirmBodyInput.addEventListener('input', checkDirty);
@@ -762,6 +798,7 @@ pub fn render_editor(data: &FormEditData, ctx: &PageContext, flash: Option<&str>
         delete_btn = delete_btn,
         success_message = html_escape(&data.success_message),
         button_label = html_escape(&data.button_label),
+        provider_options_html = provider_options_html,
         notify_email = html_escape(&data.notify_email),
         honeypot_checked = if data.include_honeypot { " checked" } else { "" },
         confirm_submitter_checked = if data.confirm_submitter { " checked" } else { "" },

@@ -13,7 +13,7 @@ use tower_sessions_sqlx_store::PostgresStore;
 
 use crate::app_state::AppState;
 use crate::handlers::{account, archive, auth, comment as comment_handler, form as form_handler, home, metrics as metrics_handler, page, plugin_route, post as post_handler, post_unlock, recover, search, subscribe, theme_static, uploads};
-use crate::handlers::admin::{activity_log, analytics as admin_analytics, appearance, appearance_editor, appearance_publish, appearance_upload, builder as admin_builder, comments as admin_comments, dashboard, dev_tools, documentation as admin_documentation, form_designer as admin_form_designer, forms as admin_forms, media, menus as admin_menus, posts, profile, settings, sites as admin_sites, taxonomy, upload, users};
+use crate::handlers::admin::{activity_log, analytics as admin_analytics, appearance, appearance_editor, appearance_publish, appearance_upload, builder as admin_builder, comments as admin_comments, dashboard, dev_tools, documentation as admin_documentation, email_providers as admin_email_providers, form_designer as admin_form_designer, forms as admin_forms, media, menus as admin_menus, posts, profile, settings, sites as admin_sites, taxonomy, upload, users};
 
 /// Prevent browsers from caching admin and account pages.
 ///
@@ -252,7 +252,10 @@ pub fn build(
         .route("/admin/sites/{id}/settings", get(admin_sites::site_settings))
         .route("/admin/sites/{id}/site-config", post(admin_sites::save_site_config))
         .route("/admin/sites/{id}/maintenance", post(admin_sites::save_maintenance))
-        .route("/admin/sites/{id}/mail-config", post(admin_sites::save_mail_config))
+        .route("/admin/sites/{id}/email-providers", post(admin_email_providers::create))
+        .route("/admin/sites/{id}/email-providers/{provider_id}", post(admin_email_providers::update))
+        .route("/admin/sites/{id}/email-providers/{provider_id}/test", post(admin_email_providers::test))
+        .route("/admin/sites/{id}/email-providers/{provider_id}/delete", post(admin_email_providers::delete))
         .route("/admin/sites/{id}/delete", post(admin_sites::delete))
         .route("/admin/sites/{id}/provision-ssl", post(admin_sites::provision_ssl))
         // ── Admin forms ────────────────────────────────────────────────────

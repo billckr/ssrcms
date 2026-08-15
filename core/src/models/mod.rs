@@ -2,6 +2,7 @@ pub mod audit_log;
 pub mod builder_project;
 pub mod comment;
 pub mod page_composition;
+pub mod email_provider;
 pub mod form_def;
 pub mod form_submission;
 pub mod mail_log;

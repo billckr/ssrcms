@@ -164,10 +164,10 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
         {media}
         {cats}
         {tags}
-        {form_designer}
         {plugins}
         {appearance}
         {forms}
+        {form_designer}
         {builder}
         {documentation}
         {settings}
@@ -401,7 +401,7 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
                 format!("Analytics{}", badge)
             )
         } else { String::new() },
-        form_designer = if ctx.can_manage_forms { nav_link("/admin/form-designer", "Forms") } else { String::new() },
+        form_designer = if ctx.can_manage_forms { nav_link("/admin/form-designer", "Form Builder") } else { String::new() },
         plugins = String::new(), // plugins disabled pre-launch
         documentation = if ctx.is_global_admin { nav_link("/admin/documentation", "Documentation") } else { String::new() },
         appearance = if ctx.can_manage_appearance { nav_link("/admin/appearance", "Appearance") } else { String::new() },

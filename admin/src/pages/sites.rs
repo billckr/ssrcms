@@ -280,69 +280,182 @@ pub struct SiteSettingsData {
     pub date_format: String,
     pub maintenance_mode: bool,
     pub maintenance_message: String,
-    pub mailgun_domain: String,
-    /// True if this site already has its own Mailgun API key saved — the
-    /// key itself is never sent back to the browser once encrypted at rest.
-    pub mailgun_key_set: bool,
+    pub providers: Vec<EmailProviderSummary>,
+}
+
+/// One configured email provider, as shown in the Email Settings tab's
+/// provider list. Credentials themselves never come back to the browser.
+pub struct EmailProviderSummary {
+    pub id: String,
+    pub label: String,
+    /// "mailgun" | "smtp" | "sendgrid" | "postmark"
+    pub provider_type: String,
+    pub verified: bool,
+}
+
+fn provider_type_label(provider_type: &str) -> &'static str {
+    match provider_type {
+        "mailgun" => "Mailgun",
+        "smtp" => "SMTP",
+        "sendgrid" => "SendGrid",
+        "postmark" => "Postmark",
+        _ => "Unknown",
+    }
+}
+
+/// The credential fields for one provider type, used both by the Add form
+/// (all four, toggled by the type `<select>`) and by a provider row's Edit
+/// form (just the one matching its own type). `id_prefix` keeps element ids
+/// unique when the same fields appear more than once on the page (one Edit
+/// form per row, plus the Add form).
+fn provider_fields_html(provider_type: &str, id_prefix: &str) -> String {
+    match provider_type {
+        "mailgun" => format!(
+            r#"<div class="form-group">
+  <label for="{p}mailgun_domain">Mailgun domain</label>
+  <input type="text" id="{p}mailgun_domain" name="mailgun_domain" placeholder="e.g. mg.example.com">
+</div>
+<div class="form-group">
+  <label for="{p}mailgun_api_key">Sending key</label>
+  <input type="password" id="{p}mailgun_api_key" name="mailgun_api_key" autocomplete="off" placeholder="e.g. key-xxxxxxxx">
+  <small>Use the domain's Sending key (Domains &rarr; select domain &rarr; Sending Keys), not the account-wide Private API key.</small>
+</div>"#,
+            p = id_prefix
+        ),
+        "smtp" => format!(
+            r#"<div class="form-group">
+  <label for="{p}smtp_host">Host</label>
+  <input type="text" id="{p}smtp_host" name="smtp_host" placeholder="e.g. smtp.example.com">
+</div>
+<div class="form-group">
+  <label for="{p}smtp_port">Port</label>
+  <input type="number" id="{p}smtp_port" name="smtp_port" placeholder="587">
+</div>
+<div class="form-group">
+  <label for="{p}smtp_tls_mode">TLS</label>
+  <select id="{p}smtp_tls_mode" name="smtp_tls_mode">
+    <option value="starttls">STARTTLS</option>
+    <option value="implicit">Implicit TLS</option>
+    <option value="none">None</option>
+  </select>
+</div>
+<div class="form-group">
+  <label for="{p}smtp_username">Username</label>
+  <input type="text" id="{p}smtp_username" name="smtp_username" autocomplete="off">
+</div>
+<div class="form-group">
+  <label for="{p}smtp_password">Password</label>
+  <input type="password" id="{p}smtp_password" name="smtp_password" autocomplete="off">
+</div>"#,
+            p = id_prefix
+        ),
+        "sendgrid" => format!(
+            r#"<div class="form-group">
+  <label for="{p}sendgrid_api_key">API key</label>
+  <input type="password" id="{p}sendgrid_api_key" name="sendgrid_api_key" autocomplete="off">
+</div>
+<div class="form-group">
+  <label for="{p}sendgrid_from_email">From address</label>
+  <input type="text" id="{p}sendgrid_from_email" name="sendgrid_from_email" placeholder="e.g. noreply@example.com">
+  <small>Must be a verified sender or domain in your SendGrid account.</small>
+</div>"#,
+            p = id_prefix
+        ),
+        "postmark" => format!(
+            r#"<div class="form-group">
+  <label for="{p}postmark_server_token">Server API token</label>
+  <input type="password" id="{p}postmark_server_token" name="postmark_server_token" autocomplete="off">
+</div>
+<div class="form-group">
+  <label for="{p}postmark_message_stream">Message stream</label>
+  <input type="text" id="{p}postmark_message_stream" name="postmark_message_stream" value="outbound">
+</div>
+<div class="form-group">
+  <label for="{p}postmark_from_email">From address</label>
+  <input type="text" id="{p}postmark_from_email" name="postmark_from_email" placeholder="e.g. noreply@example.com">
+  <small>Must be a verified sender signature in your Postmark account.</small>
+</div>"#,
+            p = id_prefix
+        ),
+        _ => String::new(),
+    }
 }
 
 pub fn render_settings(data: &SiteSettingsData, flash: Option<&str>, ctx: &crate::PageContext) -> String {
-    let content = format!(
-        r#"<div style="max-width:720px">
-<div class="card-boxed">
-  <h2 class="card-boxed-header">Support</h2>
-  <div class="card-boxed-body">
-    <p class="form-note" style="margin:0 0 .6rem">
-      Include this Site ID when contacting support or troubleshooting an
-      issue with this site.
-    </p>
+    let providers_list_html = if data.providers.is_empty() {
+        r#"<p class="form-note" style="margin:0">No email providers configured yet — add one below.</p>"#.to_string()
+    } else {
+        data.providers.iter().map(|p| {
+            let status = if p.verified {
+                r#"<span class="badge-unread" style="background:var(--success);box-shadow:none">Verified</span>"#.to_string()
+            } else {
+                r#"<span class="badge-unread" style="background:var(--muted);box-shadow:none">Unverified</span>"#.to_string()
+            };
+            let edit_id = format!("edit-provider-{}", p.id);
+            let field_prefix = format!("edit-{}-", p.id);
+            format!(
+                r#"<div class="card-boxed-section">
+  <div style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;flex-wrap:wrap">
     <div style="display:flex;align-items:center;gap:.6rem">
-      <div class="icon-pill" style="margin-top:0">
-        <button type="button" class="icon-btn" id="site-id-toggle" title="Show Site ID" aria-label="Show Site ID" onclick="toggleSiteId()"><img src="/admin/static/icons/eye.svg" alt=""></button>
-      </div>
-      <code id="site-id-value" title="Click to copy" onclick="copySiteId()" style="display:none;cursor:pointer;font-size:.8rem;background:var(--tint);padding:.3rem .6rem;border-radius:4px">{id}</code>
+      <strong>{label}</strong>
+      <span class="form-note" style="margin:0">{type_label}</span>
+      {status}
+    </div>
+    <div style="display:flex;gap:.4rem">
+      <button type="button" class="icon-btn" title="Edit Provider" aria-label="Edit Provider"
+              onclick="var f=document.getElementById('{edit_id}');f.style.display=(f.style.display==='none'?'block':'none');">
+        <img src="/admin/static/icons/edit.svg" alt="">
+      </button>
+      <form method="post" action="/admin/sites/{site_id}/email-providers/{id}/test" style="display:inline">
+        <button type="submit" class="icon-btn" title="Send Test Email" aria-label="Send Test Email"><img src="/admin/static/icons/mail.svg" alt=""></button>
+      </form>
+      <form method="post" action="/admin/sites/{site_id}/email-providers/{id}/delete" style="display:inline" onsubmit="return confirm('Delete this email provider? Any forms using it will fall back to the install-wide account.')">
+        <button type="submit" class="icon-btn icon-danger" title="Delete Provider" aria-label="Delete Provider"><img src="/admin/static/icons/trash.svg" alt=""></button>
+      </form>
     </div>
   </div>
-</div>
-<script>
-function toggleSiteId() {{
-  var val    = document.getElementById('site-id-value');
-  var toggle = document.getElementById('site-id-toggle');
-  var shown  = val.style.display !== 'none';
-  val.style.display = shown ? 'none' : '';
-  toggle.title = shown ? 'Show Site ID' : 'Hide Site ID';
-  toggle.setAttribute('aria-label', toggle.title);
-  toggle.querySelector('img').src = '/admin/static/icons/' + (shown ? 'eye.svg' : 'eye-off.svg');
-}}
-function copySiteId() {{
-  var val = document.getElementById('site-id-value');
-  var markCopied = function() {{
-    // Stays green until the page reloads — re-clicking just re-copies.
-    val.style.color = getComputedStyle(document.documentElement).getPropertyValue('--success');
-  }};
-  // navigator.clipboard requires a secure context (https, or localhost) —
-  // on a plain http:// origin (common in dev, e.g. pong.com/bckr.local)
-  // it's undefined or its promise silently rejects, so this always falls
-  // back to the older execCommand technique rather than doing nothing.
-  if (navigator.clipboard && window.isSecureContext) {{
-    navigator.clipboard.writeText(val.textContent).then(markCopied, function() {{ legacyCopy(val, markCopied); }});
-  }} else {{
-    legacyCopy(val, markCopied);
-  }}
-}}
-function legacyCopy(el, onDone) {{
-  var ta = document.createElement('textarea');
-  ta.value = el.textContent;
-  ta.style.position = 'fixed';
-  ta.style.opacity = '0';
-  document.body.appendChild(ta);
-  ta.focus();
-  ta.select();
-  try {{ document.execCommand('copy'); onDone(); }} catch (e) {{}}
-  document.body.removeChild(ta);
-}}
-</script>
+  <form method="post" action="/admin/sites/{site_id}/email-providers/{id}" id="{edit_id}" style="display:none;margin-top:.75rem;padding-top:.75rem;border-top:1px solid var(--border)">
+    <input type="hidden" name="provider_type" value="{provider_type}">
+    <div class="form-group">
+      <label for="{field_prefix}label">Label</label>
+      <input type="text" id="{field_prefix}label" name="label" required value="{label}">
+    </div>
+    {fields_html}
+    <p class="field-hint">Re-enter every field — credentials aren't shown back once saved, and saving here replaces them all.</p>
+    <div class="icon-pill">
+      <button type="submit" class="icon-btn" title="Save Provider" aria-label="Save Provider"><img src="/admin/static/icons/save.svg" alt=""></button>
+      <button type="button" class="icon-btn" title="Cancel" aria-label="Cancel"
+              onclick="document.getElementById('{edit_id}').style.display='none'"><img src="/admin/static/icons/x.svg" alt=""></button>
+    </div>
+  </form>
+</div>"#,
+                label = crate::html_escape(&p.label),
+                type_label = provider_type_label(&p.provider_type),
+                status = status,
+                site_id = crate::html_escape(&data.id),
+                id = crate::html_escape(&p.id),
+                edit_id = edit_id,
+                provider_type = crate::html_escape(&p.provider_type),
+                field_prefix = field_prefix,
+                fields_html = provider_fields_html(&p.provider_type, &field_prefix),
+            )
+        }).collect::<Vec<_>>().join("\n")
+    };
 
+    let content = format!(
+        r#"<div>
+<style>
+.settings-tab-panel {{ display: none; }}
+.settings-tab-panel.active {{ display: block; }}
+</style>
+<div class="page-tabs" role="tablist" style="margin:0 0 1rem">
+  <button type="button" class="page-tab active" role="tab" aria-selected="true" aria-controls="tab-general" data-tab="general">General</button>
+  <button type="button" class="page-tab" role="tab" aria-selected="false" aria-controls="tab-maintenance" data-tab="maintenance">Maintenance</button>
+  <button type="button" class="page-tab" role="tab" aria-selected="false" aria-controls="tab-email" data-tab="email">Email Settings</button>
+</div>
+
+<div id="tab-general" class="settings-tab-panel active" role="tabpanel">
+<div style="max-width:720px">
 <div class="card-boxed">
   <h2 class="card-boxed-header">Settings</h2>
   <div class="card-boxed-body">
@@ -398,6 +511,64 @@ function legacyCopy(el, onDone) {{
 </script>
 
 <div class="card-boxed">
+  <h2 class="card-boxed-header">Support</h2>
+  <div class="card-boxed-body">
+    <p class="form-note" style="margin:0 0 .6rem">
+      Include this Site ID when contacting support or troubleshooting an
+      issue with this site.
+    </p>
+    <div style="display:flex;align-items:center;gap:.6rem">
+      <div class="icon-pill" style="margin-top:0">
+        <button type="button" class="icon-btn" id="site-id-toggle" title="Show Site ID" aria-label="Show Site ID" onclick="toggleSiteId()"><img src="/admin/static/icons/eye.svg" alt=""></button>
+      </div>
+      <code id="site-id-value" title="Click to copy" onclick="copySiteId()" style="display:none;cursor:pointer;font-size:.8rem;background:var(--tint);padding:.3rem .6rem;border-radius:4px">{id}</code>
+    </div>
+  </div>
+</div>
+<script>
+function toggleSiteId() {{
+  var val    = document.getElementById('site-id-value');
+  var toggle = document.getElementById('site-id-toggle');
+  var shown  = val.style.display !== 'none';
+  val.style.display = shown ? 'none' : '';
+  toggle.title = shown ? 'Show Site ID' : 'Hide Site ID';
+  toggle.setAttribute('aria-label', toggle.title);
+  toggle.querySelector('img').src = '/admin/static/icons/' + (shown ? 'eye.svg' : 'eye-off.svg');
+}}
+function copySiteId() {{
+  var val = document.getElementById('site-id-value');
+  var markCopied = function() {{
+    // Stays green until the page reloads — re-clicking just re-copies.
+    val.style.color = getComputedStyle(document.documentElement).getPropertyValue('--success');
+  }};
+  // navigator.clipboard requires a secure context (https, or localhost) —
+  // on a plain http:// origin (common in dev, e.g. pong.com/bckr.local)
+  // it's undefined or its promise silently rejects, so this always falls
+  // back to the older execCommand technique rather than doing nothing.
+  if (navigator.clipboard && window.isSecureContext) {{
+    navigator.clipboard.writeText(val.textContent).then(markCopied, function() {{ legacyCopy(val, markCopied); }});
+  }} else {{
+    legacyCopy(val, markCopied);
+  }}
+}}
+function legacyCopy(el, onDone) {{
+  var ta = document.createElement('textarea');
+  ta.value = el.textContent;
+  ta.style.position = 'fixed';
+  ta.style.opacity = '0';
+  document.body.appendChild(ta);
+  ta.focus();
+  ta.select();
+  try {{ document.execCommand('copy'); onDone(); }} catch (e) {{}}
+  document.body.removeChild(ta);
+}}
+</script>
+</div>
+</div>
+
+<div id="tab-maintenance" class="settings-tab-panel" role="tabpanel">
+<div style="max-width:720px">
+<div class="card-boxed">
   <h2 class="card-boxed-header">Maintenance Mode</h2>
   <div class="card-boxed-body">
   <p class="form-note" style="margin:0 0 1rem">
@@ -443,29 +614,110 @@ function legacyCopy(el, onDone) {{
   form.addEventListener('change', checkChanged);
 }})();
 </script>
+</div>
+</div>
 
+<div id="tab-email" class="settings-tab-panel" role="tabpanel">
+<div class="two-col">
+<div>
 <div class="card-boxed">
-  <h2 class="card-boxed-header">Email (Mailgun)</h2>
+  <h2 class="card-boxed-header">Email Providers</h2>
   <div class="card-boxed-body">
   <p class="form-note" style="margin:0 0 1rem">
-    Give this site its own Mailgun account for form notifications, instead of sharing the
-    install-wide one. Leave both fields blank to use the install-wide account.
+    Configure as many third-party email accounts as you like, then pick which one each form
+    should send through on that form's own Mail Settings tab. A form with none selected uses
+    the install-wide account.
   </p>
-  <form method="post" action="/admin/sites/{id}/mail-config" class="edit-form" id="mail-config-form" data-key-set="{mailgun_key_set_js}">
+  {providers_list_html}
+  </div>
+</div>
+</div>
+
+<div>
+<div class="card-boxed">
+  <h2 class="card-boxed-header">Add Provider</h2>
+  <div class="card-boxed-body">
+  <form method="post" action="/admin/sites/{id}/email-providers" class="edit-form" id="add-provider-form">
     <div class="card-boxed-section">
       <div class="form-group">
-        <label for="mailgun_domain">Mailgun domain</label>
-        <input type="text" id="mailgun_domain" name="mailgun_domain" value="{mailgun_domain}" placeholder="e.g. mg.example.com">
+        <label for="provider-label">Label</label>
+        <input type="text" id="provider-label" name="label" required placeholder="e.g. Marketing Mailgun">
       </div>
       <div class="form-group">
-        <label for="mailgun_api_key">Mailgun sending key</label>
-        <input type="password" id="mailgun_api_key" name="mailgun_api_key" autocomplete="off" placeholder="{mailgun_key_placeholder}">
-        <small>{mailgun_key_hint} Use the domain's Sending key (Domains &rarr; select domain &rarr; Sending Keys), not the account-wide Private API key.</small>
+        <label for="provider-type">Provider</label>
+        <select id="provider-type" name="provider_type">
+          <option value="mailgun">Mailgun</option>
+          <option value="smtp">SMTP</option>
+          <option value="sendgrid">SendGrid</option>
+          <option value="postmark">Postmark</option>
+        </select>
       </div>
     </div>
-    <p class="field-hint" id="mail-config-error" style="color:var(--danger);display:none;margin:0 0 .75rem"></p>
+    <div class="card-boxed-section provider-fields" data-provider="mailgun">
+      <div class="form-group">
+        <label for="mailgun_domain">Mailgun domain</label>
+        <input type="text" id="mailgun_domain" name="mailgun_domain" placeholder="e.g. mg.example.com">
+      </div>
+      <div class="form-group">
+        <label for="mailgun_api_key">Sending key</label>
+        <input type="password" id="mailgun_api_key" name="mailgun_api_key" autocomplete="off" placeholder="e.g. key-xxxxxxxx">
+        <small>Use the domain's Sending key (Domains &rarr; select domain &rarr; Sending Keys), not the account-wide Private API key.</small>
+      </div>
+    </div>
+    <div class="card-boxed-section provider-fields" data-provider="smtp" style="display:none">
+      <div class="form-group">
+        <label for="smtp_host">Host</label>
+        <input type="text" id="smtp_host" name="smtp_host" placeholder="e.g. smtp.example.com">
+      </div>
+      <div class="form-group">
+        <label for="smtp_port">Port</label>
+        <input type="number" id="smtp_port" name="smtp_port" placeholder="587">
+      </div>
+      <div class="form-group">
+        <label for="smtp_tls_mode">TLS</label>
+        <select id="smtp_tls_mode" name="smtp_tls_mode">
+          <option value="starttls">STARTTLS</option>
+          <option value="implicit">Implicit TLS</option>
+          <option value="none">None</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="smtp_username">Username</label>
+        <input type="text" id="smtp_username" name="smtp_username" autocomplete="off">
+      </div>
+      <div class="form-group">
+        <label for="smtp_password">Password</label>
+        <input type="password" id="smtp_password" name="smtp_password" autocomplete="off">
+      </div>
+    </div>
+    <div class="card-boxed-section provider-fields" data-provider="sendgrid" style="display:none">
+      <div class="form-group">
+        <label for="sendgrid_api_key">API key</label>
+        <input type="password" id="sendgrid_api_key" name="sendgrid_api_key" autocomplete="off">
+      </div>
+      <div class="form-group">
+        <label for="sendgrid_from_email">From address</label>
+        <input type="text" id="sendgrid_from_email" name="sendgrid_from_email" placeholder="e.g. noreply@example.com">
+        <small>Must be a verified sender or domain in your SendGrid account.</small>
+      </div>
+    </div>
+    <div class="card-boxed-section provider-fields" data-provider="postmark" style="display:none">
+      <div class="form-group">
+        <label for="postmark_server_token">Server API token</label>
+        <input type="password" id="postmark_server_token" name="postmark_server_token" autocomplete="off">
+      </div>
+      <div class="form-group">
+        <label for="postmark_message_stream">Message stream</label>
+        <input type="text" id="postmark_message_stream" name="postmark_message_stream" value="outbound">
+      </div>
+      <div class="form-group">
+        <label for="postmark_from_email">From address</label>
+        <input type="text" id="postmark_from_email" name="postmark_from_email" placeholder="e.g. noreply@example.com">
+        <small>Must be a verified sender signature in your Postmark account.</small>
+      </div>
+    </div>
     <div class="icon-pill">
-      <button type="submit" id="save-mail-config-btn" class="icon-btn" title="Save Email Settings" aria-label="Save Email Settings" disabled>
+      <button type="submit" id="add-provider-btn" class="icon-btn" title="Add Provider" aria-label="Add Provider">
         <img src="/admin/static/icons/save.svg" alt="">
       </button>
     </div>
@@ -474,35 +726,37 @@ function legacyCopy(el, onDone) {{
 </div>
 <script>
 (function() {{
-  var form = document.getElementById('mail-config-form');
-  var btn  = document.getElementById('save-mail-config-btn');
-  var domainInput = document.getElementById('mailgun_domain');
-  var keyInput = document.getElementById('mailgun_api_key');
-  var errorEl = document.getElementById('mail-config-error');
-  var keyAlreadySet = form.dataset.keySet === 'true';
-
-  function snapshot() {{
-    return Array.from(new FormData(form).entries()).map(function (e) {{ return e[0] + '=' + e[1]; }}).join('&');
+  var typeSelect = document.getElementById('provider-type');
+  var groups = document.querySelectorAll('.provider-fields');
+  function sync() {{
+    groups.forEach(function(g) {{
+      g.style.display = (g.dataset.provider === typeSelect.value) ? '' : 'none';
+    }});
   }}
-  var initialSnapshot = snapshot();
-  function checkChanged() {{
-    btn.disabled = snapshot() === initialSnapshot;
-  }}
-
-  form.addEventListener('submit', function(e) {{
-    var domain = domainInput.value.trim();
-    var key = keyInput.value.trim();
-    var error = '';
-    if (domain && !key && !keyAlreadySet) {{
-      error = 'Enter an API key too — a domain alone can\'t send anything.';
-    }} else if (!domain && key) {{
-      error = 'Enter a domain too, or clear the API key as well.';
-    }}
-    errorEl.style.display = error ? '' : 'none';
-    errorEl.textContent = error;
-    if (error) e.preventDefault();
+  typeSelect.addEventListener('change', sync);
+  sync();
+}})();
+</script>
+</div>
+</div>
+</div>
+</div>
+<script>
+(function() {{
+  var settingsTabs = document.querySelectorAll('.page-tab[data-tab]');
+  var settingsPanels = document.querySelectorAll('.settings-tab-panel');
+  settingsTabs.forEach(function(btn) {{
+    btn.addEventListener('click', function() {{
+      settingsTabs.forEach(function(b) {{
+        var on = b === btn;
+        b.classList.toggle('active', on);
+        b.setAttribute('aria-selected', on ? 'true' : 'false');
+      }});
+      settingsPanels.forEach(function(panel) {{
+        panel.classList.toggle('active', panel.id === 'tab-' + btn.dataset.tab);
+      }});
+    }});
   }});
-  form.addEventListener('input', checkChanged);
 }})();
 </script>
 </div>"#,
@@ -514,14 +768,7 @@ function legacyCopy(el, onDone) {{
         date_format = crate::html_escape(&data.date_format),
         maintenance_checked = if data.maintenance_mode { " checked" } else { "" },
         maintenance_message = crate::html_escape(&data.maintenance_message),
-        mailgun_domain = crate::html_escape(&data.mailgun_domain),
-        mailgun_key_set_js = data.mailgun_key_set,
-        mailgun_key_placeholder = if data.mailgun_key_set { "•••••••• (saved)" } else { "e.g. key-xxxxxxxx" },
-        mailgun_key_hint = if data.mailgun_key_set {
-            "A key is already saved. Leave blank to keep it, or enter a new one to replace it."
-        } else {
-            "Not set."
-        },
+        providers_list_html = providers_list_html,
     );
 
     crate::admin_page(&format!("Site Settings - {}", data.hostname), "/admin/sites", flash, &content, ctx)
