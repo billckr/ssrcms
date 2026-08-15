@@ -119,6 +119,14 @@ pub async fn create(
     if form.label.trim().is_empty() {
         return flash_redirect(id, "Enter a label for this provider.").into_response();
     }
+    match email_provider::label_exists_for_site(&state.db, id, form.label.trim(), None).await {
+        Ok(true) => return flash_redirect(id, "A provider with that label already exists.").into_response(),
+        Ok(false) => {}
+        Err(e) => {
+            tracing::error!("failed to check email provider label uniqueness for site {}: {:?}", id, e);
+            return flash_redirect(id, "Failed to save provider.").into_response();
+        }
+    }
     let config = match config_from_form(&form) {
         Ok(c) => c,
         Err(msg) => return flash_redirect(id, msg).into_response(),
@@ -154,6 +162,14 @@ pub async fn update(
 
     if form.label.trim().is_empty() {
         return flash_redirect(id, "Enter a label for this provider.").into_response();
+    }
+    match email_provider::label_exists_for_site(&state.db, id, form.label.trim(), Some(provider_id)).await {
+        Ok(true) => return flash_redirect(id, "A provider with that label already exists.").into_response(),
+        Ok(false) => {}
+        Err(e) => {
+            tracing::error!("failed to check email provider label uniqueness for site {}: {:?}", id, e);
+            return flash_redirect(id, "Failed to save provider.").into_response();
+        }
     }
     let config = match config_from_form(&form) {
         Ok(c) => c,

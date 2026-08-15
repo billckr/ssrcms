@@ -147,6 +147,21 @@ pub async fn list_verified_for_site(pool: &PgPool, site_id: Uuid) -> Result<Vec<
     Ok(rows)
 }
 
+/// Whether another provider on this site already uses `label` (case-
+/// insensitive). Pass `exclude_id` when checking during an update so the
+/// row being edited doesn't collide with itself.
+pub async fn label_exists_for_site(pool: &PgPool, site_id: Uuid, label: &str, exclude_id: Option<Uuid>) -> Result<bool> {
+    let row: Option<(i64,)> = sqlx::query_as(
+        "SELECT COUNT(*) FROM email_providers WHERE site_id = $1 AND LOWER(label) = LOWER($2) AND ($3::uuid IS NULL OR id != $3)",
+    )
+    .bind(site_id)
+    .bind(label)
+    .bind(exclude_id)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.map(|(c,)| c > 0).unwrap_or(false))
+}
+
 pub async fn get_by_id(pool: &PgPool, id: Uuid) -> Result<Option<EmailProviderRow>> {
     let row = sqlx::query_as::<_, EmailProviderRow>("SELECT * FROM email_providers WHERE id = $1")
         .bind(id)
