@@ -738,7 +738,7 @@ pub async fn save_site_config(
         tracing::warn!("site cache reload failed after site config save: {:?}", e);
     }
 
-    Redirect::to(&format!("/admin/sites/{}/settings?flash=Saved.", id)).into_response()
+    Redirect::to(&format!("/admin/sites/{}/settings?flash=Saved.&tab=general", id)).into_response()
 }
 
 /// POST /admin/sites/{id}/maintenance — toggle maintenance mode for a site.
@@ -765,8 +765,10 @@ pub async fn save_maintenance(
     }
 
     let enabled = form.contains_key("maintenance_mode");
-    let message = form.get("maintenance_message").map(|s| s.trim()).filter(|s| !s.is_empty())
+    let trimmed = form.get("maintenance_message").map(|s| s.trim()).filter(|s| !s.is_empty())
         .unwrap_or(DEFAULT_MAINTENANCE_MESSAGE);
+    let message: String = trimmed.chars().take(250).collect();
+    let message = message.as_str();
 
     if let Err(e) = crate::app_state::set_site_setting(&state.db, id, "maintenance_mode", if enabled { "true" } else { "false" }).await {
         tracing::error!("failed to save maintenance_mode for site {}: {:?}", id, e);
@@ -775,7 +777,7 @@ pub async fn save_maintenance(
         tracing::error!("failed to save maintenance_message for site {}: {:?}", id, e);
     }
 
-    Redirect::to(&format!("/admin/sites/{}/settings?flash=Saved.", id)).into_response()
+    Redirect::to(&format!("/admin/sites/{}/settings?flash=Saved.&tab=maintenance", id)).into_response()
 }
 
 /// POST /admin/sites/{id}/provision-ssl

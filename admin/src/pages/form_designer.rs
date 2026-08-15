@@ -382,6 +382,7 @@ pub fn render_editor(data: &FormEditData, ctx: &PageContext, flash: Option<&str>
         <div class="card-boxed-body">
           <div id="field-rows">{rows_html}</div>
           <input type="hidden" name="fields_json" id="fields-json">
+          <input type="hidden" name="active_tab" id="active-tab" value="general">
           <div class="icon-pill">
             <button type="button" id="add-field-btn" class="icon-btn" title="Add Field" aria-label="Add Field">
               <img src="/admin/static/icons/file-plus.svg" alt="">
@@ -490,18 +491,26 @@ pub fn render_editor(data: &FormEditData, ctx: &PageContext, flash: Option<&str>
 (function() {{
   var editorTabs = document.querySelectorAll('.page-tab[data-tab]');
   var editorPanels = document.querySelectorAll('.form-tab-panel');
-  editorTabs.forEach(function(btn) {{
-    btn.addEventListener('click', function() {{
-      editorTabs.forEach(function(b) {{
-        var on = b === btn;
-        b.classList.toggle('active', on);
-        b.setAttribute('aria-selected', on ? 'true' : 'false');
-      }});
-      editorPanels.forEach(function(panel) {{
-        panel.classList.toggle('active', panel.id === 'tab-' + btn.dataset.tab);
-      }});
+  var activeTabField = document.getElementById('active-tab');
+  function activate(btn) {{
+    editorTabs.forEach(function(b) {{
+      var on = b === btn;
+      b.classList.toggle('active', on);
+      b.setAttribute('aria-selected', on ? 'true' : 'false');
     }});
+    editorPanels.forEach(function(panel) {{
+      panel.classList.toggle('active', panel.id === 'tab-' + btn.dataset.tab);
+    }});
+    if (activeTabField) activeTabField.value = btn.dataset.tab;
+  }}
+  editorTabs.forEach(function(btn) {{
+    btn.addEventListener('click', function() {{ activate(btn); }});
   }});
+  var wantedTab = new URLSearchParams(window.location.search).get('tab');
+  if (wantedTab) {{
+    var wantedBtn = document.querySelector('.page-tab[data-tab="' + wantedTab + '"]');
+    if (wantedBtn) activate(wantedBtn);
+  }}
 }})();
 (function() {{
   var FIELD_TYPES_WITH_OPTIONS = ['select', 'radio', 'toggle'];

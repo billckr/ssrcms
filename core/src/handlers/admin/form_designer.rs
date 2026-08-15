@@ -157,6 +157,18 @@ pub struct SaveFormForm {
     pub confirm_body: String,
     #[serde(default)]
     pub email_provider_id: Option<String>,
+    #[serde(default)]
+    pub active_tab: Option<String>,
+}
+
+/// Query-string suffix to keep the same Form Settings tab active after a
+/// save reloads the page, e.g. editing Mail Settings shouldn't bounce back
+/// to General Settings just because it's first in the list.
+fn tab_suffix(form: &SaveFormForm) -> String {
+    match form.active_tab.as_deref() {
+        Some(tab) if tab == "mail" || tab == "preview" => format!("?tab={tab}"),
+        _ => String::new(),
+    }
 }
 
 /// Raw shape of one field as JSON-encoded by the editor's submit handler —
@@ -255,11 +267,12 @@ pub async fn update(
     let email_provider_id = parse_provider_id(&form);
     let settings = settings_from_form(&form);
 
+    let suffix = tab_suffix(&form);
     if let Err(e) = form_def::update(&state.db, site_id, id, UpdateFormDef { name: form.name, fields, settings, email_provider_id }).await {
         tracing::error!("form_designer::update failed: {e}");
     }
 
-    Redirect::to(&format!("/admin/form-designer/{id}")).into_response()
+    Redirect::to(&format!("/admin/form-designer/{id}{suffix}")).into_response()
 }
 
 pub async fn delete(State(state): State<AppState>, admin: AdminUser, Path(id): Path<Uuid>) -> Response {

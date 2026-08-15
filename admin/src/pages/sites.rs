@@ -628,24 +628,24 @@ function legacyCopy(el, onDone) {{
 <div class="card-boxed">
   <h2 class="card-boxed-header">Maintenance Mode</h2>
   <div class="card-boxed-body">
-  <p class="form-note" style="margin:0 0 1rem">
-    Shows a maintenance page to visitors of this site. Takes effect immediately &mdash; no
-    restart needed. <code>/admin/*</code> always stays reachable so you can turn it back off.
-  </p>
-  <form method="post" action="/admin/sites/{id}/maintenance" class="edit-form" id="maintenance-form"
-        onsubmit="return confirm(document.getElementById('maintenance_mode').checked
-          ? 'Enable maintenance mode? Visitors will see a maintenance page immediately.'
-          : 'Disable maintenance mode? The site will be reachable by visitors again.')">
+  <form method="post" action="/admin/sites/{id}/maintenance" class="edit-form" id="maintenance-form">
     <div class="card-boxed-section">
       <div class="form-group">
         <label style="display:inline;font-weight:400">
           <input type="checkbox" id="maintenance_mode" name="maintenance_mode" style="display:inline;width:auto;height:auto"{maintenance_checked}>
           Enable maintenance mode
         </label>
+        <p class="form-note" style="margin:.4rem 0 0">
+          Shows a maintenance page to visitors of this site. Takes effect immediately &mdash; no
+          restart needed. <code>/admin/*</code> always stays reachable so you can turn it back off.
+        </p>
       </div>
+    </div>
+    <div class="card-boxed-section">
       <div class="form-group">
         <label for="maintenance_message">Message</label>
-        <textarea id="maintenance_message" name="maintenance_message" rows="3">{maintenance_message}</textarea>
+        <textarea id="maintenance_message" name="maintenance_message" rows="3" maxlength="250">{maintenance_message}</textarea>
+        <small id="maintenance-message-count" style="color:var(--muted)">250/250</small>
       </div>
     </div>
     <div class="icon-pill">
@@ -660,6 +660,17 @@ function legacyCopy(el, onDone) {{
 (function() {{
   var form = document.getElementById('maintenance-form');
   var btn  = document.getElementById('save-maintenance-btn');
+  var checkbox = document.getElementById('maintenance_mode');
+  var initialChecked = checkbox.checked;
+  var messageField = document.getElementById('maintenance_message');
+  var countEl = document.getElementById('maintenance-message-count');
+  function updateCount() {{
+    var remaining = 250 - messageField.value.length;
+    countEl.textContent = remaining + '/250';
+    countEl.style.color = remaining <= 20 ? 'var(--danger)' : 'var(--muted)';
+  }}
+  messageField.addEventListener('input', updateCount);
+  updateCount();
   function snapshot() {{
     return Array.from(new FormData(form).entries()).map(function (e) {{ return e[0] + '=' + e[1]; }}).join('&');
   }}
@@ -669,6 +680,16 @@ function legacyCopy(el, onDone) {{
   }}
   form.addEventListener('input', checkChanged);
   form.addEventListener('change', checkChanged);
+  form.addEventListener('submit', function(e) {{
+    if (checkbox.checked !== initialChecked) {{
+      var msg = checkbox.checked
+        ? 'Enable maintenance mode? Visitors will see a maintenance page immediately.'
+        : 'Disable maintenance mode? The site will be reachable by visitors again.';
+      if (!confirm(msg)) {{
+        e.preventDefault();
+      }}
+    }}
+  }});
 }})();
 </script>
 </div>

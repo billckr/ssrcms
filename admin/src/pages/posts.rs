@@ -1560,8 +1560,10 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
     var btn = document.createElement('button');
     btn.type = 'button';
     btn.title = 'Insert audio';
-    btn.style.cssText = 'width:auto;padding:0 4px';
+    btn.style.cssText = 'width:auto;padding:0 4px;color:var(--field-text)';
     btn.innerHTML = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>';
+    btn.addEventListener('mouseenter', function() {{ btn.style.color = '#06c'; }});
+    btn.addEventListener('mouseleave', function() {{ btn.style.color = 'var(--field-text)'; }});
     btn.addEventListener('click', function() {{
       window._quillRange = quill.getSelection(true);
       openMediaPicker('audio');
@@ -1582,11 +1584,13 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
     var btn = document.createElement('button');
     btn.type = 'button';
     btn.title = 'Insert form';
-    btn.style.cssText = 'width:auto;padding:0 4px';
+    btn.style.cssText = 'width:auto;padding:0 4px;color:var(--field-text)';
     btn.innerHTML = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><line x1="8" y1="8" x2="16" y2="8"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="8" y1="16" x2="12" y2="16"/></svg>';
+    btn.addEventListener('mouseenter', function() {{ btn.style.color = '#06c'; }});
+    btn.addEventListener('mouseleave', function() {{ btn.style.color = 'var(--field-text)'; }});
 
     var menu = document.createElement('div');
-    menu.style.cssText = 'display:none;position:absolute;top:100%;left:0;z-index:20;min-width:180px;background:#fff;border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:.3rem;margin-top:2px';
+    menu.style.cssText = 'display:none;position:absolute;top:100%;left:0;z-index:20;min-width:180px;background:var(--field-bg);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:.3rem;margin-top:2px';
     if (savedForms.length === 0) {{
       menu.innerHTML = '<div style="padding:.4rem .6rem;font-size:12px;color:var(--muted)">No forms yet — build one in <a href="/admin/form-designer" target="_blank">Form Designer</a>.</div>';
     }} else {{
@@ -1594,8 +1598,8 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
         var item = document.createElement('button');
         item.type = 'button';
         item.textContent = f[1];
-        item.style.cssText = 'display:block;width:100%;text-align:left;padding:.4rem .6rem;font-size:13px;border:none;background:none;border-radius:4px;cursor:pointer';
-        item.addEventListener('mouseenter', function() {{ item.style.background = '#f1f5f9'; }});
+        item.style.cssText = 'display:block;width:100%;text-align:left;padding:.4rem .6rem;font-size:13px;border:none;background:none;border-radius:4px;cursor:pointer;color:var(--field-text)';
+        item.addEventListener('mouseenter', function() {{ item.style.background = 'var(--tint)'; }});
         item.addEventListener('mouseleave', function() {{ item.style.background = 'none'; }});
         item.addEventListener('click', function() {{
           var range = window._quillRange || quill.getSelection(true) || {{ index: quill.getLength() }};
