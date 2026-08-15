@@ -278,6 +278,7 @@ async fn new_post_type(state: AppState, post_type: &str, site_id: Option<Uuid>, 
         live_url: None,
         preview_url: None,
         saved_forms: fetch_saved_forms(&state, site_id).await,
+        form_analytics: vec![], // brand-new post has no content yet to embed a form in
         created_at: None,
         updated_at: None,
     };
@@ -448,6 +449,13 @@ async fn edit_post_type(state: AppState, id: Uuid, site_id: Option<Uuid>, is_aut
         live_url,
         preview_url,
         saved_forms: fetch_saved_forms(&state, site_id).await,
+        // post.site_id, not site_id (the viewing admin's current session
+        // site) — a global admin can open a post belonging to a different
+        // site than the one they're currently in, and forms are looked up
+        // by slug scoped to a site, so using the admin's site here could
+        // silently find nothing (or, if unlucky, a same-slugged form
+        // belonging to the wrong site) instead of this post's real form.
+        form_analytics: fetch_form_analytics(&state, post.site_id, &post.content).await,
         created_at: Some(post.created_at.format("%Y-%m-%d %H:%M UTC").to_string()),
         updated_at: Some(post.updated_at.format("%Y-%m-%d %H:%M UTC").to_string()),
     };
@@ -567,6 +575,7 @@ pub async fn save_new(
             live_url: None,
             preview_url: None,
             saved_forms: fetch_saved_forms(&state, admin.site_id).await,
+            form_analytics: vec![],
             created_at: None,
             updated_at: None,
         };
@@ -648,6 +657,7 @@ pub async fn save_new(
                 live_url: None,
                 preview_url: None,
                 saved_forms: fetch_saved_forms(&state, admin.site_id).await,
+                form_analytics: vec![],
                 created_at: None,
                 updated_at: None,
             };
@@ -743,6 +753,7 @@ pub async fn save_edit(
             live_url: None,
             preview_url: None,
             saved_forms: fetch_saved_forms(&state, admin.site_id).await,
+            form_analytics: vec![],
             created_at: None,
             updated_at: None,
         };
@@ -845,6 +856,7 @@ pub async fn save_edit(
                 live_url: None,
                 preview_url: None,
                 saved_forms: fetch_saved_forms(&state, admin.site_id).await,
+            form_analytics: vec![],
                 created_at: None,
                 updated_at: None,
             };
@@ -1131,6 +1143,40 @@ async fn fetch_saved_forms(state: &AppState, site_id: Option<Uuid>) -> Vec<(Stri
         .into_iter()
         .map(|f| (f.slug, f.name))
         .collect()
+}
+
+/// (form slug, form name, submission count) for every distinct saved-form
+/// embed found in `content` — powers the editor sidebar's "Form Analytics"
+/// section and the Publish Options pill's "view results" link (only shown
+/// when non-empty, see render_editor). slug (not id) is what the results
+/// page at /admin/form-data-analytics/{slug} actually takes as its path
+/// param — same identifier form_submissions.form_name stores, despite that
+/// column being misleadingly named "name". A form embed referencing a
+/// deleted/missing form is silently skipped, same convention as
+/// form_def::expand_embeds.
+async fn fetch_form_analytics(state: &AppState, site_id: Option<Uuid>, content: &str) -> Vec<(String, String, i64)> {
+    let Some(site_id) = site_id else { return vec![] };
+    if !content.contains("<ss-form") {
+        return vec![];
+    }
+    let Ok(re) = regex_lite::Regex::new(r#"<ss-form\b[^>]*data-slug="([^"]*)"[^>]*>"#) else {
+        return vec![];
+    };
+    let mut slugs: Vec<String> = re.captures_iter(content).map(|c| c[1].to_string()).collect();
+    slugs.sort();
+    slugs.dedup();
+
+    let mut results = Vec::with_capacity(slugs.len());
+    for slug in slugs {
+        let Ok(Some(form)) = crate::models::form_def::get_by_slug(&state.db, site_id, &slug).await else {
+            continue;
+        };
+        let count = crate::models::form_submission::count_for_form(&state.db, site_id, &slug)
+            .await
+            .unwrap_or(0);
+        results.push((form.slug, form.name, count));
+    }
+    results
 }
 
 /// Scan the active theme's templates/ directory for available templates.

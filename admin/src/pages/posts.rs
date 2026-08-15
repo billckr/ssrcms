@@ -70,6 +70,11 @@ pub struct PostEdit {
     /// (slug, name) pairs for every form defined in Form Designer — powers
     /// the editor's "Insert Form" picker.
     pub saved_forms: Vec<(String, String)>,
+    /// (form slug, form name, submission count) for each distinct form
+    /// embedded in this post's content. Empty means "show nothing" — the
+    /// sidebar section and the Publish Options pill's results link are only
+    /// rendered when this is non-empty (see render_editor).
+    pub form_analytics: Vec<(String, String, i64)>,
     /// When this post/page was first created. None for a new, unsaved post.
     pub created_at: Option<String>,
     /// When it was last saved. None for a new, unsaved post.
@@ -578,6 +583,17 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
             label = crate::html_escape(label),
         )
     };
+    // Links to the first embedded form's results page (see fetch_form_analytics)
+    // — only shown when this post actually has a form embedded. Multiple
+    // distinct forms in one post is rare enough not to warrant a picker here;
+    // the "Form Analytics" sidebar section below lists all of them by name.
+    let form_metrics_link = match post.form_analytics.first() {
+        Some((slug, _name, _count)) => format!(
+            r#"<a href="/admin/form-data-analytics/{slug}" class="icon-btn" title="View form results" aria-label="View form results" target="_blank" rel="noopener"><img src="/admin/static/icons/send.svg" alt=""></a>"#,
+            slug = crate::html_escape(slug),
+        ),
+        None => String::new(),
+    };
     // Shares the Save pill, only for an existing post (nothing to change
     // status on or view/preview for a post that hasn't been saved yet).
     let status_actions_pill = if is_new {
@@ -587,7 +603,9 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
             r#"<button type="button" class="icon-btn" id="status-edit-btn" title="Change status" aria-label="Change status">
               <img src="/admin/static/icons/edit.svg" alt="">
             </button>
+            {form_metrics_link}
             {live_url_link}"#,
+            form_metrics_link = form_metrics_link,
             live_url_link = live_url_link,
         )
     };
@@ -602,6 +620,27 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
     // Nothing to show at all yet on a brand-new, unsaved, non-scheduled
     // post — hide the whole section rather than leaving an empty box.
     let datetime_section_display = if !is_scheduled && post.created_at.is_none() { "display:none" } else { "" };
+    // One label/value block per embedded form (see fetch_form_analytics) —
+    // named per-form ("Form Analytics — {name}") when there's more than one,
+    // since summing submission counts across different forms wouldn't mean
+    // anything. Nothing rendered at all when the post has no form embedded.
+    let form_analytics_html: String = post.form_analytics.iter().map(|(_slug, name, count)| {
+        let label = if post.form_analytics.len() > 1 {
+            format!("Form Analytics — {}", crate::html_escape(name))
+        } else {
+            "Form Analytics".to_string()
+        };
+        format!(
+            r#"<div style="margin-top:.6rem">
+              <label style="display:block;font-weight:500;margin-bottom:.35rem;font-size:13px">{label}:</label>
+              <div style="font-size:13px;color:var(--muted)">{count} result{plural}</div>
+            </div>"#,
+            label = label,
+            count = count,
+            plural = if *count == 1 { "" } else { "s" },
+        )
+    }).collect();
+
     let post_dates_info = match (&post.created_at, &post.updated_at) {
         (Some(created), Some(updated)) => format!(
             r#"<div id="post-dates-info" style="{display}">
@@ -613,10 +652,12 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
               <label style="display:block;font-weight:500;margin-bottom:.35rem;font-size:13px">Last updated:</label>
               <div style="font-size:13px;color:var(--muted)">{updated}</div>
             </div>
+            {form_analytics_html}
           </div>"#,
             display = if is_scheduled { "display:none" } else { "" },
             created = crate::html_escape(created),
             updated = crate::html_escape(updated),
+            form_analytics_html = form_analytics_html,
         ),
         _ => String::new(),
     };

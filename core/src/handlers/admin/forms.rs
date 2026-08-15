@@ -9,9 +9,9 @@ use serde::Deserialize;
 
 use crate::app_state::AppState;
 use crate::middleware::admin_auth::AdminUser;
-use crate::models::{form_def, form_submission};
+use crate::models::form_submission;
 
-use admin::pages::forms::{FormSummaryRow, SubmissionRow};
+use admin::pages::forms::SubmissionRow;
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -27,64 +27,6 @@ fn require_site_id(admin: &AdminUser) -> Result<uuid::Uuid, Response> {
     admin.site_id.ok_or_else(|| {
         (StatusCode::BAD_REQUEST, "No site selected.").into_response()
     })
-}
-
-// ── list all forms ────────────────────────────────────────────────────────────
-
-#[derive(Deserialize, Default)]
-pub struct ListFormsQuery {
-    /// Column to sort by: "name" | "submissions" | "last".
-    #[serde(default)]
-    pub sort: String,
-    /// Sort direction: "asc" or "desc".
-    #[serde(default)]
-    pub dir: String,
-}
-
-pub async fn list_forms(
-    State(state): State<AppState>,
-    admin: AdminUser,
-    Query(q): Query<ListFormsQuery>,
-) -> Response {
-    if let Err(r) = require_forms_cap(&admin) { return r; }
-    let site_id = match require_site_id(&admin) { Ok(id) => id, Err(r) => return r };
-
-    let cs = state.site_hostname(admin.site_id);
-    let ctx = super::page_ctx_full(&state, &admin, &cs).await;
-
-    match form_submission::list_forms(&state.db, site_id).await {
-        Ok(summaries) => {
-            let blocked = form_submission::blocked_names(&state.db, site_id).await;
-            // Submissions and definitions are linked only by name (no FK) —
-            // a form deleted in Form Designer leaves its collected data
-            // behind. Flag those rows rather than let them look identical
-            // to a form that's still editable/re-embeddable.
-            let defined_slugs: std::collections::HashSet<String> = form_def::list_for_site(&state.db, site_id)
-                .await
-                .unwrap_or_default()
-                .into_iter()
-                .map(|f| f.slug)
-                .collect();
-            let rows: Vec<FormSummaryRow> = summaries.into_iter().map(|s| {
-                let is_blocked = blocked.contains(&s.form_name);
-                let definition_exists = defined_slugs.contains(&s.form_name);
-                FormSummaryRow {
-                    form_name: s.form_name,
-                    submission_count: s.submission_count,
-                    last_submitted_at: s.last_submitted_at.format("%Y-%m-%d %H:%M UTC").to_string(),
-                    unread_count: s.unread_count,
-                    blocked: is_blocked,
-                    definition_exists,
-                }
-            }).collect();
-
-            Html(admin::pages::forms::render_forms_list(&rows, &q.sort, &q.dir, None, &ctx)).into_response()
-        }
-        Err(e) => {
-            tracing::error!("list_forms error: {:?}", e);
-            Html(admin::pages::forms::render_forms_list(&[], &q.sort, &q.dir, Some("Failed to load forms."), &ctx)).into_response()
-        }
-    }
 }
 
 // ── view a single form's submissions ─────────────────────────────────────────
@@ -170,7 +112,7 @@ pub async fn delete_all(
     if let Err(e) = form_submission::delete_all(&state.db, site_id, &name).await {
         tracing::error!("delete_all '{}' error: {:?}", name, e);
     }
-    Redirect::to("/admin/form-data-analytics").into_response()
+    Redirect::to("/admin/analytics?tab=forms").into_response()
 }
 
 // ── export CSV ────────────────────────────────────────────────────────────────
@@ -290,5 +232,5 @@ pub async fn toggle_block(
     } else {
         let _ = form_submission::block(&state.db, site_id, &name).await;
     }
-    Redirect::to("/admin/form-data-analytics").into_response()
+    Redirect::to("/admin/analytics?tab=forms").into_response()
 }

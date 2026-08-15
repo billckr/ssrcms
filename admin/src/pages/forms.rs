@@ -13,6 +13,10 @@ pub struct FormSummaryRow {
     /// name), but there's nothing to edit/re-embed. Surfaced as a badge
     /// rather than hidden, since the data is still real and actionable.
     pub definition_exists: bool,
+    /// The form definition's UUID — None exactly when definition_exists is
+    /// false. Backs the Edit/Analytics/Delete actions, which all need a real
+    /// form id and so only render when this is Some.
+    pub id: Option<String>,
 }
 
 pub struct SubmissionRow {
@@ -25,12 +29,12 @@ pub struct SubmissionRow {
 
 // ── Forms list ────────────────────────────────────────────────────────────────
 
-pub fn render_forms_list(
+/// Content for the "Forms" tab on /admin/analytics — table + search, no page
+/// chrome (admin_page wrapper). Used by pages::analytics inside its tab shell.
+pub fn forms_tab_content(
     forms: &[FormSummaryRow],
     sort: &str,
     dir: &str,
-    flash: Option<&str>,
-    ctx: &PageContext,
 ) -> String {
     let mut sorted: Vec<&FormSummaryRow> = forms.iter().collect();
     match sort {
@@ -50,7 +54,7 @@ pub fn render_forms_list(
         let next_dir = if is_active && asc { "desc" } else { "asc" };
         let arrow = if is_active { if asc { " \u{25B2}" } else { " \u{25BC}" } } else { "" };
         format!(
-            r#"<th><a href="/admin/form-data-analytics?sort={key}&dir={next_dir}" style="color:inherit;text-decoration:none;white-space:nowrap">{label}{arrow}</a></th>"#
+            r#"<th><a href="/admin/analytics?tab=forms&sort={key}&dir={next_dir}" style="color:inherit;text-decoration:none;white-space:nowrap">{label}{arrow}</a></th>"#
         )
     };
 
@@ -91,14 +95,47 @@ pub fn render_forms_list(
             } else {
                 String::new()
             };
+            // Edit/Analytics/Delete all need the form definition's id, so
+            // they're only available when one still exists (definition_exists) —
+            // an orphaned submissions-only row (deleted_badge above) can still
+            // be exported or blocked, just not edited/analyzed/deleted.
+            let definition_actions = match &f.id {
+                Some(id) => format!(
+                    r#"<a href="/admin/form-designer/{id}" class="icon-btn" title="Edit">
+      <img src="/admin/static/icons/edit.svg" alt="Edit">
+    </a>
+    <a href="/admin/analytics/form/{id}" class="icon-btn" title="Analytics">
+      <img src="/admin/static/icons/bar-chart.svg" alt="Analytics">
+    </a>"#,
+                    id = html_escape(id),
+                ),
+                None => String::new(),
+            };
+            let delete_btn = match &f.id {
+                Some(id) => format!(
+                    r#"<form method="POST" action="/admin/form-designer/{id}/delete" style="display:inline"
+        onsubmit="return confirm('Delete the form \'{name_js}\'? This does not delete any submissions already collected under it.')">
+    <button class="icon-btn icon-danger" title="Delete" type="submit">
+      <img src="/admin/static/icons/trash.svg" alt="Delete">
+    </button>
+  </form>"#,
+                    id = html_escape(id),
+                    name_js = f.form_name.replace('\'', "\\'"),
+                ),
+                None => String::new(),
+            };
             format!(
                 r#"<tr{row_class}>
   <td><a href="/admin/form-data-analytics/{name}">{name}</a>{blocked_badge}{deleted_badge}</td>
   <td><span style="display:inline-block;background:var(--tint);color:var(--text);border-radius:4px;padding:.15rem .5rem;font-size:.78rem;font-weight:500">{count}</span>{unread_badge}</td>
   <td>{last}</td>
-  <td>
-    <a href="/admin/form-data-analytics/{name}/export" class="icon-btn" title="Export CSV" aria-label="Export CSV"><img src="/admin/static/icons/download.svg" alt=""></a>
+  <td class="actions">
+    <div class="icon-pill-actionbuttons">
+    {definition_actions}
+    <a href="/admin/form-data-analytics/{name}/export" download class="icon-btn" title="Export CSV" aria-label="Export CSV"><img src="/admin/static/icons/download.svg" alt=""></a>
     {block_btn}
+    {delete_btn}
+    </div>
   </td>
 </tr>"#,
                 row_class = row_class,
@@ -108,7 +145,9 @@ pub fn render_forms_list(
                 last = html_escape(&f.last_submitted_at),
                 blocked_badge = blocked_badge,
                 deleted_badge = deleted_badge,
+                definition_actions = definition_actions,
                 block_btn = block_btn,
+                delete_btn = delete_btn,
             )
         }).collect::<Vec<_>>().join("\n")
     };
@@ -157,7 +196,7 @@ pub fn render_forms_list(
         pill_search_init = crate::pill_search_init_script(),
     );
 
-    admin_page("Forms", "/admin/form-data-analytics", flash, &content, ctx)
+    content
 }
 
 // ── Submission detail ─────────────────────────────────────────────────────────

@@ -15,7 +15,6 @@ done.
 - [ ] adjust badged to better fit others size on /admin/sites
 - [ ] add a dark mode maintenaince page. Add light/dark move option to https://synapcms.dev/admin/sites/8e8b22bc-ecd8-4f39-bcf5-f29876d7312b/settings in Maintenance Mode section. So either the dark mode or light mode maintance page can be selected.
 - [ ] revisit the need or funtion login behind the http://pong.com/admin/menus menu location. The theme has to be aware of this and it may need adjustment based on new menu options.
-- [ ] consider change the text field colors on post page. They are white and are very bright for a dark theme.
 - [ ] consiider adding clerk-rs as account creation option. It's not offical but appears to be well maintained.
 - [ ] add Google login via OAuth2 (oauth2 crate) as an account creation/sign-in option.
 - [ ] need to think about how we're going to relay via docs about all the possible data points that can be displayed for a site for users who want to build or customize their own themes. example Posts, pages, etc etc.
@@ -26,6 +25,8 @@ done.
 - [ ] Media manager dark-mode color scheme (sidebar/toolbar/content/footer backgrounds) still isn't right after several passes — revisit from scratch with a clearer reference/screenshot before making more changes.
 - [ ] in appearance editor, when you change a color, trying to revert back to original doesn't work.
 
+- [ ] revisit whether anyone who can edit a post (not just users with can_manage_forms) should be able to see the embedded form's submission count in the post editor sidebar and the "view form metrics" link — currently no permission gate on that, only the destination /admin/form-analytics page itself enforces can_manage_forms.
+
 ## Done
 
-- (move completed items here, or delete them — your call)
+- [x] change the text field colors on post page — they were white/bright for a dark theme; rolled out site-wide via --field-bg/--field-text
