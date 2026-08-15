@@ -53,6 +53,9 @@ pub struct FormEditData {
     pub email_provider_id: String,
     /// The site's verified providers, to populate the dropdown.
     pub provider_options: Vec<ProviderOption>,
+    /// The site this form belongs to — used to link the "Send via" hint to
+    /// that site's Email Settings tab.
+    pub site_id: String,
 }
 
 impl Default for FormEditData {
@@ -76,6 +79,7 @@ impl Default for FormEditData {
             confirm_body: "Thanks for reaching out! We've received your submission and will follow up soon.".to_string(),
             email_provider_id: String::new(),
             provider_options: Vec::new(),
+            site_id: String::new(),
         }
     }
 }
@@ -324,7 +328,7 @@ pub fn render_editor(data: &FormEditData, ctx: &PageContext, flash: Option<&str>
         Some(id) => format!("/admin/form-designer/{id}"),
         None => "/admin/form-designer".to_string(),
     };
-    let title = if is_edit { "Edit Form" } else { "New Form" };
+    let title = if is_edit { format!("Editing form - {}", html_escape(&data.name)) } else { "New Form".to_string() };
 
     let rows_html: String = data.fields.iter().enumerate()
         .map(|(i, f)| field_row_html(f, i))
@@ -450,7 +454,7 @@ pub fn render_editor(data: &FormEditData, ctx: &PageContext, flash: Option<&str>
                 <option value="">Install-wide default account</option>
                 {provider_options_html}
               </select>
-              <p class="field-hint">Configure providers on this site's Settings &rarr; Email Settings tab.</p>
+              <p class="field-hint">Configure providers on this site's Settings &rarr; <a href="/admin/sites/{site_id}/settings?tab=email" target="_blank" rel="noopener">Email Settings</a> tab.</p>
             </div>
           </div>
           <div class="card-boxed-section">
@@ -799,6 +803,7 @@ pub fn render_editor(data: &FormEditData, ctx: &PageContext, flash: Option<&str>
         success_message = html_escape(&data.success_message),
         button_label = html_escape(&data.button_label),
         provider_options_html = provider_options_html,
+        site_id = crate::html_escape(&data.site_id),
         notify_email = html_escape(&data.notify_email),
         honeypot_checked = if data.include_honeypot { " checked" } else { "" },
         confirm_submitter_checked = if data.confirm_submitter { " checked" } else { "" },
@@ -809,5 +814,5 @@ pub fn render_editor(data: &FormEditData, ctx: &PageContext, flash: Option<&str>
         type_opts_js = format!("[{}]", FIELD_TYPES.iter().map(|(v, l)| format!("['{v}','{l}']")).collect::<Vec<_>>().join(",")),
     );
 
-    admin_page(title, "/admin/form-designer", flash, &content, ctx)
+    admin_page(&title, "/admin/form-designer", flash, &content, ctx)
 }

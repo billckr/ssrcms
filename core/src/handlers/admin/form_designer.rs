@@ -94,7 +94,8 @@ pub async fn new_form(State(state): State<AppState>, admin: AdminUser) -> Respon
 
     let providers = crate::models::email_provider::list_verified_for_site(&state.db, site_id).await.unwrap_or_default();
     let data = FormEditData {
-        provider_options: providers.into_iter().map(|p| ProviderOption { id: p.id.to_string(), label: p.label }).collect(),
+        provider_options: providers.into_iter().map(|p| ProviderOption { id: p.id.to_string(), label: format!("{} - {}", p.label, p.provider_type) }).collect(),
+        site_id: site_id.to_string(),
         ..FormEditData::default()
     };
 
@@ -134,7 +135,8 @@ pub async fn edit_form(State(state): State<AppState>, admin: AdminUser, Path(id)
         confirm_subject: form.settings.confirm_subject,
         confirm_body: form.settings.confirm_body,
         email_provider_id: form.email_provider_id.map(|id| id.to_string()).unwrap_or_default(),
-        provider_options: providers.into_iter().map(|p| ProviderOption { id: p.id.to_string(), label: p.label }).collect(),
+        provider_options: providers.into_iter().map(|p| ProviderOption { id: p.id.to_string(), label: format!("{} - {}", p.label, p.provider_type) }).collect(),
+        site_id: site_id.to_string(),
     };
 
     Html(render_editor(&data, &ctx, None)).into_response()
