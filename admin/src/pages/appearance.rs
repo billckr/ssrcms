@@ -72,7 +72,9 @@ pub fn render_with_flash(themes: &[ThemeInfo], flash: Option<&str>, ctx: &crate:
       {filter_options}
     </select>
   </form>
-  <a href="/admin/appearance/create" class="btn btn-primary">+ Create Theme</a>
+  <div class="icon-pill">
+    <a href="/admin/appearance/create" class="icon-btn" title="Create Theme" aria-label="Create Theme"><img src="/admin/static/icons/file-plus.svg" alt=""></a>
+  </div>
 </div>"#,
             filter_options = filter_options,
         )
@@ -115,7 +117,8 @@ pub fn render_with_flash(themes: &[ThemeInfo], flash: Option<&str>, ctx: &crate:
 pub fn render_create_theme_form(flash: Option<&str>, ctx: &crate::PageContext) -> String {
     // Visibility radio is only shown to super_admin.
     let visibility_section = if ctx.is_global_admin {
-        r#"<div class="form-group">
+        r#"<div class="card-boxed-section">
+  <div class="form-group">
     <label>Visibility</label>
     <div class="radio-group">
       <label class="radio-label">
@@ -133,16 +136,18 @@ pub fn render_create_theme_form(flash: Option<&str>, ctx: &crate::PageContext) -
         </span>
       </label>
     </div>
-  </div>"#
+  </div>
+</div>"#
     } else {
         ""
     };
 
     let content = format!(
-        r#"<div class="card-boxed">
+        r#"<div class="card-boxed" style="max-width:560px">
   <h2 class="card-boxed-header">Create Theme</h2>
   <div class="card-boxed-body">
-  <form method="POST" action="/admin/appearance/create" class="form-section" style="max-width:520px;">
+  <form method="POST" action="/admin/appearance/create" class="edit-form" id="create-theme-form" style="max-width:580px">
+  <div class="card-boxed-section">
   <div class="form-group">
     <label for="name">Theme name <span class="required">*</span></label>
     <input type="text" id="name" name="name" required maxlength="64"
@@ -158,10 +163,12 @@ pub fn render_create_theme_form(flash: Option<&str>, ctx: &crate::PageContext) -
     <label for="author">Author</label>
     <input type="text" id="author" name="author" maxlength="100" placeholder="Your name">
   </div>
+  </div>
   {visibility}
-  <div class="form-actions">
-    <button type="submit" class="btn btn-primary">Create Theme</button>
-    <a href="/admin/appearance" class="btn btn-secondary">Cancel</a>
+  <div class="icon-pill">
+    <button type="submit" form="create-theme-form" id="create-theme-btn" class="icon-btn" title="Create Theme" aria-label="Create Theme">
+      <img src="/admin/static/icons/file-plus.svg" alt="">
+    </button>
   </div>
   </form>
   </div>
