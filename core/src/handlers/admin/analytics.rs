@@ -70,17 +70,20 @@ pub async fn list(
                 // None) rather than let them look identical to a form that's
                 // still editable/re-embeddable — Edit/Analytics/Delete all
                 // need a real form id, so they only render when one exists.
-                let defined: std::collections::HashMap<String, uuid::Uuid> = form_def::list_for_site(&state.db, site_id)
+                let defined: std::collections::HashMap<String, (uuid::Uuid, String)> = form_def::list_for_site(&state.db, site_id)
                     .await
                     .unwrap_or_default()
                     .into_iter()
-                    .map(|f| (f.slug, f.id))
+                    .map(|f| (f.slug, (f.id, f.name)))
                     .collect();
                 let mut rows: Vec<FormSummaryRow> = summaries.into_iter().map(|s| {
                     let is_blocked = blocked.contains(&s.form_name);
-                    let id = defined.get(&s.form_name).map(|id| id.to_string());
+                    let def = defined.get(&s.form_name);
+                    let id = def.map(|(id, _)| id.to_string());
+                    let display_name = def.map(|(_, name)| name.clone()).unwrap_or_else(|| s.form_name.clone());
                     FormSummaryRow {
                         form_name: s.form_name,
+                        display_name,
                         submission_count: s.submission_count,
                         last_submitted_at: s.last_submitted_at.format("%Y-%m-%d %H:%M UTC").to_string(),
                         unread_count: s.unread_count,
@@ -102,7 +105,7 @@ pub async fn list(
     };
 
     let form_filter = q.form.as_deref().map(|id| {
-        let name = rows.iter().find(|r| r.id.as_deref() == Some(id)).map(|r| r.form_name.as_str()).unwrap_or(id);
+        let name = rows.iter().find(|r| r.id.as_deref() == Some(id)).map(|r| r.display_name.as_str()).unwrap_or(id);
         (id, name)
     });
 

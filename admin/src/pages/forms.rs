@@ -3,7 +3,14 @@
 use crate::{html_escape, admin_page, PageContext};
 
 pub struct FormSummaryRow {
+    /// The form's slug — what submissions are actually keyed by, and what
+    /// every action route (export/block/delete/etc.) here takes. Not what's
+    /// displayed; see `display_name`.
     pub form_name: String,
+    /// The form definition's display name (e.g. "Contact Form"), shown in
+    /// the table instead of the slug. Falls back to the slug itself for an
+    /// orphaned row with no definition to read a name from.
+    pub display_name: String,
     pub submission_count: i64,
     pub last_submitted_at: String,
     pub unread_count: i64,
@@ -40,7 +47,7 @@ pub fn forms_tab_content(
     match sort {
         "submissions" => sorted.sort_by_key(|f| f.submission_count),
         "last"        => sorted.sort_by(|a, b| a.last_submitted_at.cmp(&b.last_submitted_at)),
-        "name"        => sorted.sort_by_key(|f| f.form_name.to_lowercase()),
+        "name"        => sorted.sort_by_key(|f| f.display_name.to_lowercase()),
         _ => {}
     }
     let asc = dir != "desc";
@@ -150,7 +157,7 @@ pub fn forms_tab_content(
   </td>
 </tr>"#,
                 row_class = row_class,
-                name = html_escape(&f.form_name),
+                name = html_escape(&f.display_name),
                 count = f.submission_count,
                 unread_badge = unread_badge,
                 last = html_escape(&f.last_submitted_at),
