@@ -70,7 +70,7 @@ pub fn page_ctx(state: &AppState, admin: &AdminUser, current_site: &str) -> admi
         can_manage_pages: admin.caps.can_manage_pages,
         unread_forms_count: 0,
         app_name,
-        logo_url: state.logo_url.clone(),
+        logo_url: state.logo_url.read().ok().and_then(|g| g.clone()),
         default_theme,
     }
 }
@@ -134,6 +134,7 @@ pub mod plugins;
 pub mod posts;
 pub mod profile;
 pub mod settings;
+pub mod logo_upload;
 pub mod sites;
 pub mod taxonomy;
 pub mod upload;

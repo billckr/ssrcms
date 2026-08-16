@@ -396,7 +396,7 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
                 String::new()
             };
             let active = if current_path.starts_with("/admin/analytics") || current_path.starts_with("/admin/form-data-analytics") { " class=\"active\"" } else { "" };
-            format!(r#"<li><a href="/admin/analytics?tab=forms"{}>{}</a></li>"#,
+            format!(r#"<li><a href="/admin/analytics?tab=general"{}>{}</a></li>"#,
                 active,
                 format!("Analytics{}", badge)
             )

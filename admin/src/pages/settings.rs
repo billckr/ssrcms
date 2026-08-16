@@ -13,6 +13,27 @@ pub fn render(
 ) -> String {
     let app_name_escaped = crate::html_escape(app_name);
 
+    let current_logo_preview = match &ctx.logo_url {
+        Some(url) => format!(
+            r#"<img src="{url}" alt="Current logo" style="height:38px;max-width:100%">"#,
+            url = crate::html_escape(url),
+        ),
+        None => format!(
+            r#"<span style="font-weight:600">{app_name_escaped}</span> <span class="field-hint">(text — no custom logo uploaded)</span>"#,
+        ),
+    };
+    // No nested <form> possible (already inside the upload form, and a
+    // second top-level <form> couldn't share this icon-pill visually) — a
+    // plain button that posts via fetch(), same pattern as the form
+    // designer/post editor's delete buttons.
+    let reset_logo_btn = if ctx.logo_url.is_some() {
+        r#"<button type="button" class="icon-btn" title="Reset to Text" aria-label="Reset to Text" onclick="resetLogoConfirm()">
+              <img src="/admin/static/icons/rotate-ccw.svg" alt="">
+            </button>"#.to_string()
+    } else {
+        String::new()
+    };
+
     let theme_options = [
         ("system", "Match system"),
         ("light", "Light"),
@@ -56,45 +77,10 @@ pub fn render(
 
     let content = format!(r#"
 <style>
-/* ── Settings tabs ── */
-.settings-tabs {{
-  display: flex;
-  gap: 0;
-  border-bottom: 2px solid var(--border);
-  margin-bottom: 1.75rem;
-}}
-
-.settings-tab-btn {{
-  position: relative;
-  padding: .55rem 1.1rem;
-  background: none;
-  border: none;
-  border-bottom: 2px solid transparent;
-  margin-bottom: -2px;
-  font-size: .875rem;
-  font-weight: 500;
-  color: var(--muted);
-  cursor: pointer;
-  transition: color .15s;
-  white-space: nowrap;
-}}
-
-.settings-tab-btn:hover {{
-  color: var(--text);
-}}
-
-.settings-tab-btn.active {{
-  color: var(--primary);
-}}
-
-.settings-tab-btn.active::after {{
-  content: '';
-  position: absolute;
-  left: 0; right: 0; bottom: -2px;
-  height: 1.5px;
-  background: linear-gradient(90deg, transparent, var(--primary) 50%, transparent);
-}}
-
+/* Tab bar look/underline is the shared .page-tabs/.page-tab (admin.css) —
+   this page used to duplicate that CSS under its own .settings-tabs/
+   .settings-tab-btn names, hand-kept in visual sync. Only the panel
+   show/hide (below) stays page-local, since that's not shared anywhere. */
 .settings-panel {{
   display: none;
   max-width: 560px;
@@ -161,11 +147,11 @@ pub fn render(
 </style>
 
 <!-- Tab bar -->
-<div class="settings-tabs" role="tablist">
-  <button class="settings-tab-btn active" role="tab" aria-selected="true"  aria-controls="tab-general"  data-tab="general">General</button>
-  <button class="settings-tab-btn"        role="tab" aria-selected="false" aria-controls="tab-security" data-tab="security">Security</button>
-  <button class="settings-tab-btn"        role="tab" aria-selected="false" aria-controls="tab-advanced" data-tab="advanced">Advanced</button>
-  <button class="settings-tab-btn"        role="tab" aria-selected="false" aria-controls="tab-widgets"  data-tab="widgets">Widgets</button>
+<div class="page-tabs" role="tablist">
+  <button type="button" class="page-tab active" role="tab" aria-selected="true"  aria-controls="tab-general"  data-tab="general">General</button>
+  <button type="button" class="page-tab"        role="tab" aria-selected="false" aria-controls="tab-security" data-tab="security">Security</button>
+  <button type="button" class="page-tab"        role="tab" aria-selected="false" aria-controls="tab-advanced" data-tab="advanced">Advanced</button>
+  <button type="button" class="page-tab"        role="tab" aria-selected="false" aria-controls="tab-widgets"  data-tab="widgets">Widgets</button>
 </div>
 
 <!-- General -->
@@ -182,13 +168,40 @@ pub fn render(
           <input type="text" id="sg-app-name" name="app_name" value="{app_name}">
           <small>Shown in the admin sidebar top-left. Set to your agency or CMS brand name.</small>
         </div>
-      </div>
-      <div class="icon-pill" style="margin-top:1.5rem">
-        <button type="submit" id="general-save-btn" class="icon-btn" title="Save General" aria-label="Save General" disabled>
-          <img src="/admin/static/icons/save.svg" alt="">
-        </button>
+        <div class="icon-pill" style="margin-top:1rem">
+          <button type="submit" id="general-save-btn" class="icon-btn" title="Save General" aria-label="Save General" disabled>
+            <img src="/admin/static/icons/save.svg" alt="">
+          </button>
+        </div>
       </div>
     </form>
+    </div>
+  </div>
+
+  <div class="card-boxed">
+    <h2 class="card-boxed-header">Sidebar Logo</h2>
+    <div class="card-boxed-body">
+      <div class="card-boxed-section">
+        <label>Current</label>
+        <div style="display:flex;align-items:center;padding:.75rem 1rem;margin-top:.4rem;background:var(--tint);border-radius:6px;max-width:360px">
+          {current_logo_preview}
+        </div>
+      </div>
+      <div class="card-boxed-section">
+        <form method="post" action="/admin/settings/logo" enctype="multipart/form-data" id="logo-upload-form">
+          <div class="form-group" style="max-width:360px">
+            <label for="sg-logo-file">Replace with a new image</label>
+            <input type="file" id="sg-logo-file" name="file" accept=".svg,.png,.webp,image/svg+xml,image/png,image/webp">
+            <small>SVG, PNG, or WebP — max 2 MB. Renders at a fixed 38px sidebar height, so any aspect ratio works.</small>
+          </div>
+          <div class="icon-pill" style="margin-top:1rem">
+            <button type="submit" id="logo-upload-btn" class="icon-btn" title="Upload Logo" aria-label="Upload Logo" disabled>
+              <img src="/admin/static/icons/save.svg" alt="">
+            </button>
+            {reset_logo_btn}
+          </div>
+        </form>
+      </div>
     </div>
   </div>
 
@@ -206,12 +219,11 @@ pub fn render(
           </select>
           <small>App-wide timezone — used for admin timestamps and scheduled publishing.</small>
         </div>
-      </div>
-
-      <div class="icon-pill" style="margin-top:1.5rem">
-        <button type="submit" id="localisation-save-btn" class="icon-btn" title="Save Localisation" aria-label="Save Localisation" disabled>
-          <img src="/admin/static/icons/save.svg" alt="">
-        </button>
+        <div class="icon-pill" style="margin-top:1rem">
+          <button type="submit" id="localisation-save-btn" class="icon-btn" title="Save Localisation" aria-label="Save Localisation" disabled>
+            <img src="/admin/static/icons/save.svg" alt="">
+          </button>
+        </div>
       </div>
     </form>
     </div>
@@ -235,12 +247,11 @@ pub fn render(
             browser from the light/system/dark switch in the header menu.
           </small>
         </div>
-      </div>
-
-      <div class="icon-pill" style="margin-top:1.5rem">
-        <button type="submit" id="appearance-save-btn" class="icon-btn" title="Save Appearance" aria-label="Save Appearance" disabled>
-          <img src="/admin/static/icons/save.svg" alt="">
-        </button>
+        <div class="icon-pill" style="margin-top:1rem">
+          <button type="submit" id="appearance-save-btn" class="icon-btn" title="Save Appearance" aria-label="Save Appearance" disabled>
+            <img src="/admin/static/icons/save.svg" alt="">
+          </button>
+        </div>
       </div>
     </form>
     </div>
@@ -273,11 +284,11 @@ pub fn render(
           <input type="number" id="sa-max-upload" name="max_upload_mb" value="{max_upload_mb}" min="1" max="1000" style="width:100px">
           <small>Applies to media and theme zip uploads. Takes effect immediately, no restart needed.</small>
         </div>
-      </div>
-      <div class="icon-pill" style="margin-top:1.5rem">
-        <button type="submit" id="uploads-save-btn" class="icon-btn" title="Save Uploads" aria-label="Save Uploads" disabled>
-          <img src="/admin/static/icons/save.svg" alt="">
-        </button>
+        <div class="icon-pill" style="margin-top:1rem">
+          <button type="submit" id="uploads-save-btn" class="icon-btn" title="Save Uploads" aria-label="Save Uploads" disabled>
+            <img src="/admin/static/icons/save.svg" alt="">
+          </button>
+        </div>
       </div>
     </form>
     </div>
@@ -531,7 +542,7 @@ window.clearTestData = function () {{
 }};
 
 (function () {{
-  var tabs    = document.querySelectorAll('.settings-tab-btn');
+  var tabs    = document.querySelectorAll('.page-tab[data-tab]');
   var panels  = document.querySelectorAll('.settings-panel');
 
   function activate(tabName) {{
@@ -551,11 +562,20 @@ window.clearTestData = function () {{
     btn.addEventListener('click', function () {{ activate(btn.dataset.tab); }});
   }});
 
-  // Restore last active tab.
-  try {{
-    var saved = sessionStorage.getItem('settings-tab');
-    if (saved) activate(saved);
-  }} catch (e) {{}}
+  // Which tab to land on: an explicit ?tab= in the URL wins (so a direct
+  // link like /admin/settings?tab=advanced works, same convention as the
+  // Form Designer editor's tabs and /admin/analytics?tab=...), else fall
+  // back to the last tab used this session, else the default (General,
+  // already marked active in the HTML).
+  var wantedTab = new URLSearchParams(window.location.search).get('tab');
+  if (wantedTab && document.querySelector('.page-tab[data-tab="' + wantedTab + '"]')) {{
+    activate(wantedTab);
+  }} else {{
+    try {{
+      var saved = sessionStorage.getItem('settings-tab');
+      if (saved) activate(saved);
+    }} catch (e) {{}}
+  }}
 }}());
 
 function dtEnableOnChange(formSelector, btnId) {{
@@ -575,9 +595,30 @@ dtEnableOnChange('.general-settings-form', 'general-save-btn');
 dtEnableOnChange('.localisation-settings-form', 'localisation-save-btn');
 dtEnableOnChange('.appearance-settings-form', 'appearance-save-btn');
 dtEnableOnChange('.uploads-settings-form', 'uploads-save-btn');
+
+// Logo upload: dtEnableOnChange's FormData-snapshot diff can't tell a
+// selected file apart from an empty one (a File serializes to the same
+// "[object File]" string either way) — just check input.files directly.
+(function() {{
+  var fileInput = document.getElementById('sg-logo-file');
+  var uploadBtn = document.getElementById('logo-upload-btn');
+  if (fileInput && uploadBtn) {{
+    fileInput.addEventListener('change', function() {{
+      uploadBtn.disabled = fileInput.files.length === 0;
+    }});
+  }}
+}})();
+window.resetLogoConfirm = function() {{
+  if (!confirm('Remove the custom logo and go back to showing the app name as text?')) return;
+  fetch('/admin/settings/logo/reset', {{ method: 'POST' }}).then(function(r) {{
+    window.location.href = r.url || '/admin/settings';
+  }});
+}};
 </script>
 "#,
         app_name = app_name_escaped,
+        current_logo_preview = current_logo_preview,
+        reset_logo_btn = reset_logo_btn,
         tz_options = tz_options,
         max_upload_mb = max_upload_mb,
         site_options = site_options,

@@ -280,18 +280,20 @@ pub struct AppState {
     /// Channel sender for view tracking — see `ViewBuffer` type alias for full rationale.
     pub view_buffer: ViewBuffer,
     /// Public URL of a custom admin sidebar logo, if `admin/static/branding/logo.*`
-    /// existed at startup. `None` means the admin chrome falls back to the
-    /// `app_name` text. Convention-based, not a DB setting — swap the file and
-    /// restart to change it; there's nothing to configure.
-    pub logo_url: Option<String>,
+    /// currently exists — `None` means the admin chrome falls back to the
+    /// `app_name` text. Detected once at startup but hot-reloadable after that:
+    /// uploading/resetting a logo from `/admin/settings` calls
+    /// `AppState::reload_logo_url` so it takes effect immediately, no restart
+    /// needed. Cache-bust the `<img src>` with a query param when it changes,
+    /// since the URL itself doesn't — the browser would otherwise keep serving
+    /// a stale cached file at the old logo's URL.
+    pub logo_url: Arc<std::sync::RwLock<Option<String>>>,
 }
 
-/// Look for `admin/static/branding/logo.{svg,png,jpg,webp}` (checked in that
-/// priority order) and return its public URL if found. Called once at startup —
-/// there is no hot-reload for this; it's a rarely-changed branding asset, not a
-/// runtime setting.
+/// Look for `admin/static/branding/logo.{svg,png,webp}` (checked in that
+/// priority order) and return its public URL if found.
 pub fn detect_admin_logo() -> Option<String> {
-    const CANDIDATES: &[&str] = &["logo.svg", "logo.png", "logo.jpg", "logo.webp"];
+    const CANDIDATES: &[&str] = &["logo.svg", "logo.png", "logo.webp"];
     CANDIDATES.iter().find_map(|name| {
         let path = std::path::Path::new("admin/static/branding").join(name);
         path.is_file().then(|| format!("/admin/static/branding/{name}"))
@@ -359,6 +361,26 @@ impl AppState {
             *w = fresh;
         }
         Ok(())
+    }
+
+    /// Re-detect the admin sidebar logo from `admin/static/branding/logo.*` and
+    /// update the in-memory cache — called after an upload or reset from
+    /// `/admin/settings` so the new (or removed) logo shows up immediately,
+    /// no restart needed. Appends a `?v={timestamp}` cache-buster since the
+    /// file's URL itself doesn't change between an old and new upload of the
+    /// same format, which would otherwise leave browsers showing a stale
+    /// cached image at that URL.
+    pub fn reload_logo_url(&self) {
+        let fresh = detect_admin_logo().map(|url| {
+            let ts = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs())
+                .unwrap_or(0);
+            format!("{url}?v={ts}")
+        });
+        if let Ok(mut w) = self.logo_url.write() {
+            *w = fresh;
+        }
     }
 
     /// Reload the site cache from the database.

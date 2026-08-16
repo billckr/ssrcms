@@ -223,8 +223,8 @@ pub fn render_list(rows: &[FormRow], page: i64, total_pages: i64, search: &str, 
     let search_toggle = crate::pill_search_toggle("form-search", "Search forms&hellip;", search);
 
     let content = format!(
-        r#"<div style="display:flex;align-items:center;justify-content:flex-end;gap:.75rem;margin-bottom:1rem;flex-wrap:wrap">
-  <div class="icon-pill">
+        r#"<div style="display:flex;align-items:flex-end;justify-content:flex-end;gap:.75rem;margin-bottom:1.25rem;flex-wrap:wrap">
+  <div class="icon-pill" style="align-self:flex-end;margin-top:0">
     {search_toggle}
     <a href="/admin/form-designer/new" class="icon-btn" title="New Form" aria-label="New Form"><img src="/admin/static/icons/file-plus.svg" alt=""></a>
   </div>
