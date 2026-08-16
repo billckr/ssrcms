@@ -911,7 +911,7 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
             r#"<div class="form-group" style="margin-bottom:.5rem">
           <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;font-weight:400">
             <input type="checkbox" id="comments-enabled-cb" name="comments_enabled" value="on" {checked}
-              onchange="if(!this.checked){{if(!confirm('Disable comments on this post? Comments already posted are kept, but they\'ll stop showing on the page and no new comments will be allowed.')){{this.checked=true;return;}}}} document.getElementById('comments-enabled-label').textContent=this.checked?'Disable Comments':'Allow Comments';">
+              onchange="if(!this.checked && this.defaultChecked){{if(!confirm('Disable comments on this post? Comments already posted are kept, but they\'ll stop showing on the page and no new comments will be allowed.')){{this.checked=true;return;}}}} document.getElementById('comments-enabled-label').textContent=this.checked?'Disable Comments':'Allow Comments';">
             <span id="comments-enabled-label">{label_text}</span>{count_badge}
           </label>
         </div>"#,
@@ -1242,14 +1242,28 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
   }});
 
   // ── Unsaved changes indicator ────────────────────────────────────────
+  // formDirty is a real diff against the form's state as loaded, not a
+  // sticky "something changed at some point" flag — so checking a box and
+  // then unchecking it back to its original state clears the indicator
+  // again instead of leaving Save armed for no real change.
   var formDirty = false;
+  var initialFormState = null;
+  function serializeFormState() {{
+    var contentEl = document.getElementById('content');
+    if (contentEl) contentEl.value = quill.root.innerHTML;
+    var pairs = [];
+    new FormData(postForm).forEach(function(value, key) {{ pairs.push(key + '=' + value); }});
+    pairs.sort();
+    return pairs.join('&');
+  }}
   function markDirty() {{
-    formDirty = true;
-    document.querySelectorAll('.unsaved-indicator').forEach(function(el) {{ el.style.display = ''; }});
+    var dirty = initialFormState !== null && serializeFormState() !== initialFormState;
+    formDirty = dirty;
+    document.querySelectorAll('.unsaved-indicator').forEach(function(el) {{ el.style.display = dirty ? '' : 'none'; }});
     var saveBtn = document.getElementById('save-btn');
     if (saveBtn) {{
-      saveBtn.disabled = false;
-      saveBtn.classList.add('icon-btn-save-dirty');
+      saveBtn.disabled = !dirty;
+      saveBtn.classList.toggle('icon-btn-save-dirty', dirty);
     }}
   }}
   window.markDirty = markDirty;
@@ -1298,6 +1312,7 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
           // Common case: editing an existing post lands back on the same
           // page (just gains a ?success=saved query string) — stay put.
           formDirty = false;
+          initialFormState = serializeFormState();
           var saveBtn = document.getElementById('save-btn');
           if (saveBtn) {{
             saveBtn.disabled = true;
@@ -1349,6 +1364,9 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
   if (existing) {{
     quill.setContents(quill.clipboard.convert(existing), 'silent');
   }}
+  // Baseline snapshot for real dirty-diffing — must be taken after the
+  // editor's starting content is loaded above, not at form-init time.
+  initialFormState = serializeFormState();
   quill.on('text-change', function(delta, oldDelta, source) {{
     if (source === 'user') markDirty();
   }});
