@@ -18,6 +18,10 @@ const PER_PAGE: i64 = 50;
 pub struct ActivityLogQuery {
     pub page: Option<i64>,
     pub site: Option<String>,
+    pub search: Option<String>,
+    pub sort: Option<String>,
+    pub dir: Option<String>,
+    pub partial: Option<String>,
 }
 
 pub async fn list(
@@ -33,6 +37,9 @@ pub async fn list(
 
     let page = query.page.unwrap_or(1).max(1);
     let offset = (page - 1) * PER_PAGE;
+    let search = query.search.as_deref().unwrap_or("").trim();
+    let sort = query.sort.as_deref().unwrap_or("");
+    let dir = query.dir.as_deref().unwrap_or("");
 
     // Global admins see everything by default, or one site when ?site= is
     // set. Site admins are always scoped to every site they belong to —
@@ -43,29 +50,26 @@ pub async fn list(
         None
     };
 
-    let (entries, total) = if admin.caps.is_global_admin {
-        match selected_site_id {
-            Some(sid) => (
-                crate::models::audit_log::list_for_sites(&state.db, &[sid], PER_PAGE, offset).await.unwrap_or_default(),
-                crate::models::audit_log::count_for_sites(&state.db, &[sid]).await.unwrap_or(0),
-            ),
-            None => (
-                crate::models::audit_log::list_all(&state.db, PER_PAGE, offset).await.unwrap_or_default(),
-                crate::models::audit_log::count_all(&state.db).await.unwrap_or(0),
-            ),
-        }
+    let scope: Option<Vec<Uuid>> = if admin.caps.is_global_admin {
+        selected_site_id.map(|sid| vec![sid])
     } else {
-        let site_ids: Vec<Uuid> = crate::models::site_user::list_for_user(&state.db, admin.user.id)
-            .await
-            .unwrap_or_default()
-            .into_iter()
-            .map(|(site, _)| site.id)
-            .collect();
-        (
-            crate::models::audit_log::list_for_sites(&state.db, &site_ids, PER_PAGE, offset).await.unwrap_or_default(),
-            crate::models::audit_log::count_for_sites(&state.db, &site_ids).await.unwrap_or(0),
+        Some(
+            crate::models::site_user::list_for_user(&state.db, admin.user.id)
+                .await
+                .unwrap_or_default()
+                .into_iter()
+                .map(|(site, _)| site.id)
+                .collect(),
         )
     };
+    let scope_slice = scope.as_deref();
+
+    let (entries, total) = tokio::join!(
+        crate::models::audit_log::list_filtered(&state.db, scope_slice, search, sort, dir, PER_PAGE, offset),
+        crate::models::audit_log::count_filtered(&state.db, scope_slice, search),
+    );
+    let entries = entries.unwrap_or_default();
+    let total = total.unwrap_or(0);
 
     // Resolve site hostnames for display — one query for every site that
     // appears in this page of results, not one per row.
@@ -90,12 +94,27 @@ pub async fn list(
     };
     let selected_site_str = selected_site_id.map(|s| s.to_string()).unwrap_or_default();
 
+    if query.partial.is_some() {
+        return Html(admin::pages::activity_log::list_fragment(
+            &rows,
+            page,
+            total_pages,
+            &selected_site_str,
+            search,
+            sort,
+            dir,
+        )).into_response();
+    }
+
     Html(admin::pages::activity_log::render_list(
         &rows,
         page,
         total_pages,
         &site_options,
         &selected_site_str,
+        search,
+        sort,
+        dir,
         None,
         &ctx,
     )).into_response()

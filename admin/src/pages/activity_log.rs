@@ -70,18 +70,18 @@ fn action_badge_class(action: &str) -> &'static str {
     }
 }
 
-fn pagination(page: i64, total_pages: i64, site_qs: &str) -> String {
+fn pagination(page: i64, total_pages: i64, qs: &str) -> String {
     if total_pages <= 1 {
         return String::new();
     }
     let base = "/admin/activity-log";
     let prev = if page > 1 {
-        format!(r#"<a href="{base}?page={}{site_qs}" class="page-btn">&laquo; Prev</a>"#, page - 1)
+        format!(r#"<a href="{base}?page={}{qs}" class="page-btn">&laquo; Prev</a>"#, page - 1)
     } else {
         r#"<span class="page-btn page-btn-disabled">&laquo; Prev</span>"#.to_string()
     };
     let next = if page < total_pages {
-        format!(r#"<a href="{base}?page={}{site_qs}" class="page-btn">Next &raquo;</a>"#, page + 1)
+        format!(r#"<a href="{base}?page={}{qs}" class="page-btn">Next &raquo;</a>"#, page + 1)
     } else {
         r#"<span class="page-btn page-btn-disabled">Next &raquo;</span>"#.to_string()
     };
@@ -92,44 +92,44 @@ fn pagination(page: i64, total_pages: i64, site_qs: &str) -> String {
         if p == page {
             nums.push_str(&format!(r#"<span class="page-btn page-btn-active">{p}</span>"#));
         } else {
-            nums.push_str(&format!(r#"<a href="{base}?page={p}{site_qs}" class="page-btn">{p}</a>"#));
+            nums.push_str(&format!(r#"<a href="{base}?page={p}{qs}" class="page-btn">{p}</a>"#));
         }
     }
     format!(r#"<div class="pagination">{prev}{nums}{next}</div>"#)
 }
 
-pub fn render_list(
+/// Table + pagination only — swapped by the live-search JS, and reused for
+/// the initial full-page render so both paths render identically. Mirrors
+/// `admin::pages::sites::sites_list_fragment`.
+pub fn list_fragment(
     rows: &[ActivityLogRow],
     page: i64,
     total_pages: i64,
-    site_options: &[(String, String)],
     selected_site_id: &str,
-    flash: Option<&str>,
-    ctx: &PageContext,
+    search: &str,
+    sort: &str,
+    dir: &str,
 ) -> String {
     let site_qs = if selected_site_id.is_empty() {
         String::new()
     } else {
         format!("&site={}", html_escape(selected_site_id))
     };
-
-    let site_filter = if site_options.is_empty() {
+    let search_qs = if search.is_empty() {
         String::new()
     } else {
-        let all_selected = if selected_site_id.is_empty() { " selected" } else { "" };
-        let opts: String = site_options.iter().map(|(id, hostname)| {
-            let sel = if id == selected_site_id { " selected" } else { "" };
-            format!(r#"<option value="{id}"{sel}>{hostname}</option>"#,
-                id = html_escape(id), sel = sel, hostname = html_escape(hostname))
-        }).collect();
+        format!("&search={}", html_escape(search))
+    };
+    let asc = dir != "desc";
+
+    // Sortable column header: link toggles asc/desc for that column, preserving
+    // the current site filter and search, and resetting to page 1.
+    let sort_th = |label: &str, key: &str| -> String {
+        let is_active = sort == key;
+        let next_dir = if is_active && asc { "desc" } else { "asc" };
+        let arrow = if is_active { if asc { " \u{25B2}" } else { " \u{25BC}" } } else { "" };
         format!(
-            r#"<select class="appearance-filter-select" aria-label="Filter by site"
-                       onchange="window.location = this.value ? '/admin/activity-log?site=' + this.value : '/admin/activity-log'">
-    <option value=""{all_selected}>All sites</option>
-    {opts}
-  </select>"#,
-            all_selected = all_selected,
-            opts = opts,
+            r#"<th><a href="/admin/activity-log?sort={key}&dir={next_dir}{site_qs}{search_qs}" style="color:inherit;text-decoration:none;white-space:nowrap">{label}{arrow}</a></th>"#
         )
     };
 
@@ -156,20 +156,82 @@ pub fn render_list(
         }).collect::<Vec<_>>().join("\n")
     };
 
-    let pag = pagination(page, total_pages, &site_qs);
+    let pag = pagination(page, total_pages, &format!("{site_qs}{search_qs}"));
+
+    format!(
+        r#"<table class="data-table">
+  <thead><tr>{when_th}{who_th}{action_th}<th>Target</th>{site_th}</tr></thead>
+  <tbody>{rows_html}</tbody>
+</table>
+{pag}"#,
+        when_th = sort_th("When", "when"),
+        who_th = sort_th("Who", "who"),
+        action_th = sort_th("Action", "action"),
+        site_th = sort_th("Site", "site"),
+        rows_html = rows_html,
+        pag = pag,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn render_list(
+    rows: &[ActivityLogRow],
+    page: i64,
+    total_pages: i64,
+    site_options: &[(String, String)],
+    selected_site_id: &str,
+    search: &str,
+    sort: &str,
+    dir: &str,
+    flash: Option<&str>,
+    ctx: &PageContext,
+) -> String {
+    let site_filter = if site_options.is_empty() {
+        String::new()
+    } else {
+        let all_selected = if selected_site_id.is_empty() { " selected" } else { "" };
+        let opts: String = site_options.iter().map(|(id, hostname)| {
+            let sel = if id == selected_site_id { " selected" } else { "" };
+            format!(r#"<option value="{id}"{sel}>{hostname}</option>"#,
+                id = html_escape(id), sel = sel, hostname = html_escape(hostname))
+        }).collect();
+        format!(
+            r#"<select class="appearance-filter-select" aria-label="Filter by site"
+                       onchange="window.location = this.value ? '/admin/activity-log?site=' + this.value : '/admin/activity-log'">
+    <option value=""{all_selected}>All sites</option>
+    {opts}
+  </select>"#,
+            all_selected = all_selected,
+            opts = opts,
+        )
+    };
+
+    let search_toggle = crate::pill_search_toggle("activity-log-search", "Search activity&hellip;", search);
+
+    let fragment = list_fragment(rows, page, total_pages, selected_site_id, search, sort, dir);
+
+    let site_qs = if selected_site_id.is_empty() {
+        String::new()
+    } else {
+        format!("&site={}", html_escape(selected_site_id))
+    };
+    let sort_qs = if sort.is_empty() { String::new() } else { format!("&sort={}&dir={}", sort, if dir == "desc" { "desc" } else { "asc" }) };
+    let fetch_prefix = format!("/admin/activity-log?partial=1{site_qs}{sort_qs}");
+    let live_search = crate::live_search_script("activity-log-search", "activity-log-list", &fetch_prefix);
 
     let content = format!(
         r#"<div style="display:flex;align-items:center;justify-content:flex-end;gap:.75rem;margin-bottom:1rem;flex-wrap:wrap">
   {site_filter}
+  <div class="icon-pill" style="align-self:flex-end;margin-top:0">{search_toggle}</div>
 </div>
-<table class="data-table">
-  <thead><tr><th>When</th><th>Who</th><th>Action</th><th>Target</th><th>Site</th></tr></thead>
-  <tbody>{rows_html}</tbody>
-</table>
-{pag}"#,
+<div id="activity-log-list">{fragment}</div>
+{live_search}
+{pill_search_init}"#,
         site_filter = site_filter,
-        rows_html = rows_html,
-        pag = pag,
+        search_toggle = search_toggle,
+        fragment = fragment,
+        live_search = live_search,
+        pill_search_init = crate::pill_search_init_script(),
     );
 
     admin_page("Activity Log", "/admin/activity-log", flash, &content, ctx)

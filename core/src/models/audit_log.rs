@@ -72,41 +72,76 @@ pub async fn record(pool: &PgPool, input: NewAuditLog<'_>) -> Result<()> {
     Ok(())
 }
 
-/// Most recent entries across every site — global admin, unfiltered view.
-pub async fn list_all(pool: &PgPool, limit: i64, offset: i64) -> Result<Vec<AuditLogEntry>> {
-    let rows = sqlx::query_as::<_, AuditLogEntry>(
-        "SELECT * FROM audit_log ORDER BY created_at DESC LIMIT $1 OFFSET $2",
-    )
-    .bind(limit)
-    .bind(offset)
-    .fetch_all(pool)
-    .await?;
+/// Maps an activity-log sort key to its backing column. `sites.hostname`
+/// requires the LEFT JOIN in [`list_filtered`]/[`count_filtered`] — every
+/// other column is unambiguous on `audit_log` alone. Anything unrecognized
+/// (including "") falls back to `created_at`, the natural recency order.
+fn sort_column(sort: &str) -> &'static str {
+    match sort {
+        "who" => "audit_log.actor_email",
+        "action" => "audit_log.action",
+        "target" => "audit_log.target_label",
+        "site" => "sites.hostname",
+        _ => "audit_log.created_at",
+    }
+}
+
+/// Entries for the admin Activity Log, with search/sort/pagination applied
+/// in SQL rather than in memory — this table can grow far larger than the
+/// sites list, so unlike `admin::pages::sites` this doesn't fetch-then-filter.
+/// `site_ids: None` is the global-admin unfiltered view; `Some(&[..])` scopes
+/// to one or more sites (a site admin's own sites, or the "filter to one
+/// site" dropdown). `search` matches actor email, action, target label, or
+/// site hostname (case-insensitive substring); pass `""` to skip filtering.
+pub async fn list_filtered(
+    pool: &PgPool,
+    site_ids: Option<&[Uuid]>,
+    search: &str,
+    sort: &str,
+    dir: &str,
+    limit: i64,
+    offset: i64,
+) -> Result<Vec<AuditLogEntry>> {
+    let order_col = sort_column(sort);
+    // "when" (the default column) reads naturally newest-first; every other
+    // column reads naturally ascending (A-Z) unless the caller asks otherwise.
+    let order_dir = match dir {
+        "asc" => "ASC",
+        "desc" => "DESC",
+        _ if sort.is_empty() || sort == "when" => "DESC",
+        _ => "ASC",
+    };
+    let sql = format!(
+        "SELECT audit_log.* FROM audit_log LEFT JOIN sites ON sites.id = audit_log.site_id \
+         WHERE ($1::uuid[] IS NULL OR audit_log.site_id = ANY($1)) \
+           AND ($2 = '' OR audit_log.actor_email ILIKE '%' || $2 || '%' \
+                OR audit_log.action ILIKE '%' || $2 || '%' \
+                OR audit_log.target_label ILIKE '%' || $2 || '%' \
+                OR COALESCE(sites.hostname, '') ILIKE '%' || $2 || '%') \
+         ORDER BY {order_col} {order_dir} LIMIT $3 OFFSET $4"
+    );
+    let rows = sqlx::query_as::<_, AuditLogEntry>(&sql)
+        .bind(site_ids)
+        .bind(search)
+        .bind(limit)
+        .bind(offset)
+        .fetch_all(pool)
+        .await?;
     Ok(rows)
 }
 
-/// Entries scoped to a set of sites — a site admin's own site(s), or the
-/// global admin's "filter to one site" view (pass a single-element slice).
-pub async fn list_for_sites(pool: &PgPool, site_ids: &[Uuid], limit: i64, offset: i64) -> Result<Vec<AuditLogEntry>> {
-    let rows = sqlx::query_as::<_, AuditLogEntry>(
-        "SELECT * FROM audit_log WHERE site_id = ANY($1) ORDER BY created_at DESC LIMIT $2 OFFSET $3",
+pub async fn count_filtered(pool: &PgPool, site_ids: Option<&[Uuid]>, search: &str) -> Result<i64> {
+    let c: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM audit_log LEFT JOIN sites ON sites.id = audit_log.site_id \
+         WHERE ($1::uuid[] IS NULL OR audit_log.site_id = ANY($1)) \
+           AND ($2 = '' OR audit_log.actor_email ILIKE '%' || $2 || '%' \
+                OR audit_log.action ILIKE '%' || $2 || '%' \
+                OR audit_log.target_label ILIKE '%' || $2 || '%' \
+                OR COALESCE(sites.hostname, '') ILIKE '%' || $2 || '%')",
     )
     .bind(site_ids)
-    .bind(limit)
-    .bind(offset)
-    .fetch_all(pool)
+    .bind(search)
+    .fetch_one(pool)
     .await?;
-    Ok(rows)
-}
-
-pub async fn count_all(pool: &PgPool) -> Result<i64> {
-    let c: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM audit_log").fetch_one(pool).await?;
-    Ok(c)
-}
-
-pub async fn count_for_sites(pool: &PgPool, site_ids: &[Uuid]) -> Result<i64> {
-    let c: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM audit_log WHERE site_id = ANY($1)")
-        .bind(site_ids)
-        .fetch_one(pool)
-        .await?;
     Ok(c)
 }

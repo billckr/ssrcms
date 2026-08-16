@@ -282,7 +282,10 @@ a.stat-cell-link:hover { background: var(--tint); }
    Pair with the JS in `pill_search_init_script()` (admin::lib). */
 .pill-search-input { box-sizing: border-box; width: 0; padding: 0; margin: 0; border: none; outline: none; background: none; color: var(--text); font-size: 13px; transition: width .18s ease, padding .18s ease, margin .18s ease; }
 .pill-search-input.expanded { width: 180px; padding: .2rem .5rem; margin-right: .35rem; }
-:root[data-theme="dark"] .pill-search-input::-webkit-search-cancel-button { filter: invert(1); }
+/* The browser's own type="search" clear button duplicates our .pill-search-clear
+   button (which sits further right and matches the rest of the pill's icon
+   styling) — hide the native one so only ours shows. */
+.pill-search-input::-webkit-search-cancel-button { -webkit-appearance: none; appearance: none; display: none; }
 
 /* Tinted box separating one distinct field/option from its neighbors within
    the same card body — used wherever a .card-boxed-body would otherwise
