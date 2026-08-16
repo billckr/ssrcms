@@ -323,13 +323,13 @@ pub fn render_list(
         r##"    <div class="mm-detail-actions" id="mmDetailActions" style="display:none">
       <div class="icon-pill" style="margin-top:.3rem;justify-content:center">
         <button id="mmPickerSetBtn" class="icon-btn" title="Set Image" aria-label="Set Image" onclick="pickerSelectImage()"><img src="/admin/static/icons/check.svg" alt=""></button>
-        <button id="mmSaveBtn" class="icon-btn" title="Save changes" aria-label="Save changes" onclick="saveDetail()"><img src="/admin/static/icons/save.svg" alt=""></button>
+        <button id="mmSaveBtn" class="icon-btn" title="Save changes" aria-label="Save changes" onclick="saveDetail()" disabled><img src="/admin/static/icons/save.svg" alt=""></button>
       </div>
     </div>"##.to_string()
     } else {
         r##"    <div class="mm-detail-actions" id="mmDetailActions" style="display:none">
       <div class="icon-pill" style="margin-top:.3rem;justify-content:center">
-        <button id="mmSaveBtn" class="icon-btn" title="Save changes" aria-label="Save changes" onclick="saveDetail()"><img src="/admin/static/icons/save.svg" alt=""></button>
+        <button id="mmSaveBtn" class="icon-btn" title="Save changes" aria-label="Save changes" onclick="saveDetail()" disabled><img src="/admin/static/icons/save.svg" alt=""></button>
       </div>
     </div>"##.to_string()
     };
@@ -1050,7 +1050,8 @@ body.sidebar-open .admin-sidebar {{
     if (btn) btn.disabled = true;
     var flashResult = function(ok) {{
       if (!btn) return;
-      btn.disabled = false;
+      btn.disabled = ok;
+      if (ok) btn.classList.remove('icon-btn-save-dirty');
       btn.classList.add(ok ? 'icon-btn-active-green' : 'icon-danger-armed');
       btn.title = ok ? 'Saved' : 'Error';
       setTimeout(function() {{
@@ -1096,12 +1097,27 @@ body.sidebar-open .admin-sidebar {{
     activeDetailIdx = (idx !== undefined) ? idx : null;
     actions.style.display = '';
     document.getElementById('mmDetail').classList.add('open');
+    // Save button starts disabled/clean — only a real edit to alt/title/
+    // caption should re-arm it (matches the post editor's markDirty convention).
+    var saveBtn = document.getElementById('mmSaveBtn');
+    if (saveBtn) {{
+      saveBtn.disabled = true;
+      saveBtn.classList.remove('icon-btn-save-dirty', 'icon-btn-active-green', 'icon-danger-armed');
+      saveBtn.title = 'Save changes';
+    }}
     // Collapse bulk bar when user focuses any detail field (mobile UX)
     ['mmDetailAlt', 'mmDetailTitle', 'mmDetailCaption'].forEach(function(id) {{
       var el = document.getElementById(id);
-      if (el) el.addEventListener('focus', function() {{
+      if (!el) return;
+      el.addEventListener('focus', function() {{
         document.getElementById('mmBulkBar').classList.remove('visible');
       }}, {{ once: true }});
+      el.addEventListener('input', function() {{
+        if (saveBtn) {{
+          saveBtn.disabled = false;
+          saveBtn.classList.add('icon-btn-save-dirty');
+        }}
+      }});
     }});
   }}
 
