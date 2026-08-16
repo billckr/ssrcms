@@ -36,6 +36,12 @@ pub struct AnalyticsQuery {
     pub sort: String,
     #[serde(default)]
     pub dir: String,
+    /// A form definition's UUID — when present, the Forms tab shows only
+    /// that one form instead of the full site list. Set by the "Analytics"
+    /// link in the Form Designer editor, so clicking it lands on this one
+    /// form rather than the whole table.
+    #[serde(default)]
+    pub form: Option<String>,
 }
 
 pub async fn list(
@@ -70,7 +76,7 @@ pub async fn list(
                     .into_iter()
                     .map(|f| (f.slug, f.id))
                     .collect();
-                let rows: Vec<FormSummaryRow> = summaries.into_iter().map(|s| {
+                let mut rows: Vec<FormSummaryRow> = summaries.into_iter().map(|s| {
                     let is_blocked = blocked.contains(&s.form_name);
                     let id = defined.get(&s.form_name).map(|id| id.to_string());
                     FormSummaryRow {
@@ -83,6 +89,9 @@ pub async fn list(
                         id,
                     }
                 }).collect();
+                if let Some(form_id) = q.form.as_deref() {
+                    rows.retain(|r| r.id.as_deref() == Some(form_id));
+                }
                 (rows, None)
             }
             Err(e) => {
@@ -92,7 +101,12 @@ pub async fn list(
         }
     };
 
-    Html(admin::pages::analytics::render(tab, &rows, &q.sort, &q.dir, flash, &ctx)).into_response()
+    let form_filter = q.form.as_deref().map(|id| {
+        let name = rows.iter().find(|r| r.id.as_deref() == Some(id)).map(|r| r.form_name.as_str()).unwrap_or(id);
+        (id, name)
+    });
+
+    Html(admin::pages::analytics::render(tab, &rows, &q.sort, &q.dir, flash, form_filter, &ctx)).into_response()
 }
 
 // ── per-form mail delivery log — GET /admin/analytics/form/{id} (moved from
@@ -112,6 +126,42 @@ pub async fn form_detail(
 
     let Ok(Some(form)) = form_def::get_by_id(&state.db, site_id, id).await else {
         return Redirect::to("/admin/analytics?tab=forms").into_response();
+    };
+
+    let tab = match params.get("tab").map(|s| s.as_str()) {
+        Some("results") => "results",
+        Some("submissions") => "submissions",
+        _ => "stats",
+    };
+
+    // Only the Submissions tab needs this — skip the queries otherwise.
+    let submissions = if tab == "submissions" {
+        const PER_PAGE: i64 = 20;
+        let _ = form_submission::mark_all_read(&state.db, site_id, &form.slug).await;
+        let total: i64 = form_submission::count_for_form(&state.db, site_id, &form.slug).await.unwrap_or(0);
+        let total_pages = ((total + PER_PAGE - 1) / PER_PAGE).max(1);
+        let page = params.get("page").and_then(|p| p.parse::<i64>().ok()).unwrap_or(1).clamp(1, total_pages);
+        let offset = (page - 1) * PER_PAGE;
+
+        let all_data = form_submission::list_all_data_for_form(&state.db, site_id, &form.slug).await.unwrap_or_default();
+        let columns = super::forms::collect_columns(&all_data.iter().collect::<Vec<_>>());
+
+        let rows: Vec<admin::pages::forms::SubmissionRow> = form_submission::list_submissions(&state.db, site_id, &form.slug, PER_PAGE, offset)
+            .await
+            .unwrap_or_default()
+            .into_iter()
+            .map(|s| admin::pages::forms::SubmissionRow {
+                id: s.id.to_string(),
+                data: s.data,
+                ip_address: s.ip_address,
+                read_at: s.read_at.map(|dt| dt.format("%Y-%m-%d %H:%M UTC").to_string()),
+                submitted_at: s.submitted_at.format("%Y-%m-%d %H:%M UTC").to_string(),
+            })
+            .collect();
+
+        Some(admin::pages::analytics::SubmissionsTabData { rows, columns, page, total_pages })
+    } else {
+        None
     };
 
     let (total_sent, succeeded, failed) = mail_log::counts_for_form(&state.db, id).await.unwrap_or((0, 0, 0));
@@ -155,10 +205,13 @@ pub async fn form_detail(
     let data = admin::pages::analytics::FormAnalyticsData {
         id: id.to_string(),
         form_name: form.name,
+        form_slug: form.slug,
+        total_submissions: form.total_submissions,
         total_sent,
         succeeded,
         failed,
         recent,
+        submissions,
     };
 
     if params.contains_key("partial") {
@@ -166,6 +219,5 @@ pub async fn form_detail(
         return Html(admin::pages::analytics::render_analytics_table(&data, sort, dir, &search_qs)).into_response();
     }
 
-    let tab = if params.get("tab").map(|s| s.as_str()) == Some("results") { "results" } else { "stats" };
     Html(admin::pages::analytics::render_analytics(&data, tab, sort, dir, search, &ctx)).into_response()
 }

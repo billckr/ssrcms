@@ -13,6 +13,10 @@ pub fn render(
     sort: &str,
     dir: &str,
     flash: Option<&str>,
+    // Set when arriving via the Form Designer editor's Analytics link
+    // (`?form={id}`) — (id, form_name) of the one form to show instead of
+    // the full site list.
+    form_filter: Option<(&str, &str)>,
     ctx: &PageContext,
 ) -> String {
     let is_forms = active_tab == "forms";
@@ -33,6 +37,17 @@ pub fn render(
     // controls side by side, not controls stacked below the tab bar.
     let controls = if is_forms { forms_tab_controls() } else { String::new() };
 
+    let filter_chip = match form_filter {
+        Some((_, name)) if is_forms => format!(
+            r#"<div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.75rem;font-size:.85rem;color:var(--muted)">
+  Filtered to <strong style="color:var(--text)">{name}</strong>
+  <a href="/admin/analytics?tab=forms" style="color:var(--muted)">&times; Clear</a>
+</div>"#,
+            name = html_escape(name),
+        ),
+        _ => String::new(),
+    };
+
     let tab_body = if is_forms {
         forms_tab_content(forms, sort, dir)
     } else {
@@ -45,9 +60,10 @@ pub fn render(
   {tabs}
   {controls}
 </div>
-{tab_body}"#,
+{filter_chip}{tab_body}"#,
         tabs = tabs,
         controls = controls,
+        filter_chip = filter_chip,
         tab_body = tab_body,
     );
     admin_page("Analytics", "/admin/analytics", flash, &content, ctx)
@@ -70,11 +86,29 @@ pub struct MailLogRow {
 pub struct FormAnalyticsData {
     pub id: String,
     pub form_name: String,
+    /// The form's slug — what submissions are actually keyed by, and what
+    /// the `/admin/form-data-analytics/{slug}/...` export/delete routes
+    /// take, unlike `form_name` above which is the display name.
+    pub form_slug: String,
+    /// Lifetime submission count — only ever increments, so it doesn't
+    /// shrink when old responses get deleted. Distinct from the live
+    /// row-count that drives the Submissions tab's own pagination.
+    pub total_submissions: i64,
     pub total_sent: i64,
     pub succeeded: i64,
     pub failed: i64,
     /// Most recent sends, newest first.
     pub recent: Vec<MailLogRow>,
+    /// Only populated when the Submissions tab is active — avoids the
+    /// extra queries otherwise.
+    pub submissions: Option<SubmissionsTabData>,
+}
+
+pub struct SubmissionsTabData {
+    pub rows: Vec<crate::pages::forms::SubmissionRow>,
+    pub columns: Vec<String>,
+    pub page: i64,
+    pub total_pages: i64,
 }
 
 /// Compute integer Y-axis bounds so every tick label is a whole number —
@@ -175,29 +209,45 @@ pub fn render_analytics_table(data: &FormAnalyticsData, sort: &str, dir: &str, s
 /// caller) and are only used here to render the column headers' state/links.
 pub fn render_analytics(data: &FormAnalyticsData, active_tab: &str, sort: &str, dir: &str, search: &str, ctx: &PageContext) -> String {
     let is_results = active_tab == "results";
-    let stats_active = if is_results { "" } else { " active" };
+    let is_submissions = active_tab == "submissions";
+    let stats_active = if is_results || is_submissions { "" } else { " active" };
     let results_active = if is_results { " active" } else { "" };
+    let submissions_active = if is_submissions { " active" } else { "" };
     let id = html_escape(&data.id);
 
     let tabs = format!(
         r#"<div class="page-tabs" style="margin-bottom:0">
   <a href="/admin/analytics/form/{id}?tab=stats" class="page-tab{stats_active}">Stats</a>
   <a href="/admin/analytics/form/{id}?tab=results" class="page-tab{results_active}">Delivery Results</a>
+  <a href="/admin/analytics/form/{id}?tab=submissions" class="page-tab{submissions_active}">Submissions</a>
 </div>"#,
-        id = id, stats_active = stats_active, results_active = results_active,
+        id = id, stats_active = stats_active, results_active = results_active, submissions_active = submissions_active,
     );
 
-    // Search only makes sense against the Delivery Results table — same
-    // layout convention as elsewhere: tab bar and controls on one row (see
-    // pages::analytics::render for the tabs list, and forms_tab_controls).
+    // Same layout convention as elsewhere: tab bar and controls (search,
+    // export, delete) sit on one row (see pages::analytics::render for the
+    // tabs list, and forms_tab_controls).
     let search_toggle = crate::pill_search_toggle("analytics-search", "Search sends&hellip;", search);
     let controls = if is_results {
         format!(r#"<div class="icon-pill" style="align-self:flex-end;margin-top:0">{search_toggle}</div>"#, search_toggle = search_toggle)
+    } else if is_submissions {
+        let has_submissions = data.submissions.as_ref().is_some_and(|s| !s.rows.is_empty());
+        crate::pages::forms::render_submissions_controls(&data.form_slug, has_submissions)
     } else {
         String::new()
     };
 
-    let tab_body = if is_results {
+    let tab_body = if is_submissions {
+        match &data.submissions {
+            Some(sub) => {
+                let pagination_base = format!("/admin/analytics/form/{id}?tab=submissions");
+                crate::pages::forms::render_submissions_body(
+                    &data.form_slug, &sub.rows, &sub.columns, sub.page, sub.total_pages, &pagination_base, "&",
+                )
+            }
+            None => String::new(),
+        }
+    } else if is_results {
         let search_qs = if search.is_empty() { String::new() } else { format!("&search={}", html_escape(search)) };
         let table_html = render_analytics_table(data, sort, dir, &search_qs);
         let fetch_prefix = format!("/admin/analytics/form/{}?tab=results&partial=1&sort={}&dir={}", data.id, sort, dir);
@@ -233,7 +283,13 @@ pub fn render_analytics(data: &FormAnalyticsData, active_tab: &str, sort: &str, 
             responsive_svg(chart.svg().unwrap_or_default(), 600, 220)
         };
         format!(
-            r#"<div class="card-boxed">
+            r#"<div class="card-boxed" style="margin-bottom:1rem">
+  <div class="card-boxed-body">
+    <div style="font-size:1.6rem;font-weight:700">{total_submissions}</div>
+    <div class="field-hint">Total submissions (lifetime — includes any since deleted)</div>
+  </div>
+</div>
+<div class="card-boxed">
   <div class="card-boxed-body">
     <div style="display:flex;gap:2rem;flex-wrap:wrap;margin-bottom:1.5rem">
       <div><div style="font-size:1.6rem;font-weight:700">{total}</div><div class="field-hint">Total sent</div></div>
@@ -243,6 +299,7 @@ pub fn render_analytics(data: &FormAnalyticsData, active_tab: &str, sort: &str, 
     <div style="max-width:420px">{chart_html}</div>
   </div>
 </div>"#,
+            total_submissions = data.total_submissions,
             total = data.total_sent,
             succeeded = data.succeeded,
             failed = data.failed,

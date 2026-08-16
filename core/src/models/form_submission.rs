@@ -15,6 +15,11 @@ pub struct FormSubmission {
     pub ip_address: Option<String>,
     pub read_at: Option<DateTime<Utc>>,
     pub submitted_at: DateTime<Utc>,
+    /// The form definition this was collected under, if it still exists.
+    /// `form_name` (the slug) stays the authoritative lookup key
+    /// everywhere else — this is purely an FK for exact joins, and is NULL
+    /// for orphaned submissions whose definition was later deleted.
+    pub form_id: Option<Uuid>,
 }
 
 /// Create a new form submission.
@@ -23,20 +28,37 @@ pub struct CreateFormSubmission {
     pub form_name: String,
     pub data: serde_json::Value,
     pub ip_address: Option<String>,
+    pub form_id: Option<Uuid>,
 }
 
 pub async fn create(pool: &PgPool, input: CreateFormSubmission) -> Result<FormSubmission> {
+    let form_id = input.form_id;
     let row = sqlx::query_as::<_, FormSubmission>(
-        "INSERT INTO form_submissions (site_id, form_name, data, ip_address)
-         VALUES ($1, $2, $3, $4)
+        "INSERT INTO form_submissions (site_id, form_name, data, ip_address, form_id)
+         VALUES ($1, $2, $3, $4, $5)
          RETURNING *",
     )
     .bind(input.site_id)
     .bind(&input.form_name)
     .bind(&input.data)
     .bind(&input.ip_address)
+    .bind(form_id)
     .fetch_one(pool)
     .await?;
+
+    // Lifetime counter — only ever incremented, never decremented on
+    // delete (see FormDef::total_submissions). Best-effort: a failure here
+    // shouldn't fail the submission itself, which is already saved above.
+    if let Some(id) = form_id {
+        if let Err(e) = sqlx::query("UPDATE forms SET total_submissions = total_submissions + 1 WHERE id = $1")
+            .bind(id)
+            .execute(pool)
+            .await
+        {
+            tracing::error!("form_submission::create: total_submissions increment failed: {e:?}");
+        }
+    }
+
     Ok(row)
 }
 

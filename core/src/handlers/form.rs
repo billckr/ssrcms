@@ -85,6 +85,7 @@ pub async fn submit(
             form_name: name.clone(),
             data: serde_json::to_value(&data).unwrap_or(serde_json::Value::Object(Default::default())),
             ip_address: ip,
+            form_id: form.as_ref().map(|f| f.id),
         };
 
         if let Err(e) = create(&state.db, input).await {
@@ -93,7 +94,7 @@ pub async fn submit(
 
         // Fire-and-forget: don't make the visitor's redirect wait on an
         // outbound HTTP call to Mailgun.
-        if let Some(form) = form {
+        if let Some(form) = form.filter(|f| !f.settings.no_mail) {
             let site_id = current_site.site.id;
             let form_id = form.id;
             let provider_id = form.email_provider_id;

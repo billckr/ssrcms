@@ -103,8 +103,18 @@ pub fn forms_tab_content(
                 Some(id) => format!(
                     r#"<a href="/admin/form-designer/{id}" class="icon-btn" title="Edit">
       <img src="/admin/static/icons/edit.svg" alt="Edit">
-    </a>
-    <a href="/admin/analytics/form/{id}" class="icon-btn" title="Analytics">
+    </a>"#,
+                    id = html_escape(id),
+                ),
+                None => String::new(),
+            };
+            // Submissions now live on the form's Analytics page (Submissions
+            // tab) — reached via analytics_btn below. An orphaned
+            // (definition-deleted) row has no id to route there, so it can
+            // still be exported/blocked but not viewed in the admin.
+            let analytics_btn = match &f.id {
+                Some(id) => format!(
+                    r#"<a href="/admin/analytics/form/{id}" class="icon-btn" title="Analytics">
       <img src="/admin/static/icons/bar-chart.svg" alt="Analytics">
     </a>"#,
                     id = html_escape(id),
@@ -126,12 +136,13 @@ pub fn forms_tab_content(
             };
             format!(
                 r#"<tr{row_class}>
-  <td><a href="/admin/form-data-analytics/{name}">{name}</a>{blocked_badge}{deleted_badge}</td>
+  <td>{name}{blocked_badge}{deleted_badge}</td>
   <td><span style="display:inline-block;background:var(--tint);color:var(--text);border-radius:4px;padding:.15rem .5rem;font-size:.78rem;font-weight:500">{count}</span>{unread_badge}</td>
   <td>{last}</td>
   <td class="actions">
     <div class="icon-pill-actionbuttons">
     {definition_actions}
+    {analytics_btn}
     <a href="/admin/form-data-analytics/{name}/export" download class="icon-btn" title="Export CSV" aria-label="Export CSV"><img src="/admin/static/icons/download.svg" alt=""></a>
     {block_btn}
     {delete_btn}
@@ -146,6 +157,7 @@ pub fn forms_tab_content(
                 blocked_badge = blocked_badge,
                 deleted_badge = deleted_badge,
                 definition_actions = definition_actions,
+                analytics_btn = analytics_btn,
                 block_btn = block_btn,
                 delete_btn = delete_btn,
             )
@@ -221,18 +233,23 @@ fn ip_link_html(ip: Option<&str>) -> String {
     }
 }
 
-fn submission_pagination(form_name: &str, page: i64, total_pages: i64) -> String {
+/// `base_path` is the full pagination link prefix (already including any
+/// fixed query params, e.g. `?tab=submissions`); `sep` is `"?"` when
+/// `base_path` has no query string yet, `"&"` when `page` needs to join one
+/// already there — lets this one function serve both the standalone
+/// `/admin/form-data-analytics/{slug}` page and the Submissions tab under
+/// `/admin/analytics/form/{id}`.
+fn submissions_pagination(base_path: &str, sep: &str, page: i64, total_pages: i64) -> String {
     if total_pages <= 1 {
         return String::new();
     }
-    let base_path = format!("/admin/form-data-analytics/{}", html_escape(form_name));
     let prev = if page > 1 {
-        format!(r#"<a href="{base_path}?page={}" class="page-btn">&laquo; Prev</a>"#, page - 1)
+        format!(r#"<a href="{base_path}{sep}page={}" class="page-btn">&laquo; Prev</a>"#, page - 1)
     } else {
         r#"<span class="page-btn page-btn-disabled">&laquo; Prev</span>"#.to_string()
     };
     let next = if page < total_pages {
-        format!(r#"<a href="{base_path}?page={}" class="page-btn">Next &raquo;</a>"#, page + 1)
+        format!(r#"<a href="{base_path}{sep}page={}" class="page-btn">Next &raquo;</a>"#, page + 1)
     } else {
         r#"<span class="page-btn page-btn-disabled">Next &raquo;</span>"#.to_string()
     };
@@ -243,20 +260,28 @@ fn submission_pagination(form_name: &str, page: i64, total_pages: i64) -> String
         if p == page {
             nums.push_str(&format!(r#"<span class="page-btn page-btn-active">{p}</span>"#));
         } else {
-            nums.push_str(&format!(r#"<a href="{base_path}?page={p}" class="page-btn">{p}</a>"#));
+            nums.push_str(&format!(r#"<a href="{base_path}{sep}page={p}" class="page-btn">{p}</a>"#));
         }
     }
     format!(r#"<div class="pagination">{prev}{nums}{next}</div>"#)
 }
 
-pub fn render_form_detail(
-    form_name: &str,
+/// The submissions list body — search pill, response cards, pagination —
+/// shared by the standalone `/admin/form-data-analytics/{slug}` page and the
+/// Submissions tab on `/admin/analytics/form/{id}`. `form_slug` is the
+/// form's slug (what submissions are actually keyed by), used to build the
+/// export/delete-all/delete-one action URLs, which live under
+/// `/admin/form-data-analytics/{slug}/...` regardless of where the list is
+/// displayed. `pagination_base`/`pagination_sep` are passed straight through
+/// to [`submissions_pagination`].
+pub fn render_submissions_body(
+    form_slug: &str,
     submissions: &[SubmissionRow],
     columns: &[String],
     page: i64,
     total_pages: i64,
-    flash: Option<&str>,
-    ctx: &PageContext,
+    pagination_base: &str,
+    pagination_sep: &str,
 ) -> String {
     let rows = if submissions.is_empty() {
         r#"<p class="empty-state">No submissions yet.</p>"#.to_string()
@@ -295,20 +320,13 @@ pub fn render_form_detail(
                 submitted = html_escape(&s.submitted_at),
                 fields = fields,
                 ip = ip_link_html(s.ip_address.as_deref()),
-                fname = html_escape(form_name),
+                fname = html_escape(form_slug),
                 id = html_escape(&s.id),
             )
         }).collect::<Vec<_>>().join("\n")
     };
 
-    let has_submissions = !submissions.is_empty();
-    let search_toggle = if has_submissions {
-        crate::pill_search_toggle("submission-search", "Search responses&hellip;", "")
-    } else {
-        String::new()
-    };
-
-    let content = format!(
+    format!(
         r#"<style>
 .submission-list .card-boxed {{ margin-bottom: .6rem; }}
 .submission-row summary.card-boxed-header {{ transition: background-color .1s ease; }}
@@ -331,16 +349,6 @@ pub fn render_form_detail(
 .submission-field dd {{ font-size: 13px; color: var(--text); word-break: break-word; }}
 #submission-no-matches {{ display: none; color: var(--muted); font-size: .9rem; padding: 1rem 0; }}
 </style>
-<div style="display:flex;align-items:center;justify-content:flex-end;gap:.75rem;margin-bottom:1rem;flex-wrap:wrap">
-  <div class="icon-pill">
-    {search_toggle}
-    <a href="/admin/form-data-analytics/{fname}/export" class="icon-btn" title="Export CSV" aria-label="Export CSV"><img src="/admin/static/icons/download.svg" alt=""></a>
-    <form method="POST" action="/admin/form-data-analytics/{fname}/delete-all" style="display:inline"
-          onsubmit="return confirm('Delete ALL submissions for this form?')">
-      <button class="icon-btn icon-danger" type="submit" title="Delete All" aria-label="Delete All"><img src="/admin/static/icons/trash.svg" alt=""></button>
-    </form>
-  </div>
-</div>
 <div class="submission-list">
 {rows}
 </div>
@@ -365,13 +373,57 @@ pub fn render_form_detail(
 }})();
 </script>
 {pill_search_init}"#,
-        fname = html_escape(form_name),
-        search_toggle = search_toggle,
         rows = rows,
-        pagination = submission_pagination(form_name, page, total_pages),
+        pagination = submissions_pagination(pagination_base, pagination_sep, page, total_pages),
         pill_search_init = crate::pill_search_init_script(),
-    );
+    )
+}
 
-    let title = format!("Form: {}", form_name);
+/// Search/Export/Delete-All controls for a form's submissions list — meant
+/// to sit on the same row as the tab bar (see `pages::analytics::render_analytics`
+/// for the Submissions tab, and `forms_tab_controls`/results-tab controls for
+/// the layout convention this matches), rather than above the list itself.
+pub fn render_submissions_controls(form_slug: &str, has_submissions: bool) -> String {
+    let search_toggle = if has_submissions {
+        crate::pill_search_toggle("submission-search", "Search responses&hellip;", "")
+    } else {
+        String::new()
+    };
+    format!(
+        r#"<div class="icon-pill" style="align-self:flex-end;margin-top:0">
+  {search_toggle}
+  <a href="/admin/form-data-analytics/{fname}/export" download class="icon-btn" title="Export CSV" aria-label="Export CSV"><img src="/admin/static/icons/download.svg" alt=""></a>
+  <form method="POST" action="/admin/form-data-analytics/{fname}/delete-all" style="display:inline"
+        onsubmit="return confirm('Delete ALL submissions for this form?')">
+    <button class="icon-btn icon-danger" type="submit" title="Delete All" aria-label="Delete All"><img src="/admin/static/icons/trash.svg" alt=""></button>
+  </form>
+</div>"#,
+        fname = html_escape(form_slug),
+        search_toggle = search_toggle,
+    )
+}
+
+/// Standalone `/admin/form-data-analytics/{slug}` page — still reachable
+/// directly (e.g. an old bookmark, or an orphaned form whose definition was
+/// deleted and so has no `/admin/analytics/form/{id}` to redirect to), even
+/// though the Forms tab no longer links to it for forms that still have one.
+pub fn render_form_detail(
+    form_slug: &str,
+    submissions: &[SubmissionRow],
+    columns: &[String],
+    page: i64,
+    total_pages: i64,
+    flash: Option<&str>,
+    ctx: &PageContext,
+) -> String {
+    let base_path = format!("/admin/form-data-analytics/{}", html_escape(form_slug));
+    let body = render_submissions_body(form_slug, submissions, columns, page, total_pages, &base_path, "?");
+    let controls = render_submissions_controls(form_slug, !submissions.is_empty());
+    let content = format!(
+        r#"<div style="display:flex;align-items:center;justify-content:flex-end;gap:.75rem;margin-bottom:1rem;flex-wrap:wrap">{controls}</div>
+{body}"#,
+        controls = controls, body = body,
+    );
+    let title = format!("Form: {}", form_slug);
     admin_page(&title, "/admin/form-data-analytics", flash, &content, ctx)
 }

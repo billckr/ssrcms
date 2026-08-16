@@ -50,6 +50,12 @@ pub struct FormSettings {
     pub confirm_subject: String,
     #[serde(default = "default_confirm_body")]
     pub confirm_body: String,
+    /// When true, submissions still save to the database as normal but no
+    /// admin-notify or submitter-confirmation email is ever sent — overrides
+    /// `notify_email`/`confirm_submitter` rather than requiring both to be
+    /// cleared out individually.
+    #[serde(default)]
+    pub no_mail: bool,
 }
 
 fn default_success_message() -> String { "Thank you for your submission!".to_string() }
@@ -70,6 +76,7 @@ impl Default for FormSettings {
             confirm_submitter: false,
             confirm_subject: default_confirm_subject(),
             confirm_body: default_confirm_body(),
+            no_mail: false,
         }
     }
 }
@@ -84,6 +91,11 @@ pub struct FormDefRow {
     pub fields: serde_json::Value,
     pub settings: serde_json::Value,
     pub email_provider_id: Option<Uuid>,
+    /// Lifetime submission count — only ever increments (see migration
+    /// 0061), so deleting old responses doesn't erase how much interest a
+    /// form actually got. Separate from the live `COUNT(*)` shown on the
+    /// Submissions tab, which reflects what's currently stored.
+    pub total_submissions: i64,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -102,6 +114,11 @@ pub struct FormDef {
     /// Which configured `email_providers` row this form's notify/confirm
     /// emails send through. `None` falls back to the install-wide account.
     pub email_provider_id: Option<Uuid>,
+    /// Lifetime submission count — only ever increments (see migration
+    /// 0061), so deleting old responses doesn't erase how much interest a
+    /// form actually got. Separate from the live `COUNT(*)` shown on the
+    /// Submissions tab, which reflects what's currently stored.
+    pub total_submissions: i64,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -116,6 +133,7 @@ impl From<FormDefRow> for FormDef {
             fields: serde_json::from_value(row.fields).unwrap_or_default(),
             settings: serde_json::from_value(row.settings).unwrap_or_default(),
             email_provider_id: row.email_provider_id,
+            total_submissions: row.total_submissions,
             created_at: row.created_at,
             updated_at: row.updated_at,
         }

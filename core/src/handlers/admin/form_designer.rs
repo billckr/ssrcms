@@ -134,6 +134,7 @@ pub async fn edit_form(State(state): State<AppState>, admin: AdminUser, Path(id)
         confirm_submitter: form.settings.confirm_submitter,
         confirm_subject: form.settings.confirm_subject,
         confirm_body: form.settings.confirm_body,
+        no_mail: form.settings.no_mail,
         email_provider_id: form.email_provider_id.map(|id| id.to_string()).unwrap_or_default(),
         provider_options: providers.into_iter().map(|p| ProviderOption { id: p.id.to_string(), label: format!("{} - {}", p.label, p.provider_type) }).collect(),
         site_id: site_id.to_string(),
@@ -155,6 +156,7 @@ pub struct SaveFormForm {
     pub confirm_submitter: Option<String>,
     pub confirm_subject: String,
     pub confirm_body: String,
+    pub no_mail: Option<String>,
     #[serde(default)]
     pub email_provider_id: Option<String>,
     #[serde(default)]
@@ -233,6 +235,7 @@ fn settings_from_form(form: &SaveFormForm) -> FormSettings {
         } else {
             form.confirm_body.clone()
         },
+        no_mail: form.no_mail.as_deref() == Some("true"),
     }
 }
 

@@ -9,7 +9,7 @@ use serde::Deserialize;
 
 use crate::app_state::AppState;
 use crate::middleware::admin_auth::AdminUser;
-use crate::models::form_submission;
+use crate::models::{form_def, form_submission};
 
 use admin::pages::forms::SubmissionRow;
 
@@ -49,6 +49,16 @@ pub async fn view_form(
 
     let cs = state.site_hostname(admin.site_id);
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
+
+    // Submissions now live on the Submissions tab of the form's own
+    // Analytics page — redirect there whenever a form definition still
+    // exists for this slug. Only an orphaned row (definition deleted, so
+    // there's no /admin/analytics/form/{id} to send it to) still renders
+    // here directly.
+    if let Ok(Some(form)) = form_def::get_by_slug(&state.db, site_id, &name).await {
+        let page_qs = q.page.map(|p| format!("&page={p}")).unwrap_or_default();
+        return Redirect::to(&format!("/admin/analytics/form/{}?tab=submissions{page_qs}", form.id)).into_response();
+    }
 
     // Mark as read in the background (fire-and-forget; errors are non-fatal)
     let _ = form_submission::mark_all_read(&state.db, site_id, &name).await;
@@ -96,7 +106,7 @@ pub async fn delete_submission(
     if let Err(e) = form_submission::delete(&state.db, site_id, id).await {
         tracing::error!("delete_submission error: {:?}", e);
     }
-    Redirect::to(&format!("/admin/form-data-analytics/{}", name)).into_response()
+    Redirect::to(&submissions_return_url(&state, site_id, &name).await).into_response()
 }
 
 // ── delete all submissions for a form ────────────────────────────────────────
@@ -112,7 +122,17 @@ pub async fn delete_all(
     if let Err(e) = form_submission::delete_all(&state.db, site_id, &name).await {
         tracing::error!("delete_all '{}' error: {:?}", name, e);
     }
-    Redirect::to("/admin/analytics?tab=forms").into_response()
+    Redirect::to(&submissions_return_url(&state, site_id, &name).await).into_response()
+}
+
+/// Where to send the admin back to after a submissions-list action (single
+/// delete, delete-all): the form's Submissions tab if a definition still
+/// exists for this slug, else the old standalone page (orphaned data).
+async fn submissions_return_url(state: &AppState, site_id: uuid::Uuid, name: &str) -> String {
+    match form_def::get_by_slug(&state.db, site_id, name).await {
+        Ok(Some(form)) => format!("/admin/analytics/form/{}?tab=submissions", form.id),
+        _ => format!("/admin/form-data-analytics/{name}"),
+    }
 }
 
 // ── export CSV ────────────────────────────────────────────────────────────────
@@ -176,7 +196,7 @@ pub async fn export_csv(
 
 /// Build an ordered, deduplicated column list from a set of JSONB objects.
 /// Prioritizes: name, email, subject, message; then all others.
-fn collect_columns(values: &[&serde_json::Value]) -> Vec<String> {
+pub(super) fn collect_columns(values: &[&serde_json::Value]) -> Vec<String> {
     let mut all_keys = std::collections::HashSet::new();
 
     // Collect all unique keys from all values

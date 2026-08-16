@@ -48,6 +48,9 @@ pub struct FormEditData {
     pub confirm_submitter: bool,
     pub confirm_subject: String,
     pub confirm_body: String,
+    /// When true, submissions still save as normal but no admin-notify or
+    /// submitter-confirmation email is ever sent for this form.
+    pub no_mail: bool,
     /// Empty string means "use the install-wide account" — matches the
     /// dropdown's own empty-option value.
     pub email_provider_id: String,
@@ -77,6 +80,7 @@ impl Default for FormEditData {
             confirm_submitter: false,
             confirm_subject: "We've received your submission".to_string(),
             confirm_body: "Thanks for reaching out! We've received your submission and will follow up soon.".to_string(),
+            no_mail: false,
             email_provider_id: String::new(),
             provider_options: Vec::new(),
             site_id: String::new(),
@@ -168,23 +172,22 @@ pub fn forms_list_fragment(rows: &[FormRow], page: i64, total_pages: i64, search
 
     // Edit/Export/Block/Delete all now live on the Forms tab of
     // /admin/analytics instead — this list is just for managing form
-    // structure (create/rename/reorder fields), reached by clicking the
-    // name. Analytics stays here too, as a direct link to this specific
-    // form's stats (bar-chart-2 — same icon as the "back to Analytics"
-    // link in this form's own editor pill).
+    // structure (create/rename/reorder fields) is reached via the Edit
+    // icon rather than the name itself now, matching the Forms tab's
+    // Edit/Analytics pattern on /admin/analytics?tab=forms.
     let body = if rows.is_empty() {
         r#"<tr><td colspan="4" style="text-align:center;color:var(--muted)">No forms yet. Create one to get started.</td></tr>"#.to_string()
     } else {
         rows.iter().map(|f| {
             format!(
                 r#"<tr>
-  <td><a href="/admin/form-designer/{id}">{name}</a></td>
+  <td>{name}</td>
   <td><code>{slug}</code></td>
   <td><span style="display:inline-block;background:var(--tint);color:var(--text);border-radius:4px;padding:.15rem .5rem;font-size:.78rem;font-weight:500">{count}</span></td>
   <td class="actions">
     <div class="icon-pill-actionbuttons">
-      <a href="/admin/analytics/form/{id}" class="icon-btn" title="Analytics" aria-label="Analytics">
-        <img src="/admin/static/icons/bar-chart-2.svg" alt="">
+      <a href="/admin/form-designer/{id}" class="icon-btn" title="Edit" aria-label="Edit">
+        <img src="/admin/static/icons/edit.svg" alt="">
       </a>
     </div>
   </td>
@@ -360,10 +363,13 @@ pub fn render_editor(data: &FormEditData, ctx: &PageContext, flash: Option<&str>
     // form has no row on the Forms tab yet. bar-chart-2 (not bar-chart, which
     // is already the per-form "view metrics" icon on the Forms tab itself)
     // keeps the two visually distinct despite both being analytics-related.
-    let analytics_link = if data.id.is_some() {
-        r#"<a href="/admin/analytics?tab=forms" class="icon-btn" title="Back to Analytics" aria-label="Back to Analytics">
+    let analytics_link = if let Some(id) = &data.id {
+        format!(
+            r#"<a href="/admin/analytics?tab=forms&form={id}" class="icon-btn" title="Analytics" aria-label="Analytics">
     <img src="/admin/static/icons/bar-chart-2.svg" alt="">
-  </a>"#.to_string()
+  </a>"#,
+            id = html_escape(id),
+        )
     } else {
         String::new()
     };
@@ -426,18 +432,6 @@ pub fn render_editor(data: &FormEditData, ctx: &PageContext, flash: Option<&str>
               <span>Include spam honeypot field</span>
             </label>
           </div>
-          <hr style="border:none;border-top:1px solid var(--border);margin:1rem 0">
-          <div class="card-boxed-section" id="confirm-fields" style="display:{confirm_fields_display}">
-            <div class="form-group">
-              <label for="confirm-subject">Confirmation subject</label>
-              <input type="text" id="confirm-subject" name="confirm_subject" maxlength="200" value="{confirm_subject}">
-            </div>
-            <div class="form-group" style="margin-top:.6rem">
-              <label for="confirm-body">Confirmation message</label>
-              <textarea id="confirm-body" name="confirm_body" rows="4" style="resize:vertical">{confirm_body}</textarea>
-              <p class="field-hint">Use <code>{{{{field_name}}}}</code> to insert a submitted value, e.g. <code>{{{{name}}}}</code>.</p>
-            </div>
-          </div>
           <div class="icon-pill">
             <button type="button" id="save-form-btn" class="icon-btn" title="{save_label}" aria-label="{save_label}"
                     onclick="event.preventDefault();event.stopPropagation();document.getElementById('form-designer-form').requestSubmit();">
@@ -448,6 +442,15 @@ pub fn render_editor(data: &FormEditData, ctx: &PageContext, flash: Option<&str>
           </div>
           </div>
           <div id="tab-mail" class="form-tab-panel" role="tabpanel">
+          <div class="card-boxed-section">
+            <label class="switch-toggle">
+              <input type="checkbox" id="no-mail" name="no_mail" value="true"{no_mail_checked}>
+              <span class="switch-slider"></span>
+              <span>Don't send any email for this form</span>
+            </label>
+            <p class="field-hint">Submissions still save to the database as normal — no admin notification or submitter confirmation is sent.</p>
+          </div>
+          <div id="mail-fields-wrap" style="display:{mail_fields_display}">
           <div class="card-boxed-section">
             <div class="form-group">
               <label for="email-provider">Send via</label>
@@ -472,6 +475,24 @@ pub fn render_editor(data: &FormEditData, ctx: &PageContext, flash: Option<&str>
               <span>Email the submitter a confirmation</span>
             </label>
             <p class="field-hint">Sends to whatever the form's first Email-type field collects. Add one to the fields above if this form doesn't have one yet.</p>
+          </div>
+          <div class="card-boxed-section" id="confirm-fields" style="display:{confirm_fields_display}">
+            <div class="form-group">
+              <label for="confirm-subject">Confirmation subject</label>
+              <input type="text" id="confirm-subject" name="confirm_subject" maxlength="200" value="{confirm_subject}">
+            </div>
+            <div class="form-group" style="margin-top:.6rem">
+              <label for="confirm-body">Confirmation message</label>
+              <textarea id="confirm-body" name="confirm_body" rows="4" style="resize:vertical">{confirm_body}</textarea>
+              <p class="field-hint">Use <code>{{{{field_name}}}}</code> to insert a submitted value, e.g. <code>{{{{name}}}}</code>.</p>
+            </div>
+          </div>
+          </div>
+          <div class="icon-pill">
+            <button type="button" id="save-mail-btn" class="icon-btn" title="{save_label}" aria-label="{save_label}"
+                    onclick="event.preventDefault();event.stopPropagation();document.getElementById('form-designer-form').requestSubmit();">
+              <img src="/admin/static/icons/save.svg" alt="">
+            </button>
           </div>
           </div>
           <div id="tab-preview" class="form-tab-panel" role="tabpanel">
@@ -680,10 +701,17 @@ pub fn render_editor(data: &FormEditData, ctx: &PageContext, flash: Option<&str>
   var confirmFieldsBox = document.getElementById('confirm-fields');
   var confirmSubjectInput = document.getElementById('confirm-subject');
   var confirmBodyInput = document.getElementById('confirm-body');
-  var saveBtn = document.getElementById('save-form-btn');
+  var noMailInput = document.getElementById('no-mail');
+  var mailFieldsWrap = document.getElementById('mail-fields-wrap');
+  var saveBtns = [document.getElementById('save-form-btn'), document.getElementById('save-mail-btn')];
 
   confirmSubmitterInput.addEventListener('change', function() {{
     confirmFieldsBox.style.display = confirmSubmitterInput.checked ? 'block' : 'none';
+    checkDirty();
+  }});
+
+  noMailInput.addEventListener('change', function() {{
+    mailFieldsWrap.style.display = noMailInput.checked ? 'none' : 'block';
     checkDirty();
   }});
 
@@ -762,13 +790,15 @@ pub fn render_editor(data: &FormEditData, ctx: &PageContext, flash: Option<&str>
       notify_email: notifyEmailInput.value,
       confirm_submitter: confirmSubmitterInput.checked,
       confirm_subject: confirmSubjectInput.value,
-      confirm_body: confirmBodyInput.value
+      confirm_body: confirmBodyInput.value,
+      no_mail: noMailInput.checked
     }});
   }}
   var initialSnapshot = null;
   function checkDirty() {{
     if (initialSnapshot === null) return;
-    saveBtn.disabled = (snapshot() === initialSnapshot);
+    var dirty = (snapshot() !== initialSnapshot);
+    saveBtns.forEach(function(b) {{ b.disabled = !dirty; }});
   }}
 
   buttonLabelInput.addEventListener('input', updatePreview);
@@ -781,7 +811,7 @@ pub fn render_editor(data: &FormEditData, ctx: &PageContext, flash: Option<&str>
   confirmBodyInput.addEventListener('input', checkDirty);
   updatePreview();
   initialSnapshot = snapshot();
-  saveBtn.disabled = true;
+  saveBtns.forEach(function(b) {{ b.disabled = true; }});
 
   form.addEventListener('submit', function(e) {{
     var fields = readFields();
@@ -817,6 +847,8 @@ pub fn render_editor(data: &FormEditData, ctx: &PageContext, flash: Option<&str>
         honeypot_checked = if data.include_honeypot { " checked" } else { "" },
         confirm_submitter_checked = if data.confirm_submitter { " checked" } else { "" },
         confirm_fields_display = if data.confirm_submitter { "block" } else { "none" },
+        no_mail_checked = if data.no_mail { " checked" } else { "" },
+        mail_fields_display = if data.no_mail { "none" } else { "block" },
         confirm_subject = html_escape(&data.confirm_subject),
         confirm_body = html_escape(&data.confirm_body),
         save_label = if is_edit { "Save Changes" } else { "Create Form" },
