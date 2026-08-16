@@ -131,13 +131,13 @@ pub fn render_list(menus: &[MenuRow], sort: &str, dir: &str, ctx: &crate::PageCo
               <label for="new-menu-location">Location</label>
               <select id="new-menu-location" name="location">{location_opts}</select>
             </div>
+            <div class="icon-pill" style="margin-top:1rem">
+              <button type="submit" form="new-menu-form" class="icon-btn" id="create-menu-submit" title="Create Menu" aria-label="Create Menu" disabled>
+                <img src="/admin/static/icons/file-plus.svg" alt="">
+              </button>
+            </div>
           </div>
         </form>
-        <div class="icon-pill">
-          <button type="submit" form="new-menu-form" class="icon-btn" id="create-menu-submit" title="Create Menu" aria-label="Create Menu" disabled>
-            <img src="/admin/static/icons/file-plus.svg" alt="">
-          </button>
-        </div>
       </div>
     </div>
   </div>
@@ -508,19 +508,19 @@ pub fn render_edit(
           <select id="menu-location" name="location" form="menu-settings-form">{location_opts}</select>
         </div>
       </div>
-    </div>
-    <div class="icon-pill">
-      <form id="menu-settings-form" method="POST" action="/admin/menus/{menu_id}" style="margin:0;display:inline">
-        <button type="submit" class="icon-btn" id="menu-settings-save" title="Save" aria-label="Save" disabled>
-          <img src="/admin/static/icons/save.svg" alt="">
-        </button>
-      </form>
-      <form method="POST" action="/admin/menus/{menu_id}/delete"
-            onsubmit="return confirm('Delete this menu and all its items?')" style="margin:0;display:inline">
-        <button type="submit" class="icon-btn icon-danger" title="Delete" aria-label="Delete">
-          <img src="/admin/static/icons/delete.svg" alt="">
-        </button>
-      </form>
+      <div class="icon-pill" style="margin-top:1rem">
+        <form id="menu-settings-form" method="POST" action="/admin/menus/{menu_id}" style="margin:0;display:inline">
+          <button type="submit" class="icon-btn" id="menu-settings-save" title="Save" aria-label="Save" disabled>
+            <img src="/admin/static/icons/save.svg" alt="">
+          </button>
+        </form>
+        <form method="POST" action="/admin/menus/{menu_id}/delete"
+              onsubmit="return confirm('Delete this menu and all its items?')" style="margin:0;display:inline">
+          <button type="submit" class="icon-btn icon-danger" title="Delete" aria-label="Delete">
+            <img src="/admin/static/icons/delete.svg" alt="">
+          </button>
+        </form>
+      </div>
     </div>
   </div>
 </div>
@@ -600,11 +600,11 @@ pub fn render_edit(
             <input type="number" name="sort_order" value="0" style="width:100px">
           </div>
         </div>
-      </div>
-      <div class="icon-pill">
-        <button type="submit" class="icon-btn" title="Save Item" aria-label="Save Item">
-          <img src="/admin/static/icons/save.svg" alt="">
-        </button>
+        <div class="icon-pill" style="margin-top:1rem">
+          <button type="submit" class="icon-btn" title="Save Item" aria-label="Save Item">
+            <img src="/admin/static/icons/save.svg" alt="">
+          </button>
+        </div>
       </div>
     </form>
   </div>

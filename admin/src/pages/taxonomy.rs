@@ -41,14 +41,14 @@ pub fn render(terms: &[TermItem], taxonomy: &str, sort: &str, dir: &str, flash: 
               onblur="this.value=this.value.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'');">
             <small>Lowercase, hyphens only. Auto-filled from name as you type &mdash; edit it here to override.</small>
           </div>
+          <div class="icon-pill" style="margin-top:1rem">
+            <button type="submit" form="add-term-form" id="add-term-btn" class="icon-btn" title="Add {title_s}" aria-label="Add {title_s}" disabled>
+              <img src="/admin/static/icons/file-plus.svg" alt="">
+            </button>
+          </div>
         </div>
         <input type="hidden" name="taxonomy" value="{taxonomy}">
       </form>
-      <div class="icon-pill">
-        <button type="submit" form="add-term-form" id="add-term-btn" class="icon-btn" title="Add {title_s}" aria-label="Add {title_s}" disabled>
-          <img src="/admin/static/icons/file-plus.svg" alt="">
-        </button>
-      </div>
       </div>
       <script>
         var slugTouched = false;

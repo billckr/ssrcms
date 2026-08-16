@@ -166,7 +166,7 @@ pub fn render(
         <div class="form-group" style="max-width:360px">
           <label for="sg-app-name">App Name</label>
           <input type="text" id="sg-app-name" name="app_name" value="{app_name}">
-          <small>Shown in the admin sidebar top-left. Set to your agency or CMS brand name.</small>
+          <small>Shown in the admin sidebar top-left. Set to your agency or CMS brand name. Only displayed as text when no custom logo is uploaded — see Sidebar Logo below.</small>
         </div>
         <div class="icon-pill" style="margin-top:1rem">
           <button type="submit" id="general-save-btn" class="icon-btn" title="Save General" aria-label="Save General" disabled>
