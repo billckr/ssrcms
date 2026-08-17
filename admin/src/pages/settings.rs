@@ -19,7 +19,7 @@ pub fn render(
             url = crate::html_escape(url),
         ),
         None => format!(
-            r#"<span style="font-weight:600">{app_name_escaped}</span> <span class="field-hint">(text — no custom logo uploaded)</span>"#,
+            r#"<span style="font-weight:600;color:#f8fafc">{app_name_escaped}</span> <span class="field-hint" style="color:#94a3b8">(text — no custom logo uploaded)</span>"#,
         ),
     };
     // No nested <form> possible (already inside the upload form, and a
@@ -181,9 +181,9 @@ pub fn render(
   <div class="card-boxed">
     <h2 class="card-boxed-header">Sidebar Logo</h2>
     <div class="card-boxed-body">
-      <div class="card-boxed-section">
+      <div class="card-boxed-section card-boxed-section-hidden">
         <label>Current</label>
-        <div style="display:flex;align-items:center;padding:.75rem 1rem;margin-top:.4rem;background:var(--tint);border-radius:6px;max-width:360px">
+        <div style="display:flex;align-items:center;padding:.75rem 1rem;margin-top:.4rem;background:#1e293b;border-radius:6px;max-width:360px">
           {current_logo_preview}
         </div>
       </div>
