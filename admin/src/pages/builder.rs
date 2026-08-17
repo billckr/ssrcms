@@ -146,9 +146,15 @@ pub fn render_project_list(projects: &[ProjectRow], sort: &str, dir: &str, flash
         <input id="proj-desc" type="text" name="description" maxlength="100"
                placeholder="e.g. Full site redesign 2026" style="width:100%">
       </div>
-      <div style="display:flex;gap:.5rem;justify-content:flex-end;margin-top:1rem">
-        <button type="button" class="btn" onclick="this.closest('form').reset();closeNewProjectDialog()">Cancel</button>
-        <button type="submit" class="btn btn-primary">Save</button>
+      <div style="display:flex;justify-content:flex-end;margin-top:1rem">
+        <div class="icon-pill-actionbuttons">
+        <button type="button" class="icon-btn" title="Cancel" aria-label="Cancel" onclick="this.closest('form').reset();closeNewProjectDialog()">
+          <img src="/admin/static/icons/x.svg" alt="">
+        </button>
+        <button type="submit" class="icon-btn" id="new-project-save" title="Save" aria-label="Save" disabled>
+          <img src="/admin/static/icons/save.svg" alt="">
+        </button>
+        </div>
       </div>
     </div>
   </form>
@@ -169,9 +175,15 @@ pub fn render_project_list(projects: &[ProjectRow], sort: &str, dir: &str, flash
         <input id="rename-desc-input" type="text" name="description" maxlength="100"
                style="width:100%" autocomplete="off">
       </div>
-      <div style="display:flex;gap:.5rem;justify-content:flex-end;margin-top:1rem">
-        <button type="button" class="btn" onclick="document.getElementById('rename-dialog').close();document.querySelector('.admin-content').style.filter=''">Cancel</button>
-        <button type="submit" class="btn btn-primary">Save</button>
+      <div style="display:flex;justify-content:flex-end;margin-top:1rem">
+        <div class="icon-pill-actionbuttons">
+        <button type="button" class="icon-btn" title="Cancel" aria-label="Cancel" onclick="document.getElementById('rename-dialog').close();document.querySelector('.admin-content').style.filter=''">
+          <img src="/admin/static/icons/x.svg" alt="">
+        </button>
+        <button type="submit" class="icon-btn" id="rename-save" title="Save" aria-label="Save" disabled>
+          <img src="/admin/static/icons/save.svg" alt="">
+        </button>
+        </div>
       </div>
     </div>
   </form>
@@ -200,10 +212,26 @@ function openRenameDialog(id, currentName, currentDesc) {{
   dlg.showModal();
   document.getElementById('rename-input').select();
   document.querySelector('.admin-content').style.filter = 'blur(1.5px)';
+  updateRenameSaveState();
 }}
 document.getElementById('rename-dialog').addEventListener('close', function() {{
   document.querySelector('.admin-content').style.filter = '';
 }});
+(function() {{
+  var nameInput = document.getElementById('proj-name');
+  var saveBtn = document.getElementById('new-project-save');
+  function update() {{ saveBtn.disabled = nameInput.value.trim().length === 0; }}
+  nameInput.addEventListener('input', update);
+  update();
+}})();
+var updateRenameSaveState;
+(function() {{
+  var nameInput = document.getElementById('rename-input');
+  var saveBtn = document.getElementById('rename-save');
+  updateRenameSaveState = function() {{ saveBtn.disabled = nameInput.value.trim().length === 0; }};
+  nameInput.addEventListener('input', updateRenameSaveState);
+  updateRenameSaveState();
+}})();
 </script>"#,
         flash_html = flash_html,
         rows = rows,
@@ -250,19 +278,21 @@ pub fn render_page_list(project: &ProjectRow, pages: &[PageRow], ctx: &crate::Pa
   <td style="color:var(--muted);font-size:.875rem;font-family:monospace">{url}</td>
   <td>{updated}</td>
   <td class="actions">
-    <a href="/admin/builder/{proj}/pages/{page}" class="icon-btn" title="Edit">
-      <img src="/admin/static/icons/edit.svg" alt="Edit">
-    </a>
-    <button class="icon-btn" type="button" title="Duplicate page"
-            onclick="openDuplicateDialog('{proj}', '{page}', '{name_js}')">
-      <img src="/admin/static/icons/copy.svg" alt="Duplicate">
-    </button>
-    <form method="POST" action="/admin/builder/{proj}/pages/{page}/delete" style="display:inline"
-          onsubmit="return confirm('Delete this page?')">
-      <button class="icon-btn icon-danger" type="submit" title="Delete">
-        <img src="/admin/static/icons/trash.svg" alt="Delete">
+    <div class="icon-pill-actionbuttons">
+      <a href="/admin/builder/{proj}/pages/{page}" class="icon-btn" title="Edit">
+        <img src="/admin/static/icons/edit.svg" alt="Edit">
+      </a>
+      <button class="icon-btn" type="button" title="Duplicate page"
+              onclick="openDuplicateDialog('{proj}', '{page}', '{name_js}')">
+        <img src="/admin/static/icons/copy.svg" alt="Duplicate">
       </button>
-    </form>
+      <form method="POST" action="/admin/builder/{proj}/pages/{page}/delete" style="display:inline"
+            onsubmit="return confirm('Delete this page?')">
+        <button class="icon-btn icon-danger" type="submit" title="Delete">
+          <img src="/admin/static/icons/trash.svg" alt="Delete">
+        </button>
+      </form>
+    </div>
   </td>
 </tr>"#,
                 proj                    = crate::html_escape(&project.id),
@@ -283,7 +313,11 @@ pub fn render_page_list(project: &ProjectRow, pages: &[PageRow], ctx: &crate::Pa
   <a href="/admin/builder" class="btn">← Projects</a>
   {active_badge}
   <span style="flex:1"></span>
-  <a href="/admin/builder/{proj_id}/pages/new" class="btn btn-primary">+ New Page</a>
+  <div class="icon-pill" style="align-self:flex-end;margin-top:0">
+    <a href="/admin/builder/{proj_id}/pages/new" class="icon-btn" title="New Page" aria-label="New Page">
+      <img src="/admin/static/icons/file-text.svg" alt="">
+    </a>
+  </div>
 </div>
 <table class="data-table">
   <thead>
@@ -455,11 +489,13 @@ pub fn render_new_page_form(
     };
 
     let content = format!(
-        r#"<a href="/admin/builder/{proj_id}" style="color:var(--muted);font-size:.875rem;display:inline-block;margin-bottom:1rem">
-  ← Back to {proj_name}
-</a>
-<div style="max-width:520px">
-  <form method="POST" action="/admin/builder/{proj_id}/pages/new">
+        r#"<div class="card-boxed" style="max-width:560px">
+  <h2 class="card-boxed-header">
+    <span>New Page — {proj_name}</span>
+  </h2>
+  <div class="card-boxed-body">
+  <form method="POST" action="/admin/builder/{proj_id}/pages/new" id="new-page-form">
+    <div class="card-boxed-section">
     <div class="form-group">
       <label for="page-name">Page Name</label>
       <input id="page-name" type="text" name="name" required
@@ -490,22 +526,46 @@ pub fn render_new_page_form(
       </p>
     </div>
     {copy_from_field}
-    <button type="submit" class="btn btn-primary">Create Page &amp; Open Editor</button>
+    <div class="icon-pill">
+      <a href="/admin/builder/{proj_id}" class="icon-btn" title="Back to {proj_name}" aria-label="Back to {proj_name}">
+        <img src="/admin/static/icons/corner-down-left.svg" alt="">
+      </a>
+      <button type="submit" form="new-page-form" id="new-page-save" class="icon-btn" title="Create Page &amp; Open Editor" aria-label="Create Page &amp; Open Editor" disabled>
+        <img src="/admin/static/icons/file-plus.svg" alt="">
+      </button>
+    </div>
+    </div>
   </form>
+  </div>
 </div>
 <script>
+  var nameInput = document.getElementById('page-name');
+  var slugInput = document.getElementById('page-slug');
+  var saveBtn   = document.getElementById('new-page-save');
+
   function toggleSlug(type) {{
     var noSlug = type === 'homepage' || type === 'post_template';
     document.getElementById('slug-group').style.display = noSlug ? 'none' : '';
-    document.getElementById('page-slug').required = !noSlug;
+    slugInput.required = !noSlug;
+    updateSaveState();
   }}
   toggleSlug(document.getElementById('page-type').value);
 
+  function updateSaveState() {{
+    var nameValid = nameInput.value.trim().length > 0;
+    var slugValid = !slugInput.required
+      || (slugInput.value.trim().length > 0 && slugInput.checkValidity());
+    saveBtn.disabled = !(nameValid && slugValid);
+  }}
+  nameInput.addEventListener('input', updateSaveState);
+  slugInput.addEventListener('input', updateSaveState);
+  updateSaveState();
+
   var slugEdited = false;
-  document.getElementById('page-slug').addEventListener('input', function() {{
+  slugInput.addEventListener('input', function() {{
     slugEdited = true;
   }});
-  document.getElementById('page-name').addEventListener('input', function() {{
+  nameInput.addEventListener('input', function() {{
     if (slugEdited) return;
     var slug = this.value
       .toLowerCase()
@@ -514,7 +574,8 @@ pub fn render_new_page_form(
       .replace(/\s+/g, '-')
       .replace(/-+/g, '-')
       .replace(/^-|-$/g, '');
-    document.getElementById('page-slug').value = slug;
+    slugInput.value = slug;
+    updateSaveState();
   }});
 </script>"#,
         proj_id                  = crate::html_escape(&project.id),

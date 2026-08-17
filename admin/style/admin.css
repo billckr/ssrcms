@@ -316,6 +316,7 @@ a.stat-cell-link:hover { background: var(--tint); }
 .card-boxed-section { border: 1px solid var(--border); border-radius: var(--radius); padding: .85rem 1rem; margin-bottom: .6rem; background: var(--tint); }
 .card-boxed-section:last-child { margin-bottom: 0; }
 .card-boxed-section .form-group { margin: 0; }
+.card-boxed-section .form-group + .form-group { margin-top: 1rem; }
 :root[data-theme="dark"] .card-boxed-section { background: transparent; border-color: transparent; }
 /* A section that holds an .icon-pill (a field + its own Save button, e.g.
    Settings/General) hits the same "fill matches --tint" problem dark mode

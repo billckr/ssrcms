@@ -188,9 +188,7 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
           </button>
           <div class="header-menu-dropdown" id="header-menu-dropdown">
             <div class="theme-switch" role="group" aria-label="Theme" id="theme-switch">
-              <button type="button" class="theme-switch-btn" data-theme-choice="light" onclick="setTheme('light')" title="Light mode" aria-label="Light mode">
-                <img src="/admin/static/icons/sun.svg" alt="">
-              </button>
+              <!-- Light mode disabled for now; setTheme('light') logic kept intact for re-enabling later. -->
               <button type="button" class="theme-switch-btn" data-theme-choice="system" onclick="setTheme('system')" title="Match system" aria-label="Match system">
                 <img src="/admin/static/icons/monitor.svg" alt="">
               </button>
