@@ -708,7 +708,7 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
                     selected = selected)
             })
             .collect::<Vec<_>>().join("");
-        format!(r#"<div class="card-boxed-section">
+        format!(r#"<div class="card-boxed-section card-boxed-section-hidden">
           <div class="form-group">
             <label for="template">Template</label>
             <select id="template" name="template">{opts}</select>
@@ -921,18 +921,18 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
         )
     };
 
-    // Comments + Password share one compact box rather than each getting
-    // their own — both are simple on/off checkboxes for the same audience
-    // (editors/admins), so splitting them added visual weight for no gain.
-    let comments_and_password_box = if comments_section.is_empty() && password_section.is_empty() {
-        String::new()
-    } else {
-        format!(
-            r#"<div class="card-boxed-section">{comments_section}{password_section}</div>"#,
-            comments_section = comments_section,
-            password_section = password_section,
-        )
-    };
+    // Comments + Password share one compact box with the Save pill below —
+    // both are simple on/off checkboxes for the same audience
+    // (editors/admins), so splitting them added visual weight for no gain,
+    // and putting Save in the same .card-boxed-section as the last field
+    // (rather than its own row below the card) is what lets the section's
+    // fill go transparent via .card-boxed-section:has(.icon-pill) in
+    // admin.css instead of the pill needing its own recolor.
+    let comments_and_password_box = format!(
+        "{comments_section}{password_section}",
+        comments_section = comments_section,
+        password_section = password_section,
+    );
 
     // Author card: shown to editors/admins when viewing an existing post written by someone else.
     let author_card = if !ctx.user_role.eq_ignore_ascii_case("author") && !post.author_name.is_empty() {
@@ -1075,7 +1075,7 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
       <div class="card-boxed">
         <h2 class="card-boxed-header">Content</h2>
         <div class="card-boxed-body">
-          <div class="card-boxed-section">
+          <div class="card-boxed-section card-boxed-section-hidden">
             <div style="display:grid;grid-template-columns:1fr auto;gap:.75rem;align-items:start">
               <div class="form-group" style="margin:0">
                 <label for="title"><span style="display:inline-block;background:var(--tint);color:var(--text);border-radius:999px;padding:.15rem .65rem;font-size:.78rem;font-weight:600">Title <span style="color:var(--danger)">*</span></span></label>
@@ -1091,14 +1091,14 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
               </div>
             </div>
           </div>
-          <div class="card-boxed-section">
+          <div class="card-boxed-section card-boxed-section-hidden">
             <div class="form-group">
               <label for="excerpt"><span style="display:inline-block;background:var(--tint);color:var(--text);border-radius:999px;padding:.15rem .65rem;font-size:.78rem;font-weight:600">Excerpt <span style="color:var(--danger)">*</span></span> <small style="font-weight:400;color:var(--muted)">Used as meta description — required for SEO</small></label>
               <textarea id="excerpt" name="excerpt" rows="3" required maxlength="500" style="resize:none">{excerpt}</textarea>
               <small id="excerpt-count" style="color:var(--muted)">500/500</small>
             </div>
           </div>
-          <div class="card-boxed-section">
+          <div class="card-boxed-section card-boxed-section-hidden">
             <div class="form-group">
               <label><span style="display:inline-block;background:var(--tint);color:var(--text);border-radius:999px;padding:.15rem .65rem;font-size:.78rem;font-weight:600">Content <span style="color:var(--danger)">*</span></span></label>
               <div id="quill-editor" style="height:620px;background:var(--field-bg);font-size:1rem"></div>
@@ -1116,7 +1116,7 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
           <span>{publish_options_label}</span>
           {delete_btn_inline}
         </h3>
-        <div class="card-boxed-section">
+        <div class="card-boxed-section card-boxed-section-hidden">
           <div class="form-group">
             <label for="status" id="status-label" style="{status_select_display}">Status</label>
             {status_readonly}
@@ -1125,21 +1125,23 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
           </div>
         </div>
         {template_section}
-        <div class="card-boxed-section" id="datetime-section" style="{datetime_section_display}">
+        <div class="card-boxed-section card-boxed-section-hidden" id="datetime-section" style="{datetime_section_display}">
           <div class="form-group" id="datetime-picker-wrap" style="{datetime_picker_display}">
             {datetime_field}
           </div>
           {post_dates_info}
         </div>
-        {comments_and_password_box}
         <input type="hidden" name="post_type" value="{post_type}">
-        <div style="display:flex;align-items:center;gap:.6rem">
-          <div class="icon-pill">
-            <button type="submit" class="icon-btn" id="save-btn" title="Save" aria-label="Save" disabled>
-              <img src="/admin/static/icons/save.svg" alt="">
-            </button>
-            <span class="unsaved-indicator" style="display:none;color:var(--success);font-weight:600;font-size:12px;padding:0 .3rem;white-space:nowrap">Save Changes</span>
-            {status_actions_pill}
+        <div class="card-boxed-section">
+          {comments_and_password_box}
+          <div style="display:flex;align-items:center;gap:.6rem">
+            <div class="icon-pill">
+              <button type="submit" class="icon-btn" id="save-btn" title="Save" aria-label="Save" disabled>
+                <img src="/admin/static/icons/save.svg" alt="">
+              </button>
+              <span class="unsaved-indicator" style="display:none;color:var(--success);font-weight:600;font-size:12px;padding:0 .3rem;white-space:nowrap">Save Changes</span>
+              {status_actions_pill}
+            </div>
           </div>
         </div>
       </div>
