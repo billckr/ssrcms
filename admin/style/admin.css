@@ -29,8 +29,11 @@
   --shadow: 0 1px 3px rgba(0,0,0,.1);
   /* Text input/textarea/select fill — its own variable (rather than reusing
      --surface) since it's overridden independently in dark mode (see that
-     block below). */
-  --field-bg: #fff;
+     block below). Set to --tint rather than #fff: white-on-white gave
+     fields no contrast against --surface, the same problem --tint already
+     solves for boxed sections/pills — dark mode's --field-bg below follows
+     this same "match --tint" pattern already. */
+  --field-bg: var(--tint);
   --field-text: var(--text);
 }
 
@@ -314,6 +317,11 @@ a.stat-cell-link:hover { background: var(--tint); }
 .card-boxed-section:last-child { margin-bottom: 0; }
 .card-boxed-section .form-group { margin: 0; }
 :root[data-theme="dark"] .card-boxed-section { background: transparent; border-color: transparent; }
+/* A section that holds an .icon-pill (a field + its own Save button, e.g.
+   Settings/General) hits the same "fill matches --tint" problem dark mode
+   solves above — drop its box the same way, in both themes, rather than
+   recoloring the pill. */
+.card-boxed-section:has(.icon-pill) { background: transparent; border-color: transparent; }
 /* Opt-in modifier for a specific page/section that wants the box gone in
    BOTH themes (not just dark, which already gets it above) — e.g. a page
    dense enough that the extra border/fill is noise even in light mode.
