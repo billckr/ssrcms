@@ -66,14 +66,20 @@ pub fn render_with_flash(themes: &[ThemeInfo], flash: Option<&str>, ctx: &crate:
             )
         };
         format!(
-            r#"<div class="appearance-toolbar">
-  <form method="GET" action="/admin/appearance" style="display:contents">
-    <select name="filter" class="appearance-filter-select" onchange="this.form.submit()" aria-label="Theme filter">
-      {filter_options}
-    </select>
+            r#"<div class="card-boxed" style="max-width:520px;margin-bottom:1.5rem">
+  <h2 class="card-boxed-header">Themes</h2>
+  <div class="card-boxed-body">
+  <form method="GET" action="/admin/appearance">
+    <div class="form-group" style="max-width:280px">
+      <label for="appearance-filter" class="sr-only">Theme filter</label>
+      <select id="appearance-filter" name="filter" class="appearance-filter-select" onchange="this.form.submit()" aria-label="Theme filter" style="width:100%">
+        {filter_options}
+      </select>
+    </div>
   </form>
-  <div class="icon-pill">
+  <div class="icon-pill" style="margin-top:1rem">
     <a href="/admin/appearance/create" class="icon-btn" title="Create Theme" aria-label="Create Theme"><img src="/admin/static/icons/file-plus.svg" alt=""></a>
+  </div>
   </div>
 </div>"#,
             filter_options = filter_options,
@@ -1283,12 +1289,12 @@ fn render_card(t: &ThemeInfo, ctx: &crate::PageContext, filter: &str) -> String 
             )
         };
         format!(
-            r#"<div class="icon-pill"><form method="post" action="/admin/appearance/delete" style="display:inline;"
+            r#"<form method="post" action="/admin/appearance/delete" style="display:inline;"
                 data-confirm="{confirm}" onsubmit="return confirm(this.dataset.confirm)">
     <input type="hidden" name="theme" value="{name}">
     <input type="hidden" name="source" value="{source}">
     <button type="submit" class="icon-btn icon-danger" title="{label}" aria-label="{label}"><img src="/admin/static/icons/delete.svg" alt=""></button>
-</form></div>"#,
+</form>"#,
             confirm = confirm_msg,
             name    = name_esc,
             source  = crate::html_escape(&t.source),
@@ -1303,7 +1309,7 @@ fn render_card(t: &ThemeInfo, ctx: &crate::PageContext, filter: &str) -> String 
   {screenshot}
   {header}
   <div class="theme-actions">
-    <div class="icon-pill">{activate}{edit}</div>{delete}
+    <div class="icon-pill">{activate}{edit}{delete}</div>
   </div>
 </div>"#,
         active     = active_class,

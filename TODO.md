@@ -24,6 +24,7 @@ done.
 - [ ] media manager/picker WASM island only stays "warm" within a single admin page — navigating to a new page and reopening pays the full bootstrap + fetch delay again. Real-world gain from the keep-warm fix is smaller than a quick same-page test suggests. Revisit with sessionStorage-cached initial data (cheap, partial fix) or as part of a future whole-admin WASM SPA conversion (real fix, bigger project) if this keeps being noticeable.
 - [ ] Media manager dark-mode color scheme (sidebar/toolbar/content/footer backgrounds) still isn't right after several passes — revisit from scratch with a clearer reference/screenshot before making more changes.
 - [ ] in appearance editor, when you change a color, trying to revert back to original doesn't work.
+- [ ] revisit /admin/appearance page layout — icons/pills/tools look inconsistent with other admin pages; adjust to match the site's established look (card-boxed sections, pill placement, etc.)
 
 - [ ] revisit whether anyone who can edit a post (not just users with can_manage_forms) should be able to see the embedded form's submission count in the post editor sidebar and the "view form metrics" link — currently no permission gate on that, only the destination /admin/form-analytics page itself enforces can_manage_forms.
 
