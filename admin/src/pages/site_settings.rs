@@ -12,23 +12,19 @@ pub fn render(
     let brand_name_escaped = crate::html_escape(brand_name);
     let app_name_escaped = crate::html_escape(&ctx.app_name);
 
-    // ctx.logo_url may be showing the system-wide fallback logo, not one
-    // this site has set itself — has_site_logo (whether
-    // admin/static/branding/{site_id}/logo.* actually exists) is what
-    // decides whether "Reset to Text" makes sense, not just "is some logo
-    // currently displayed."
-    let current_logo_preview = match (&ctx.logo_url, has_site_logo) {
-        (Some(url), true) => format!(
+    // ctx.logo_url may be showing the system-wide fallback logo, not one this
+    // site has set itself — that fallback belongs to the provider/agency
+    // account, not this site, so it must never be displayed here. has_site_logo
+    // (whether admin/static/branding/{site_id}/logo.* actually exists) is the
+    // only thing this preview keys off; ctx.logo_url is only used when it's
+    // actually this site's own upload.
+    let current_logo_preview = if has_site_logo {
+        format!(
             r#"<img src="{url}" alt="Current logo" style="height:38px;max-width:100%">"#,
-            url = crate::html_escape(url),
-        ),
-        (Some(url), false) => format!(
-            r#"<img src="{url}" alt="Current logo" style="height:38px;max-width:100%"> <span class="field-hint" style="color:#94a3b8">(system-wide default — this site hasn't set its own)</span>"#,
-            url = crate::html_escape(url),
-        ),
-        (None, _) => format!(
-            r#"<span style="font-weight:600;color:#f8fafc">{app_name_escaped}</span> <span class="field-hint" style="color:#94a3b8">(text — no custom logo uploaded)</span>"#,
-        ),
+            url = crate::html_escape(ctx.logo_url.as_deref().unwrap_or_default()),
+        )
+    } else {
+        r#"<span class="field-hint" style="color:#94a3b8">No logo uploaded</span>"#.to_string()
     };
     let reset_logo_btn = if has_site_logo {
         r#"<button type="button" class="icon-btn" title="Reset to Text" aria-label="Reset to Text" onclick="resetLogoConfirm()">
