@@ -423,7 +423,6 @@ tr.muted td { opacity: .55; }
 }
 .customizer-image-preview.has-image::before { content: none; }
 .customizer-image-actions { display: flex; flex-direction: column; gap: .4rem; }
-.customizer-image-actions .btn { width: 100%; }
 
 /* Drag handle — shared by the menu editor's item reordering and the theme
    customizer's reorderable option groups. */

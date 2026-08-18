@@ -437,7 +437,11 @@ fn render_customizer_landing(theme_name: &str, source: &str, data: &CustomizerDa
   <div class="customizer-image-picker">
     <div class="customizer-image-preview{has_image_class}" id="{input_id}-preview"{bg_style}></div>
     <div class="customizer-image-actions">
-      <button type="button" class="btn btn-primary btn-sm" onclick="openMediaPicker('customizer_image', '{input_id}')">Choose Image</button>
+      <div class="icon-pill" style="align-self:flex-start;margin-top:0">
+        <button type="button" class="icon-btn" title="Choose Image" aria-label="Choose Image" onclick="openMediaPicker('customizer_image', '{input_id}')">
+          <img src="/admin/static/icons/image.svg" alt="">
+        </button>
+      </div>
     </div>
   </div>
   <input type="hidden" name="{key}" id="{input_id}" value="{value}">
@@ -818,9 +822,15 @@ pub fn render_theme_editor(
       <option value=".js">.js</option>
       <option value=".xml">.xml</option>
     </select>
-    <button type="submit" class="btn btn-sm btn-primary">Create</button>
-    <button type="button" class="btn btn-sm btn-secondary"
-            onclick="document.getElementById('new-file-form').style.display='none'">Cancel</button>
+    <div class="icon-pill-actionbuttons">
+      <button type="button" class="icon-btn" title="Cancel" aria-label="Cancel"
+              onclick="document.getElementById('new-file-form').style.display='none'">
+        <img src="/admin/static/icons/x.svg" alt="">
+      </button>
+      <button type="submit" class="icon-btn" title="Create" aria-label="Create">
+        <img src="/admin/static/icons/check.svg" alt="">
+      </button>
+    </div>
   </form>
 </div>"#,
             theme = theme_esc,
@@ -890,7 +900,11 @@ pub fn render_theme_editor(
      onsubmit="return confirm('Restore the original backup? Your current edits will be overwritten.')">
   <input type="hidden" name="file" value="{file}">
   <input type="hidden" name="source" value="{source}">
-  <button type="submit" class="btn btn-sm btn-secondary">Restore original</button>
+  <div class="icon-pill-actionbuttons">
+    <button type="submit" class="icon-btn" title="Restore original" aria-label="Restore original">
+      <img src="/admin/static/icons/rotate-ccw.svg" alt="">
+    </button>
+  </div>
 </form>"#,
                 theme  = theme_esc,
                 file   = rel_esc,
@@ -911,7 +925,11 @@ pub fn render_theme_editor(
      onsubmit="return confirm('Delete {file_js}? This cannot be undone.')">
   <input type="hidden" name="file" value="{file}">
   <input type="hidden" name="source" value="{source}">
-  <button type="submit" class="btn btn-sm btn-danger">Delete file</button>
+  <div class="icon-pill-actionbuttons">
+    <button type="submit" class="icon-btn icon-danger" title="Delete file" aria-label="Delete file">
+      <img src="/admin/static/icons/trash.svg" alt="">
+    </button>
+  </div>
 </form>"#,
                 theme    = theme_esc,
                 file     = rel_esc,
@@ -931,7 +949,7 @@ pub fn render_theme_editor(
 
         let del_btn2 = delete_btn;
         let ro = if is_readonly { " readonly" } else { "" };
-        let save_btn = if is_readonly { "" } else { r#"<button type="submit" form="save-form" class="btn btn-primary" id="save-btn" disabled>Save file</button>"# };
+        let save_btn = if is_readonly { "" } else { r#"<button type="submit" form="save-form" class="icon-btn" id="save-btn" title="Save file" aria-label="Save file" disabled><img src="/admin/static/icons/save.svg" alt=""></button>"# };
         let edited_at = if has_backup {
             files.iter()
                 .find(|f| f.rel_path == rel)

@@ -1,5 +1,12 @@
 # Synaptic Signals — Admin UI Conventions
 
+## Buttons, everywhere
+
+Every submit/action button in any form or modal — full-page or dialog — is an icon button, never a text button:
+- Icon comes from the existing Feather set at `admin/static/icons/*.svg` (already installed, ~290 icons). Never invent a new icon file, use emoji, or fall back to text-only.
+- Always wrapped in a pill: `.icon-pill` (page-level toolbar) or `.icon-pill-actionbuttons` (form/modal footer) containing one or more `.icon-btn` buttons.
+- Never `.btn` / `.btn-primary` text buttons for submit/cancel/save actions.
+
 ## Modals
 
 Structure:

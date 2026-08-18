@@ -176,7 +176,11 @@ pub fn render_profile(data: &ProfileData, flash: Option<&str>, ctx: &AccountCont
           </div>
         </fieldset>
 
-        <button type="submit" class="btn btn-primary" id="profile-save-btn" disabled>Save Changes</button>
+        <div class="icon-pill">
+          <button type="submit" class="icon-btn" id="profile-save-btn" title="Save Changes" aria-label="Save Changes" disabled>
+            <img src="/admin/static/icons/save.svg" alt="">
+          </button>
+        </div>
       </form>
     </div>
   </div>
@@ -213,7 +217,11 @@ pub fn render_profile(data: &ProfileData, flash: Option<&str>, ctx: &AccountCont
           </div>
         </fieldset>
 
-        <button type="submit" class="btn btn-primary" id="password-save-btn" disabled>Change Password</button>
+        <div class="icon-pill">
+          <button type="submit" class="icon-btn" id="password-save-btn" title="Change Password" aria-label="Change Password" disabled>
+            <img src="/admin/static/icons/key.svg" alt="">
+          </button>
+        </div>
       </form>
     </div>
   </div>
