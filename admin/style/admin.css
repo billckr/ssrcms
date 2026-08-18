@@ -316,7 +316,12 @@ a.stat-cell-link:hover { background: var(--tint); }
 .card-boxed-section { border: 1px solid var(--border); border-radius: var(--radius); padding: .85rem 1rem; margin-bottom: .6rem; background: var(--tint); }
 .card-boxed-section:last-child { margin-bottom: 0; }
 .card-boxed-section .form-group { margin: 0; }
-.card-boxed-section .form-group + .form-group { margin-top: 1rem; }
+/* Direct-child combinator only — a descendant selector here would also match
+   form-groups sibling to each other inside a nested row/grid (e.g.
+   .user-form-grid's Display Name + Username pair), adding a stray top
+   margin that knocks the second column down out of alignment with the
+   first. */
+.card-boxed-section > .form-group + .form-group { margin-top: 1rem; }
 :root[data-theme="dark"] .card-boxed-section { background: transparent; border-color: transparent; }
 /* A section that holds an .icon-pill (a field + its own Save button, e.g.
    Settings/General) hits the same "fill matches --tint" problem dark mode
@@ -691,7 +696,11 @@ a.author-card-name:hover { text-decoration: underline; }
 a.author-card-site:hover { text-decoration: underline; }
 .checkbox-group { display: flex; flex-direction: column; gap: .35rem; font-size: 13px; max-height: 200px; overflow-y: auto; }
 .radio-group { display: flex; flex-direction: column; gap: .6rem; margin-top: .25rem; }
-.radio-label { display: flex; align-items: flex-start; gap: .6rem; font-size: 13px; font-weight: normal; cursor: pointer; }
+/* Specified as "label.radio-label" (not just ".radio-label") so its
+   specificity ties .form-group label's display:block and wins on source
+   order — otherwise that rule stacks the radio above its heading text
+   instead of beside it. */
+label.radio-label { display: flex; align-items: flex-start; gap: .6rem; font-size: 13px; font-weight: normal; cursor: pointer; }
 .radio-label input[type=radio] { margin-top: .2rem; flex-shrink: 0; }
 .radio-label strong { display: block; }
 .title-input { font-size: 1.25rem; font-weight: 600; }

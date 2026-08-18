@@ -678,6 +678,20 @@ pub fn render_editor(user: &UserEdit, flash: Option<&str>, ctx: &crate::PageCont
     // Global admin creates/edits site-scoped users using site role values (admin/editor/author/subscriber).
     // "admin" here means site_users.role = 'admin' (site admin), NOT users.role = 'super_admin'.
     let is_new = user.id.is_none();
+
+    // Save button lives inside whichever section renders last, so its
+    // .card-boxed-section parent picks up the :has(.icon-pill) transparent-
+    // background rule and it aligns like other single-form icon-pills,
+    // rather than floating below the form as its own boxed pill.
+    let save_btn = format!(
+        r#"<div class="icon-pill">
+      <button type="submit" form="user-editor-form" id="save-btn" class="icon-btn" title="Save" aria-label="Save"{save_disabled}>
+        <img src="/admin/static/icons/save.svg" alt="">
+      </button>
+    </div>"#,
+        save_disabled = if is_new { " disabled" } else { "" },
+    );
+
     let role_field = if user.is_super_admin_target {
         if is_new {
             r#"<div class="form-group">
@@ -748,10 +762,12 @@ pub fn render_editor(user: &UserEdit, flash: Option<&str>, ctx: &crate::PageCont
         <a href="/admin/users/{user_id}/site-access" class="btn btn-secondary">Change Role</a>
       </div>
       {site_roles_list}
+      {save_btn}
     </div>"#,
             current_label = crate::html_escape(role_display(&user.role)),
             user_id = crate::html_escape(user.id.as_deref().unwrap_or("")),
             site_roles_list = site_roles_list,
+            save_btn = save_btn,
         )
     };
 
@@ -871,25 +887,30 @@ function toggleSiteFields() {{
     // read-only here, changed via /site-access), so wrapping it in a visible
     // bordered box left a pointless empty section — keep the hidden input
     // (still needed for form submission) but drop the box on edit.
+    // Site-assignment gets its own card-boxed-section, stacked below Role
+    // rather than side-by-side with it. Computed before role_section_new so
+    // we know whether it (or role_section_new) is the last section on the
+    // new-user form, and therefore which one gets the save button.
+    let site_assignment_section = if site_section.is_empty() {
+        String::new()
+    } else {
+        format!(r#"<div class="card-boxed-section">{site_section}{save_btn}</div>"#, save_btn = save_btn)
+    };
+
     let role_section_new = if is_new {
+        let trailing_btn = if site_assignment_section.is_empty() { save_btn.as_str() } else { "" };
         format!(
             r#"<div class="card-boxed-section">
       <div class="form-group" style="margin:0">
         {role_field_inner}
       </div>
+      {trailing_btn}
     </div>"#,
             role_field_inner = role_field,
+            trailing_btn = trailing_btn,
         )
     } else {
         role_field.clone()
-    };
-
-    // Site-assignment gets its own card-boxed-section, stacked below Role
-    // rather than side-by-side with it.
-    let site_assignment_section = if site_section.is_empty() {
-        String::new()
-    } else {
-        format!(r#"<div class="card-boxed-section">{site_section}</div>"#)
     };
 
     // Requirements checklist — new-user form only. Admins editing an existing
@@ -967,11 +988,6 @@ function toggleSiteFields() {{
     {role_section_new}
     {site_assignment_section}
     {role_section}
-    <div class="icon-pill">
-      <button type="submit" form="user-editor-form" id="save-btn" class="icon-btn" title="Save" aria-label="Save"{save_disabled}>
-        <img src="/admin/static/icons/save.svg" alt="">
-      </button>
-    </div>
   </form>
   {suspend_form}
   </div>
@@ -1191,7 +1207,6 @@ function toggleSiteFields() {{
         password_hint     = password_hint,
         is_new_js         = if is_new { "true" } else { "false" },
         autofocus         = if is_new { " autofocus" } else { "" },
-        save_disabled     = if is_new { " disabled" } else { "" },
         role_section      = role_section,
     );
 

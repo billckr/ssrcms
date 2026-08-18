@@ -123,9 +123,19 @@ pub fn render_with_flash(themes: &[ThemeInfo], flash: Option<&str>, ctx: &crate:
 }
 
 pub fn render_create_theme_form(flash: Option<&str>, ctx: &crate::PageContext) -> String {
-    // Visibility radio is only shown to super_admin.
-    let visibility_section = if ctx.is_global_admin {
-        r#"<div class="card-boxed-section">
+    let create_btn = r#"<div class="icon-pill">
+    <button type="submit" form="create-theme-form" id="create-theme-btn" class="icon-btn" title="Create Theme" aria-label="Create Theme">
+      <img src="/admin/static/icons/file-plus.svg" alt="">
+    </button>
+  </div>"#;
+
+    // Visibility radio is only shown to super_admin. The submit button lives
+    // inside whichever section renders last, so its .card-boxed-section
+    // parent picks up the :has(.icon-pill) transparent-background rule and
+    // it aligns like every other single-form icon-pill.
+    let (visibility_section, data_section_btn) = if ctx.is_global_admin {
+        (format!(
+            r#"<div class="card-boxed-section">
   <div class="form-group">
     <label>Visibility</label>
     <div class="radio-group">
@@ -145,9 +155,12 @@ pub fn render_create_theme_form(flash: Option<&str>, ctx: &crate::PageContext) -
       </label>
     </div>
   </div>
-</div>"#
+  {create_btn}
+</div>"#,
+            create_btn = create_btn,
+        ), "")
     } else {
-        ""
+        (String::new(), create_btn)
     };
 
     let content = format!(
@@ -171,17 +184,14 @@ pub fn render_create_theme_form(flash: Option<&str>, ctx: &crate::PageContext) -
     <label for="author">Author</label>
     <input type="text" id="author" name="author" maxlength="100" placeholder="Your name">
   </div>
+  {data_section_btn}
   </div>
   {visibility}
-  <div class="icon-pill">
-    <button type="submit" form="create-theme-form" id="create-theme-btn" class="icon-btn" title="Create Theme" aria-label="Create Theme">
-      <img src="/admin/static/icons/file-plus.svg" alt="">
-    </button>
-  </div>
   </form>
   </div>
 </div>"#,
         visibility = visibility_section,
+        data_section_btn = data_section_btn,
     );
 
     admin_page("Create Theme", "/admin/themes", flash, &content, ctx)
