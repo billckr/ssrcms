@@ -679,17 +679,41 @@ pub fn render_editor(user: &UserEdit, flash: Option<&str>, ctx: &crate::PageCont
     // "admin" here means site_users.role = 'admin' (site admin), NOT users.role = 'super_admin'.
     let is_new = user.id.is_none();
 
-    // Save button lives inside whichever section renders last, so its
-    // .card-boxed-section parent picks up the :has(.icon-pill) transparent-
-    // background rule and it aligns like other single-form icon-pills,
-    // rather than floating below the form as its own boxed pill.
+    // Save button (plus, on edit, the Back to Users and Change Role links)
+    // lives inside whichever section renders last, so its .card-boxed-section
+    // parent picks up the :has(.icon-pill) transparent-background rule and
+    // it aligns like other single-form icon-pills, rather than floating
+    // below the form as its own boxed pill. On edit, Back to Users and
+    // Change Role move down into this pill instead of sitting in the card
+    // header / Current Role section.
+    let (back_btn, change_role_btn) = if is_new {
+        (String::new(), String::new())
+    } else {
+        (
+            r#"<a href="/admin/users" class="icon-btn" title="Back to Users" aria-label="Back to Users">
+        <img src="/admin/static/icons/corner-down-left.svg" alt="">
+      </a>"#.to_string(),
+            format!(
+                r#"<a href="/admin/users/{user_id}/site-access" class="icon-btn" title="Change Role" aria-label="Change Role">
+        <img src="/admin/static/icons/key.svg" alt="">
+      </a>"#,
+                user_id = crate::html_escape(user.id.as_deref().unwrap_or("")),
+            ),
+        )
+    };
+    // Save starts disabled either way — on new-user it stays disabled until
+    // all required fields validate (see checkComplete() below), on edit it
+    // stays disabled until something actually changes (see isDirty()).
     let save_btn = format!(
         r#"<div class="icon-pill">
-      <button type="submit" form="user-editor-form" id="save-btn" class="icon-btn" title="Save" aria-label="Save"{save_disabled}>
+      {back_btn}
+      {change_role_btn}
+      <button type="submit" form="user-editor-form" id="save-btn" class="icon-btn" title="Save" aria-label="Save" disabled>
         <img src="/admin/static/icons/save.svg" alt="">
       </button>
     </div>"#,
-        save_disabled = if is_new { " disabled" } else { "" },
+        back_btn = back_btn,
+        change_role_btn = change_role_btn,
     );
 
     let role_field = if user.is_super_admin_target {
@@ -746,26 +770,20 @@ pub fn render_editor(user: &UserEdit, flash: Option<&str>, ctx: &crate::PageCont
         }
     };
 
-    // "Role" section shown only on the edit form — current role (read-only
-    // here; changed via /site-access) plus the user's existing site
-    // assignments. Folded into the same card-boxed panel as the rest of the
-    // form (a 4th card-boxed-section, under Requirements) rather than a
+    // "Role" section shown only on the edit form — the user's existing site
+    // assignments (read-only here; changed via /site-access, reached through
+    // the Change Role icon in the Back/Save pill below) plus the Save
+    // button itself. Folded into the same card-boxed panel as the rest of
+    // the form (a 4th card-boxed-section, under Requirements) rather than a
     // separate panel below — it's part of the same "editing this user" task.
     let role_section = if is_new {
         String::new()
     } else {
         format!(
             r#"<div class="card-boxed-section">
-      <div class="form-group" style="margin:0">
-        <label>Current Role</label>
-        <p style="margin:0 0 0.5rem">{current_label}</p>
-        <a href="/admin/users/{user_id}/site-access" class="btn btn-secondary">Change Role</a>
-      </div>
       {site_roles_list}
       {save_btn}
     </div>"#,
-            current_label = crate::html_escape(role_display(&user.role)),
-            user_id = crate::html_escape(user.id.as_deref().unwrap_or("")),
             site_roles_list = site_roles_list,
             save_btn = save_btn,
         )
@@ -786,18 +804,22 @@ pub fn render_editor(user: &UserEdit, flash: Option<&str>, ctx: &crate::PageCont
     // being rebuilt without the expected margins.
     let (suspend_toggle, suspend_form) = if !is_new && user.email != ctx.user_email && !user.is_protected {
         let user_id = crate::html_escape(user.id.as_deref().unwrap_or(""));
-        let (action, btn_label, btn_style, confirm_msg) = if user.is_active {
+        // Status reads as a single check-circle icon rather than a text
+        // button — green (icon-btn-active-green, see admin.css) when active,
+        // red (icon-danger-armed, already theme-aware) when suspended. The
+        // icon's own color is the status; clicking it toggles.
+        let (action, icon_class, title, confirm_msg) = if user.is_active {
             (
                 "suspend",
-                "Active",
-                "background:#16a34a;color:#fff;border:none",
+                "icon-btn-active-green",
+                "Active — click to suspend",
                 "Suspend this user? They will be immediately unable to log in until reactivated.",
             )
         } else {
             (
                 "reactivate",
-                "Suspended",
-                "background:#dc2626;color:#fff;border:none",
+                "icon-danger-armed",
+                "Suspended — click to reactivate",
                 "Reactivate this user? They will immediately be able to log in again.",
             )
         };
@@ -805,13 +827,15 @@ pub fn render_editor(user: &UserEdit, flash: Option<&str>, ctx: &crate::PageCont
             r#"<div class="card-boxed-section">
     <div class="form-group" style="margin:0">
       <label>Account Status</label>
-      <div style="margin:.35rem 0 0">
-        <button type="submit" form="suspend-toggle-form" class="btn" style="{btn_style}">{btn_label}</button>
+      <div class="icon-pill" style="margin-top:.35rem">
+        <button type="submit" form="suspend-toggle-form" id="status-toggle-btn" class="icon-btn {icon_class}" title="{title}" aria-label="{title}">
+          <img src="/admin/static/icons/check-circle.svg" alt="">
+        </button>
       </div>
     </div>
     </div>"#,
-            btn_style = btn_style,
-            btn_label = btn_label,
+            icon_class = icon_class,
+            title = title,
         );
         let form = format!(
             r#"<form method="POST" action="/admin/users/{user_id}/{action}" id="suspend-toggle-form" onsubmit="return confirm('{confirm_msg}')">
@@ -949,13 +973,21 @@ function toggleSiteFields() {{
         ""
     };
 
+    // Back to Users stays in the header on the new-user form; on edit it
+    // moves down into the icon-pill next to Save (see `back_btn` above).
+    let header_back = if is_new {
+        r#"<a href="/admin/users" class="icon-btn" title="Back to Users" aria-label="Back to Users">
+      <img src="/admin/static/icons/corner-down-left.svg" alt="">
+    </a>"#
+    } else {
+        ""
+    };
+
     let content = format!(
         r#"<div class="card-boxed" style="max-width:560px">
   <h2 class="card-boxed-header">
     <span>{form_title}</span>
-    <a href="/admin/users" class="icon-btn" title="Back to Users" aria-label="Back to Users">
-      <img src="/admin/static/icons/corner-down-left.svg" alt="">
-    </a>
+    {header_back}
   </h2>
   <div class="card-boxed-body">
   <form method="POST" action="{action}" id="user-editor-form" style="max-width:580px">
@@ -1129,7 +1161,7 @@ function toggleSiteFields() {{
         .slice(0, 15)
         .replace(/-$/, '');
     }}
-    var slugPattern = /^[a-z0-9][a-z0-9\-]{{6,13}}[a-z0-9]$/;
+    var slugPattern = /^[a-z0-9][a-z0-9\-]{{3,13}}[a-z0-9]$/;
     var unameEl = document.getElementById('username');
     var dnameEl = document.getElementById('display_name');
     var usernameTouched = false;
@@ -1190,11 +1222,41 @@ function toggleSiteFields() {{
     var hnInput = document.querySelector('input[name="new_hostname"]');
     if (hnInput) hnInput.addEventListener('input', syncSaveBtn);
     syncSaveBtn();
+  }} else {{
+    // Edit form: Save stays disabled until something in the user's info
+    // actually changes, rather than sitting there enabled by default for a
+    // no-op submit. Mirrors the post/page editor's dirty-tracking
+    // (markDirty()), but as a hard disable — this form has no draft/
+    // autosave state to fall back on, so there's nothing else to signal.
+    var saveBtn  = document.getElementById('save-btn');
+    var dnameEl  = document.getElementById('display_name');
+    var unameEl  = document.getElementById('username');
+    var emailEl  = document.getElementById('email');
+    var initial = {{
+      display_name: dnameEl ? dnameEl.value : '',
+      username:     unameEl ? unameEl.value : '',
+      email:        emailEl ? emailEl.value : '',
+    }};
+    var isDirty = function() {{
+      if (pwInput && pwInput.value) return true;
+      if (dnameEl && dnameEl.value !== initial.display_name) return true;
+      if (unameEl && unameEl.value !== initial.username) return true;
+      if (emailEl && emailEl.value !== initial.email) return true;
+      return false;
+    }};
+    var syncSaveBtn = function() {{
+      if (saveBtn) saveBtn.disabled = !isDirty();
+    }};
+    [dnameEl, unameEl, emailEl, pwInput].forEach(function(el) {{
+      if (el) el.addEventListener('input', syncSaveBtn);
+    }});
+    syncSaveBtn();
   }}
 }}());
 </script>
 </div>"#,
         form_title        = title,
+        header_back       = header_back,
         action            = action,
         username          = crate::html_escape(&user.username),
         display_name      = crate::html_escape(&user.display_name),
@@ -1332,6 +1394,9 @@ pub fn render_site_access(
     </select>
   </div>
   <div class="icon-pill" style="margin-top:1.5rem">
+    <a href="/admin/users/{user_id}/edit" class="icon-btn" title="Back to User" aria-label="Back to User">
+      <img src="/admin/static/icons/corner-down-left.svg" alt="">
+    </a>
     <button type="submit" class="icon-btn" id="assign-btn" title="Assign" aria-label="Assign" disabled>
       <img src="/admin/static/icons/save.svg" alt="">
     </button>

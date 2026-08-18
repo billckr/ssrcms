@@ -599,6 +599,9 @@ tr.muted td { opacity: .55; }
    pair this class with a `#some-id.icon-btn-active-green` rule per button
    rather than relying on the class alone. */
 #create-menu-submit.icon-btn-active-green img { filter: var(--success-filter); }
+/* User edit page's Account Status icon — green when active. Suspended uses
+   the existing .icon-danger-armed class instead (already id-free/theme-aware). */
+#status-toggle-btn.icon-btn-active-green img { filter: var(--success-filter); }
 /* Same id-specificity reasoning as above, but blue (the same accent as
    .icon-btn:hover) instead of green — for a save action that should read
    as "there's something to save" without implying success/danger. */

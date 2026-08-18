@@ -318,13 +318,23 @@ pub async fn new_user(
     Html(admin::pages::users::render_editor(&edit, None, &ctx)).into_response()
 }
 
+#[derive(Deserialize, Default)]
+pub struct EditUserQuery {
+    pub success: Option<String>,
+}
+
 pub async fn edit_user(
     State(state): State<AppState>,
     admin: AdminUser,
     Path(id): Path<Uuid>,
+    Query(q): Query<EditUserQuery>,
 ) -> impl IntoResponse {
     let cs = state.site_hostname(admin.site_id);
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
+    let flash = match q.success.as_deref() {
+        Some("user_updated") => Some("User updated successfully."),
+        _ => None,
+    };
 
     // Site isolation: non-global admins may only edit users on their site.
     if !admin.caps.is_global_admin {
@@ -387,7 +397,7 @@ pub async fn edit_user(
         is_active: user.is_active,
         is_protected: user.is_protected,
     };
-    Html(admin::pages::users::render_editor(&edit, None, &ctx)).into_response()
+    Html(admin::pages::users::render_editor(&edit, flash, &ctx)).into_response()
 }
 
 #[derive(Deserialize)]
@@ -935,7 +945,10 @@ pub async fn save_edit(
     };
 
     match crate::models::user::update(&state.db, id, &update).await {
-        Ok(_) => Redirect::to("/admin/users").into_response(),
+        // Redirect back to the same edit page (rather than the list) with a
+        // success flash — PRG pattern matching /admin/profile, so a refresh
+        // doesn't resubmit and the admin isn't bounced away mid-edit.
+        Ok(_) => Redirect::to(&format!("/admin/users/{}/edit?success=user_updated", id)).into_response(),
         Err(e) => {
             tracing::error!("update user {} error: {:?}", id, e);
             let edit = UserEdit {
