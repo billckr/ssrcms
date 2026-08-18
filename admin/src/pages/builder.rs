@@ -203,11 +203,13 @@ function confirmDelete(form, isActive) {{
   }}
   return confirm('Delete this project and all its pages? This cannot be undone.');
 }}
+var renameBaseline = {{ name: '', desc: '' }};
 function openRenameDialog(id, currentName, currentDesc) {{
   var dlg = document.getElementById('rename-dialog');
   var form = document.getElementById('rename-form');
   document.getElementById('rename-input').value = currentName;
   document.getElementById('rename-desc-input').value = currentDesc || '';
+  renameBaseline = {{ name: currentName, desc: currentDesc || '' }};
   form.action = '/admin/builder/' + id + '/rename';
   dlg.showModal();
   document.getElementById('rename-input').select();
@@ -227,9 +229,15 @@ document.getElementById('rename-dialog').addEventListener('close', function() {{
 var updateRenameSaveState;
 (function() {{
   var nameInput = document.getElementById('rename-input');
+  var descInput = document.getElementById('rename-desc-input');
   var saveBtn = document.getElementById('rename-save');
-  updateRenameSaveState = function() {{ saveBtn.disabled = nameInput.value.trim().length === 0; }};
+  updateRenameSaveState = function() {{
+    var nameEmpty = nameInput.value.trim().length === 0;
+    var unchanged = nameInput.value === renameBaseline.name && descInput.value === renameBaseline.desc;
+    saveBtn.disabled = nameEmpty || unchanged;
+  }};
   nameInput.addEventListener('input', updateRenameSaveState);
+  descInput.addEventListener('input', updateRenameSaveState);
   updateRenameSaveState();
 }})();
 </script>"#,
@@ -327,29 +335,51 @@ pub fn render_page_list(project: &ProjectRow, pages: &[PageRow], ctx: &crate::Pa
 </table>
 
 <!-- Duplicate page dialog -->
-<dialog id="duplicate-dialog" style="border:1px solid #e2e8f0;border-radius:8px;padding:1.5rem;min-width:380px;box-shadow:0 4px 24px rgba(0,0,0,.12);position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);margin:0">
+<dialog id="duplicate-dialog" class="modal-card">
   <form method="POST" id="duplicate-form">
     <input type="hidden" name="name" id="duplicate-name-input-hidden">
-    <h3 style="margin:0 0 1rem">Duplicate Page</h3>
-    <div class="form-group">
-      <label for="duplicate-name-input">New Page Name</label>
-      <input id="duplicate-name-input" type="text" required maxlength="100"
-             style="width:100%" autofocus>
-    </div>
-    <div style="display:flex;gap:.5rem;justify-content:flex-end;margin-top:1rem">
-      <button type="button" class="btn" onclick="document.getElementById('duplicate-dialog').close();document.querySelector('.admin-content').style.filter=''">Cancel</button>
-      <button type="submit" class="btn btn-primary">Duplicate &amp; Open Editor</button>
+    <h3 class="modal-card-header">Duplicate Page</h3>
+    <div class="modal-card-body">
+      <div class="form-group">
+        <label for="duplicate-name-input">New Page Name</label>
+        <input id="duplicate-name-input" type="text" required maxlength="100"
+               style="width:100%" autofocus>
+      </div>
+      <div style="display:flex;justify-content:flex-end;margin-top:1rem">
+        <div class="icon-pill-actionbuttons">
+        <button type="button" class="icon-btn" title="Cancel" aria-label="Cancel" onclick="document.getElementById('duplicate-dialog').close();document.querySelector('.admin-content').style.filter=''">
+          <img src="/admin/static/icons/x.svg" alt="">
+        </button>
+        <button type="submit" class="icon-btn" id="duplicate-save" title="Duplicate &amp; Open Editor" aria-label="Duplicate &amp; Open Editor" disabled>
+          <img src="/admin/static/icons/copy.svg" alt="">
+        </button>
+        </div>
+      </div>
     </div>
   </form>
 </dialog>
 <script>
+var duplicateBaseline = '';
+var updateDuplicateSaveState;
+(function() {{
+  var inp = document.getElementById('duplicate-name-input');
+  var saveBtn = document.getElementById('duplicate-save');
+  updateDuplicateSaveState = function() {{
+    var empty = inp.value.trim().length === 0;
+    var unchanged = inp.value === duplicateBaseline;
+    saveBtn.disabled = empty || unchanged;
+  }};
+  inp.addEventListener('input', updateDuplicateSaveState);
+}})();
 function openDuplicateDialog(projId, pageId, currentName) {{
   var dlg  = document.getElementById('duplicate-dialog');
   var form = document.getElementById('duplicate-form');
   var inp  = document.getElementById('duplicate-name-input');
   inp.value = currentName + ' (copy)';
+  duplicateBaseline = inp.value;
   form.action = '/admin/builder/' + projId + '/pages/' + pageId + '/duplicate';
   dlg.showModal();
+  updateDuplicateSaveState();
   inp.select();
   document.querySelector('.admin-content').style.filter = 'blur(1.5px)';
 }}

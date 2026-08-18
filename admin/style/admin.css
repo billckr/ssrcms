@@ -497,7 +497,6 @@ tr.muted td { opacity: .55; }
 .badge-trashed { color: #991b1b; }
 .badge-scheduled { color: #1e40af; }
 .badge-protected { color: #6b21a8; }
-.badge-in-use   { background: #fef3c7; color: #92400e; cursor: help; }
 .badge-private  { background: #e0e7ff; color: #3730a3; }
 .badge-super-admin { background: #1e293b; color: #f8fafc; }
 .badge-site-admin  { background: #dbeafe; color: #1d4ed8; }

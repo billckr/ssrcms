@@ -1186,7 +1186,7 @@ fn render_card(t: &ThemeInfo, ctx: &crate::PageContext, filter: &str) -> String 
     if filter == "global" || filter == "private" {
         let source_val = crate::html_escape(&t.source);
         let in_my_themes_badge = if t.has_site_copy {
-            r#"<span class="badge badge-in-use">In My Themes</span>"#.to_string()
+            r#"<span class="badge">My Themes</span>"#.to_string()
         } else {
             String::new()
         };
