@@ -1864,6 +1864,7 @@ mod tests {
             user_role: "admin".to_string(),
             is_global_admin: false,
             is_impersonating: false,
+            is_on_home_site: true,
             can_manage_users: false,
             can_manage_sites: false,
             can_manage_plugins: false,

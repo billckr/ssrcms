@@ -106,6 +106,11 @@ pub fn page_ctx(state: &AppState, admin: &AdminUser, current_site: &str) -> admi
         },
         is_global_admin: admin.caps.is_global_admin,
         is_impersonating: admin.caps.is_impersonating,
+        // No recorded default site (never auto-assigned one, e.g. an admin
+        // who doesn't own any site) means there's nothing to compare
+        // against — default to "home" so the badge doesn't spuriously
+        // append the site name for a user who can't actually switch sites.
+        is_on_home_site: admin.user.default_site_id.map_or(true, |d| admin.site_id == Some(d)),
         can_manage_users: admin.caps.can_manage_users,
         can_manage_sites: admin.caps.can_manage_sites,
         can_manage_plugins: admin.caps.can_manage_plugins,

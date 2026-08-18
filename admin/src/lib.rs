@@ -15,6 +15,11 @@ pub struct PageContext {
     pub is_global_admin: bool,
     /// Super-admin viewing a site they do not own.
     pub is_impersonating: bool,
+    /// True when the current site is this user's own default/home site —
+    /// false once they've switched (via /admin/sites) to another site they
+    /// hold a role on. Only meaningful for non-global-admins; global admins
+    /// use `is_impersonating` for the equivalent distinction instead.
+    pub is_on_home_site: bool,
     /// Can view, create, edit, and delete users.
     pub can_manage_users: bool,
     /// Can create new sites and edit site-level settings.
@@ -54,7 +59,7 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
     let visiting_badge = if ctx.is_impersonating && !ctx.current_site.is_empty() {
         let site = html_escape(&ctx.current_site);
         format!(
-            r#"<a href="/admin/sites/go-home" class="badge-visiting" title="Return to your admin panel"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>super admin &rarr; {site}</a>"#
+            r#"<a href="/admin/sites/go-home" class="badge-visiting" title="Return to your admin panel"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>Super Admin &rarr; {site}</a>"#
         )
     } else {
         String::new()
@@ -75,11 +80,18 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
         // in the chrome which role the current session is acting as.
         let label = if ctx.user_role.is_empty() {
             ctx.current_site.clone()
+        } else if ctx.is_on_home_site {
+            ctx.user_role.clone()
         } else {
-            format!("{} - {}", ctx.current_site, ctx.user_role.to_lowercase())
+            format!("{} - {}", ctx.user_role, ctx.current_site)
         };
+        // On the home site this just opens the site switcher, same as the
+        // super-admin badge. Once switched to another site, clicking it
+        // returns to the home site instead — mirroring go-home's behavior
+        // for the impersonation badge.
+        let href = if ctx.is_on_home_site { "/admin/sites" } else { "/admin/sites/go-home" };
         format!(
-            r#"<a href="/admin/sites" class="site-indicator">{}</a>"#,
+            r#"<a href="{href}" class="site-indicator">{}</a>"#,
             html_escape(&label)
         )
     };
