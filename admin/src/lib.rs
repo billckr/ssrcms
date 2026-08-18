@@ -26,7 +26,7 @@ pub struct PageContext {
     /// Can create, edit, publish, and delete content.
     pub can_manage_content: bool,
     /// Can manage themes (appearance).
-    pub can_manage_appearance: bool,
+    pub can_manage_themes: bool,
     /// Can create, edit, and delete categories and tags.
     pub can_manage_taxonomies: bool,
     /// Can view, export, and delete form submissions.
@@ -402,9 +402,9 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
         form_designer = if ctx.can_manage_forms { nav_link("/admin/form-designer", "Form Builder") } else { String::new() },
         plugins = String::new(), // plugins disabled pre-launch
         documentation = if ctx.is_global_admin { nav_link("/admin/documentation", "Documentation") } else { String::new() },
-        appearance = if ctx.can_manage_appearance { nav_link("/admin/appearance", "Themes") } else { String::new() },
-        menus = if ctx.can_manage_appearance { nav_link("/admin/menus", "Menus") } else { String::new() },
-        builder = if ctx.can_manage_appearance { nav_link("/admin/builder", "Page Builder") } else { String::new() },
+        appearance = if ctx.can_manage_themes { nav_link("/admin/themes", "Themes") } else { String::new() },
+        menus = if ctx.can_manage_themes { nav_link("/admin/menus", "Menus") } else { String::new() },
+        builder = if ctx.can_manage_themes { nav_link("/admin/builder", "Page Builder") } else { String::new() },
         settings = if ctx.can_manage_settings { nav_link("/admin/settings", "System Settings") } else { String::new() },
         activity_log = if ctx.can_manage_users { nav_link("/admin/activity-log", "Activity Log") } else { String::new() },
         flash_html = flash_html,

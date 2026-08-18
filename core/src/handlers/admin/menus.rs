@@ -35,7 +35,7 @@ pub async fn list(
     let Some(site_id) = admin.site_id else {
         return Redirect::to("/admin").into_response();
     };
-    if !admin.caps.can_manage_appearance {
+    if !admin.caps.can_manage_themes {
         return Redirect::to("/admin").into_response();
     }
 
@@ -89,7 +89,7 @@ pub async fn create(
     let Some(site_id) = admin.site_id else {
         return Redirect::to("/admin").into_response();
     };
-    if !admin.caps.can_manage_appearance {
+    if !admin.caps.can_manage_themes {
         return Redirect::to("/admin").into_response();
     }
 
@@ -126,7 +126,7 @@ pub async fn edit(
     Path(id): Path<Uuid>,
     Query(q): Query<EditMenuQuery>,
 ) -> impl IntoResponse {
-    if !admin.caps.can_manage_appearance {
+    if !admin.caps.can_manage_themes {
         return Redirect::to("/admin").into_response();
     }
 
@@ -184,7 +184,7 @@ pub async fn update(
     Path(id): Path<Uuid>,
     Form(form): Form<UpdateMenuForm>,
 ) -> impl IntoResponse {
-    if !admin.caps.can_manage_appearance {
+    if !admin.caps.can_manage_themes {
         return Redirect::to("/admin").into_response();
     }
 
@@ -220,7 +220,7 @@ pub async fn delete(
     admin: AdminUser,
     Path(id): Path<Uuid>,
 ) -> impl IntoResponse {
-    if !admin.caps.can_manage_appearance {
+    if !admin.caps.can_manage_themes {
         return Redirect::to("/admin").into_response();
     }
 
@@ -267,7 +267,7 @@ pub async fn add_item(
     Path(id): Path<Uuid>,
     Form(form): Form<AddItemForm>,
 ) -> impl IntoResponse {
-    if !admin.caps.can_manage_appearance {
+    if !admin.caps.can_manage_themes {
         return Redirect::to("/admin").into_response();
     }
 
@@ -323,7 +323,7 @@ pub async fn edit_item(
     Path((menu_id, item_id)): Path<(Uuid, Uuid)>,
     Form(form): Form<EditItemForm>,
 ) -> impl IntoResponse {
-    if !admin.caps.can_manage_appearance {
+    if !admin.caps.can_manage_themes {
         return Redirect::to("/admin").into_response();
     }
 
@@ -363,7 +363,7 @@ pub async fn delete_item(
     admin: AdminUser,
     Path((menu_id, item_id)): Path<(Uuid, Uuid)>,
 ) -> impl IntoResponse {
-    if !admin.caps.can_manage_appearance {
+    if !admin.caps.can_manage_themes {
         return Redirect::to("/admin").into_response();
     }
 
@@ -398,7 +398,7 @@ pub async fn reorder_items(
     Path(id): Path<Uuid>,
     Json(body): Json<ReorderItemsBody>,
 ) -> impl IntoResponse {
-    if !admin.caps.can_manage_appearance {
+    if !admin.caps.can_manage_themes {
         return StatusCode::FORBIDDEN.into_response();
     }
 

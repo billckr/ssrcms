@@ -1,8 +1,8 @@
 //! Theme list, activation, deletion, and screenshots — plus the helpers shared
-//! across the appearance handler modules:
-//! - `appearance_upload.rs` — zip install and "create from default"
-//! - `appearance_publish.rs` — copying between library tiers (get/publish)
-//! - `appearance_editor.rs` — the in-browser template file editor
+//! across the theme handler modules:
+//! - `themes_upload.rs` — zip install and "create from default"
+//! - `themes_publish.rs` — copying between library tiers (get/publish)
+//! - `themes_editor.rs` — the in-browser template file editor
 
 use axum::{
     body::Body,
@@ -17,7 +17,7 @@ use uuid::Uuid;
 
 use crate::app_state::{AppState, set_site_setting};
 use crate::middleware::admin_auth::AdminUser;
-use admin::pages::appearance::{ThemeInfo, render_with_flash};
+use admin::pages::themes::{ThemeInfo, render_with_flash};
 
 /// Required template files every valid theme must provide.
 pub(crate) const REQUIRED_TEMPLATES: &[&str] = &[
@@ -41,13 +41,13 @@ pub async fn list(
     admin: AdminUser,
     Query(q): Query<AppearanceQuery>,
 ) -> impl IntoResponse {
-    if !admin.caps.can_manage_appearance {
+    if !admin.caps.can_manage_themes {
         return (StatusCode::FORBIDDEN, Html("<h1>403 Forbidden</h1>".to_string())).into_response();
     }
     let cs = state.site_hostname(admin.site_id);
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
     let filter = q.filter.as_deref().unwrap_or("my");
-    render_appearance_list(&state, None, &ctx, admin.site_id, filter).await.into_response()
+    render_theme_list(&state, None, &ctx, admin.site_id, filter).await.into_response()
 }
 
 // ── Activate ──────────────────────────────────────────────────────────────────
@@ -62,7 +62,7 @@ pub async fn activate(
     admin: AdminUser,
     Form(form): Form<ActivateForm>,
 ) -> impl IntoResponse {
-    if !admin.caps.can_manage_appearance {
+    if !admin.caps.can_manage_themes {
         return (StatusCode::FORBIDDEN, "Forbidden").into_response();
     }
     let themes_dir = &state.config.themes_dir;
@@ -72,7 +72,7 @@ pub async fn activate(
 
     // Reject obviously invalid names before any filesystem access.
     if form.theme.contains("..") || form.theme.contains('/') || form.theme.contains('\\') {
-        return render_appearance_list(&state, Some("Invalid theme name."), &ctx, admin.site_id, "my").await.into_response();
+        return render_theme_list(&state, Some("Invalid theme name."), &ctx, admin.site_id, "my").await.into_response();
     }
 
     let sites_dir   = &state.config.sites_dir;
@@ -91,17 +91,17 @@ pub async fn activate(
             sd.join(&form.theme)
         } else {
             tracing::warn!("theme activation failed: theme '{}' not found", form.theme);
-            return render_appearance_list(&state, Some("Theme not found."), &ctx, admin.site_id, "my").await.into_response();
+            return render_theme_list(&state, Some("Theme not found."), &ctx, admin.site_id, "my").await.into_response();
         }
     } else {
         tracing::warn!("theme activation failed: theme '{}' not found", form.theme);
-        return render_appearance_list(&state, Some("Theme not found."), &ctx, admin.site_id, "my").await.into_response();
+        return render_theme_list(&state, Some("Theme not found."), &ctx, admin.site_id, "my").await.into_response();
     };
 
     // Path traversal guard: theme must live within global/, private/, or sites/<id>/.
     let canonical_theme = match theme_path.canonicalize() {
         Ok(p) => p,
-        Err(_) => return render_appearance_list(&state, Some("Theme not found."), &ctx, admin.site_id, "my").await.into_response(),
+        Err(_) => return render_theme_list(&state, Some("Theme not found."), &ctx, admin.site_id, "my").await.into_response(),
     };
     let canonical_global  = global_dir.canonicalize().unwrap_or_default();
     let canonical_private = private_dir.canonicalize().unwrap_or_default();
@@ -114,14 +114,14 @@ pub async fn activate(
         || canonical_theme.starts_with(&canonical_site);
     if !in_allowed_dir {
         tracing::warn!("activate path traversal attempt: theme_name={:?}", form.theme);
-        return render_appearance_list(&state, Some("Theme not found."), &ctx, admin.site_id, "my").await.into_response();
+        return render_theme_list(&state, Some("Theme not found."), &ctx, admin.site_id, "my").await.into_response();
     }
 
     let site_id = match admin.site_id {
         Some(id) => id,
         None => {
             tracing::warn!("theme activate: no site selected, cannot save per-site setting");
-            return render_appearance_list(&state, Some("No site selected."), &ctx, admin.site_id, "my").await.into_response();
+            return render_theme_list(&state, Some("No site selected."), &ctx, admin.site_id, "my").await.into_response();
         }
     };
 
@@ -142,11 +142,11 @@ pub async fn activate(
                 Ok(Ok(())) => tracing::info!("auto-copied theme '{}' to site {}", form.theme, site_id),
                 Ok(Err(e)) => {
                     tracing::error!("activate: failed to copy theme '{}' to site dir: {}", form.theme, e);
-                    return render_appearance_list(&state, Some("Failed to copy theme to your site. Please try again."), &ctx, admin.site_id, "my").await.into_response();
+                    return render_theme_list(&state, Some("Failed to copy theme to your site. Please try again."), &ctx, admin.site_id, "my").await.into_response();
                 }
                 Err(e) => {
                     tracing::error!("activate: copy task panicked: {:?}", e);
-                    return render_appearance_list(&state, Some("Failed to copy theme to your site. Please try again."), &ctx, admin.site_id, "my").await.into_response();
+                    return render_theme_list(&state, Some("Failed to copy theme to your site. Please try again."), &ctx, admin.site_id, "my").await.into_response();
                 }
             }
         }
@@ -154,12 +154,12 @@ pub async fn activate(
 
     if let Err(e) = set_site_setting(&state.db, site_id, "active_theme", &form.theme).await {
         tracing::error!("failed to save active_theme to DB: {:?}", e);
-        return render_appearance_list(&state, Some("Failed to activate theme. Please try again."), &ctx, admin.site_id, "my").await.into_response();
+        return render_theme_list(&state, Some("Failed to activate theme. Please try again."), &ctx, admin.site_id, "my").await.into_response();
     }
 
     if let Err(e) = state.templates.switch_theme(&form.theme) {
         tracing::error!("failed to switch theme to '{}': {:?}", form.theme, e);
-        return render_appearance_list(&state, Some("Theme files could not be loaded. Please try again."), &ctx, admin.site_id, "my").await.into_response();
+        return render_theme_list(&state, Some("Theme files could not be loaded. Please try again."), &ctx, admin.site_id, "my").await.into_response();
     }
 
     *state.active_theme.write().unwrap() = form.theme.clone();
@@ -168,7 +168,7 @@ pub async fn activate(
     // immediately serves assets from the newly selected theme.
     state.update_site_theme_in_cache(site_id, &form.theme);
 
-    Redirect::to("/admin/appearance").into_response()
+    Redirect::to("/admin/themes").into_response()
 }
 
 // ── Delete ─────────────────────────────────────────────────────────────────────
@@ -185,7 +185,7 @@ pub async fn delete(
     admin: AdminUser,
     Form(form): Form<DeleteForm>,
 ) -> impl IntoResponse {
-    if !admin.caps.can_manage_appearance {
+    if !admin.caps.can_manage_themes {
         return (StatusCode::FORBIDDEN, "Forbidden").into_response();
     }
     let cs = state.site_hostname(admin.site_id);
@@ -194,7 +194,7 @@ pub async fn delete(
 
     macro_rules! err {
         ($msg:expr) => {
-            return render_appearance_list(&state, Some($msg), &ctx, admin.site_id, "my")
+            return render_theme_list(&state, Some($msg), &ctx, admin.site_id, "my")
                 .await
                 .into_response()
         };
@@ -304,7 +304,7 @@ pub async fn delete(
     }
 
     tracing::info!("theme '{}' deleted by {}", form.theme, if admin.caps.is_global_admin { "super_admin" } else { "site_admin" });
-    render_appearance_list(&state, Some(&format!("Theme '{}' deleted.", form.theme)), &ctx, admin.site_id, "my")
+    render_theme_list(&state, Some(&format!("Theme '{}' deleted.", form.theme)), &ctx, admin.site_id, "my")
         .await
         .into_response()
 }
@@ -386,7 +386,7 @@ pub(crate) fn copy_dir_all(src: &FsPath, dst: &FsPath) -> std::io::Result<()> {
 
 // ── Shared list renderer ───────────────────────────────────────────────────────
 
-pub(crate) async fn render_appearance_list(
+pub(crate) async fn render_theme_list(
     state: &AppState,
     flash: Option<&str>,
     ctx: &admin::PageContext,
@@ -548,8 +548,8 @@ fn scan_theme_dir(dir: &FsPath, active_theme: &str, source: &str, themes: &mut V
                         active: dir_name == active_theme,
                         has_screenshot,
                         source: source.to_string(),
-                        can_delete: false,         // computed after scanning in render_appearance_list
-                        in_use_by: 0,              // computed after scanning in render_appearance_list
+                        can_delete: false,         // computed after scanning in render_theme_list
+                        in_use_by: 0,              // computed after scanning in render_theme_list
                         has_site_copy: false,      // computed below for global/private filter view
                         is_private_origin: source == "private", // also set for site copies below
                         has_global_copy: false,    // computed below for private filter view

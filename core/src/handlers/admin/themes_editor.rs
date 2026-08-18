@@ -1,6 +1,6 @@
 //! The in-browser theme file editor: browsing, creating, editing, restoring,
 //! and deleting individual template/CSS/JS files within a theme. Split out of
-//! appearance.rs, which also owns the theme list/activate/delete/screenshot
+//! themes.rs, which also owns the theme list/activate/delete/screenshot
 //! handlers and the library-wide operations (upload, create, get, publish).
 
 use axum::{
@@ -17,7 +17,7 @@ use uuid::Uuid;
 use crate::app_state::AppState;
 use crate::middleware::admin_auth::AdminUser;
 
-use super::appearance::{render_appearance_list, url_encode_param, REQUIRED_TEMPLATES};
+use super::themes::{render_theme_list, url_encode_param, REQUIRED_TEMPLATES};
 
 /// One declared `[customizer.colors.<key>]` entry: `key` is the CSS custom
 /// property name (without `--`) the theme's `static/css/style.css` must
@@ -71,7 +71,7 @@ async fn build_customizer(
     theme_dir: &FsPath,
     site_id: Option<Uuid>,
     theme_name: &str,
-) -> Option<admin::pages::appearance::CustomizerData> {
+) -> Option<admin::pages::themes::CustomizerData> {
     let toml_content = fs::read_to_string(theme_dir.join("theme.toml")).ok()?;
     let parsed: toml::Table = toml::from_str(&toml_content).ok()?;
 
@@ -86,7 +86,7 @@ async fn build_customizer(
     }
 
     let theme_section = parsed.get("theme").and_then(|v| v.as_table());
-    let manifest = admin::pages::appearance::ThemeManifestInfo {
+    let manifest = admin::pages::themes::ThemeManifestInfo {
         name: theme_section.and_then(|t| t.get("name")).and_then(|v| v.as_str()).unwrap_or("Unknown").to_string(),
         version: theme_section.and_then(|t| t.get("version")).and_then(|v| v.as_str()).unwrap_or("unknown").to_string(),
         description: theme_section.and_then(|t| t.get("description")).and_then(|v| v.as_str()).unwrap_or("").to_string(),
@@ -184,7 +184,7 @@ async fn build_customizer(
         Default::default()
     };
 
-    Some(admin::pages::appearance::CustomizerData { manifest, colors, options, order_options, choices, texts, images, has_color_backup, overridden_option_keys })
+    Some(admin::pages::themes::CustomizerData { manifest, colors, options, order_options, choices, texts, images, has_color_backup, overridden_option_keys })
 }
 
 #[derive(Deserialize)]
@@ -200,7 +200,7 @@ pub async fn new_file(
     Path(theme): Path<String>,
     Form(form): Form<NewFileForm>,
 ) -> impl IntoResponse {
-    if !admin.caps.can_manage_appearance {
+    if !admin.caps.can_manage_themes {
         return (StatusCode::FORBIDDEN, "Forbidden").into_response();
     }
     let cs = state.site_hostname(admin.site_id);
@@ -208,7 +208,7 @@ pub async fn new_file(
 
     let source = form.source.as_deref().unwrap_or("site");
     let Some(theme_dir) = resolve_theme_dir_by_source(&state.config.themes_dir, &state.config.sites_dir, &theme, Some(source), admin.site_id) else {
-        return render_appearance_list(&state, Some("Theme not found."), &ctx, admin.site_id, "my")
+        return render_theme_list(&state, Some("Theme not found."), &ctx, admin.site_id, "my")
             .await.into_response();
     };
 
@@ -216,15 +216,15 @@ pub async fn new_file(
     let customizer = build_customizer(&state.db, &theme_dir, admin.site_id, &theme).await;
     let editor_err = |msg: &'static str| {
         let files = walk_theme_files(&theme_dir);
-        let editor_files: Vec<admin::pages::appearance::EditorFile> = files.iter().map(|f| {
-            admin::pages::appearance::EditorFile {
+        let editor_files: Vec<admin::pages::themes::EditorFile> = files.iter().map(|f| {
+            admin::pages::themes::EditorFile {
                 rel_path: f.clone(),
                 is_selected: false,
                 has_backup: bak_path_for(&theme_dir.join(f)).exists(),
                 edited_at: None,
             }
         }).collect();
-        Html(admin::pages::appearance::render_theme_editor(
+        Html(admin::pages::themes::render_theme_editor(
             &theme, &editor_files, None, "", false, Some(msg), &ctx, false, source, customizer.as_ref(),
         )).into_response()
     };
@@ -283,7 +283,7 @@ pub async fn new_file(
     }
 
     Redirect::to(&format!(
-        "/admin/appearance/editor/{}?source={}&file={}",
+        "/admin/themes/editor/{}?source={}&file={}",
         url_encode_param(&theme),
         source,
         url_encode_param(&rel),
@@ -451,7 +451,7 @@ pub async fn edit_file(
     Path(theme): Path<String>,
     Query(q): Query<EditorQuery>,
 ) -> Response {
-    if !admin.caps.can_manage_appearance {
+    if !admin.caps.can_manage_themes {
         return (StatusCode::FORBIDDEN, Html("<h1>403 Forbidden</h1>".to_string())).into_response();
     }
     let cs = state.site_hostname(admin.site_id);
@@ -459,7 +459,7 @@ pub async fn edit_file(
 
     let source = q.source.as_deref().unwrap_or("site");
     let Some(theme_dir) = resolve_theme_dir_by_source(&state.config.themes_dir, &state.config.sites_dir, &theme, Some(source), admin.site_id) else {
-        return render_appearance_list(&state, Some("Theme not found."), &ctx, admin.site_id, "my")
+        return render_theme_list(&state, Some("Theme not found."), &ctx, admin.site_id, "my")
             .await.into_response();
     };
 
@@ -512,7 +512,7 @@ pub async fn edit_file(
 
     let effective_flash: Option<String> = file_err.map(|s| s.to_string()).or(status_flash);
 
-    let editor_files: Vec<admin::pages::appearance::EditorFile> = files.iter().map(|f| {
+    let editor_files: Vec<admin::pages::themes::EditorFile> = files.iter().map(|f| {
         let abs = theme_dir.join(f);
         let has_bak = bak_path_for(&abs).exists();
         let edited_at = if has_bak {
@@ -540,7 +540,7 @@ pub async fn edit_file(
         } else {
             None
         };
-        admin::pages::appearance::EditorFile {
+        admin::pages::themes::EditorFile {
             rel_path: f.clone(),
             is_selected: selected_rel.as_deref() == Some(f.as_str()),
             has_backup: has_bak,
@@ -549,7 +549,7 @@ pub async fn edit_file(
     }).collect();
 
     let customizer = build_customizer(&state.db, &theme_dir, admin.site_id, &theme).await;
-    Html(admin::pages::appearance::render_theme_editor(
+    Html(admin::pages::themes::render_theme_editor(
         &theme,
         &editor_files,
         selected_rel.as_deref(),
@@ -569,7 +569,7 @@ pub async fn save_file(
     Path(theme): Path<String>,
     Form(form): Form<SaveFileForm>,
 ) -> Response {
-    if !admin.caps.can_manage_appearance {
+    if !admin.caps.can_manage_themes {
         return (StatusCode::FORBIDDEN, "Forbidden").into_response();
     }
     let cs = state.site_hostname(admin.site_id);
@@ -577,16 +577,16 @@ pub async fn save_file(
 
     let source = form.source.as_deref().unwrap_or("site");
     let Some(theme_dir) = resolve_theme_dir_by_source(&state.config.themes_dir, &state.config.sites_dir, &theme, Some(source), admin.site_id) else {
-        return render_appearance_list(&state, Some("Theme not found."), &ctx, admin.site_id, "my")
+        return render_theme_list(&state, Some("Theme not found."), &ctx, admin.site_id, "my")
             .await.into_response();
     };
 
     if !admin.caps.is_global_admin && (is_in_global_dir(&theme_dir, &state.config.themes_dir) || is_in_private_dir(&theme_dir, &state.config.themes_dir)) {
-        return Redirect::to(&format!("/admin/appearance/editor/{}?source={}", url_encode_param(&theme), source)).into_response();
+        return Redirect::to(&format!("/admin/themes/editor/{}?source={}", url_encode_param(&theme), source)).into_response();
     }
 
     let redirect_base = format!(
-        "/admin/appearance/editor/{}?source={}&file={}",
+        "/admin/themes/editor/{}?source={}&file={}",
         url_encode_param(&theme), source, url_encode_param(&form.file)
     );
 
@@ -647,7 +647,7 @@ pub async fn restore_file(
     Path(theme): Path<String>,
     Form(form): Form<RestoreFileForm>,
 ) -> Response {
-    if !admin.caps.can_manage_appearance {
+    if !admin.caps.can_manage_themes {
         return (StatusCode::FORBIDDEN, "Forbidden").into_response();
     }
     let cs = state.site_hostname(admin.site_id);
@@ -655,21 +655,21 @@ pub async fn restore_file(
 
     let source = form.source.as_deref().unwrap_or("site");
     let Some(theme_dir) = resolve_theme_dir_by_source(&state.config.themes_dir, &state.config.sites_dir, &theme, Some(source), admin.site_id) else {
-        return render_appearance_list(&state, Some("Theme not found."), &ctx, admin.site_id, "my")
+        return render_theme_list(&state, Some("Theme not found."), &ctx, admin.site_id, "my")
             .await.into_response();
     };
 
     if !admin.caps.is_global_admin && (is_in_global_dir(&theme_dir, &state.config.themes_dir) || is_in_private_dir(&theme_dir, &state.config.themes_dir)) {
-        return Redirect::to(&format!("/admin/appearance/editor/{}?source={}", url_encode_param(&theme), source)).into_response();
+        return Redirect::to(&format!("/admin/themes/editor/{}?source={}", url_encode_param(&theme), source)).into_response();
     }
 
     let redirect_base = format!(
-        "/admin/appearance/editor/{}?source={}&file={}",
+        "/admin/themes/editor/{}?source={}&file={}",
         url_encode_param(&theme), source, url_encode_param(&form.file)
     );
     // When restored from the customizer landing page (colors card), stay on
     // that page instead of navigating into the raw file editor view.
-    let stay_redirect = format!("/admin/appearance/editor/{}?source={}", url_encode_param(&theme), source);
+    let stay_redirect = format!("/admin/themes/editor/{}?source={}", url_encode_param(&theme), source);
     let redirect_base = if form.stay.is_some() { stay_redirect } else { redirect_base };
 
     let Some(abs_path) = resolve_file_in_theme(&theme_dir, &form.file) else {
@@ -716,7 +716,7 @@ pub async fn save_customizer(
     Path(theme): Path<String>,
     Form(mut form): Form<HashMap<String, String>>,
 ) -> Response {
-    if !admin.caps.can_manage_appearance {
+    if !admin.caps.can_manage_themes {
         return (StatusCode::FORBIDDEN, "Forbidden").into_response();
     }
     let cs = state.site_hostname(admin.site_id);
@@ -730,15 +730,15 @@ pub async fn save_customizer(
         .map(|raw| raw.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect())
         .unwrap_or_default();
     let Some(theme_dir) = resolve_theme_dir_by_source(&state.config.themes_dir, &state.config.sites_dir, &theme, Some(&source), admin.site_id) else {
-        return render_appearance_list(&state, Some("Theme not found."), &ctx, admin.site_id, "my")
+        return render_theme_list(&state, Some("Theme not found."), &ctx, admin.site_id, "my")
             .await.into_response();
     };
 
     if !admin.caps.is_global_admin && (is_in_global_dir(&theme_dir, &state.config.themes_dir) || is_in_private_dir(&theme_dir, &state.config.themes_dir)) {
-        return Redirect::to(&format!("/admin/appearance/editor/{}?source={}", url_encode_param(&theme), source)).into_response();
+        return Redirect::to(&format!("/admin/themes/editor/{}?source={}", url_encode_param(&theme), source)).into_response();
     }
 
-    let redirect = format!("/admin/appearance/editor/{}?source={}&saved=1", url_encode_param(&theme), source);
+    let redirect = format!("/admin/themes/editor/{}?source={}&saved=1", url_encode_param(&theme), source);
 
     let Ok(toml_content) = fs::read_to_string(theme_dir.join("theme.toml")) else {
         return Redirect::to(&redirect).into_response();
@@ -861,7 +861,7 @@ pub async fn reset_options(
     Path(theme): Path<String>,
     Form(form): Form<ResetOptionsForm>,
 ) -> Response {
-    if !admin.caps.can_manage_appearance {
+    if !admin.caps.can_manage_themes {
         return (StatusCode::FORBIDDEN, "Forbidden").into_response();
     }
     let cs = state.site_hostname(admin.site_id);
@@ -869,11 +869,11 @@ pub async fn reset_options(
 
     let source = form.source.as_deref().unwrap_or("site");
     let Some(theme_dir) = resolve_theme_dir_by_source(&state.config.themes_dir, &state.config.sites_dir, &theme, Some(source), admin.site_id) else {
-        return render_appearance_list(&state, Some("Theme not found."), &ctx, admin.site_id, "my")
+        return render_theme_list(&state, Some("Theme not found."), &ctx, admin.site_id, "my")
             .await.into_response();
     };
 
-    let redirect = format!("/admin/appearance/editor/{}?source={}", url_encode_param(&theme), source);
+    let redirect = format!("/admin/themes/editor/{}?source={}", url_encode_param(&theme), source);
 
     if !admin.caps.is_global_admin && (is_in_global_dir(&theme_dir, &state.config.themes_dir) || is_in_private_dir(&theme_dir, &state.config.themes_dir)) {
         return Redirect::to(&redirect).into_response();
@@ -903,7 +903,7 @@ pub async fn delete_file(
     Path(theme): Path<String>,
     Form(form): Form<DeleteFileForm>,
 ) -> Response {
-    if !admin.caps.can_manage_appearance {
+    if !admin.caps.can_manage_themes {
         return (StatusCode::FORBIDDEN, "Forbidden").into_response();
     }
     let cs = state.site_hostname(admin.site_id);
@@ -911,7 +911,7 @@ pub async fn delete_file(
 
     let source = form.source.as_deref().unwrap_or("site");
     let Some(theme_dir) = resolve_theme_dir_by_source(&state.config.themes_dir, &state.config.sites_dir, &theme, Some(source), admin.site_id) else {
-        return render_appearance_list(&state, Some("Theme not found."), &ctx, admin.site_id, "my")
+        return render_theme_list(&state, Some("Theme not found."), &ctx, admin.site_id, "my")
             .await.into_response();
     };
 
@@ -919,8 +919,8 @@ pub async fn delete_file(
     let rel = form.file.trim().to_string();
     if REQUIRED_TEMPLATES.contains(&rel.as_str()) {
         let files = walk_theme_files(&theme_dir);
-        let editor_files: Vec<admin::pages::appearance::EditorFile> = files.iter().map(|f| {
-            admin::pages::appearance::EditorFile {
+        let editor_files: Vec<admin::pages::themes::EditorFile> = files.iter().map(|f| {
+            admin::pages::themes::EditorFile {
                 rel_path: f.clone(),
                 is_selected: f == &rel,
                 has_backup: bak_path_for(&theme_dir.join(f)).exists(),
@@ -928,7 +928,7 @@ pub async fn delete_file(
             }
         }).collect();
         let customizer = build_customizer(&state.db, &theme_dir, admin.site_id, &theme).await;
-        return Html(admin::pages::appearance::render_theme_editor(
+        return Html(admin::pages::themes::render_theme_editor(
             &theme, &editor_files, Some(&rel), "", false,
             Some("Required theme templates cannot be deleted."), &ctx, false, source, customizer.as_ref(),
         )).into_response();
@@ -936,8 +936,8 @@ pub async fn delete_file(
 
     let Some(abs_path) = resolve_file_in_theme(&theme_dir, &rel) else {
         let files = walk_theme_files(&theme_dir);
-        let editor_files: Vec<admin::pages::appearance::EditorFile> = files.iter().map(|f| {
-            admin::pages::appearance::EditorFile {
+        let editor_files: Vec<admin::pages::themes::EditorFile> = files.iter().map(|f| {
+            admin::pages::themes::EditorFile {
                 rel_path: f.clone(),
                 is_selected: false,
                 has_backup: bak_path_for(&theme_dir.join(f)).exists(),
@@ -945,7 +945,7 @@ pub async fn delete_file(
             }
         }).collect();
         let customizer = build_customizer(&state.db, &theme_dir, admin.site_id, &theme).await;
-        return Html(admin::pages::appearance::render_theme_editor(
+        return Html(admin::pages::themes::render_theme_editor(
             &theme, &editor_files, None, "", false,
             Some("File not found."), &ctx, false, source, customizer.as_ref(),
         )).into_response();
@@ -962,8 +962,8 @@ pub async fn delete_file(
     if let Err(e) = fs::remove_file(&abs_path) {
         tracing::error!("delete_file: remove failed for {:?}: {}", abs_path, e);
         let files = walk_theme_files(&theme_dir);
-        let editor_files: Vec<admin::pages::appearance::EditorFile> = files.iter().map(|f| {
-            admin::pages::appearance::EditorFile {
+        let editor_files: Vec<admin::pages::themes::EditorFile> = files.iter().map(|f| {
+            admin::pages::themes::EditorFile {
                 rel_path: f.clone(),
                 is_selected: f == &rel,
                 has_backup: bak_path_for(&theme_dir.join(f)).exists(),
@@ -971,12 +971,12 @@ pub async fn delete_file(
             }
         }).collect();
         let customizer = build_customizer(&state.db, &theme_dir, admin.site_id, &theme).await;
-        return Html(admin::pages::appearance::render_theme_editor(
+        return Html(admin::pages::themes::render_theme_editor(
             &theme, &editor_files, Some(&rel), "", false,
             Some("Failed to delete file. Please try again."), &ctx, false, source, customizer.as_ref(),
         )).into_response();
     }
 
     tracing::info!("theme file deleted: theme={} file={}", theme, rel);
-    Redirect::to(&format!("/admin/appearance/editor/{}?source={}", url_encode_param(&theme), source)).into_response()
+    Redirect::to(&format!("/admin/themes/editor/{}?source={}", url_encode_param(&theme), source)).into_response()
 }

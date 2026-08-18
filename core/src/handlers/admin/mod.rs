@@ -64,7 +64,7 @@ pub fn page_ctx(state: &AppState, admin: &AdminUser, current_site: &str) -> admi
         can_manage_plugins: admin.caps.can_manage_plugins,
         can_manage_settings: admin.caps.can_manage_settings,
         can_manage_content: admin.caps.can_manage_content,
-        can_manage_appearance: admin.caps.can_manage_appearance,
+        can_manage_themes: admin.caps.can_manage_themes,
         can_manage_taxonomies: admin.caps.can_manage_taxonomies,
         can_manage_forms: admin.caps.can_manage_forms,
         can_manage_pages: admin.caps.can_manage_pages,
@@ -116,10 +116,10 @@ pub fn sanitize_media_text(input: &str) -> String {
 
 pub mod activity_log;
 pub mod analytics;
-pub mod appearance;
-pub mod appearance_editor;
-pub mod appearance_publish;
-pub mod appearance_upload;
+pub mod themes;
+pub mod themes_editor;
+pub mod themes_publish;
+pub mod themes_upload;
 pub mod builder;
 pub mod comments;
 pub mod dashboard;

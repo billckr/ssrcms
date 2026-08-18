@@ -7,7 +7,7 @@ Total: **21,801 lines across 95 files** (excluding `target/`)
 ### Core — Handlers (Admin)
 | File | Lines |
 |------|------:|
-| `core/src/handlers/admin/appearance.rs` | 1,749 |
+| `core/src/handlers/admin/themes.rs` | 1,749 |
 | `core/src/handlers/admin/users.rs` | 1,086 |
 | `core/src/handlers/admin/posts.rs` | 909 |
 | `core/src/handlers/admin/plugins.rs` | 661 |
@@ -157,11 +157,11 @@ consequence of scope, not poor organization.
 ## Possible Future Refactor
 
 If the file becomes hard to navigate or the editor and manager need to diverge in ownership, there
-is a clean split into a `handlers/admin/appearance/` module:
+is a clean split into a `handlers/admin/themes/` module:
 
 ```
-core/src/handlers/admin/appearance/
-    mod.rs          — list handler, render_appearance_list, scan_theme_dir (~350 lines)
+core/src/handlers/admin/themes/
+    mod.rs          — list handler, render_theme_list, scan_theme_dir (~350 lines)
     file_editor.rs  — edit/save/restore/delete/new file handlers + all filesystem helpers (~700 lines)
     theme_manager.rs — upload, extract, create, activate, delete, screenshot, publish (~700 lines)
 ```

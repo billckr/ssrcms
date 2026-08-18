@@ -1,5 +1,5 @@
 //! Theme installation: zip upload and "create from default" — the two ways a
-//! new theme directory gets created on disk. Split out of appearance.rs, which
+//! new theme directory gets created on disk. Split out of themes.rs, which
 //! also owns the theme list/activate/delete/screenshot handlers.
 
 use axum::{
@@ -14,9 +14,9 @@ use std::path::{Path as FsPath, PathBuf};
 
 use crate::app_state::AppState;
 use crate::middleware::admin_auth::AdminUser;
-use admin::pages::appearance::render_create_theme_form;
+use admin::pages::themes::render_create_theme_form;
 
-use super::appearance::{copy_dir_all, render_appearance_list, url_encode_param, REQUIRED_TEMPLATES};
+use super::themes::{copy_dir_all, render_theme_list, url_encode_param, REQUIRED_TEMPLATES};
 
 // ── Zip upload ─────────────────────────────────────────────────────────────────
 
@@ -25,7 +25,7 @@ pub async fn upload_theme(
     admin: AdminUser,
     mut multipart: Multipart,
 ) -> impl IntoResponse {
-    if !admin.caps.can_manage_appearance {
+    if !admin.caps.can_manage_themes {
         return (StatusCode::FORBIDDEN, "Forbidden").into_response();
     }
     let cs = state.site_hostname(admin.site_id);
@@ -42,13 +42,13 @@ pub async fn upload_theme(
                 Ok(b) if b.len() <= max_bytes => zip_bytes = Some(b.to_vec()),
                 Ok(_) => {
                     let msg = format!("Upload too large. Maximum size is {} MB.", max_upload_mb);
-                    return render_appearance_list(&state, Some(&msg), &ctx, admin.site_id, "my")
+                    return render_theme_list(&state, Some(&msg), &ctx, admin.site_id, "my")
                         .await
                         .into_response();
                 }
                 Err(e) => {
                     tracing::error!("failed to read theme zip field: {:?}", e);
-                    return render_appearance_list(&state, Some("Failed to read uploaded file. Please try again."), &ctx, admin.site_id, "my")
+                    return render_theme_list(&state, Some("Failed to read uploaded file. Please try again."), &ctx, admin.site_id, "my")
                         .await
                         .into_response();
                 }
@@ -58,7 +58,7 @@ pub async fn upload_theme(
 
     let zip_bytes = match zip_bytes {
         Some(b) => b,
-        None => return render_appearance_list(&state, Some("No file received."), &ctx, admin.site_id, "my").await.into_response(),
+        None => return render_theme_list(&state, Some("No file received."), &ctx, admin.site_id, "my").await.into_response(),
     };
 
     // Route the upload to the correct subdirectory.
@@ -70,7 +70,7 @@ pub async fn upload_theme(
     } else if let Some(sid) = admin.site_id {
         format!("{}/{}/themes", sites_parent, sid)
     } else {
-        return render_appearance_list(&state, Some("No site selected. Cannot install theme."), &ctx, admin.site_id, "my")
+        return render_theme_list(&state, Some("No site selected. Cannot install theme."), &ctx, admin.site_id, "my")
             .await
             .into_response();
     };
@@ -78,7 +78,7 @@ pub async fn upload_theme(
     // Ensure target directory exists.
     if let Err(e) = std::fs::create_dir_all(&target_dir) {
         tracing::error!("failed to create theme target dir '{}': {}", target_dir, e);
-        return render_appearance_list(&state, Some("Failed to prepare theme directory."), &ctx, admin.site_id, "my")
+        return render_theme_list(&state, Some("Failed to prepare theme directory."), &ctx, admin.site_id, "my")
             .await
             .into_response();
     }
@@ -97,23 +97,23 @@ pub async fn upload_theme(
             let active = state.active_theme.read().unwrap().clone();
             if let Err(e) = state.templates.switch_theme(&active) {
                 tracing::error!("theme '{}' installed but Tera reload of '{}' failed: {:?}", theme_name, active, e);
-                return render_appearance_list(&state, Some("Theme installed but could not be reloaded. Please restart the server."), &ctx, admin.site_id, "my")
+                return render_theme_list(&state, Some("Theme installed but could not be reloaded. Please restart the server."), &ctx, admin.site_id, "my")
                     .await
                     .into_response();
             }
             tracing::info!("reloaded active theme '{}' after installing '{}'", active, theme_name);
 
-            render_appearance_list(&state, Some(&format!("Theme '{}' installed successfully.", theme_name)), &ctx, admin.site_id, "my")
+            render_theme_list(&state, Some(&format!("Theme '{}' installed successfully.", theme_name)), &ctx, admin.site_id, "my")
                 .await
                 .into_response()
         }
         Ok(Err(msg)) => {
             tracing::warn!("theme upload rejected: {}", msg);
-            render_appearance_list(&state, Some("Installation failed. Please try again."), &ctx, admin.site_id, "my").await.into_response()
+            render_theme_list(&state, Some("Installation failed. Please try again."), &ctx, admin.site_id, "my").await.into_response()
         }
         Err(e) => {
             tracing::error!("theme upload task panicked: {:?}", e);
-            render_appearance_list(&state, Some("Installation failed. Please try again."), &ctx, admin.site_id, "my")
+            render_theme_list(&state, Some("Installation failed. Please try again."), &ctx, admin.site_id, "my")
                 .await
                 .into_response()
         }
@@ -282,7 +282,7 @@ pub async fn create_form(
     State(state): State<AppState>,
     admin: AdminUser,
 ) -> impl IntoResponse {
-    if !admin.caps.can_manage_appearance {
+    if !admin.caps.can_manage_themes {
         return (StatusCode::FORBIDDEN, Html("<h1>403 Forbidden</h1>".to_string())).into_response();
     }
     let cs = state.site_hostname(admin.site_id);
@@ -295,7 +295,7 @@ pub async fn create_theme(
     admin: AdminUser,
     Form(form): Form<CreateThemeForm>,
 ) -> impl IntoResponse {
-    if !admin.caps.can_manage_appearance {
+    if !admin.caps.can_manage_themes {
         return (StatusCode::FORBIDDEN, Html("<h1>403 Forbidden</h1>".to_string())).into_response();
     }
     let cs = state.site_hostname(admin.site_id);
@@ -369,5 +369,5 @@ pub async fn create_theme(
     }
 
     tracing::info!("theme '{}' created by {}", name, if admin.caps.is_global_admin { "super_admin" } else { "site_admin" });
-    Redirect::to(&format!("/admin/appearance/editor/{}", url_encode_param(&name))).into_response()
+    Redirect::to(&format!("/admin/themes/editor/{}", url_encode_param(&name))).into_response()
 }

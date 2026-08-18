@@ -13,7 +13,7 @@ use tower_sessions_sqlx_store::PostgresStore;
 
 use crate::app_state::AppState;
 use crate::handlers::{account, archive, auth, comment as comment_handler, form as form_handler, home, metrics as metrics_handler, page, plugin_route, post as post_handler, post_unlock, recover, search, subscribe, theme_static, uploads};
-use crate::handlers::admin::{activity_log, analytics as admin_analytics, appearance, appearance_editor, appearance_publish, appearance_upload, builder as admin_builder, comments as admin_comments, dashboard, dev_tools, documentation as admin_documentation, email_providers as admin_email_providers, form_designer as admin_form_designer, forms as admin_forms, logo_upload, media, menus as admin_menus, posts, profile, settings, sites as admin_sites, taxonomy, upload, users};
+use crate::handlers::admin::{activity_log, analytics as admin_analytics, themes, themes_editor, themes_publish, themes_upload, builder as admin_builder, comments as admin_comments, dashboard, dev_tools, documentation as admin_documentation, email_providers as admin_email_providers, form_designer as admin_form_designer, forms as admin_forms, logo_upload, media, menus as admin_menus, posts, profile, settings, sites as admin_sites, taxonomy, upload, users};
 
 /// Prevent browsers from caching admin and account pages.
 ///
@@ -199,22 +199,24 @@ pub fn build(
         // ── Admin plugins — disabled pre-launch, re-enable post-launch ────
         // ── Admin documentation ────────────────────────────────────────────
         .route("/admin/documentation", get(admin_documentation::list))
-        // ── Admin appearance ───────────────────────────────────────────────
-        .route("/admin/appearance", get(appearance::list))
-        .route("/admin/appearance/activate", post(appearance::activate))
-        .route("/admin/appearance/get-theme", post(appearance_publish::get_theme))
-        .route("/admin/appearance/publish-theme", post(appearance_publish::publish_theme))
-        .route("/admin/appearance/delete", post(appearance::delete))
-        .route("/admin/appearance/upload", post(appearance_upload::upload_theme).layer(upload_limit))
-        .route("/admin/theme-screenshot/{theme_name}", get(appearance::screenshot))
-        .route("/admin/appearance/create", get(appearance_upload::create_form).post(appearance_upload::create_theme))
-        .route("/admin/appearance/editor/{theme}", get(appearance_editor::edit_file))
-        .route("/admin/appearance/editor/{theme}/save", post(appearance_editor::save_file))
-        .route("/admin/appearance/editor/{theme}/restore", post(appearance_editor::restore_file))
-        .route("/admin/appearance/editor/{theme}/new-file", post(appearance_editor::new_file))
-        .route("/admin/appearance/editor/{theme}/delete-file", post(appearance_editor::delete_file))
-        .route("/admin/appearance/editor/{theme}/customizer-save", post(appearance_editor::save_customizer))
-        .route("/admin/appearance/editor/{theme}/customizer-reset", post(appearance_editor::reset_options))
+        // ── Admin themes ───────────────────────────────────────────────────
+        .route("/admin/themes", get(themes::list))
+        .route("/admin/themes/activate", post(themes::activate))
+        .route("/admin/themes/get-theme", post(themes_publish::get_theme))
+        .route("/admin/themes/publish-theme", post(themes_publish::publish_theme))
+        .route("/admin/themes/delete", post(themes::delete))
+        .route("/admin/themes/upload", post(themes_upload::upload_theme).layer(upload_limit))
+        .route("/admin/theme-screenshot/{theme_name}", get(themes::screenshot))
+        .route("/admin/themes/create", get(themes_upload::create_form).post(themes_upload::create_theme))
+        .route("/admin/themes/editor/{theme}", get(themes_editor::edit_file))
+        .route("/admin/themes/editor/{theme}/save", post(themes_editor::save_file))
+        .route("/admin/themes/editor/{theme}/restore", post(themes_editor::restore_file))
+        .route("/admin/themes/editor/{theme}/new-file", post(themes_editor::new_file))
+        .route("/admin/themes/editor/{theme}/delete-file", post(themes_editor::delete_file))
+        .route("/admin/themes/editor/{theme}/customizer-save", post(themes_editor::save_customizer))
+        .route("/admin/themes/editor/{theme}/customizer-reset", post(themes_editor::reset_options))
+        // Old URL, kept as a permanent redirect for existing bookmarks/links.
+        .route("/admin/appearance", get(|| async { axum::response::Redirect::permanent("/admin/themes") }))
         // ── Page builder ───────────────────────────────────────────────────
         .route("/admin/builder",                                        get(admin_builder::list))
         .route("/admin/builder/create",                                 post(admin_builder::create_project))

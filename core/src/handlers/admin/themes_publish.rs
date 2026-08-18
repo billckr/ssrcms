@@ -1,5 +1,5 @@
 //! Copying themes between library tiers: global/private → site ("Get Theme")
-//! and private → global ("Publish"). Split out of appearance.rs, which also
+//! and private → global ("Publish"). Split out of themes.rs, which also
 //! owns the theme list/activate/delete/screenshot handlers.
 
 use axum::{
@@ -14,7 +14,7 @@ use std::path::Path as FsPath;
 use crate::app_state::AppState;
 use crate::middleware::admin_auth::AdminUser;
 
-use super::appearance::{copy_dir_all, render_appearance_list};
+use super::themes::{copy_dir_all, render_theme_list};
 
 // ── Get Theme (copy global → site, no activation) ─────────────────────────────
 
@@ -30,7 +30,7 @@ pub async fn get_theme(
     admin: AdminUser,
     Form(form): Form<GetThemeForm>,
 ) -> impl IntoResponse {
-    if !admin.caps.can_manage_appearance {
+    if !admin.caps.can_manage_themes {
         return (StatusCode::FORBIDDEN, "Forbidden").into_response();
     }
 
@@ -38,7 +38,7 @@ pub async fn get_theme(
     if name.is_empty() || name.contains("..") || name.contains('/') || name.contains('\\') {
         let cs = state.site_hostname(admin.site_id);
         let ctx = super::page_ctx_full(&state, &admin, &cs).await;
-        return render_appearance_list(&state, Some("Invalid theme name."), &ctx, admin.site_id, "global")
+        return render_theme_list(&state, Some("Invalid theme name."), &ctx, admin.site_id, "global")
             .await.into_response();
     }
 
@@ -56,7 +56,7 @@ pub async fn get_theme(
     if !source.is_dir() {
         let cs = state.site_hostname(admin.site_id);
         let ctx = super::page_ctx_full(&state, &admin, &cs).await;
-        return render_appearance_list(&state, Some("Theme not found."), &ctx, admin.site_id, return_filter)
+        return render_theme_list(&state, Some("Theme not found."), &ctx, admin.site_id, return_filter)
             .await.into_response();
     }
 
@@ -65,7 +65,7 @@ pub async fn get_theme(
         None => {
             let cs = state.site_hostname(admin.site_id);
             let ctx = super::page_ctx_full(&state, &admin, &cs).await;
-            return render_appearance_list(
+            return render_theme_list(
                 &state, Some("No site selected."),
                 &ctx, admin.site_id, "global",
             ).await.into_response();
@@ -75,7 +75,7 @@ pub async fn get_theme(
     let dest = FsPath::new(&state.config.sites_dir).join(site_id.to_string()).join("themes").join(&name);
     if dest.exists() {
         // Already copied — just send them to their themes.
-        return Redirect::to("/admin/appearance?filter=my").into_response();
+        return Redirect::to("/admin/themes?filter=my").into_response();
     }
 
     let source_owned = source.to_path_buf();
@@ -83,20 +83,20 @@ pub async fn get_theme(
     match tokio::task::spawn_blocking(move || copy_dir_all(&source_owned, &dest_owned)).await {
         Ok(Ok(())) => {
             tracing::info!("get_theme: copied '{}' ({}) to site {}", name, return_filter, site_id);
-            Redirect::to("/admin/appearance?filter=my").into_response()
+            Redirect::to("/admin/themes?filter=my").into_response()
         }
         Ok(Err(e)) => {
             tracing::error!("get_theme: copy failed for '{}': {}", name, e);
             let cs = state.site_hostname(admin.site_id);
             let ctx = super::page_ctx_full(&state, &admin, &cs).await;
-            render_appearance_list(&state, Some("Failed to get theme. Please try again."), &ctx, admin.site_id, return_filter)
+            render_theme_list(&state, Some("Failed to get theme. Please try again."), &ctx, admin.site_id, return_filter)
                 .await.into_response()
         }
         Err(e) => {
             tracing::error!("get_theme: task panicked: {:?}", e);
             let cs = state.site_hostname(admin.site_id);
             let ctx = super::page_ctx_full(&state, &admin, &cs).await;
-            render_appearance_list(&state, Some("Failed to get theme. Please try again."), &ctx, admin.site_id, return_filter)
+            render_theme_list(&state, Some("Failed to get theme. Please try again."), &ctx, admin.site_id, return_filter)
                 .await.into_response()
         }
     }
@@ -125,7 +125,7 @@ pub async fn publish_theme(
     macro_rules! err {
         ($msg:expr) => {{
             let ctx = super::page_ctx_full(&state, &admin, &cs).await;
-            return render_appearance_list(&state, Some($msg), &ctx, admin.site_id, "private")
+            return render_theme_list(&state, Some($msg), &ctx, admin.site_id, "private")
                 .await
                 .into_response();
         }};
@@ -157,7 +157,7 @@ pub async fn publish_theme(
         Ok(Ok(())) => {
             tracing::info!("publish_theme: '{}' published to global by super_admin", name);
             let ctx = super::page_ctx_full(&state, &admin, &cs).await;
-            render_appearance_list(
+            render_theme_list(
                 &state,
                 Some(&format!("Theme '{}' is now in the global library.", name)),
                 &ctx,

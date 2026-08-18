@@ -1796,7 +1796,7 @@ mod tests {
             can_manage_plugins: false,
             can_manage_settings: false,
             can_manage_content: true,
-            can_manage_appearance: false,
+            can_manage_themes: false,
             can_manage_taxonomies: false,
             can_manage_forms: false,
             can_manage_pages: true,

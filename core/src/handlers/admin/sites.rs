@@ -43,7 +43,7 @@ use uuid::Uuid;
 use std::path::Path as FsPath;
 use crate::app_state::AppState;
 use crate::middleware::admin_auth::{AdminUser, SESSION_CURRENT_SITE_KEY};
-use crate::handlers::admin::appearance::copy_dir_all;
+use crate::handlers::admin::themes::copy_dir_all;
 use admin::pages::sites::{SiteRow, SiteSettingsData};
 use tower_sessions::Session;
 

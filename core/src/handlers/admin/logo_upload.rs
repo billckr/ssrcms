@@ -1,7 +1,7 @@
 //! Admin sidebar logo upload/reset — the "Branding" card on /admin/settings'
 //! General tab. Split out of settings.rs (which owns the plain-form fields)
 //! since this needs multipart handling, same split convention as
-//! appearance.rs/appearance_upload.rs for theme zip uploads.
+//! themes.rs/themes_upload.rs for theme zip uploads.
 
 use axum::{
     extract::{Multipart, State},

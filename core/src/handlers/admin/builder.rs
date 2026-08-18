@@ -37,7 +37,7 @@ pub async fn list(
     let Some(site_id) = admin.site_id else {
         return Redirect::to("/admin").into_response();
     };
-    if !admin.caps.can_manage_appearance {
+    if !admin.caps.can_manage_themes {
         return Redirect::to("/admin").into_response();
     }
 
@@ -83,7 +83,7 @@ pub async fn create_project(
     let Some(site_id) = admin.site_id else {
         return Redirect::to("/admin").into_response();
     };
-    if !admin.caps.can_manage_appearance {
+    if !admin.caps.can_manage_themes {
         return Redirect::to("/admin").into_response();
     }
 
@@ -131,7 +131,7 @@ pub async fn rename_project(
     let Some(site_id) = admin.site_id else {
         return Redirect::to("/admin/builder").into_response();
     };
-    if !admin.caps.can_manage_appearance {
+    if !admin.caps.can_manage_themes {
         return Redirect::to("/admin/builder").into_response();
     }
     let name = form.project_name.trim().to_string();
@@ -158,7 +158,7 @@ pub async fn project_pages(
     let Some(site_id) = admin.site_id else {
         return Redirect::to("/admin").into_response();
     };
-    if !admin.caps.can_manage_appearance {
+    if !admin.caps.can_manage_themes {
         return Redirect::to("/admin").into_response();
     }
 
@@ -212,7 +212,7 @@ pub async fn new_page_form(
     let Some(site_id) = admin.site_id else {
         return Redirect::to("/admin").into_response();
     };
-    if !admin.caps.can_manage_appearance {
+    if !admin.caps.can_manage_themes {
         return Redirect::to("/admin").into_response();
     }
 
@@ -278,7 +278,7 @@ pub async fn create_page(
     let Some(site_id) = admin.site_id else {
         return Redirect::to("/admin").into_response();
     };
-    if !admin.caps.can_manage_appearance {
+    if !admin.caps.can_manage_themes {
         return Redirect::to("/admin").into_response();
     }
 
@@ -362,7 +362,7 @@ pub async fn edit_page(
     let Some(site_id) = admin.site_id else {
         return Redirect::to("/admin").into_response();
     };
-    if !admin.caps.can_manage_appearance {
+    if !admin.caps.can_manage_themes {
         return Redirect::to("/admin").into_response();
     }
 
@@ -419,7 +419,7 @@ pub async fn save(
     let Some(site_id) = admin.site_id else {
         return (StatusCode::FORBIDDEN, "No site").into_response();
     };
-    if !admin.caps.can_manage_appearance {
+    if !admin.caps.can_manage_themes {
         return (StatusCode::FORBIDDEN, "Forbidden").into_response();
     }
 
@@ -492,7 +492,7 @@ pub async fn publish(
     let Some(site_id) = admin.site_id else {
         return (StatusCode::FORBIDDEN, "No site").into_response();
     };
-    if !admin.caps.can_manage_appearance {
+    if !admin.caps.can_manage_themes {
         return (StatusCode::FORBIDDEN, "Forbidden").into_response();
     }
 
@@ -538,7 +538,7 @@ pub async fn activate_project(
     let Some(site_id) = admin.site_id else {
         return Redirect::to("/admin/builder").into_response();
     };
-    if !admin.caps.can_manage_appearance {
+    if !admin.caps.can_manage_themes {
         return Redirect::to("/admin/builder").into_response();
     }
     // Require at least one published page before allowing activation.
@@ -565,7 +565,7 @@ pub async fn deactivate_project(
     let Some(site_id) = admin.site_id else {
         return Redirect::to("/admin/builder").into_response();
     };
-    if !admin.caps.can_manage_appearance {
+    if !admin.caps.can_manage_themes {
         return Redirect::to("/admin/builder").into_response();
     }
     if let Err(e) = builder_project::deactivate(&state.db, site_id).await {
@@ -582,7 +582,7 @@ pub async fn delete_project(
     let Some(site_id) = admin.site_id else {
         return Redirect::to("/admin/builder").into_response();
     };
-    if !admin.caps.can_manage_appearance {
+    if !admin.caps.can_manage_themes {
         return Redirect::to("/admin/builder").into_response();
     }
     // Block deletion of the currently live project.
@@ -615,7 +615,7 @@ pub async fn set_homepage(
     let Some(site_id) = admin.site_id else {
         return Redirect::to("/admin/builder").into_response();
     };
-    if !admin.caps.can_manage_appearance {
+    if !admin.caps.can_manage_themes {
         return Redirect::to("/admin/builder").into_response();
     }
     // Verify project ownership
@@ -642,7 +642,7 @@ pub async fn duplicate_page(
     let Some(site_id) = admin.site_id else {
         return Redirect::to("/admin/builder").into_response();
     };
-    if !admin.caps.can_manage_appearance {
+    if !admin.caps.can_manage_themes {
         return Redirect::to("/admin/builder").into_response();
     }
     if builder_project::get_by_id(&state.db, project_id, site_id).await.ok().flatten().is_none() {
@@ -666,7 +666,7 @@ pub async fn delete_page(
     let Some(site_id) = admin.site_id else {
         return Redirect::to("/admin/builder").into_response();
     };
-    if !admin.caps.can_manage_appearance {
+    if !admin.caps.can_manage_themes {
         return Redirect::to("/admin/builder").into_response();
     }
     if let Err(e) = page_composition::delete(&state.db, page_id, site_id).await {

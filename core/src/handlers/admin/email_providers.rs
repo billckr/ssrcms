@@ -97,7 +97,7 @@ fn config_from_form(form: &ProviderForm) -> Result<ProviderConfig, &'static str>
 }
 
 fn flash_redirect(site_id: Uuid, msg: &str) -> Redirect {
-    let msg = crate::handlers::admin::appearance::url_encode_param(msg);
+    let msg = crate::handlers::admin::themes::url_encode_param(msg);
     Redirect::to(&format!("/admin/sites/{}/settings?flash={}&tab=email", site_id, msg))
 }
 

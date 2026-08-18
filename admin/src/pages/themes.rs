@@ -43,7 +43,7 @@ pub fn render_with_flash(themes: &[ThemeInfo], flash: Option<&str>, ctx: &crate:
     let sel_global  = if filter == "global"  { " selected" } else { "" };
     let sel_private = if filter == "private" { " selected" } else { "" };
 
-    let toolbar = if ctx.can_manage_appearance {
+    let toolbar = if ctx.can_manage_themes {
         // Super admins get a three-option dropdown (My Themes, Global, Private).
         // When impersonating, private themes are hidden — they belong to the super admin's
         // own space and would be confusing in another site's context.
@@ -69,7 +69,7 @@ pub fn render_with_flash(themes: &[ThemeInfo], flash: Option<&str>, ctx: &crate:
             r#"<div class="card-boxed">
   <h2 class="card-boxed-header">Theme Options</h2>
   <div class="card-boxed-body">
-  <form method="GET" action="/admin/appearance">
+  <form method="GET" action="/admin/themes">
     <div class="form-group" style="max-width:280px">
       <label for="appearance-filter" class="sr-only">Theme filter</label>
       <select id="appearance-filter" name="filter" class="appearance-filter-select" onchange="this.form.submit()" aria-label="Theme filter" style="width:100%">
@@ -79,14 +79,14 @@ pub fn render_with_flash(themes: &[ThemeInfo], flash: Option<&str>, ctx: &crate:
   </form>
   <div class="card-boxed-section" style="margin-top:1rem">
     <p class="muted" style="font-size:1.0625rem;margin-bottom:1.25rem;">Upload a <code>.zip</code> file containing a valid theme. The zip must include <code>theme.toml</code> and all required templates.</p>
-    <form method="post" action="/admin/appearance/upload" enctype="multipart/form-data" class="upload-form" id="theme-upload-form">
+    <form method="post" action="/admin/themes/upload" enctype="multipart/form-data" class="upload-form" id="theme-upload-form">
       <div class="form-group">
         <input type="file" id="theme_zip" name="file" accept=".zip" required>
       </div>
     </form>
   </div>
   <div class="icon-pill" style="margin-top:1rem">
-    <a href="/admin/appearance/create" class="icon-btn" title="Create Theme" aria-label="Create Theme"><img src="/admin/static/icons/file-plus.svg" alt=""></a>
+    <a href="/admin/themes/create" class="icon-btn" title="Create Theme" aria-label="Create Theme"><img src="/admin/static/icons/file-plus.svg" alt=""></a>
     <button type="submit" form="theme-upload-form" class="icon-btn" id="theme-upload-btn" title="Upload &amp; Install" aria-label="Upload &amp; Install" disabled>
       <img src="/admin/static/icons/upload.svg" alt="">
     </button>
@@ -119,7 +119,7 @@ pub fn render_with_flash(themes: &[ThemeInfo], flash: Option<&str>, ctx: &crate:
 </div>"#
     );
 
-    admin_page("Themes", "/admin/appearance", flash, &content, ctx)
+    admin_page("Themes", "/admin/themes", flash, &content, ctx)
 }
 
 pub fn render_create_theme_form(flash: Option<&str>, ctx: &crate::PageContext) -> String {
@@ -154,7 +154,7 @@ pub fn render_create_theme_form(flash: Option<&str>, ctx: &crate::PageContext) -
         r#"<div class="card-boxed" style="max-width:560px">
   <h2 class="card-boxed-header">Create Theme</h2>
   <div class="card-boxed-body">
-  <form method="POST" action="/admin/appearance/create" class="edit-form" id="create-theme-form" style="max-width:580px">
+  <form method="POST" action="/admin/themes/create" class="edit-form" id="create-theme-form" style="max-width:580px">
   <div class="card-boxed-section">
   <div class="form-group">
     <label for="name">Theme name <span class="required">*</span></label>
@@ -184,7 +184,7 @@ pub fn render_create_theme_form(flash: Option<&str>, ctx: &crate::PageContext) -
         visibility = visibility_section,
     );
 
-    admin_page("Create Theme", "/admin/appearance", flash, &content, ctx)
+    admin_page("Create Theme", "/admin/themes", flash, &content, ctx)
 }
 
 pub fn render(themes: &[ThemeInfo], ctx: &crate::PageContext) -> String {
@@ -279,7 +279,7 @@ fn render_customizer_landing(theme_name: &str, source: &str, data: &CustomizerDa
     // Changes, so it reads as a secondary/undo action, not a peer of Save.
     let restore_colors_btn = if data.has_color_backup {
         format!(
-            r#"<form method="POST" action="/admin/appearance/editor/{theme}/restore" class="customizer-restore-form"
+            r#"<form method="POST" action="/admin/themes/editor/{theme}/restore" class="customizer-restore-form"
      onsubmit="return confirm('Restore the original backup? Your current color edits will be overwritten.')">
   <input type="hidden" name="file" value="static/css/style.css">
   <input type="hidden" name="source" value="{source}">
@@ -303,7 +303,7 @@ fn render_customizer_landing(theme_name: &str, source: &str, data: &CustomizerDa
         let has_override = keys.iter().any(|k| data.overridden_option_keys.contains(k));
         if keys.is_empty() || !has_override { return String::new(); }
         format!(
-            r#"<form method="POST" action="/admin/appearance/editor/{theme}/customizer-reset" class="customizer-restore-form"
+            r#"<form method="POST" action="/admin/themes/editor/{theme}/customizer-reset" class="customizer-restore-form"
      onsubmit="return confirm('Restore original settings? Your current changes in this section will be overwritten.')">
   <input type="hidden" name="keys" value="{keys}">
   <input type="hidden" name="source" value="{source}">
@@ -522,7 +522,7 @@ fn render_customizer_landing(theme_name: &str, source: &str, data: &CustomizerDa
             r#"<div class="card-boxed">
   <h2 class="card-boxed-header">{group}</h2>
   <div class="card-boxed-body">
-    <form method="POST" action="/admin/appearance/editor/{theme}/customizer-save" id="{form_id}">
+    <form method="POST" action="/admin/themes/editor/{theme}/customizer-save" id="{form_id}">
       <input type="hidden" name="source" value="{source}">
       <input type="hidden" name="bool_option_keys" value="{bool_keys}">
       {colors}
@@ -712,7 +712,7 @@ fn render_theme_details_card(manifest: &ThemeManifestInfo, theme_name: &str, sou
         r#"<details class="card-boxed customizer-details-panel" open>
   <summary class="card-boxed-header">Theme Details</summary>
   <div class="card-boxed-body">
-    <p style="margin-bottom:.6rem;"><strong>Name:</strong> <a href="/admin/appearance/editor/{theme}?source={source}">{name}</a></p>
+    <p style="margin-bottom:.6rem;"><strong>Name:</strong> <a href="/admin/themes/editor/{theme}?source={source}">{name}</a></p>
     <p style="margin-bottom:.6rem;"><strong>Version:</strong> {version}</p>
     <p style="margin-bottom:.6rem;"><strong>Author:</strong> {author}</p>
     <p style="margin-bottom:0;"><strong>Description:</strong> {description}</p>
@@ -771,7 +771,7 @@ pub fn render_theme_editor(
     };
 
     let file_picker = format!(
-        r#"<form method="GET" action="/admin/appearance/editor/{theme}" style="display:contents;">
+        r#"<form method="GET" action="/admin/themes/editor/{theme}" style="display:contents;">
   <input type="hidden" name="source" value="{source}">
   <select name="file" class="editor-file-select" onchange="this.form.submit()"
           aria-label="Select theme file" title="Navigate to file">
@@ -787,17 +787,17 @@ pub fn render_theme_editor(
     // a text button) sits directly next to the file <select> — the same
     // icon-btn pattern used elsewhere (e.g. restore icons in the
     // customizer). It toggles the same hidden filename/extension form below.
-    let new_file_icon_btn = if ctx.can_manage_appearance && !is_readonly {
+    let new_file_icon_btn = if ctx.can_manage_themes && !is_readonly {
         r#"<button type="button" class="icon-btn" title="New file" aria-label="New file"
         onclick="document.getElementById('new-file-form').style.display='flex'"><img src="/admin/static/icons/file-plus.svg" alt=""></button>"#.to_string()
     } else {
         String::new()
     };
 
-    let new_file_panel = if ctx.can_manage_appearance && !is_readonly {
+    let new_file_panel = if ctx.can_manage_themes && !is_readonly {
         format!(
             r#"<div id="new-file-form" style="display:none;align-items:center;gap:.5rem;flex-wrap:wrap;margin-top:.5rem;">
-  <form method="POST" action="/admin/appearance/editor/{theme}/new-file"
+  <form method="POST" action="/admin/themes/editor/{theme}/new-file"
         style="display:contents">
     <input type="hidden" name="source" value="{source}">
     <input type="text" name="filename" placeholder="e.g. partials/header or custom"
@@ -876,7 +876,7 @@ pub fn render_theme_editor(
 
         let restore_btn = if has_backup {
             format!(
-                r#"<form method="POST" action="/admin/appearance/editor/{theme}/restore" style="display:contents"
+                r#"<form method="POST" action="/admin/themes/editor/{theme}/restore" style="display:contents"
      onsubmit="return confirm('Restore the original backup? Your current edits will be overwritten.')">
   <input type="hidden" name="file" value="{file}">
   <input type="hidden" name="source" value="{source}">
@@ -897,7 +897,7 @@ pub fn render_theme_editor(
         );
         let delete_btn = if !is_required {
             format!(
-                r#"<form method="POST" action="/admin/appearance/editor/{theme}/delete-file" style="display:contents"
+                r#"<form method="POST" action="/admin/themes/editor/{theme}/delete-file" style="display:contents"
      onsubmit="return confirm('Delete {file_js}? This cannot be undone.')">
   <input type="hidden" name="file" value="{file}">
   <input type="hidden" name="source" value="{source}">
@@ -1038,7 +1038,7 @@ pub fn render_theme_editor(
       <span class="editor-filename">{file}</span>{edited_at}
       {restore}
     </div>
-    <form method="POST" action="/admin/appearance/editor/{theme}/save" class="editor-form" id="save-form">
+    <form method="POST" action="/admin/themes/editor/{theme}/save" class="editor-form" id="save-form">
       <input type="hidden" name="file" value="{file}">
       <input type="hidden" name="source" value="{source}">
       <div class="editor-textarea-wrap">
@@ -1109,7 +1109,7 @@ pub fn render_theme_editor(
 
     admin_page(
         &format!("Edit Theme: {}", crate::html_escape(theme_name)),
-        "/admin/appearance",
+        "/admin/themes",
         flash,
         &content_html,
         ctx,
@@ -1184,7 +1184,7 @@ fn render_card(t: &ThemeInfo, ctx: &crate::PageContext, filter: &str) -> String 
             String::new()
         } else {
             format!(
-                r#"<form method="post" action="/admin/appearance/get-theme" style="display:inline;">
+                r#"<form method="post" action="/admin/themes/get-theme" style="display:inline;">
     <input type="hidden" name="theme" value="{name}">
     <input type="hidden" name="source" value="{source}">
     <button type="submit" class="icon-btn" title="Get Theme" aria-label="Get Theme"><img src="/admin/static/icons/download.svg" alt=""></button>
@@ -1198,7 +1198,7 @@ fn render_card(t: &ThemeInfo, ctx: &crate::PageContext, filter: &str) -> String 
         // publish it to global, or remove it entirely.
         let (edit_html, make_global_html, remove_html) = if filter == "private" {
             let edit = format!(
-                r#"<a href="/admin/appearance/editor/{name}?source=private" class="icon-btn" title="Edit" aria-label="Edit"><img src="/admin/static/icons/edit.svg" alt=""></a>"#,
+                r#"<a href="/admin/themes/editor/{name}?source=private" class="icon-btn" title="Edit" aria-label="Edit"><img src="/admin/static/icons/edit.svg" alt=""></a>"#,
                 name = name_esc,
             );
 
@@ -1212,7 +1212,7 @@ fn render_card(t: &ThemeInfo, ctx: &crate::PageContext, filter: &str) -> String 
             };
 
             let make_global = format!(
-                r#"<form method="post" action="/admin/appearance/publish-theme" style="display:inline;">
+                r#"<form method="post" action="/admin/themes/publish-theme" style="display:inline;">
     <input type="hidden" name="theme" value="{name}">
     <button type="submit" class="icon-btn" title="Publish to Global" aria-label="Publish to Global"{confirm}><img src="/admin/static/icons/upload-cloud.svg" alt=""></button>
 </form>"#,
@@ -1222,7 +1222,7 @@ fn render_card(t: &ThemeInfo, ctx: &crate::PageContext, filter: &str) -> String 
 
             let remove = if t.can_delete {
                 format!(
-                    r#"<form method="post" action="/admin/appearance/delete" style="display:inline;"
+                    r#"<form method="post" action="/admin/themes/delete" style="display:inline;"
      onsubmit="return confirm('Remove private theme &quot;{name}&quot;? This only deletes the private copy — any site copies are unaffected.')">
     <input type="hidden" name="theme" value="{name}">
     <input type="hidden" name="source" value="private">
@@ -1275,7 +1275,7 @@ fn render_card(t: &ThemeInfo, ctx: &crate::PageContext, filter: &str) -> String 
     } else {
         let confirm_msg = format!("Activate theme '{}'? This will replace the current active theme for this site.", t.display_name.replace('\'', "\\'"));
         format!(
-            r#"<form method="post" action="/admin/appearance/activate" style="display:inline;"
+            r#"<form method="post" action="/admin/themes/activate" style="display:inline;"
                   data-confirm="{confirm_msg}" onsubmit="return confirm(this.dataset.confirm)">
     <input type="hidden" name="theme" value="{name}">
     <button type="submit" class="icon-btn" title="Activate" aria-label="Activate"><img src="/admin/static/icons/power.svg" alt=""></button>
@@ -1286,7 +1286,7 @@ fn render_card(t: &ThemeInfo, ctx: &crate::PageContext, filter: &str) -> String 
     };
 
     let edit_html = format!(
-        r#"<a href="/admin/appearance/editor/{name}?source={source}" class="icon-btn" title="Edit" aria-label="Edit"><img src="/admin/static/icons/edit.svg" alt=""></a>"#,
+        r#"<a href="/admin/themes/editor/{name}?source={source}" class="icon-btn" title="Edit" aria-label="Edit"><img src="/admin/static/icons/edit.svg" alt=""></a>"#,
         name   = name_esc,
         source = crate::html_escape(&t.source),
     );
@@ -1309,7 +1309,7 @@ fn render_card(t: &ThemeInfo, ctx: &crate::PageContext, filter: &str) -> String 
             )
         };
         format!(
-            r#"<form method="post" action="/admin/appearance/delete" style="display:inline;"
+            r#"<form method="post" action="/admin/themes/delete" style="display:inline;"
                 data-confirm="{confirm}" onsubmit="return confirm(this.dataset.confirm)">
     <input type="hidden" name="theme" value="{name}">
     <input type="hidden" name="source" value="{source}">

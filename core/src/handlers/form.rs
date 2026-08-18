@@ -149,7 +149,7 @@ pub async fn submit(
     Redirect::to(&format!(
         "{}?submitted={}",
         base,
-        crate::handlers::admin::appearance::url_encode_param(&name)
+        crate::handlers::admin::themes::url_encode_param(&name)
     ))
 }
 

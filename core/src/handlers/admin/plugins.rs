@@ -1,5 +1,5 @@
 //! Admin plugin management handlers.
-//! Mirrors the appearance.rs pattern: install, upload, activate, deactivate, delete.
+//! Mirrors the themes.rs pattern: install, upload, activate, deactivate, delete.
 
 use axum::{
     extract::{Multipart, Query, State},
@@ -644,7 +644,7 @@ fn tempdir_in(dir: &str) -> Result<String, String> {
         .ok_or("Temp path is not valid UTF-8.".to_string())
 }
 
-/// Recursively copy a directory. Mirrors the pattern from appearance.rs.
+/// Recursively copy a directory. Mirrors the pattern from themes.rs.
 pub fn copy_dir_all(src: &FsPath, dst: &FsPath) -> std::io::Result<()> {
     fs::create_dir_all(dst)?;
     for entry in fs::read_dir(src)? {

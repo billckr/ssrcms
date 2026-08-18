@@ -1,7 +1,7 @@
 pub mod account;
 pub mod activity_log;
 pub mod analytics;
-pub mod appearance;
+pub mod themes;
 pub mod builder;
 pub mod dashboard;
 pub mod documentation;

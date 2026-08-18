@@ -8,7 +8,7 @@ done.
 ## Open
 
 - [ ] create option when using install-vps.sh to also populate the documention table with the current docs. May need to creation new migration as part of the process.
-- [ ] theme images take about 0.25 or higher secs to fully load. admin/appearance  explore possible options to load load them in mem or startup for quick load or optimize in some other way
+- [ ] theme images take about 0.25 or higher secs to fully load. admin/themes  explore possible options to load load them in mem or startup for quick load or optimize in some other way
 - [ ] allow site admins to either upload via ui or web their owns logo for their account simlar to how the super admin has for the main app.
 - [ ] work on synap install flow.
 - [ ] review dark mode and make small tweaks to button, icon and text colors. Documetnation bold also needs changing.
@@ -23,8 +23,7 @@ done.
 - [ ] consider adding a link back to the main site on the subscribe form.
 - [ ] media manager/picker WASM island only stays "warm" within a single admin page — navigating to a new page and reopening pays the full bootstrap + fetch delay again. Real-world gain from the keep-warm fix is smaller than a quick same-page test suggests. Revisit with sessionStorage-cached initial data (cheap, partial fix) or as part of a future whole-admin WASM SPA conversion (real fix, bigger project) if this keeps being noticeable.
 - [ ] Media manager dark-mode color scheme (sidebar/toolbar/content/footer backgrounds) still isn't right after several passes — revisit from scratch with a clearer reference/screenshot before making more changes.
-- [ ] in appearance editor, when you change a color, trying to revert back to original doesn't work.
-- [ ] revisit /admin/appearance page layout — icons/pills/tools look inconsistent with other admin pages; adjust to match the site's established look (card-boxed sections, pill placement, etc.)
+- [ ] in theme editor, when you change a color, trying to revert back to original doesn't work.
 
 - [ ] revisit whether anyone who can edit a post (not just users with can_manage_forms) should be able to see the embedded form's submission count in the post editor sidebar and the "view form metrics" link — currently no permission gate on that, only the destination /admin/form-analytics page itself enforces can_manage_forms.
 

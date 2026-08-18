@@ -39,7 +39,7 @@ pub struct AdminCaps {
     /// Can create, edit, publish, and delete content.
     pub can_manage_content: bool,
     /// Can manage themes (appearance).
-    pub can_manage_appearance: bool,
+    pub can_manage_themes: bool,
     /// Can create, edit, and delete categories and tags.
     pub can_manage_taxonomies: bool,
     /// Can view, export, and delete form submissions.
@@ -70,7 +70,7 @@ impl AdminCaps {
             can_manage_plugins: is_global_admin,
             can_manage_settings: is_global_admin && is_on_default_site,
             can_manage_content: true,
-            can_manage_appearance: is_admin,
+            can_manage_themes: is_admin,
             can_manage_taxonomies: is_editor_or_above,
             can_manage_forms: is_admin,
             can_manage_pages: is_editor_or_above,

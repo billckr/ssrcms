@@ -618,7 +618,7 @@ pub async fn save_new(
                                         let src = std::path::Path::new(&thm_dir).join("global").join("default");
                                         let dst = site_themes.join("default");
                                         if src.is_dir() && !dst.exists() {
-                                            let _ = crate::handlers::admin::appearance::copy_dir_all(&src, &dst);
+                                            let _ = crate::handlers::admin::themes::copy_dir_all(&src, &dst);
                                         }
                                     });
                                     // If assigning as admin, claim ownership of the new site.
@@ -701,7 +701,7 @@ pub async fn save_new(
                                         let src = std::path::Path::new(&thm_dir).join("global").join("default");
                                         let dst = site_themes.join("default");
                                         if src.is_dir() && !dst.exists() {
-                                            let _ = crate::handlers::admin::appearance::copy_dir_all(&src, &dst);
+                                            let _ = crate::handlers::admin::themes::copy_dir_all(&src, &dst);
                                         }
                                     });
                                     super::audit(&state, &admin, "site.created", "site", Some(site.id), &site.hostname, Some(site.id)).await;

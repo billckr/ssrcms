@@ -953,7 +953,7 @@ Synaptic Signals does not include a CSS preprocessor, bundler, or minifier. If y
 
 ## 13. Admin Appearance UI
 
-The **Appearance** page (`/admin/appearance`) is the starting point for all theme management. It lists themes in views toggled by a dropdown in the toolbar.
+The **Themes** page (`/admin/themes`) is the starting point for all theme management. It lists themes in views toggled by a dropdown in the toolbar.
 
 ### Toolbar
 
@@ -970,7 +970,7 @@ The **Appearance** page (`/admin/appearance`) is the starting point for all them
      Private Themes
 ```
 
-The dropdown and the Create Theme button both appear only for users with the `can_manage_appearance` permission (site admins and super admins).
+The dropdown and the Create Theme button both appear only for users with the `can_manage_themes` permission (site admins and super admins).
 
 ### Theme card layout
 
@@ -1041,7 +1041,7 @@ The **+ Create Theme** button on the Appearance toolbar creates a new theme pre-
 
 ### Accessing the form
 
-Click **+ Create Theme** on `/admin/appearance`. The form requires the `can_manage_appearance` permission; a direct GET to `/admin/appearance/create` returns 403 if you lack it.
+Click **+ Create Theme** on `/admin/themes`. The form requires the `can_manage_themes` permission; a direct GET to `/admin/themes/create` returns 403 if you lack it.
 
 ### Form fields
 
@@ -1096,11 +1096,11 @@ After the theme is created you are redirected directly into the theme editor wit
 
 ## 15. Admin Theme Editor
 
-The in-browser editor at `/admin/appearance/editor/<theme>` lets you view and edit theme files without leaving the admin. Changes take effect immediately for all visitors — no server restart is required.
+The in-browser editor at `/admin/themes/editor/<theme>` lets you view and edit theme files without leaving the admin. Changes take effect immediately for all visitors — no server restart is required.
 
 ### Accessing the editor
 
-Click **Edit** on any theme card in the **My Themes** view. You can also navigate directly to `/admin/appearance/editor/<theme-name>`.
+Click **Edit** on any theme card in the **My Themes** view. You can also navigate directly to `/admin/themes/editor/<theme-name>`.
 
 The editor toolbar shows:
 
@@ -1255,7 +1255,7 @@ Removing a site theme does not affect the original in `themes/global/` — other
 Super admins follow the same My Themes / Global Themes / Private Themes workflow as site admins, with the following additional capabilities:
 
 - **My Themes** — shows only themes in your site's own folder (`themes/sites/<site_id>/`), the same as other site admins. This keeps your working view manageable regardless of how many global or private themes exist.
-- **Global Themes** — shows all themes in `themes/global/`. Each card shows **Get Theme** (to copy to My Themes) or **In My Themes** (if you already have a copy). To edit a global theme directly, navigate to its editor via `/admin/appearance/editor/<name>?source=global` — the editor is fully writable for super admins.
+- **Global Themes** — shows all themes in `themes/global/`. Each card shows **Get Theme** (to copy to My Themes) or **In My Themes** (if you already have a copy). To edit a global theme directly, navigate to its editor via `/admin/themes/editor/<name>?source=global` — the editor is fully writable for super admins.
 - **Private Themes** — shows all themes in `themes/private/`. Each card has an **Edit** button that opens the private original directly in the editor, plus the same **Get Theme** / **In My Themes** controls as the Global Themes view. Private originals can be edited without taking a site copy.
 - The **Create Theme** form defaults to **Private** visibility for super admins; select **Public** to create directly in `themes/global/`.
 - A global theme cannot be deleted if it is currently active on any site (the card header shows an amber site-count badge `[N]`).
@@ -1281,13 +1281,13 @@ There are three ways to install a theme:
 
 **Create in the admin (recommended for new themes)** — Click **+ Create Theme** on the Appearance page. The CMS copies the full default theme as a starting point and drops you straight into the editor. See Section 14 for details.
 
-**Zip upload** — Go to **Appearance** (`/admin/appearance`), scroll to the Upload Theme section, and upload a `.zip` file containing your theme. The zip may place theme files at the root or inside a single top-level folder — both layouts are accepted. The CMS validates the structure and rejects the upload with an error message if anything is missing. On success the theme appears in the theme list immediately. Uploading a zip whose `theme.toml` names an already-installed theme replaces it in place.
+**Zip upload** — Go to **Themes** (`/admin/themes`), scroll to the Upload Theme section, and upload a `.zip` file containing your theme. The zip may place theme files at the root or inside a single top-level folder — both layouts are accepted. The CMS validates the structure and rejects the upload with an error message if anything is missing. On success the theme appears in the theme list immediately. Uploading a zip whose `theme.toml` names an already-installed theme replaces it in place.
 
 **Manual installation** — Copy your theme directory into `themes/global/` (for a theme available to all sites) or `themes/sites/<site_id>/` (for a site-specific theme). The theme appears in the Appearance list on next server restart.
 
 ### Verify the theme loads
 
-Activate your theme in the admin at **Appearance** (`/admin/appearance`). Select your theme and click **Activate**. The switch is immediate — templates and static assets update for all visitors without a server restart. If the theme is missing required files or has a malformed `theme.toml`, the admin will display an error and the active theme will not change.
+Activate your theme in the admin at **Themes** (`/admin/themes`). Select your theme and click **Activate**. The switch is immediate — templates and static assets update for all visitors without a server restart. If the theme is missing required files or has a malformed `theme.toml`, the admin will display an error and the active theme will not change.
 
 ### Test all seven template types
 
