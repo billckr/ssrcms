@@ -92,12 +92,12 @@ pub fn render_results(
 
 <div style="display:flex;align-items:center;justify-content:flex-end;gap:.75rem;margin-bottom:1rem;flex-wrap:wrap">
   <div class="icon-pill" style="align-self:flex-end;margin-top:0">
+    <a href="/admin/designer/polls/{poll_id}" class="icon-btn" title="Edit Poll" aria-label="Edit Poll"><img src="/admin/static/icons/edit.svg" alt=""></a>
     <a href="/admin/designer/polls/{poll_id}/results/export" download class="icon-btn" title="Export CSV" aria-label="Export CSV"><img src="/admin/static/icons/download.svg" alt=""></a>
     <form method="POST" action="/admin/designer/polls/{poll_id}/results/reset" style="display:inline"
           onsubmit="return confirm('Delete ALL votes for this poll and reset the count to zero?')">
       <button class="icon-btn icon-danger" type="submit" title="Reset Results" aria-label="Reset Results"><img src="/admin/static/icons/trash.svg" alt=""></button>
     </form>
-    <a href="/admin/designer/polls/{poll_id}" class="icon-btn" title="Edit Poll" aria-label="Edit Poll"><img src="/admin/static/icons/edit.svg" alt=""></a>
   </div>
 </div>
 

@@ -90,6 +90,30 @@ fn parse_options(raw: &str) -> Vec<PollOption> {
         .collect()
 }
 
+/// Mirrors the JS-side checks in the editor (name/question required + sane
+/// length, at least two options) so a submission that bypasses the browser
+/// (JS disabled, direct POST) can't write incomplete or oversized data.
+fn validate_poll(name: &str, question: &str, options: &[PollOption]) -> Option<String> {
+    let name_len = name.trim().chars().count();
+    if name_len < 5 || name_len > 255 {
+        return Some("Poll name must be between 5 and 255 characters.".to_string());
+    }
+    let question_len = question.trim().chars().count();
+    if question_len < 5 || question_len > 255 {
+        return Some("Question must be between 5 and 255 characters.".to_string());
+    }
+    if options.len() < 2 {
+        return Some("A poll needs at least two options.".to_string());
+    }
+    for o in options {
+        let label_len = o.label.trim().chars().count();
+        if label_len < 1 || label_len > 255 {
+            return Some("Each option label must be between 1 and 255 characters.".to_string());
+        }
+    }
+    None
+}
+
 fn settings_from_form(form: &SavePollForm) -> PollSettings {
     PollSettings {
         success_message: if form.success_message.trim().is_empty() {
@@ -117,6 +141,21 @@ pub async fn create(
     let options = parse_options(&form.options_json);
     let settings = settings_from_form(&form);
 
+    if let Some(msg) = validate_poll(&form.name, &form.question, &options) {
+        let cs = state.site_hostname(admin.site_id);
+        let ctx = super::page_ctx_full(&state, &admin, &cs).await;
+        let data = PollEditData {
+            id: None,
+            name: form.name,
+            question: form.question,
+            options: options.into_iter().map(|o| PollOptionRow { key: o.key, label: o.label }).collect(),
+            success_message: settings.success_message,
+            button_label: settings.button_label,
+            vote_protection: settings.vote_protection.as_str().to_string(),
+        };
+        return Html(render_editor(&data, &ctx, Some(&msg))).into_response();
+    }
+
     if let Err(e) = poll_def::create(&state.db, CreatePollDef { site_id, name: form.name, question: form.question, options, settings }).await {
         tracing::error!("poll_designer::create failed: {e}");
     }
@@ -134,6 +173,21 @@ pub async fn update(
 
     let options = parse_options(&form.options_json);
     let settings = settings_from_form(&form);
+
+    if let Some(msg) = validate_poll(&form.name, &form.question, &options) {
+        let cs = state.site_hostname(admin.site_id);
+        let ctx = super::page_ctx_full(&state, &admin, &cs).await;
+        let data = PollEditData {
+            id: Some(id.to_string()),
+            name: form.name,
+            question: form.question,
+            options: options.into_iter().map(|o| PollOptionRow { key: o.key, label: o.label }).collect(),
+            success_message: settings.success_message,
+            button_label: settings.button_label,
+            vote_protection: settings.vote_protection.as_str().to_string(),
+        };
+        return Html(render_editor(&data, &ctx, Some(&msg))).into_response();
+    }
 
     if let Err(e) = poll_def::update(&state.db, site_id, id, UpdatePollDef { name: form.name, question: form.question, options, settings }).await {
         tracing::error!("poll_designer::update failed: {e}");

@@ -39,8 +39,8 @@ impl Default for PollEditData {
             name: String::new(),
             question: String::new(),
             options: vec![
-                PollOptionRow { key: "option_1".to_string(), label: "Option 1".to_string() },
-                PollOptionRow { key: "option_2".to_string(), label: "Option 2".to_string() },
+                PollOptionRow { key: "option_1".to_string(), label: String::new() },
+                PollOptionRow { key: "option_2".to_string(), label: String::new() },
             ],
             success_message: "Thanks for voting!".to_string(),
             button_label: "Vote".to_string(),
@@ -102,7 +102,7 @@ fn option_row_html(o: &PollOptionRow, index: usize) -> String {
         r#"<div class="poll-option-row" data-index="{index}" style="display:flex;align-items:end;gap:.6rem;border:1px solid var(--border);border-radius:var(--radius);padding:.6rem .75rem;margin-bottom:.5rem;background:var(--tint)">
   <div class="form-group" style="margin:0;flex:1">
     <label>Option label</label>
-    <input type="text" class="poll-option-label" value="{label}" placeholder="e.g. Blue">
+    <input type="text" class="poll-option-label" maxlength="255" value="{label}" placeholder="{placeholder}">
   </div>
   <button type="button" class="icon-btn poll-option-up" title="Move up" aria-label="Move up"><img src="/admin/static/icons/chevron-up.svg" alt=""></button>
   <button type="button" class="icon-btn poll-option-down" title="Move down" aria-label="Move down"><img src="/admin/static/icons/chevron-down.svg" alt=""></button>
@@ -110,6 +110,7 @@ fn option_row_html(o: &PollOptionRow, index: usize) -> String {
 </div>"#,
         index = index,
         label = html_escape(&o.label),
+        placeholder = format!("e.g. Option {}", index + 1),
     )
 }
 
@@ -162,7 +163,7 @@ pub fn render_editor(data: &PollEditData, ctx: &PageContext, flash: Option<&str>
           <div class="card-boxed-section">
             <div class="form-group">
               <label for="poll-question">Question</label>
-              <input type="text" id="poll-question" name="question" required maxlength="200" value="{question}" placeholder="e.g. What's your favorite color?">
+              <input type="text" id="poll-question" name="question" required minlength="5" maxlength="255" value="{question}" placeholder="e.g. What's your favorite color?">
             </div>
           </div>
           <div class="card-boxed-section">
@@ -184,7 +185,7 @@ pub fn render_editor(data: &PollEditData, ctx: &PageContext, flash: Option<&str>
           <div class="card-boxed-section">
             <div class="form-group">
               <label for="poll-name">Poll name</label>
-              <input type="text" id="poll-name" name="name" required maxlength="120" value="{name}" placeholder="e.g. Favorite Color Poll">
+              <input type="text" id="poll-name" name="name" required minlength="5" maxlength="255" value="{name}" placeholder="e.g. Favorite Color Poll">
             </div>
           </div>
           <div class="card-boxed-section">
@@ -210,6 +211,16 @@ pub fn render_editor(data: &PollEditData, ctx: &PageContext, flash: Option<&str>
               </label>
             </div>
             <p class="field-hint">Controls what stops the same visitor from voting twice. Neither option requires a login — clearing cookies (and, for Cookie only, switching networks) can still allow a re-vote.</p>
+          </div>
+          <div class="card-boxed-section">
+            <div class="form-note" style="margin-bottom:0">
+              <p><strong>Requirements:</strong></p>
+              <ul style="list-style:none;padding-left:0;margin:0.25rem 0 0">
+                <li id="poll-req-name"><span class="pw-dot" style="display:inline-block;width:1.1rem;font-style:normal">&middot;</span>Poll name (5-255 characters)</li>
+                <li id="poll-req-question"><span class="pw-dot" style="display:inline-block;width:1.1rem;font-style:normal">&middot;</span>Question (5-255 characters)</li>
+                <li id="poll-req-options"><span class="pw-dot" style="display:inline-block;width:1.1rem;font-style:normal">&middot;</span>At least two options with labels</li>
+              </ul>
+            </div>
           </div>
           <div class="icon-pill">
             <button type="button" id="save-poll-btn" class="icon-btn" title="{save_label}" aria-label="{save_label}"
@@ -239,7 +250,7 @@ pub fn render_editor(data: &PollEditData, ctx: &PageContext, flash: Option<&str>
     row.className = 'poll-option-row';
     row.style.cssText = 'display:flex;align-items:end;gap:.6rem;border:1px solid var(--border);border-radius:var(--radius);padding:.6rem .75rem;margin-bottom:.5rem;background:var(--tint)';
     row.innerHTML =
-      '<div class="form-group" style="margin:0;flex:1"><label>Option label</label><input type="text" class="poll-option-label" placeholder="e.g. Blue"></div>' +
+      '<div class="form-group" style="margin:0;flex:1"><label>Option label</label><input type="text" class="poll-option-label" maxlength="255" placeholder="e.g. Blue"></div>' +
       '<button type="button" class="icon-btn poll-option-up" title="Move up" aria-label="Move up"><img src="/admin/static/icons/chevron-up.svg" alt=""></button>' +
       '<button type="button" class="icon-btn poll-option-down" title="Move down" aria-label="Move down"><img src="/admin/static/icons/chevron-down.svg" alt=""></button>' +
       '<button type="button" class="icon-btn icon-danger poll-option-remove" title="Remove option" aria-label="Remove option"><img src="/admin/static/icons/trash.svg" alt=""></button>';
@@ -294,6 +305,27 @@ pub fn render_editor(data: &PollEditData, ctx: &PageContext, flash: Option<&str>
   var buttonLabelInput = document.getElementById('button-label');
   var saveBtn = document.getElementById('save-poll-btn');
 
+  function setReq(id, ok, touched) {{
+    var li = document.getElementById(id);
+    if (!li) return;
+    var dot = li.querySelector('.pw-dot');
+    if (!touched) {{
+      li.style.color = ''; if (dot) dot.textContent = '·';
+    }} else if (ok) {{
+      li.style.color = '#16a34a'; if (dot) dot.textContent = '✓';
+    }} else {{
+      li.style.color = '#dc2626'; if (dot) dot.textContent = '✗';
+    }}
+  }}
+  function updateRequirements() {{
+    var nameLen = nameInput.value.trim().length;
+    var questionLen = questionInput.value.trim().length;
+    var optionCount = readOptions().length;
+    setReq('poll-req-name', nameLen >= 5 && nameLen <= 255, nameLen > 0);
+    setReq('poll-req-question', questionLen >= 5 && questionLen <= 255, questionLen > 0);
+    setReq('poll-req-options', optionCount >= 2, optionCount > 0);
+  }}
+
   function snapshot() {{
     var protection = document.querySelector('input[name="vote_protection"]:checked');
     return JSON.stringify({{
@@ -306,9 +338,16 @@ pub fn render_editor(data: &PollEditData, ctx: &PageContext, flash: Option<&str>
     }});
   }}
   var initialSnapshot = null;
+  function isComplete() {{
+    var nameLen = nameInput.value.trim().length;
+    var questionLen = questionInput.value.trim().length;
+    return nameLen >= 5 && nameLen <= 255 && questionLen >= 5 && questionLen <= 255 && readOptions().length >= 2;
+  }}
   function checkDirty() {{
+    updateRequirements();
     if (initialSnapshot === null) return;
-    saveBtn.disabled = (snapshot() === initialSnapshot);
+    var dirty = snapshot() !== initialSnapshot;
+    saveBtn.disabled = !(dirty && isComplete());
   }}
 
   nameInput.addEventListener('input', checkDirty);

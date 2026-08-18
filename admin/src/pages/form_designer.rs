@@ -67,8 +67,8 @@ impl Default for FormEditData {
             id: None,
             name: String::new(),
             fields: vec![FieldRow {
-                label: "Your name".to_string(),
-                name: "name".to_string(),
+                label: String::new(),
+                name: String::new(),
                 field_type: "text".to_string(),
                 required: true,
                 options_text: String::new(),
@@ -283,11 +283,11 @@ fn field_row_html(f: &FieldRow, index: usize) -> String {
     <div style="flex:1;display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:.6rem;align-items:end">
       <div class="form-group" style="margin:0">
         <label class="field-label-caption">{label_of_label}</label>
-        <input type="text" class="field-label" value="{label}" placeholder="{label_placeholder}">
+        <input type="text" class="field-label" maxlength="255" value="{label}" placeholder="{label_placeholder}">
       </div>
       <div class="form-group field-name-wrap" style="margin:0;{visual_only_display}">
         <label>Field name <span class="field-hint">(used in submissions)</span></label>
-        <input type="text" class="field-name" value="{name}" placeholder="e.g. name">
+        <input type="text" class="field-name" maxlength="100" value="{name}" placeholder="e.g. name">
       </div>
       <div class="form-group" style="margin:0">
         <label>Type</label>
@@ -410,7 +410,7 @@ pub fn render_editor(data: &FormEditData, ctx: &PageContext, flash: Option<&str>
           <div class="card-boxed-section">
             <div class="form-group">
               <label for="form-name">Form name</label>
-              <input type="text" id="form-name" name="name" required maxlength="120" value="{name}" placeholder="e.g. Contact Us">
+              <input type="text" id="form-name" name="name" required minlength="5" maxlength="255" value="{name}" placeholder="e.g. Contact Us">
             </div>
           </div>
           <div class="card-boxed-section">
@@ -431,6 +431,15 @@ pub fn render_editor(data: &FormEditData, ctx: &PageContext, flash: Option<&str>
               <span class="switch-slider"></span>
               <span>Include spam honeypot field</span>
             </label>
+          </div>
+          <div class="card-boxed-section">
+            <div class="form-note" style="margin-bottom:0">
+              <p><strong>Requirements:</strong></p>
+              <ul style="list-style:none;padding-left:0;margin:0.25rem 0 0">
+                <li id="form-req-name"><span class="pw-dot" style="display:inline-block;width:1.1rem;font-style:normal">&middot;</span>Form name (5-255 characters)</li>
+                <li id="form-req-fields"><span class="pw-dot" style="display:inline-block;width:1.1rem;font-style:normal">&middot;</span>At least one field, each with a label and field name</li>
+              </ul>
+            </div>
           </div>
           <div class="icon-pill">
             <button type="button" id="save-form-btn" class="icon-btn" title="{save_label}" aria-label="{save_label}"
@@ -564,8 +573,8 @@ pub fn render_editor(data: &FormEditData, ctx: &PageContext, flash: Option<&str>
       '<div style="display:flex;align-items:flex-start;gap:.6rem">' +
         '<span class="drag-handle" title="Drag to reorder" draggable="true" style="margin-top:1.6rem"><img src="/admin/static/icons/move.svg" alt=""></span>' +
         '<div style="flex:1;display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:.6rem;align-items:end">' +
-          '<div class="form-group" style="margin:0"><label class="field-label-caption">Field label</label><input type="text" class="field-label" placeholder="e.g. Your name"></div>' +
-          '<div class="form-group field-name-wrap" style="margin:0"><label>Field name <span class="field-hint">(used in submissions)</span></label><input type="text" class="field-name" placeholder="e.g. name"></div>' +
+          '<div class="form-group" style="margin:0"><label class="field-label-caption">Field label</label><input type="text" class="field-label" maxlength="255" placeholder="e.g. Your name"></div>' +
+          '<div class="form-group field-name-wrap" style="margin:0"><label>Field name <span class="field-hint">(used in submissions)</span></label><input type="text" class="field-name" maxlength="100" placeholder="e.g. name"></div>' +
           '<div class="form-group" style="margin:0"><label>Type</label><select class="field-type">' + typeOpts + '</select></div>' +
           '<button type="button" class="icon-btn icon-danger field-remove" title="Remove field" style="margin-bottom:.45rem"><img src="/admin/static/icons/trash.svg" alt="Remove"></button>' +
         '</div>' +
@@ -705,6 +714,29 @@ pub fn render_editor(data: &FormEditData, ctx: &PageContext, flash: Option<&str>
   var mailFieldsWrap = document.getElementById('mail-fields-wrap');
   var saveBtns = [document.getElementById('save-form-btn'), document.getElementById('save-mail-btn')];
 
+  function setReq(id, ok, touched) {{
+    var li = document.getElementById(id);
+    if (!li) return;
+    var dot = li.querySelector('.pw-dot');
+    if (!touched) {{
+      li.style.color = ''; if (dot) dot.textContent = '·';
+    }} else if (ok) {{
+      li.style.color = '#16a34a'; if (dot) dot.textContent = '✓';
+    }} else {{
+      li.style.color = '#dc2626'; if (dot) dot.textContent = '✗';
+    }}
+  }}
+  function updateRequirements() {{
+    var nameLen = formNameInput.value.trim().length;
+    setReq('form-req-name', nameLen >= 5 && nameLen <= 255, nameLen > 0);
+    var fields = readFields();
+    var fieldsOk = fields.length > 0 && fields.every(function(f) {{
+      if (VISUAL_ONLY_TYPES.indexOf(f.type) !== -1) return true;
+      return f.label.length >= 1 && f.label.length <= 255 && f.name.length >= 1 && f.name.length <= 100;
+    }});
+    setReq('form-req-fields', fieldsOk, fields.length > 0);
+  }}
+
   confirmSubmitterInput.addEventListener('change', function() {{
     confirmFieldsBox.style.display = confirmSubmitterInput.checked ? 'block' : 'none';
     checkDirty();
@@ -795,10 +827,21 @@ pub fn render_editor(data: &FormEditData, ctx: &PageContext, flash: Option<&str>
     }});
   }}
   var initialSnapshot = null;
+  function isComplete() {{
+    var nameLen = formNameInput.value.trim().length;
+    if (nameLen < 5 || nameLen > 255) return false;
+    var fields = readFields();
+    if (fields.length === 0) return false;
+    return fields.every(function(f) {{
+      if (VISUAL_ONLY_TYPES.indexOf(f.type) !== -1) return true;
+      return f.label.length >= 1 && f.label.length <= 255 && f.name.length >= 1 && f.name.length <= 100;
+    }});
+  }}
   function checkDirty() {{
+    updateRequirements();
     if (initialSnapshot === null) return;
     var dirty = (snapshot() !== initialSnapshot);
-    saveBtns.forEach(function(b) {{ b.disabled = !dirty; }});
+    saveBtns.forEach(function(b) {{ b.disabled = !(dirty && isComplete()); }});
   }}
 
   buttonLabelInput.addEventListener('input', updatePreview);

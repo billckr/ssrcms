@@ -200,6 +200,46 @@ fn parse_fields(raw: &str) -> Vec<FormField> {
         .collect()
 }
 
+/// Mirrors `admin::pages::form_designer::is_visual_only` — separator/note
+/// fields don't submit a value, so "Field name" doesn't apply to them.
+fn is_visual_only(field_type: &str) -> bool {
+    matches!(field_type, "separator" | "note")
+}
+
+/// Mirrors the JS-side checks in the editor (name required + sane length,
+/// at least one field, each field's label/name filled in) so a submission
+/// that bypasses the browser (JS disabled, direct POST) can't write
+/// incomplete or oversized data.
+fn validate_form(name: &str, fields: &[FormField]) -> Option<String> {
+    let name_len = name.trim().chars().count();
+    if name_len < 5 || name_len > 255 {
+        return Some("Form name must be between 5 and 255 characters.".to_string());
+    }
+    if fields.is_empty() {
+        return Some("A form needs at least one field.".to_string());
+    }
+    for f in fields {
+        if is_visual_only(&f.field_type) {
+            if f.field_type == "note" && f.label.trim().is_empty() {
+                return Some("Note text can't be empty.".to_string());
+            }
+            if f.label.trim().chars().count() > 255 {
+                return Some("Field label must be 255 characters or fewer.".to_string());
+            }
+            continue;
+        }
+        let label_len = f.label.trim().chars().count();
+        if label_len < 1 || label_len > 255 {
+            return Some("Each field label must be between 1 and 255 characters.".to_string());
+        }
+        let name_len = f.name.trim().chars().count();
+        if name_len < 1 || name_len > 100 {
+            return Some("Each field name must be between 1 and 100 characters.".to_string());
+        }
+    }
+    None
+}
+
 fn parse_provider_id(form: &SaveFormForm) -> Option<Uuid> {
     form.email_provider_id.as_deref()
         .map(str::trim)
@@ -251,6 +291,37 @@ pub async fn create(
     let email_provider_id = parse_provider_id(&form);
     let settings = settings_from_form(&form);
 
+    if let Some(msg) = validate_form(&form.name, &fields) {
+        let cs = state.site_hostname(admin.site_id);
+        let ctx = super::page_ctx_full(&state, &admin, &cs).await;
+        let providers = crate::models::email_provider::list_verified_for_site(&state.db, site_id).await.unwrap_or_default();
+        let data = FormEditData {
+            id: None,
+            name: form.name,
+            fields: fields.into_iter().map(|f| FieldRow {
+                label: f.label,
+                name: f.name,
+                field_type: f.field_type,
+                required: f.required,
+                options_text: f.options.into_iter().map(|(v, l)| {
+                    if v == l { l } else { format!("{v}|{l}") }
+                }).collect::<Vec<_>>().join("\n"),
+            }).collect(),
+            success_message: settings.success_message,
+            button_label: settings.button_label,
+            include_honeypot: settings.include_honeypot,
+            notify_email: settings.notify_email.unwrap_or_default(),
+            confirm_submitter: settings.confirm_submitter,
+            confirm_subject: settings.confirm_subject,
+            confirm_body: settings.confirm_body,
+            no_mail: settings.no_mail,
+            email_provider_id: email_provider_id.map(|id| id.to_string()).unwrap_or_default(),
+            provider_options: providers.into_iter().map(|p| ProviderOption { id: p.id.to_string(), label: format!("{} - {}", p.label, p.provider_type) }).collect(),
+            site_id: site_id.to_string(),
+        };
+        return Html(render_editor(&data, &ctx, Some(&msg))).into_response();
+    }
+
     if let Err(e) = form_def::create(&state.db, CreateFormDef { site_id, name: form.name, fields, settings, email_provider_id }).await {
         tracing::error!("form_designer::create failed: {e}");
     }
@@ -269,6 +340,37 @@ pub async fn update(
     let fields = parse_fields(&form.fields_json);
     let email_provider_id = parse_provider_id(&form);
     let settings = settings_from_form(&form);
+
+    if let Some(msg) = validate_form(&form.name, &fields) {
+        let cs = state.site_hostname(admin.site_id);
+        let ctx = super::page_ctx_full(&state, &admin, &cs).await;
+        let providers = crate::models::email_provider::list_verified_for_site(&state.db, site_id).await.unwrap_or_default();
+        let data = FormEditData {
+            id: Some(id.to_string()),
+            name: form.name,
+            fields: fields.into_iter().map(|f| FieldRow {
+                label: f.label,
+                name: f.name,
+                field_type: f.field_type,
+                required: f.required,
+                options_text: f.options.into_iter().map(|(v, l)| {
+                    if v == l { l } else { format!("{v}|{l}") }
+                }).collect::<Vec<_>>().join("\n"),
+            }).collect(),
+            success_message: settings.success_message,
+            button_label: settings.button_label,
+            include_honeypot: settings.include_honeypot,
+            notify_email: settings.notify_email.unwrap_or_default(),
+            confirm_submitter: settings.confirm_submitter,
+            confirm_subject: settings.confirm_subject,
+            confirm_body: settings.confirm_body,
+            no_mail: settings.no_mail,
+            email_provider_id: email_provider_id.map(|id| id.to_string()).unwrap_or_default(),
+            provider_options: providers.into_iter().map(|p| ProviderOption { id: p.id.to_string(), label: format!("{} - {}", p.label, p.provider_type) }).collect(),
+            site_id: site_id.to_string(),
+        };
+        return Html(render_editor(&data, &ctx, Some(&msg))).into_response();
+    }
 
     let suffix = tab_suffix(&form);
     if let Err(e) = form_def::update(&state.db, site_id, id, UpdateFormDef { name: form.name, fields, settings, email_provider_id }).await {
