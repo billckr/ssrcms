@@ -9,8 +9,56 @@ use crate::errors::Result;
 use crate::models::site::Site;
 use crate::models::user::User;
 
+/// A user's role on a specific site. Deliberately has NO variant
+/// corresponding to users.role's SiteAdmin/SuperAdmin — those are global,
+/// not per-site, concepts. Keeping them out of this enum entirely (no
+/// `From<UserRole>` impl either) makes it a compile error, not just a
+/// runtime CHECK-constraint violation, to store or session-pin one as a
+/// site role.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, sqlx::Type)]
+#[sqlx(type_name = "text")]
+#[serde(rename_all = "lowercase")]
+pub enum SiteRole {
+    #[sqlx(rename = "admin")]
+    Admin,
+    #[sqlx(rename = "editor")]
+    Editor,
+    #[sqlx(rename = "author")]
+    Author,
+    #[sqlx(rename = "subscriber")]
+    Subscriber,
+}
+
+impl SiteRole {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            SiteRole::Admin => "admin",
+            SiteRole::Editor => "editor",
+            SiteRole::Author => "author",
+            SiteRole::Subscriber => "subscriber",
+        }
+    }
+
+    pub fn from_str(s: &str) -> Option<Self> {
+        match s {
+            "admin" => Some(SiteRole::Admin),
+            "editor" => Some(SiteRole::Editor),
+            "author" => Some(SiteRole::Author),
+            "subscriber" => Some(SiteRole::Subscriber),
+            _ => None,
+        }
+    }
+}
+
+impl std::fmt::Display for SiteRole {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct SiteUser {
+    pub id: Uuid,
     pub site_id: Uuid,
     pub user_id: Uuid,
     pub role: String,
@@ -19,33 +67,46 @@ pub struct SiteUser {
     pub created_at: DateTime<Utc>,
 }
 
-/// Add (or update role of) a user on a site, recording who did the inviting.
+impl SiteUser {
+    pub fn role_typed(&self) -> Option<SiteRole> {
+        SiteRole::from_str(&self.role)
+    }
+}
+
+/// Grant a user a role on a site, recording who did the inviting. Adding a
+/// role the user already holds on this site is a no-op (idempotent); adding
+/// a different role does not remove any role they already hold — a user can
+/// now hold several roles on the same site simultaneously.
 /// Pass `invited_by: None` for CLI-seeded rows or super_admin-initiated entries
 /// where attribution is not required.
 pub async fn add(
     pool: &PgPool,
     site_id: Uuid,
     user_id: Uuid,
-    role: &str,
+    role: SiteRole,
     invited_by: Option<Uuid>,
 ) -> Result<SiteUser> {
     let su = sqlx::query_as::<_, SiteUser>(
         r#"
         INSERT INTO site_users (site_id, user_id, role, invited_by)
         VALUES ($1, $2, $3, $4)
-        ON CONFLICT (site_id, user_id) DO UPDATE SET role = EXCLUDED.role
+        ON CONFLICT (site_id, user_id, role)
+        DO UPDATE SET invited_by = COALESCE(site_users.invited_by, EXCLUDED.invited_by)
         RETURNING *
         "#,
     )
     .bind(site_id)
     .bind(user_id)
-    .bind(role)
+    .bind(role.as_str())
     .bind(invited_by)
     .fetch_one(pool)
     .await?;
     Ok(su)
 }
 
+/// Remove ALL roles a user holds on a site (e.g. full offboarding from the
+/// site). To revoke a single role while leaving others intact, use
+/// `remove_role`.
 pub async fn remove(pool: &PgPool, site_id: Uuid, user_id: Uuid) -> Result<()> {
     sqlx::query("DELETE FROM site_users WHERE site_id = $1 AND user_id = $2")
         .bind(site_id)
@@ -53,6 +114,57 @@ pub async fn remove(pool: &PgPool, site_id: Uuid, user_id: Uuid) -> Result<()> {
         .execute(pool)
         .await?;
     Ok(())
+}
+
+/// Revoke a single role, leaving any other roles the user holds on this
+/// site intact.
+pub async fn remove_role(pool: &PgPool, site_id: Uuid, user_id: Uuid, role: SiteRole) -> Result<()> {
+    sqlx::query("DELETE FROM site_users WHERE site_id = $1 AND user_id = $2 AND role = $3")
+        .bind(site_id)
+        .bind(user_id)
+        .bind(role.as_str())
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+/// Whether a user has any role at all on a site — a pure access check, not
+/// concerned with which role(s). Use this instead of `get_role` for
+/// "is this user allowed onto this site" gates.
+pub async fn has_any_role(pool: &PgPool, site_id: Uuid, user_id: Uuid) -> Result<bool> {
+    let exists: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM site_users WHERE site_id = $1 AND user_id = $2)",
+    )
+    .bind(site_id)
+    .bind(user_id)
+    .fetch_one(pool)
+    .await?;
+    Ok(exists)
+}
+
+/// All roles a user holds on a site (may be empty, one, or several).
+pub async fn list_roles_for_user_and_site(
+    pool: &PgPool,
+    site_id: Uuid,
+    user_id: Uuid,
+) -> Result<Vec<SiteRole>> {
+    let rows: Vec<String> = sqlx::query_scalar(
+        "SELECT role FROM site_users WHERE site_id = $1 AND user_id = $2 ORDER BY role",
+    )
+    .bind(site_id)
+    .bind(user_id)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .filter_map(|r| match SiteRole::from_str(&r) {
+            Some(role) => Some(role),
+            None => {
+                tracing::warn!("unrecognized site_users.role value {:?} for site {} user {}", r, site_id, user_id);
+                None
+            }
+        })
+        .collect())
 }
 
 /// Number of users holding the 'admin' role on a site — used to warn before
@@ -133,24 +245,25 @@ pub async fn sole_admin_hostnames_batch(
     Ok(map)
 }
 
-pub async fn get_role(pool: &PgPool, site_id: Uuid, user_id: Uuid) -> Result<Option<String>> {
-    let role: Option<String> = sqlx::query_scalar(
-        "SELECT role FROM site_users WHERE site_id = $1 AND user_id = $2",
+/// Replace this user's roles on this site with exactly the one given role
+/// (used by the single-role dropdown on the Users admin page). Does not
+/// support assigning multiple roles — see `add`/`remove_role` for that.
+pub async fn update_role(pool: &PgPool, site_id: Uuid, user_id: Uuid, role: SiteRole) -> Result<()> {
+    let mut tx = pool.begin().await?;
+    sqlx::query("DELETE FROM site_users WHERE site_id = $1 AND user_id = $2")
+        .bind(site_id)
+        .bind(user_id)
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query(
+        "INSERT INTO site_users (site_id, user_id, role) VALUES ($1, $2, $3)",
     )
     .bind(site_id)
     .bind(user_id)
-    .fetch_optional(pool)
+    .bind(role.as_str())
+    .execute(&mut *tx)
     .await?;
-    Ok(role)
-}
-
-pub async fn update_role(pool: &PgPool, site_id: Uuid, user_id: Uuid, role: &str) -> Result<()> {
-    sqlx::query("UPDATE site_users SET role = $1 WHERE site_id = $2 AND user_id = $3")
-        .bind(role)
-        .bind(site_id)
-        .bind(user_id)
-        .execute(pool)
-        .await?;
+    tx.commit().await?;
     Ok(())
 }
 
@@ -240,13 +353,14 @@ pub async fn list_for_user_scoped(
 ) -> Result<Vec<(Site, String)>> {
     let rows = sqlx::query_as::<_, SiteWithRole>(
         r#"
-        SELECT s.id, s.hostname, s.owner_user_id, s.created_at, s.updated_at,
+        SELECT DISTINCT ON (s.id)
+               s.id, s.hostname, s.owner_user_id, s.created_at, s.updated_at,
                su.role as site_role
         FROM sites s
         JOIN site_users su ON su.site_id = s.id
         WHERE su.user_id = $1
           AND (su.role = 'admin' OR s.id = $2)
-        ORDER BY s.created_at ASC
+        ORDER BY s.id, (su.role = 'admin') DESC, s.created_at ASC
         "#,
     )
     .bind(user_id)

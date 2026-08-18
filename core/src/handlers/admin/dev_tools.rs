@@ -120,10 +120,10 @@ pub async fn seed_users(
         return (StatusCode::BAD_REQUEST, Json(json!({"error": "count must be between 1 and 200"}))).into_response();
     }
     let (site_role, users_role) = match body.role.as_str() {
-        "admin" => ("admin", user::UserRole::SiteAdmin),
-        "editor" => ("editor", user::UserRole::Editor),
-        "author" => ("author", user::UserRole::Author),
-        "subscriber" => ("subscriber", user::UserRole::Subscriber),
+        "admin" => (site_user::SiteRole::Admin, user::UserRole::SiteAdmin),
+        "editor" => (site_user::SiteRole::Editor, user::UserRole::Editor),
+        "author" => (site_user::SiteRole::Author, user::UserRole::Author),
+        "subscriber" => (site_user::SiteRole::Subscriber, user::UserRole::Subscriber),
         _ => {
             return (StatusCode::BAD_REQUEST, Json(json!({"error": "role must be admin, editor, author, or subscriber"}))).into_response();
         }
@@ -248,7 +248,7 @@ pub async fn seed_posts(
 
     // Mirrors seed_posts.sh's access check: super_admin OR a site_users row.
     if !admin.caps.is_global_admin {
-        let has_role = matches!(site_user::get_role(&state.db, site.id, author.id).await, Ok(Some(_)));
+        let has_role = site_user::has_any_role(&state.db, site.id, author.id).await.unwrap_or(false);
         if author.role != "super_admin" && !has_role {
             return (
                 StatusCode::BAD_REQUEST,

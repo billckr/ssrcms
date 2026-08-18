@@ -37,7 +37,7 @@ pub async fn list(
 ) -> Html<String> {
     let cs = state.site_hostname(admin.site_id);
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
-    let author_filter = if admin.site_role == "author" { Some(admin.user.id) } else { None };
+    let author_filter = if admin.site_role == Some(crate::models::site_user::SiteRole::Author) { Some(admin.user.id) } else { None };
     list_type(state, "post", q.page, q.status.as_deref(), q.search.as_deref(), q.partial.as_deref(), admin.site_id, author_filter, q.sort.as_deref(), q.dir.as_deref(), ctx).await
 }
 
@@ -298,7 +298,7 @@ pub async fn edit_post(
 ) -> impl IntoResponse {
     let cs = state.site_hostname(admin.site_id);
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
-    edit_post_type(state, id, admin.site_id, admin.site_role == "author", admin.user.id, ctx, q.success.as_deref()).await
+    edit_post_type(state, id, admin.site_id, admin.site_role == Some(crate::models::site_user::SiteRole::Author), admin.user.id, ctx, q.success.as_deref()).await
 }
 
 pub async fn edit_page(
@@ -520,7 +520,7 @@ pub async fn save_new(
         return Redirect::to("/admin").into_response();
     }
     // Authors may only save as draft or pending — clamp anything else to draft.
-    let status = if admin.site_role == "author" {
+    let status = if admin.site_role == Some(crate::models::site_user::SiteRole::Author) {
         match parse_status(&form.status) {
             PostStatus::Pending => PostStatus::Pending,
             _ => PostStatus::Draft,
@@ -686,7 +686,7 @@ pub async fn save_edit(
                     return Redirect::to(redirect).into_response();
                 }
                 // Author restriction: authors can only edit their own draft/pending posts.
-                if admin.site_role == "author" {
+                if admin.site_role == Some(crate::models::site_user::SiteRole::Author) {
                     if p.author_id != admin.user.id {
                         return Redirect::to(redirect).into_response();
                     }
@@ -700,7 +700,7 @@ pub async fn save_edit(
     }
 
     // Authors may only save as draft or pending — clamp anything else to draft.
-    let status = if admin.site_role == "author" {
+    let status = if admin.site_role == Some(crate::models::site_user::SiteRole::Author) {
         match parse_status(&form.status) {
             PostStatus::Pending => PostStatus::Pending,
             _ => PostStatus::Draft,
@@ -883,7 +883,7 @@ pub async fn api_set_sources_public(
     if !admin.caps.is_global_admin && post.site_id != admin.site_id {
         return (axum::http::StatusCode::FORBIDDEN, axum::Json(serde_json::json!({"error": "Forbidden"}))).into_response();
     }
-    if admin.site_role == "author" && post.author_id != admin.user.id {
+    if admin.site_role == Some(crate::models::site_user::SiteRole::Author) && post.author_id != admin.user.id {
         return (axum::http::StatusCode::FORBIDDEN, axum::Json(serde_json::json!({"error": "Forbidden"}))).into_response();
     }
 
@@ -940,7 +940,7 @@ pub async fn api_set_sources(
     if !admin.caps.is_global_admin && post.site_id != admin.site_id {
         return (axum::http::StatusCode::FORBIDDEN, axum::Json(serde_json::json!({"error": "Forbidden"}))).into_response();
     }
-    if admin.site_role == "author" && post.author_id != admin.user.id {
+    if admin.site_role == Some(crate::models::site_user::SiteRole::Author) && post.author_id != admin.user.id {
         return (axum::http::StatusCode::FORBIDDEN, axum::Json(serde_json::json!({"error": "Forbidden"}))).into_response();
     }
 
@@ -984,10 +984,10 @@ pub async fn delete_post(
                 if p.site_id != admin.site_id {
                     return Redirect::to("/admin/posts").into_response();
                 }
-                if admin.site_role == "author" && p.author_id != admin.user.id {
+                if admin.site_role == Some(crate::models::site_user::SiteRole::Author) && p.author_id != admin.user.id {
                     return Redirect::to("/admin/posts").into_response();
                 }
-                if admin.site_role == "author" && p.status == "published" {
+                if admin.site_role == Some(crate::models::site_user::SiteRole::Author) && p.status == "published" {
                     return Redirect::to("/admin/posts").into_response();
                 }
             }
@@ -1018,10 +1018,10 @@ pub async fn delete_page(
                 if p.site_id != admin.site_id {
                     return Redirect::to("/admin/pages").into_response();
                 }
-                if admin.site_role == "author" && p.author_id != admin.user.id {
+                if admin.site_role == Some(crate::models::site_user::SiteRole::Author) && p.author_id != admin.user.id {
                     return Redirect::to("/admin/pages").into_response();
                 }
-                if admin.site_role == "author" && p.status == "published" {
+                if admin.site_role == Some(crate::models::site_user::SiteRole::Author) && p.status == "published" {
                     return Redirect::to("/admin/pages").into_response();
                 }
             }
@@ -1077,8 +1077,8 @@ async fn bulk_delete_type(state: AppState, admin: AdminUser, ids: Vec<String>, r
             match &post {
                 Some(p) => {
                     if p.site_id != admin.site_id { continue; }
-                    if admin.site_role == "author" && p.author_id != admin.user.id { continue; }
-                    if admin.site_role == "author" && p.status == "published" { continue; }
+                    if admin.site_role == Some(crate::models::site_user::SiteRole::Author) && p.author_id != admin.user.id { continue; }
+                    if admin.site_role == Some(crate::models::site_user::SiteRole::Author) && p.status == "published" { continue; }
                 }
                 None => continue,
             }

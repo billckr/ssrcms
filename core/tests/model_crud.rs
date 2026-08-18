@@ -375,10 +375,10 @@ async fn test_create_site_with_defaults_seeds_settings_and_admin_role() {
     assert!(!settings.site_name.is_empty());
 
     // owner has admin role in site_users
-    let role = site_user::get_role(&pool, s.id, owner.id)
+    let roles = site_user::list_roles_for_user_and_site(&pool, s.id, owner.id)
         .await
-        .expect("get_role should succeed");
-    assert_eq!(role.as_deref(), Some("admin"), "owner should be admin on their site");
+        .expect("list_roles_for_user_and_site should succeed");
+    assert_eq!(roles, vec![site_user::SiteRole::Admin], "owner should be admin on their site");
 
     // Cleanup
     site::delete(&pool, s.id).await.ok();
@@ -427,7 +427,7 @@ async fn test_invited_by_recorded_on_site_user() {
         .await
         .expect("create site");
 
-    site_user::add(&pool, s.id, invitee.id, "author", Some(inviter.id))
+    site_user::add(&pool, s.id, invitee.id, site_user::SiteRole::Author, Some(inviter.id))
         .await
         .expect("add invitee");
 
@@ -447,6 +447,72 @@ async fn test_invited_by_recorded_on_site_user() {
     site::delete(&pool, s.id).await.ok();
     user::delete(&pool, inviter.id).await.ok();
     user::delete(&pool, invitee.id).await.ok();
+}
+
+#[tokio::test]
+#[ignore = "requires live PostgreSQL: set DATABASE_URL and run cargo test -- --include-ignored"]
+async fn test_multi_role_add_is_idempotent_and_coexists() {
+    let pool = test_pool().await;
+    let owner = make_test_user(&pool).await;
+    let member = make_test_user(&pool).await;
+    let id = uid();
+
+    let s = site::create_with_defaults(&pool, &format!("multirole-{id}.example.com"), Some(owner.id))
+        .await
+        .expect("create site");
+
+    // Grant two different roles on the same site.
+    site_user::add(&pool, s.id, member.id, site_user::SiteRole::Editor, Some(owner.id))
+        .await
+        .expect("add editor role");
+    site_user::add(&pool, s.id, member.id, site_user::SiteRole::Author, Some(owner.id))
+        .await
+        .expect("add author role");
+
+    let roles = site_user::list_roles_for_user_and_site(&pool, s.id, member.id)
+        .await
+        .expect("list_roles_for_user_and_site should succeed");
+    assert_eq!(roles.len(), 2, "user should hold both roles on this site");
+    assert!(roles.contains(&site_user::SiteRole::Editor));
+    assert!(roles.contains(&site_user::SiteRole::Author));
+
+    // Re-adding an already-held role is a no-op, not an error, and doesn't duplicate.
+    site_user::add(&pool, s.id, member.id, site_user::SiteRole::Editor, Some(owner.id))
+        .await
+        .expect("re-adding an existing role should succeed idempotently");
+    let roles_after = site_user::list_roles_for_user_and_site(&pool, s.id, member.id)
+        .await
+        .expect("list_roles_for_user_and_site should succeed");
+    assert_eq!(roles_after.len(), 2, "re-adding a held role must not duplicate it");
+
+    assert!(
+        site_user::has_any_role(&pool, s.id, member.id).await.expect("has_any_role"),
+        "member should have access to the site"
+    );
+
+    // Removing one role leaves the other intact.
+    site_user::remove_role(&pool, s.id, member.id, site_user::SiteRole::Editor)
+        .await
+        .expect("remove_role should succeed");
+    let roles_final = site_user::list_roles_for_user_and_site(&pool, s.id, member.id)
+        .await
+        .expect("list_roles_for_user_and_site should succeed");
+    assert_eq!(roles_final, vec![site_user::SiteRole::Author]);
+
+    // Cleanup
+    site::delete(&pool, s.id).await.ok();
+    user::delete(&pool, owner.id).await.ok();
+    user::delete(&pool, member.id).await.ok();
+}
+
+#[test]
+fn test_site_role_rejects_global_only_values() {
+    // super_admin and site_admin are users.role-only, global-scope values —
+    // SiteRole must never accept them, as defense in depth alongside the
+    // site_users.role CHECK constraint (which also never allows them).
+    assert_eq!(site_user::SiteRole::from_str("super_admin"), None);
+    assert_eq!(site_user::SiteRole::from_str("site_admin"), None);
+    assert_eq!(site_user::SiteRole::from_str("admin"), Some(site_user::SiteRole::Admin));
 }
 
 #[tokio::test]

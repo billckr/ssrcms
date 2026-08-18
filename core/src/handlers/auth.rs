@@ -11,7 +11,7 @@ use tower_sessions::Session;
 
 use crate::app_state::AppState;
 use crate::middleware::account_auth::SESSION_ACCOUNT_USER_ID_KEY;
-use crate::middleware::admin_auth::{SESSION_CURRENT_SITE_KEY, SESSION_USER_ID_KEY};
+use crate::middleware::admin_auth::{SESSION_CURRENT_ROLE_KEY, SESSION_CURRENT_SITE_KEY, SESSION_USER_ID_KEY};
 
 /// Records a staff (/admin/login) login attempt to the audit log — subscriber
 /// logins at the public /login form are intentionally not logged here, same
@@ -130,8 +130,8 @@ pub async fn login_post(
     if user.role.as_str() != "super_admin" {
         match &resolved_site {
             Some((site, _)) => {
-                match crate::models::site_user::get_role(&state.db, site.id, user.id).await {
-                    Ok(Some(_)) => {} // has access — continue
+                match crate::models::site_user::has_any_role(&state.db, site.id, user.id).await {
+                    Ok(true) => {} // has access — continue
                     _ => {
                         log_staff_login(&state, Some(user.id), &user.email, &user.role, Some(site.id), false).await;
                         return Html(admin::pages::login::render(
@@ -162,6 +162,10 @@ pub async fn login_post(
     if let Some((site, _)) = resolved_site {
         tracing::info!("login: site_id stored in session: {} ({})", site.hostname, site.id);
         let _ = session.insert(SESSION_CURRENT_SITE_KEY, site.id.to_string()).await;
+        // Clear any role pinned from a previous session on this browser — it may
+        // belong to a different site, or a role that's since been revoked. The
+        // AdminUser extractor will re-derive/prompt for it on the next request.
+        let _ = session.remove::<String>(SESSION_CURRENT_ROLE_KEY).await;
     } else {
         tracing::warn!("login: no site resolved for hostname '{}' — session will have no site_id", hostname);
     }
@@ -225,8 +229,8 @@ pub async fn public_login_post(
 
     match &resolved_site {
         Some((site, _)) => {
-            match crate::models::site_user::get_role(&state.db, site.id, user.id).await {
-                Ok(Some(_)) => {}
+            match crate::models::site_user::has_any_role(&state.db, site.id, user.id).await {
+                Ok(true) => {}
                 _ => return Html(admin::pages::login::render_public(
                     Some("Your account does not have access to this site."),
                     None, redirect_val, &default_theme,

@@ -84,7 +84,7 @@ pub async fn dashboard(
     Query(query): Query<DashboardQuery>,
 ) -> Html<String> {
     let site_id = admin.site_id;
-    let is_author = admin.site_role == "author";
+    let is_author = admin.site_role == Some(crate::models::site_user::SiteRole::Author);
 
     let total_users = if admin.caps.is_global_admin && !admin.caps.is_impersonating {
         crate::models::user::count_staff(&state.db, admin.user.id).await

@@ -120,10 +120,9 @@ pub(super) async fn can_preview_site(state: &AppState, session: &Session, site_i
     match user.role.as_str() {
         "super_admin" => true,
         "site_admin" | "editor" | "author" => {
-            crate::models::site_user::get_role(&state.db, site_id, user_id)
+            crate::models::site_user::has_any_role(&state.db, site_id, user_id)
                 .await
-                .unwrap_or(None)
-                .is_some()
+                .unwrap_or(false)
         }
         _ => false,
     }

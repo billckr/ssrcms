@@ -86,7 +86,7 @@ pub async fn create_with_defaults(
             r#"
             INSERT INTO site_users (site_id, user_id, role, invited_by)
             VALUES ($1, $2, 'admin', NULL)
-            ON CONFLICT (site_id, user_id) DO UPDATE SET role = 'admin'
+            ON CONFLICT (site_id, user_id, role) DO NOTHING
             "#,
         )
         .bind(site.id)

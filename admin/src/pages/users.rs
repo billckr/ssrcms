@@ -54,6 +54,11 @@ pub struct UserRow {
     pub site_hostnames: Vec<String>,
     /// Site UUIDs parallel to site_hostnames. Used to render switch-site links for admins.
     pub site_ids: Vec<String>,
+    /// Comma-joined role labels (e.g. "Editor, Author") for each entry in
+    /// site_hostnames, parallel to it — a user can hold multiple roles on
+    /// the same site, shown as one domain badge with these in its tooltip
+    /// rather than one duplicated badge per role.
+    pub site_role_labels: Vec<String>,
     /// The user's default/primary site UUID. Used to highlight the primary domain badge.
     pub default_site_id: Option<String>,
     /// False when the account is suspended — login is blocked, but content/data is untouched.
@@ -138,29 +143,47 @@ fn build_staff_rows(staff: &[UserRow], current_user_id: &str, can_manage_access:
         let domain_badges = if u.site_hostnames.is_empty() {
             r#"<span style="display:inline-block;background:#fed7aa;color:#c2410c;border-radius:4px;padding:.15rem .5rem;font-size:.78rem;font-weight:500;white-space:nowrap">Unassigned</span>"#.to_string()
         } else if can_manage_access {
-            u.site_hostnames.iter().zip(u.site_ids.iter()).map(|(h, sid)| {
+            let empty_labels = Vec::new();
+            let labels = if u.site_role_labels.len() == u.site_hostnames.len() { &u.site_role_labels } else { &empty_labels };
+            u.site_hostnames.iter().zip(u.site_ids.iter()).enumerate().map(|(i, (h, sid))| {
                 let is_primary = u.default_site_id.as_deref() == Some(sid.as_str());
                 let (bg, fg) = if is_primary { ("#dbeafe", "#1e40af") } else { ("var(--tint)", "var(--text)") };
+                // Roles-on-this-site tooltip: a user can hold more than one role
+                // on the same site, so this shows all of them on hover instead of
+                // rendering one duplicated badge per role. The "+" suffix flags
+                // multi-role at a glance, without needing to hover.
+                let role_label = labels.get(i).map(|s| s.as_str()).unwrap_or("");
+                let is_multi_role = role_label.contains(',');
+                let title = if role_label.is_empty() { format!("Switch to {h}") } else { format!("{h} — {role_label}") };
+                let suffix = if is_multi_role { " +" } else { "" };
                 format!(
                     r#"<form method="POST" action="/admin/sites/switch" style="display:inline;margin:.1rem .15rem .1rem 0">
                       <input type="hidden" name="site_id" value="{sid}">
-                      <button type="submit" title="Switch to {h}" style="display:inline-block;background:{bg};color:{fg};border-radius:4px;padding:.15rem .5rem;font-size:.78rem;font-weight:500;white-space:nowrap;border:none;cursor:pointer;font-family:inherit;line-height:1.4">
-                        {h}
+                      <button type="submit" title="{title}" style="display:inline-block;background:{bg};color:{fg};border-radius:4px;padding:.15rem .5rem;font-size:.78rem;font-weight:500;white-space:nowrap;border:none;cursor:pointer;font-family:inherit;line-height:1.4">
+                        {h}{suffix}
                       </button>
                     </form>"#,
                     sid = crate::html_escape(sid),
                     h = crate::html_escape(h),
+                    title = crate::html_escape(&title),
+                    suffix = suffix,
                     bg = bg,
                     fg = fg,
                 )
             }).collect::<Vec<_>>().join("")
         } else {
-            u.site_hostnames.iter().zip(u.site_ids.iter()).map(|(h, sid)| {
+            let empty_labels = Vec::new();
+            let labels = if u.site_role_labels.len() == u.site_hostnames.len() { &u.site_role_labels } else { &empty_labels };
+            u.site_hostnames.iter().zip(u.site_ids.iter()).enumerate().map(|(i, (h, sid))| {
                 let is_primary = u.default_site_id.as_deref() == Some(sid.as_str());
                 let (bg, fg) = if is_primary { ("#dbeafe", "#1e40af") } else { ("var(--tint)", "var(--text)") };
+                let role_label = labels.get(i).map(|s| s.as_str()).unwrap_or("");
+                let is_multi_role = role_label.contains(',');
+                let title = if role_label.is_empty() { h.clone() } else { format!("{h} — {role_label}") };
+                let suffix = if is_multi_role { " +" } else { "" };
                 format!(
-                    r#"<span style="display:inline-block;background:{bg};color:{fg};border-radius:4px;padding:.15rem .5rem;font-size:.78rem;font-weight:500;margin:.1rem .15rem .1rem 0;white-space:nowrap">{h}</span>"#,
-                    bg = bg, fg = fg, h = crate::html_escape(h),
+                    r#"<span title="{title}" style="display:inline-block;background:{bg};color:{fg};border-radius:4px;padding:.15rem .5rem;font-size:.78rem;font-weight:500;margin:.1rem .15rem .1rem 0;white-space:nowrap">{h}{suffix}</span>"#,
+                    title = crate::html_escape(&title), bg = bg, fg = fg, h = crate::html_escape(h), suffix = suffix,
                 )
             }).collect::<Vec<_>>().join("")
         };

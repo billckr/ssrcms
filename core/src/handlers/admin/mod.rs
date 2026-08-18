@@ -56,7 +56,14 @@ pub fn page_ctx(state: &AppState, admin: &AdminUser, current_site: &str) -> admi
     admin::PageContext {
         current_site: current_site.to_string(),
         user_email: admin.user.email.clone(),
-        user_role: if admin.caps.is_global_admin { "Super Admin".to_string() } else { role_display_name(&admin.site_role) },
+        user_role: if admin.caps.is_global_admin {
+            "Super Admin".to_string()
+        } else {
+            match admin.site_role {
+                Some(r) => role_display_name(r.as_str()),
+                None => role_display_name(&admin.user.role),
+            }
+        },
         is_global_admin: admin.caps.is_global_admin,
         is_impersonating: admin.caps.is_impersonating,
         can_manage_users: admin.caps.can_manage_users,
@@ -133,6 +140,7 @@ pub mod menus;
 pub mod plugins;
 pub mod posts;
 pub mod profile;
+pub mod role_picker;
 pub mod settings;
 pub mod logo_upload;
 pub mod sites;

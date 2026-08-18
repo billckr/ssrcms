@@ -105,8 +105,8 @@ pub async fn subscribe_post(
     match crate::models::user::get_by_email(&state.db, &email).await {
         Ok(existing) => {
             // Known user — ensure they have a site_users row for this site.
-            match crate::models::site_user::get_role(&state.db, site_id, existing.id).await {
-                Ok(Some(_)) => {
+            match crate::models::site_user::has_any_role(&state.db, site_id, existing.id).await {
+                Ok(true) => {
                     err!("This email address is already subscribed to this site.");
                 }
                 _ => {
@@ -115,7 +115,7 @@ pub async fn subscribe_post(
                         &state.db,
                         site_id,
                         existing.id,
-                        "subscriber",
+                        crate::models::site_user::SiteRole::Subscriber,
                         None,
                     )
                     .await
@@ -152,7 +152,7 @@ pub async fn subscribe_post(
                     &state.db,
                     site_id,
                     new_user.id,
-                    "subscriber",
+                    crate::models::site_user::SiteRole::Subscriber,
                     None,
                 )
                 .await

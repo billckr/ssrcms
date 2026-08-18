@@ -14,6 +14,7 @@ pub mod plugins;
 pub mod posts;
 pub mod profile;
 pub mod recover;
+pub mod role_picker;
 pub mod settings;
 pub mod sites;
 pub mod subscribe;

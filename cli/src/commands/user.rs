@@ -162,7 +162,7 @@ async fn create(admin_password: Option<String>) -> anyhow::Result<()> {
         sqlx::query(
             "INSERT INTO site_users (site_id, user_id, role, invited_by)
              VALUES ($1, $2, $3, NULL)
-             ON CONFLICT (site_id, user_id) DO UPDATE SET role = EXCLUDED.role"
+             ON CONFLICT (site_id, user_id, role) DO NOTHING"
         )
         .bind(site_id)
         .bind(id)

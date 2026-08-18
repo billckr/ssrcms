@@ -130,6 +130,7 @@ pub async fn list(
                     is_super_admin: u.role == "super_admin",
                     site_hostnames: vec![],
                     site_ids: vec![],
+                    site_role_labels: vec![],
                     default_site_id: None,
                     sole_admin_hostnames: vec![],
                 })
@@ -162,6 +163,7 @@ pub async fn list(
                 is_super_admin: u.role == "super_admin",
                 site_hostnames: vec![],
                 site_ids: vec![],
+                site_role_labels: vec![],
                     default_site_id: None,
                 sole_admin_hostnames: vec![],
             }).collect()
@@ -181,6 +183,7 @@ pub async fn list(
             is_super_admin: false,
             site_hostnames: vec![],
             site_ids: vec![],
+            site_role_labels: vec![],
                     default_site_id: None,
             sole_admin_hostnames: vec![],
         }).collect()
@@ -229,12 +232,15 @@ pub async fn list(
         .filter_map(|u| u.id.parse::<Uuid>().ok())
         .collect();
     if !all_ids.is_empty() {
-        let membership_rows: Vec<(Uuid, Uuid, String)> = sqlx::query_as(
-            "SELECT su.user_id, s.id, s.hostname \
+        // su.role included so a user with multiple roles on the same site
+        // collapses to one domain badge with all roles in its tooltip,
+        // rather than one duplicated badge per role (see membership_map below).
+        let membership_rows: Vec<(Uuid, Uuid, String, String)> = sqlx::query_as(
+            "SELECT su.user_id, s.id, s.hostname, su.role \
              FROM site_users su \
              JOIN sites s ON s.id = su.site_id \
              WHERE su.user_id = ANY($1) \
-             ORDER BY s.created_at ASC",
+             ORDER BY s.created_at ASC, su.role ASC",
         )
         .bind(&all_ids)
         .fetch_all(&state.db)
@@ -254,9 +260,25 @@ pub async fn list(
             .map(|(uid, dsid)| (uid.to_string(), dsid.map(|id| id.to_string())))
             .collect();
 
-        let mut membership_map: std::collections::HashMap<String, Vec<(String, String)>> = std::collections::HashMap::new();
-        for (uid, site_id, hostname) in membership_rows {
-            membership_map.entry(uid.to_string()).or_default().push((site_id.to_string(), hostname));
+        // (site_id, hostname) -> roles held on that site, in insertion order,
+        // deduped per site so a user with multiple roles there gets one entry.
+        let mut membership_map: std::collections::HashMap<String, Vec<(String, String, Vec<String>)>> = std::collections::HashMap::new();
+        for (uid, site_id, hostname, role) in membership_rows {
+            let entries = membership_map.entry(uid.to_string()).or_default();
+            let site_id = site_id.to_string();
+            match entries.iter_mut().find(|(sid, _, _)| *sid == site_id) {
+                Some((_, _, roles)) => roles.push(role),
+                None => entries.push((site_id, hostname, vec![role])),
+            }
+        }
+        fn role_label(role: &str) -> &str {
+            match role {
+                "admin" => "Admin",
+                "editor" => "Editor",
+                "author" => "Author",
+                "subscriber" => "Subscriber",
+                other => other,
+            }
         }
 
         // Preflight which of these users are a site's sole admin, so Delete
@@ -267,8 +289,11 @@ pub async fn list(
 
         for u in staff.iter_mut().chain(subscribers.iter_mut()) {
             if let Some(memberships) = membership_map.get(&u.id) {
-                u.site_hostnames = memberships.iter().map(|(_, h)| h.clone()).collect();
-                u.site_ids       = memberships.iter().map(|(id, _)| id.clone()).collect();
+                u.site_hostnames = memberships.iter().map(|(_, h, _)| h.clone()).collect();
+                u.site_ids       = memberships.iter().map(|(id, _, _)| id.clone()).collect();
+                u.site_role_labels = memberships.iter()
+                    .map(|(_, _, roles)| roles.iter().map(|r| role_label(r)).collect::<Vec<_>>().join(", "))
+                    .collect();
             }
             u.default_site_id = default_site_map.get(&u.id).and_then(|v| v.clone());
             if let Ok(uid) = u.id.parse::<Uuid>() {
@@ -339,8 +364,8 @@ pub async fn edit_user(
     // Site isolation: non-global admins may only edit users on their site.
     if !admin.caps.is_global_admin {
         let allowed = match admin.site_id {
-            Some(sid) => crate::models::site_user::get_role(&state.db, sid, id)
-                .await.ok().flatten().is_some(),
+            Some(sid) => crate::models::site_user::has_any_role(&state.db, sid, id)
+                .await.unwrap_or(false),
             None => false,
         };
         if !allowed {
@@ -367,8 +392,15 @@ pub async fn edit_user(
     let display_role = if is_super_admin_target {
         user.role.clone()
     } else if let Some(sid) = admin.site_id {
-        crate::models::site_user::get_role(&state.db, sid, id)
-            .await.ok().flatten().unwrap_or_else(|| user.role.clone())
+        // A user can hold multiple roles on this site now; the single-role edit
+        // dropdown shows the first one (alphabetical) and, if changed, replaces
+        // ALL of their roles here with the one selected (see update_role).
+        crate::models::site_user::list_roles_for_user_and_site(&state.db, sid, id)
+            .await
+            .ok()
+            .and_then(|roles| roles.into_iter().next())
+            .map(|r| r.as_str().to_string())
+            .unwrap_or_else(|| user.role.clone())
     } else {
         user.role.clone()
     };
@@ -572,21 +604,28 @@ pub async fn save_new(
         return Html(admin::pages::users::render_editor(&edit, Some(msg), &ctx)).into_response();
     }
 
-    // site_role: what goes into site_users.role (admin/editor/author/subscriber).
+    // requested_role: what the form asked for, after site-admin escalation capping.
     // Site admins cannot assign super_admin; cap to editor.
-    let site_role = if !admin.caps.is_global_admin && form.role == "super_admin" {
+    let requested_role = if !admin.caps.is_global_admin && form.role == "super_admin" {
         "editor"
     } else {
         form.role.as_str()
     };
     // users_role: what goes into users.role. "admin" is a site_users concept, stored
-    // as "site_admin" in users.role. "super_admin" is CLI-only.
-    let users_role_str = match site_role {
+    // as "site_admin" in users.role. "super_admin" is CLI-only (capped above unless
+    // the actor is already a global admin).
+    let users_role_str = match requested_role {
         "admin" => "site_admin",
         "super_admin" => "site_admin",
         other => other,
     };
     let role = parse_role(users_role_str);
+    // site_role: what goes into site_users.role. `SiteRole` has no super_admin
+    // variant at all, so a super_admin target (only reachable by a global admin,
+    // per the cap above) deliberately gets None here — they never get a
+    // site_users row; super_admin access bypasses site_users entirely.
+    let site_role: Option<crate::models::site_user::SiteRole> =
+        crate::models::site_user::SiteRole::from_str(requested_role);
     let create = CreateUser {
         username: form.username.clone(),
         email: form.email.clone(),
@@ -632,7 +671,7 @@ pub async fn save_new(
                                         }
                                     });
                                     // If assigning as admin, claim ownership of the new site.
-                                    if site_role == "admin" {
+                                    if site_role == Some(crate::models::site_user::SiteRole::Admin) {
                                         let _ = sqlx::query(
                                             "UPDATE sites SET owner_user_id = $1 WHERE id = $2 AND owner_user_id IS NULL",
                                         )
@@ -658,12 +697,12 @@ pub async fn save_new(
                             .and_then(|s| s.parse::<Uuid>().ok())
                     }
                 };
-                if let Some(sid) = site_id {
-                    if let Err(e) = crate::models::site_user::add(&state.db, sid, new_user.id, site_role, None).await {
+                if let (Some(sid), Some(role)) = (site_id, site_role) {
+                    if let Err(e) = crate::models::site_user::add(&state.db, sid, new_user.id, role, None).await {
                         tracing::warn!("failed to add user {} to site {}: {:?}", new_user.id, sid, e);
                     }
                     // If assigning as admin and the site has no owner yet, claim ownership.
-                    if site_role == "admin" {
+                    if role == crate::models::site_user::SiteRole::Admin {
                         let _ = sqlx::query(
                             "UPDATE sites SET owner_user_id = $1 WHERE id = $2 AND owner_user_id IS NULL",
                         )
@@ -736,11 +775,13 @@ pub async fn save_new(
                         }
                     }
                 };
-                if let Some(site_id) = target_site_id {
-                    if let Err(e) = crate::models::site_user::add(&state.db, site_id, new_user.id, site_role, Some(admin.user.id)).await {
+                // Site admins can never produce a super_admin target (capped above),
+                // so site_role is always Some here.
+                if let (Some(site_id), Some(role)) = (target_site_id, site_role) {
+                    if let Err(e) = crate::models::site_user::add(&state.db, site_id, new_user.id, role, Some(admin.user.id)).await {
                         tracing::warn!("failed to add new user {} to site {}: {:?}", new_user.id, site_id, e);
                     }
-                    if site_role == "admin" {
+                    if role == crate::models::site_user::SiteRole::Admin {
                         let _ = crate::models::user::set_default_site(&state.db, new_user.id, Some(site_id)).await;
                     }
                 }
@@ -785,8 +826,8 @@ pub async fn save_edit(
     // Site isolation: non-global admins may only edit users on their site.
     if !admin.caps.is_global_admin {
         let allowed = match admin.site_id {
-            Some(sid) => crate::models::site_user::get_role(&state.db, sid, id)
-                .await.ok().flatten().is_some(),
+            Some(sid) => crate::models::site_user::has_any_role(&state.db, sid, id)
+                .await.unwrap_or(false),
             None => false,
         };
         if !allowed {
@@ -998,6 +1039,7 @@ pub async fn delete_user(
                         is_super_admin: u.role == "super_admin",
                         site_hostnames: vec![],
                         site_ids: vec![],
+                        site_role_labels: vec![],
                     default_site_id: None,
                     sole_admin_hostnames: vec![],
                     }).collect()
@@ -1014,6 +1056,7 @@ pub async fn delete_user(
                         is_super_admin: false,
                         site_hostnames: vec![],
                         site_ids: vec![],
+                        site_role_labels: vec![],
                     default_site_id: None,
                     sole_admin_hostnames: vec![],
                     }).collect()
@@ -1576,13 +1619,16 @@ pub async fn add_site_access(
                         let _ = crate::models::site_user::remove(&state.db, site_uuid, old_owner_id).await;
                     }
                     Some("demote_author") => {
-                        // Demote displaced admin to author on this site.
-                        let _ = sqlx::query(
-                            "UPDATE site_users SET role = 'author' WHERE site_id = $1 AND user_id = $2"
+                        // Demote displaced admin to author on this site: drop their
+                        // 'admin' role specifically (not a blanket role UPDATE, since
+                        // under multi-role they may hold other roles here too) and
+                        // ensure an 'author' role exists.
+                        let _ = crate::models::site_user::remove_role(
+                            &state.db, site_uuid, old_owner_id, crate::models::site_user::SiteRole::Admin,
+                        ).await;
+                        let _ = crate::models::site_user::add(
+                            &state.db, site_uuid, old_owner_id, crate::models::site_user::SiteRole::Author, None,
                         )
-                        .bind(site_uuid)
-                        .bind(old_owner_id)
-                        .execute(&state.db)
                         .await;
                     }
                     _ => {
@@ -1644,6 +1690,9 @@ pub async fn add_site_access(
         }
     };
 
+    // `role` above is sanitised to always be one of "admin"/"editor"/"author"/"subscriber".
+    let role = crate::models::site_user::SiteRole::from_str(role)
+        .expect("add_site_access role is sanitised to a valid SiteRole above");
     if let Err(e) = crate::models::site_user::add(&state.db, site_uuid, user_id, role, Some(admin.user.id)).await {
         tracing::warn!("failed to add user {} to site {}: {:?}", user_id, site_uuid, e);
         return Redirect::to(&format!("/admin/users/{}/site-access?error=db_error", user_id)).into_response();

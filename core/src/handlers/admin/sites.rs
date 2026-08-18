@@ -7,11 +7,10 @@ const DEFAULT_MAINTENANCE_MESSAGE: &str =
 /// site's own settings (config, maintenance mode, email providers).
 pub(crate) async fn require_site_manager(state: &AppState, admin: &AdminUser, site: &crate::models::site::Site, ) -> bool {
     let is_owner = site.owner_user_id == Some(admin.user.id);
-    let has_role = matches!(
-        crate::models::site_user::get_role(&state.db, site.id, admin.user.id)
-            .await.ok().flatten().as_deref(),
-        Some("admin" | "site_admin")
-    );
+    let roles = crate::models::site_user::list_roles_for_user_and_site(&state.db, site.id, admin.user.id)
+        .await
+        .unwrap_or_default();
+    let has_role = roles.contains(&crate::models::site_user::SiteRole::Admin);
     admin.caps.is_global_admin || is_owner || has_role
 }
 
@@ -42,7 +41,7 @@ use uuid::Uuid;
 
 use std::path::Path as FsPath;
 use crate::app_state::AppState;
-use crate::middleware::admin_auth::{AdminUser, SESSION_CURRENT_SITE_KEY};
+use crate::middleware::admin_auth::{AdminUser, SESSION_CURRENT_ROLE_KEY, SESSION_CURRENT_SITE_KEY};
 use crate::handlers::admin::themes::copy_dir_all;
 use admin::pages::sites::{SiteRow, SiteSettingsData};
 use tower_sessions::Session;
@@ -506,14 +505,15 @@ pub async fn switch(
         let allowed = if admin.caps.is_global_admin {
             true
         } else {
-            crate::models::site_user::get_role(&state.db, uuid, admin.user.id)
+            crate::models::site_user::has_any_role(&state.db, uuid, admin.user.id)
                 .await
-                .ok()
-                .flatten()
-                .is_some()
+                .unwrap_or(false)
         };
         if allowed {
             let _ = session.insert(SESSION_CURRENT_SITE_KEY, uuid.to_string()).await;
+            // A different site can have a completely different role set for the
+            // same user — any pinned role must not carry over.
+            let _ = session.remove::<String>(SESSION_CURRENT_ROLE_KEY).await;
         } else {
             tracing::warn!("site_admin {} attempted to switch to unauthorised site {}", admin.user.id, uuid);
         }
@@ -532,6 +532,7 @@ pub async fn go_home(
 ) -> impl IntoResponse {
     if let Some(default_site_id) = admin.user.default_site_id {
         let _ = session.insert(SESSION_CURRENT_SITE_KEY, default_site_id.to_string()).await;
+        let _ = session.remove::<String>(SESSION_CURRENT_ROLE_KEY).await;
     }
     // Only allow relative paths starting with /admin to prevent open-redirect.
     let next = params.get("next")
@@ -554,13 +555,7 @@ pub async fn site_settings(
         Ok(s) => s,
         Err(_) => return Redirect::to("/admin/sites").into_response(),
     };
-    let is_owner = site.owner_user_id == Some(admin.user.id);
-    let has_role = matches!(
-        crate::models::site_user::get_role(&state.db, id, admin.user.id)
-            .await.ok().flatten().as_deref(),
-        Some("admin" | "site_admin")
-    );
-    if !admin.caps.is_global_admin && !is_owner && !has_role {
+    if !require_site_manager(&state, &admin, &site).await {
         return (axum::http::StatusCode::FORBIDDEN, "Forbidden").into_response();
     }
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
@@ -708,13 +703,7 @@ pub async fn save_site_config(
         Ok(s) => s,
         Err(_) => return Redirect::to("/admin/sites").into_response(),
     };
-    let is_owner = site.owner_user_id == Some(admin.user.id);
-    let has_role = matches!(
-        crate::models::site_user::get_role(&state.db, id, admin.user.id)
-            .await.ok().flatten().as_deref(),
-        Some("admin" | "site_admin")
-    );
-    if !admin.caps.is_global_admin && !is_owner && !has_role {
+    if !require_site_manager(&state, &admin, &site).await {
         return (axum::http::StatusCode::FORBIDDEN, "Forbidden").into_response();
     }
 
@@ -754,13 +743,7 @@ pub async fn save_maintenance(
         Ok(s) => s,
         Err(_) => return Redirect::to("/admin/sites").into_response(),
     };
-    let is_owner = site.owner_user_id == Some(admin.user.id);
-    let has_role = matches!(
-        crate::models::site_user::get_role(&state.db, id, admin.user.id)
-            .await.ok().flatten().as_deref(),
-        Some("admin" | "site_admin")
-    );
-    if !admin.caps.is_global_admin && !is_owner && !has_role {
+    if !require_site_manager(&state, &admin, &site).await {
         return (axum::http::StatusCode::FORBIDDEN, "Forbidden").into_response();
     }
 

@@ -22,7 +22,7 @@ pub async fn list(
         .map(|s| s.as_str())
         .filter(|s| ["image", "video", "audio", "document"].contains(s));
 
-    let uploaded_by = if admin.site_role == "author" { Some(admin.user.id) } else { None };
+    let uploaded_by = if admin.site_role == Some(crate::models::site_user::SiteRole::Author) { Some(admin.user.id) } else { None };
 
     let folders = if let Some(sid) = admin.site_id {
         crate::models::media_folder::list(&state.db, sid).await.unwrap_or_default()
@@ -244,7 +244,7 @@ pub async fn api_grid(
         .map(|s| s.as_str())
         .filter(|s| ["image", "video", "audio", "document"].contains(s));
 
-    let uploaded_by = if admin.site_role == "author" { Some(admin.user.id) } else { None };
+    let uploaded_by = if admin.site_role == Some(crate::models::site_user::SiteRole::Author) { Some(admin.user.id) } else { None };
 
     let folders = if let Some(sid) = admin.site_id {
         crate::models::media_folder::list(&state.db, sid).await.unwrap_or_default()
@@ -397,7 +397,7 @@ pub async fn delete(
                 return (axum::http::StatusCode::FORBIDDEN, "Forbidden").into_response();
             }
             // Author restriction: authors can only delete their own uploads.
-            if admin.site_role == "author" && media.uploaded_by != admin.user.id {
+            if admin.site_role == Some(crate::models::site_user::SiteRole::Author) && media.uploaded_by != admin.user.id {
                 tracing::warn!(
                     "media delete forbidden: author {} tried to delete media {} uploaded by {}",
                     admin.user.id, id, media.uploaded_by
@@ -524,7 +524,7 @@ pub async fn api_list(
         file_size: i64,
     }
 
-    let uploaded_by = if admin.site_role == "author" { Some(admin.user.id) } else { None };
+    let uploaded_by = if admin.site_role == Some(crate::models::site_user::SiteRole::Author) { Some(admin.user.id) } else { None };
     let raw = crate::models::media::list(&state.db, admin.site_id, uploaded_by, None, 500, 0)
         .await
         .unwrap_or_else(|e| {
