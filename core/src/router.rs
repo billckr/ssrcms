@@ -7,7 +7,7 @@ use axum::{
     routing::{get, post},
     Router,
 };
-use tower_http::{services::ServeDir, trace::TraceLayer};
+use tower_http::{services::ServeDir, set_header::SetResponseHeaderLayer, trace::TraceLayer};
 use tower_sessions::SessionManagerLayer;
 use tower_sessions_sqlx_store::PostgresStore;
 
@@ -20,13 +20,18 @@ use crate::handlers::admin::{activity_log, analytics as admin_analytics, themes,
 /// Without this, the browser's back button shows a stale cached copy of a
 /// protected page after logout. `no-store` is stronger than `no-cache` — it
 /// tells the browser not to write the response to any cache at all.
+///
+/// Only applies when the handler didn't already set its own `Cache-Control`
+/// — a handler serving an asset that's safe (and meant) to cache, like the
+/// theme screenshot endpoint's `public, max-age=3600`, knows better than
+/// this blanket page-level policy, which only cares about HTML views.
 async fn no_store_for_protected(req: Request, next: Next) -> Response {
     let is_protected = {
         let p = req.uri().path();
         p.starts_with("/admin") || p.starts_with("/account")
     };
     let mut response = next.run(req).await;
-    if is_protected {
+    if is_protected && !response.headers().contains_key(axum::http::header::CACHE_CONTROL) {
         response.headers_mut().insert(
             axum::http::header::CACHE_CONTROL,
             axum::http::HeaderValue::from_static("no-store"),
@@ -290,7 +295,22 @@ pub fn build(
         .route("/admin/form-data-analytics/{name}/export", get(admin_forms::export_csv))
         .route("/admin/form-data-analytics/{name}/toggle-block", post(admin_forms::toggle_block))
         // ── Static files ───────────────────────────────────────────────────
-        .nest_service("/admin/static", ServeDir::new("admin/static"))
+        // CSS/JS/icons here have no cache-busting in their URLs (no ?v=, no
+        // content hash) — a new deploy overwrites the same filenames. So this
+        // uses a short max-age plus must-revalidate rather than a long/
+        // "immutable" cache: browsers avoid re-fetching within the window,
+        // but a deploy is visible within minutes via ServeDir's built-in
+        // Last-Modified conditional-GET support (cheap 304s), not stale for
+        // however long a longer max-age would otherwise hide it.
+        .nest_service(
+            "/admin/static",
+            tower::ServiceBuilder::new()
+                .layer(SetResponseHeaderLayer::if_not_present(
+                    axum::http::header::CACHE_CONTROL,
+                    axum::http::HeaderValue::from_static("public, max-age=300, must-revalidate"),
+                ))
+                .service(ServeDir::new("admin/static")),
+        )
         .layer(admin_session_layer);
 
     let router = public_router.merge(admin_router);
