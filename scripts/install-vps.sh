@@ -583,10 +583,10 @@ gate_on_requirements() {
 
 do_build() {
   cd "$REPO_DIR"
-  cargo build --release --bin synaptic --bin synap
-  BIN_SYNAPTIC="$REPO_DIR/target/release/synaptic"
+  cargo build --release --bin synapcms --bin synap
+  BIN_SYNAPCMS="$REPO_DIR/target/release/synapcms"
   BIN_CLI="$REPO_DIR/target/release/synap"
-  [[ -f "$BIN_SYNAPTIC" && -f "$BIN_CLI" ]] || { echo "Build did not produce expected binaries." >&2; return 1; }
+  [[ -f "$BIN_SYNAPCMS" && -f "$BIN_CLI" ]] || { echo "Build did not produce expected binaries." >&2; return 1; }
 
   # media-app (media library WASM island) — built locally like everything
   # else here; only the resulting JS/WASM output ships to the VPS as static
@@ -662,7 +662,7 @@ do_ship_files() {
   ssh_run "systemctl stop synapcms 2>/dev/null; systemctl disable synapcms 2>/dev/null; true"
   ssh_run "mkdir -p ${INSTALL_DIR}/uploads ${INSTALL_DIR}/search-index ${INSTALL_DIR}/themes/sites ${INSTALL_DIR}/plugins/sites"
 
-  scp_run "$BIN_SYNAPTIC" "${VPS_USER}@${VPS_HOST}:${INSTALL_DIR}/synaptic"
+  scp_run "$BIN_SYNAPCMS" "${VPS_USER}@${VPS_HOST}:${INSTALL_DIR}/synapcms"
   scp_run "$BIN_CLI"      "${VPS_USER}@${VPS_HOST}:${INSTALL_DIR}/synap"
 
   ssh_run "mkdir -p ${INSTALL_DIR}/admin"
@@ -674,13 +674,13 @@ do_ship_files() {
            mkdir -p ${INSTALL_DIR}/admin && tar xzf /tmp/ss-install-assets.tar.gz -C ${INSTALL_DIR}/admin --overwrite static 2>/dev/null; \
            rm -f /tmp/ss-install-assets.tar.gz"
 
-  ssh_run "chmod +x ${INSTALL_DIR}/synaptic ${INSTALL_DIR}/synap"
+  ssh_run "chmod +x ${INSTALL_DIR}/synapcms ${INSTALL_DIR}/synap"
   ssh_run "ln -sf ${INSTALL_DIR}/synap /usr/local/bin/synap"
   ssh_run "chown -R ${SYNAPTIC_USER}:${SYNAPTIC_USER} ${INSTALL_DIR}"
 
   # SELinux context (AlmaLinux) — matches install.sh behavior.
   ssh_run "command -v chcon >/dev/null && chcon -Rt var_t ${INSTALL_DIR} 2>/dev/null; \
-           command -v chcon >/dev/null && chcon -t bin_t ${INSTALL_DIR}/synaptic ${INSTALL_DIR}/synap 2>/dev/null; true"
+           command -v chcon >/dev/null && chcon -t bin_t ${INSTALL_DIR}/synapcms ${INSTALL_DIR}/synap 2>/dev/null; true"
   echo "Files copied."
 }
 
@@ -877,8 +877,8 @@ print_summary() {
     echo "   permalinks. Answer the prompts for domain, admin email/username/"
     echo "   password, etc. This also regenerates the Caddyfile/systemd unit for"
     echo "   the values you choose — re-run this script, or 'systemctl reload"
-    echo "   caddy' + 'systemctl restart synapcms', afterwards to pick"
-    echo "   them up.)"
+    echo "   caddy' + 'synap app restart' (from \$INSTALL_DIR — or 'systemctl"
+    echo "   restart synapcms' directly), afterwards to pick them up.)"
   else
     section "Admin Login"
     echo "  Username: ${ADMIN_USERNAME}"

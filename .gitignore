@@ -34,8 +34,8 @@ Thumbs.db
 *:Zone.Identifier
 
 # Application runtime
-synaptic.pid
-.synaptic.pid
+synapcms.pid
+.synapcms.pid
 logs/
 
 # Local deployment and dev artifacts
@@ -44,7 +44,7 @@ logs/
 Caddyfile
 synapcms.service
 /synap
-/synaptic
+/synapcms
 
 # Uploads directory (populated at runtime)
 uploads/

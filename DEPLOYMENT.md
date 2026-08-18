@@ -200,7 +200,7 @@ other sites' data. `--clean` is scoped to `INSTALL_DIR`/`DB_NAME` only.
 
 ```
 /var/www/bckr.dev/
-├── synaptic                  # Binary (deployed, rebuilt every deploy)
+├── synapcms                  # Binary (deployed, rebuilt every deploy)
 ├── synap                 # CLI (deployed)
 ├── .env                      # Environment config (generated once, preserved after)
 ├── themes/                   # Theme files (deployed)

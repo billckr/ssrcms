@@ -31,7 +31,7 @@ pub enum ThemeAction {
         #[arg(long, env = "DATABASE_URL", hide = true)]
         database_url: Option<String>,
         /// Path to the server PID file (used to signal a live reload without restart)
-        #[arg(long, default_value = "synaptic.pid")]
+        #[arg(long, default_value = "synapcms.pid")]
         pid_file: String,
     },
     /// Remove a site's local copy of a theme (never touches the global original)
@@ -52,7 +52,7 @@ pub enum ThemeAction {
     /// Reload the active theme's templates from disk without restarting (sends SIGUSR1)
     Reload {
         /// Path to the server PID file
-        #[arg(long, default_value = "synaptic.pid")]
+        #[arg(long, default_value = "synapcms.pid")]
         pid_file: String,
     },
 }

@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 
 [[bin]]
-name = "synaptic"
+name = "synapcms"
 path = "src/main.rs"
 
 [lib]

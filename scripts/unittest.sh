@@ -36,7 +36,7 @@ mapfile -t result_lines < <(echo "$output" | grep "^test result:")
 labels=(
     "admin unit tests"
     "synaptic-core unit tests"
-    "synaptic binary (main.rs)"
+    "synapcms binary (main.rs)"
     "model_crud integration"
     "routes integration"
     "theme_e2e integration"

@@ -9,7 +9,7 @@ Synaptic Signals supports running multiple client sites from a single database a
 - **Single PostgreSQL database** — all sites share one DB. Content is isolated by a `site_id` UUID column on `posts`, `taxonomies`, `media`, and `site_settings`.
 - **Domain-based routing** — the `Host` header is matched against the `sites` table. Each request is scoped to the matching site's settings and content.
 - **Global user pool** — users exist once across all sites. Per-site roles are stored in the `site_users` junction table.
-- **Single binary** — one running `synaptic` process serves all sites. Use Caddy as a reverse proxy with multiple domain names pointing to the same port.
+- **Single binary** — one running `synapcms` process serves all sites. Use Caddy as a reverse proxy with multiple domain names pointing to the same port.
 
 ---
 

@@ -175,7 +175,7 @@ fn default_search_index_path() -> String {
 }
 
 fn default_pid_file() -> String {
-    "synaptic.pid".to_string()
+    "synapcms.pid".to_string()
 }
 
 fn default_smtp_port() -> u16 { 587 }

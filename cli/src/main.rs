@@ -46,7 +46,7 @@ Examples:
   # --setup-service with explicit binaries (skips the target/release ->
   # target/debug autodetect — useful if you built somewhere else)
   synap install --setup-service \\
-    --synaptic-bin target/release/synaptic --synap-bin target/release/synap
+    --synapcms-bin target/release/synapcms --synap-bin target/release/synap
 
   # If preflight detects an existing install (running process, active
   # service, or existing DB data) you're asked Fresh/Coexist/Bail

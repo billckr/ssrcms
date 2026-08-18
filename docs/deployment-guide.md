@@ -24,7 +24,7 @@ cargo build --release
 ```
 
 This produces two binaries in `target/release/`:
-- `synaptic` — the CMS server
+- `synapcms` — the CMS server
 - `synap` — the installer/manager
 
 ---
@@ -37,7 +37,7 @@ sudo mkdir -p /opt/synaptic-signals/uploads
 sudo chown -R www-data:www-data /opt/synaptic-signals
 
 # Copy binaries
-sudo cp target/release/synaptic /opt/synaptic-signals/
+sudo cp target/release/synapcms /opt/synaptic-signals/
 sudo cp target/release/synap /opt/synaptic-signals/
 
 # Copy required runtime files
@@ -316,7 +316,7 @@ Activates a theme by updating `active_theme` in the database, then sends `SIGUSR
 
 Options:
   --database-url <URL>    Database URL (overrides DATABASE_URL env var)
-  --pid-file <PATH>       Path to the server PID file [default: synaptic.pid]
+  --pid-file <PATH>       Path to the server PID file [default: synapcms.pid]
 ```
 
 ```bash
@@ -324,7 +324,7 @@ Options:
 ./synap theme activate claude
 ```
 
-The CLI reads the server's PID from `synaptic.pid` (written to the working directory on startup) and sends `SIGUSR1`. The server reacts by re-reading `active_theme` from the database and hot-reloading the templates. If the server is not running the change is still persisted in the database and will take effect on next start.
+The CLI reads the server's PID from `synapcms.pid` (written to the working directory on startup) and sends `SIGUSR1`. The server reacts by re-reading `active_theme` from the database and hot-reloading the templates. If the server is not running the change is still persisted in the database and will take effect on next start.
 
 **`--pid-file`** is only needed if the server was started from a different directory or if `PID_FILE` was set to a custom path in the server config.
 
@@ -336,8 +336,8 @@ Synaptic Signals supports switching the active theme without restarting the serv
 
 ### How it works
 
-1. **On startup** the server writes its process ID to `synaptic.pid` in the working directory.
-2. **`synap theme activate <name>`** updates `active_theme` in the database, then reads `synaptic.pid` and sends `SIGUSR1` to the server process.
+1. **On startup** the server writes its process ID to `synapcms.pid` in the working directory.
+2. **`synap theme activate <name>`** updates `active_theme` in the database, then reads `synapcms.pid` and sends `SIGUSR1` to the server process.
 3. **The running server** receives `SIGUSR1`, re-reads `active_theme` from the database, and calls `switch_theme()` — reloading all templates from disk into the Tera engine immediately.
 4. The next incoming HTTP request is served by the new theme. No downtime, no restart.
 
@@ -356,7 +356,7 @@ If the server is not currently running, the database is still updated and the ne
 ```bash
 ./synap theme activate claude
 # Theme 'claude' activated in database.
-# No PID file found at 'synaptic.pid' — start the server and it will use the new theme.
+# No PID file found at 'synapcms.pid' — start the server and it will use the new theme.
 ```
 
 ### Custom PID file location
@@ -364,7 +364,7 @@ If the server is not currently running, the database is still updated and the ne
 If the server was started from a different directory, or `PID_FILE` is set to a custom path in the config, pass `--pid-file`:
 
 ```bash
-./synap theme activate claude --pid-file /var/run/synaptic.pid
+./synap theme activate claude --pid-file /var/run/synapcms.pid
 ```
 
 ### What does NOT require a restart
@@ -380,7 +380,7 @@ If the server was started from a different directory, or `PID_FILE` is set to a 
 
 | Change | Reason |
 |--------|--------|
-| Update the `synaptic` binary | New compiled code |
+| Update the `synapcms` binary | New compiled code |
 | Add/remove a plugin | Plugins are loaded at startup |
 | Change `.env` or `synaptic.toml` | Config loaded at startup |
 
@@ -394,7 +394,7 @@ cargo build --release
 
 # 2. Replace binaries (the service will be briefly down)
 sudo systemctl stop synapcms
-sudo cp target/release/synaptic     /opt/synaptic-signals/synaptic
+sudo cp target/release/synapcms     /opt/synaptic-signals/synapcms
 sudo cp target/release/synap /opt/synaptic-signals/synap
 sudo systemctl start synapcms
 
@@ -408,7 +408,7 @@ sudo /opt/synaptic-signals/synap migrate
 
 ```
 /opt/synaptic-signals/
-├── synaptic              # CMS binary
+├── synapcms              # CMS binary
 ├── synap          # CLI binary
 ├── .env                  # Environment variables (DATABASE_URL, SECRET_KEY, etc.)
 ├── themes/
@@ -417,7 +417,7 @@ sudo /opt/synaptic-signals/synap migrate
 │   └── seo/              # SEO plugin (and any others)
 ├── uploads/              # User-uploaded media files
 ├── search-index/         # Tantivy full-text search index (auto-created)
-└── synaptic.pid          # Server PID (written on startup, removed on exit)
+└── synapcms.pid          # Server PID (written on startup, removed on exit)
 ```
 
 ---
@@ -436,4 +436,4 @@ sudo /opt/synaptic-signals/synap migrate
 | `UPLOADS_DIR` | No | `./uploads` | Path to store uploaded files |
 | `SEARCH_INDEX_PATH` | No | `./search-index` | Path for Tantivy index files |
 | `LOG_LEVEL` | No | `info` | Tracing log level (`trace`, `debug`, `info`, `warn`, `error`) |
-| `PID_FILE` | No | `./synaptic.pid` | Path to write the server PID file on startup |
+| `PID_FILE` | No | `./synapcms.pid` | Path to write the server PID file on startup |

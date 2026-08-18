@@ -1,12 +1,16 @@
-//! Local dev process management — a Rust port of app.sh's start/stop/restart/status/logs
-//! commands, for running `synap app <action>` instead of `./app.sh <action>`.
+//! Process management for both a dev checkout and a production install — a Rust port of
+//! app.sh's start/stop/restart/status/logs commands, for running `synap app <action>` instead
+//! of `./app.sh <action>` in dev, and as the WP-CLI-style production equivalent of
+//! `systemctl <action> synapcms` on a VPS install (see `Mode` below).
 //!
-//! Assumes it's run from the project root (same convention as `synap migrate` / `synap dev
-//! reset`, which app.sh itself always `cd`s into before invoking). Paths (PID file, log file,
-//! binary, search index) are relative to the current directory for that reason.
+//! Assumes it's run from the project root in dev (same convention as `synap migrate` / `synap
+//! dev reset`, which app.sh itself always `cd`s into before invoking) or from the install
+//! directory in production (same convention as `install-vps.sh`'s `INSTALL_DIR`, where `synap`
+//! itself is symlinked onto PATH). Paths (PID file, log file, binary, search index) are
+//! relative to the current directory for that reason.
 //!
 //! Build/rebuild/test/clean-* commands are intentionally NOT ported here — those are cargo
-//! workflows tied to the source tree, not process lifecycle, and stay in app.sh.
+//! workflows tied to the source tree, not process lifecycle, and stay in app.sh (dev-only).
 
 use clap::Subcommand;
 use std::fs;
@@ -19,7 +23,7 @@ use std::time::Duration;
 pub enum AppAction {
     /// Build (if needed) and start the server in the background
     Start {
-        /// Use the release binary (target/release/synaptic) instead of debug
+        /// Use the release binary (target/release/synapcms) instead of debug — dev checkout only
         #[arg(long)]
         release: bool,
     },
@@ -27,7 +31,7 @@ pub enum AppAction {
     Stop,
     /// Stop then start (no rebuild)
     Restart {
-        /// Use the release binary (target/release/synaptic) instead of debug
+        /// Use the release binary (target/release/synapcms) instead of debug — dev checkout only
         #[arg(long)]
         release: bool,
     },
@@ -37,30 +41,48 @@ pub enum AppAction {
     Logs,
 }
 
-/// Verify the current directory actually is the project root before touching
-/// any PID/log/binary paths (all resolved relative to cwd below) — running
-/// from the wrong directory previously failed silently: it would write/read
-/// PID and log files in the wrong place, report "Not running" for an
-/// instance that was actually up, and (via `restart`/`free_port`) kill a
-/// real running server before discovering the replacement couldn't even
-/// find its binary.
-fn require_project_root() -> anyhow::Result<()> {
-    let looks_right = Path::new("Cargo.toml").is_file()
+/// Which kind of directory `synap app` is being run from — its process-management strategy
+/// differs completely between the two:
+///
+/// - `DevCheckout`: a source tree (Cargo.toml + core/ + cli/). The server runs as a plain
+///   nohup'd background process tracked via a PID file — nothing else is managing it, so
+///   `synap app` owns its full lifecycle directly (this is `app.sh`'s original model).
+/// - `ProdInstall`: an `install-vps.sh`-deployed directory (a `synapcms` binary sitting right
+///   in the install root, shipped alongside `synap` itself — no source tree). Here the server
+///   is supervised by systemd (`synapcms.service`, `Restart=always`), so `synap app` must NOT
+///   nohup/kill it directly — doing so would either leave a duplicate process running (systemd
+///   auto-restarting what looks like a crash) or fight the supervisor. Instead this mode is a
+///   thin, friendlier wrapper around `systemctl`/`journalctl`, the same way `wp cli` delegates
+///   to the actual running webserver rather than managing it itself.
+enum Mode {
+    DevCheckout,
+    ProdInstall,
+}
+
+fn detect_mode() -> anyhow::Result<Mode> {
+    let is_dev_checkout = Path::new("Cargo.toml").is_file()
         && Path::new("core").is_dir()
         && Path::new("cli").is_dir();
-    if !looks_right {
-        let cwd = std::env::current_dir().map(|p| p.display().to_string()).unwrap_or_default();
-        anyhow::bail!(
-            "synap app must be run from the project root (expected to find Cargo.toml, \
-             core/, and cli/ in the current directory — got '{cwd}').\n\
-             cd to the project root and try again."
-        );
+    if is_dev_checkout {
+        return Ok(Mode::DevCheckout);
     }
-    Ok(())
+    // install-vps.sh ships the `synapcms` binary directly into the install root (alongside
+    // `synap` itself, which is what's actually on PATH when this runs) — that's the signature
+    // of a production install directory, as opposed to some unrelated directory.
+    if Path::new("synapcms").is_file() {
+        return Ok(Mode::ProdInstall);
+    }
+    let cwd = std::env::current_dir().map(|p| p.display().to_string()).unwrap_or_default();
+    anyhow::bail!(
+        "synap app must be run from either the project root of a dev checkout (expected to \
+         find Cargo.toml, core/, and cli/) or a production install directory (expected to \
+         find a `synapcms` binary) — found neither in '{cwd}'.\n\
+         cd to the right directory and try again."
+    );
 }
 
 fn pid_file_in(dir: &Path) -> PathBuf {
-    dir.join(".synaptic.pid")
+    dir.join(".synapcms.pid")
 }
 
 fn pid_file() -> PathBuf {
@@ -73,9 +95,9 @@ fn log_file() -> PathBuf {
 
 fn binary_path(release: bool) -> PathBuf {
     if release {
-        PathBuf::from("target/release/synaptic")
+        PathBuf::from("target/release/synapcms")
     } else {
-        PathBuf::from("target/debug/synaptic")
+        PathBuf::from("target/debug/synapcms")
     }
 }
 
@@ -169,6 +191,83 @@ async fn check_postgres() -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Run `systemctl <action> synapcms`, streaming its own output straight through — its error
+/// messages (e.g. "Interactive authentication required", permission denied when not root) are
+/// already clear, so there's no value in re-wrapping them.
+fn systemctl(action: &str) -> anyhow::Result<()> {
+    let status = Command::new("systemctl").args([action, "synapcms"]).status()?;
+    if !status.success() {
+        anyhow::bail!("systemctl {action} synapcms failed (exit {status}).");
+    }
+    Ok(())
+}
+
+fn systemctl_main_pid() -> Option<u32> {
+    let out = Command::new("systemctl")
+        .args(["show", "--property=MainPID", "--value", "synapcms"])
+        .output()
+        .ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    let pid: u32 = String::from_utf8_lossy(&out.stdout).trim().parse().ok()?;
+    if pid == 0 { None } else { Some(pid) } // MainPID is 0 when the unit isn't running
+}
+
+async fn cmd_start_prod() -> anyhow::Result<()> {
+    if systemctl_main_pid().is_some() {
+        println!("Already running. Use 'synap app restart' to restart.");
+        return Ok(());
+    }
+    check_postgres().await?;
+    check_caddy();
+    println!("Starting SynapCMS (systemctl start synapcms)...");
+    systemctl("start")?;
+    std::thread::sleep(Duration::from_secs(1));
+    match systemctl_main_pid() {
+        Some(pid) => println!("Started (PID {pid}) — listening on port {}", port()),
+        None => println!("Started, but systemd doesn't report it as running yet — check 'synap app status'."),
+    }
+    Ok(())
+}
+
+fn cmd_stop_prod() -> anyhow::Result<()> {
+    if systemctl_main_pid().is_none() {
+        println!("Not running.");
+        return Ok(());
+    }
+    println!("Stopping server (systemctl stop synapcms)...");
+    systemctl("stop")?;
+    println!("Stopped.");
+    Ok(())
+}
+
+async fn cmd_restart_prod() -> anyhow::Result<()> {
+    check_postgres().await?;
+    println!("Restarting SynapCMS (systemctl restart synapcms)...");
+    systemctl("restart")?;
+    std::thread::sleep(Duration::from_secs(1));
+    match systemctl_main_pid() {
+        Some(pid) => println!("Started (PID {pid}) — listening on port {}", port()),
+        None => println!("Restarted, but systemd doesn't report it as running yet — check 'synap app status'."),
+    }
+    Ok(())
+}
+
+fn cmd_status_prod() {
+    match systemctl_main_pid() {
+        Some(pid) => println!("Running (PID {pid}) on port {}", port()),
+        None => println!("Not running."),
+    }
+    check_caddy();
+}
+
+fn cmd_logs_prod() -> anyhow::Result<()> {
+    println!("Tailing journalctl -u synapcms (Ctrl+C to exit)...");
+    Command::new("journalctl").args(["-u", "synapcms", "-n", "50", "-f"]).status()?;
+    Ok(())
+}
+
 async fn cmd_start(release: bool) -> anyhow::Result<()> {
     if let Some(pid) = running_pid() {
         println!("Already running (PID {pid}). Use 'synap app restart' to restart.");
@@ -181,7 +280,7 @@ async fn cmd_start(release: bool) -> anyhow::Result<()> {
     if !binary.exists() {
         println!("Binary not found — building ({})...", if release { "release" } else { "debug" });
         let mut cmd = Command::new("cargo");
-        cmd.arg("build").arg("--bin").arg("synaptic");
+        cmd.arg("build").arg("--bin").arg("synapcms");
         if release {
             cmd.arg("--release");
         }
@@ -328,15 +427,26 @@ fn print_tail(path: &Path, n: usize) {
 }
 
 pub async fn run(action: AppAction) -> anyhow::Result<()> {
-    require_project_root()?;
-    match action {
-        AppAction::Start { release } => cmd_start(release).await,
-        AppAction::Stop => cmd_stop(),
-        AppAction::Restart { release } => cmd_restart(release).await,
-        AppAction::Status => {
-            cmd_status();
-            Ok(())
-        }
-        AppAction::Logs => cmd_logs(),
+    match detect_mode()? {
+        Mode::DevCheckout => match action {
+            AppAction::Start { release } => cmd_start(release).await,
+            AppAction::Stop => cmd_stop(),
+            AppAction::Restart { release } => cmd_restart(release).await,
+            AppAction::Status => {
+                cmd_status();
+                Ok(())
+            }
+            AppAction::Logs => cmd_logs(),
+        },
+        Mode::ProdInstall => match action {
+            AppAction::Start { .. } => cmd_start_prod().await,
+            AppAction::Stop => cmd_stop_prod(),
+            AppAction::Restart { .. } => cmd_restart_prod().await,
+            AppAction::Status => {
+                cmd_status_prod();
+                Ok(())
+            }
+            AppAction::Logs => cmd_logs_prod(),
+        },
     }
 }

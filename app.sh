@@ -23,9 +23,9 @@ set -euo pipefail
 # ── Configuration ─────────────────────────────────────────────────────────────
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PID_FILE="$SCRIPT_DIR/.synaptic.pid"
+PID_FILE="$SCRIPT_DIR/.synapcms.pid"
 LOG_FILE="$SCRIPT_DIR/logs/synapcms.log"
-BINARY="$SCRIPT_DIR/target/debug/synaptic"
+BINARY="$SCRIPT_DIR/target/debug/synapcms"
 SEARCH_INDEX="$SCRIPT_DIR/search-index"
 
 # Read PORT from .env if present, default to 3000
@@ -239,7 +239,7 @@ cmd_logs() {
 cmd_build() {
     log "Building (debug)..."
     cd "$SCRIPT_DIR"
-    cargo build --bin synaptic
+    cargo build --bin synapcms
     build_wasm
     log "Build complete: $BINARY"
 }
@@ -247,9 +247,9 @@ cmd_build() {
 cmd_build_release() {
     log "Building (release)..."
     cd "$SCRIPT_DIR"
-    cargo build --release --bin synaptic
+    cargo build --release --bin synapcms
     build_wasm
-    BINARY="$SCRIPT_DIR/target/release/synaptic"
+    BINARY="$SCRIPT_DIR/target/release/synapcms"
     log "Build complete: $BINARY"
 }
 

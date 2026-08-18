@@ -232,8 +232,8 @@ cargo build --release
 ```
 
 Binaries are written to:
-- `target/debug/synaptic` and `target/debug/synap`
-- `target/release/synaptic` and `target/release/synap`
+- `target/debug/synapcms` and `target/debug/synap`
+- `target/release/synapcms` and `target/release/synap`
 
 ---
 
@@ -360,7 +360,7 @@ If you want automatic restarts on every file save, use `cargo-watch` (runs the s
 
 ```bash
 cargo install cargo-watch
-cargo watch -x "run --bin synaptic"
+cargo watch -x "run --bin synapcms"
 ```
 
 ---
@@ -391,7 +391,7 @@ fuser -k 3000/tcp
 Either source your `.env` manually or ensure it exists:
 ```bash
 export $(grep -v '^#' .env | xargs)
-cargo run --bin synaptic
+cargo run --bin synapcms
 ```
 
 Or just make sure the `.env` file is in the workspace root — the server loads it automatically via `dotenvy`.

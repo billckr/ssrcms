@@ -110,14 +110,14 @@ pub struct InstallArgs {
     #[arg(long, env = "SYNAP_SETUP_SERVICE")]
     pub setup_service: bool,
 
-    /// Path to the built `synaptic` binary to install as {install_dir}/synaptic
-    /// when --setup-service is used. Defaults to target/release/synaptic (then
-    /// target/debug/synaptic) relative to the current directory.
+    /// Path to the built `synapcms` binary to install as {install_dir}/synapcms
+    /// when --setup-service is used. Defaults to target/release/synapcms (then
+    /// target/debug/synapcms) relative to the current directory.
     #[arg(long)]
-    pub synaptic_bin: Option<String>,
+    pub synapcms_bin: Option<String>,
 
     /// Path to the built `synap` CLI binary to install as {install_dir}/synap
-    /// when --setup-service is used. Defaults similarly to synaptic_bin.
+    /// when --setup-service is used. Defaults similarly to synapcms_bin.
     #[arg(long)]
     pub synap_bin: Option<String>,
 
@@ -884,7 +884,7 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
     write_env_key_if_absent(&env_path, "LOG_LEVEL", "info");
 
     if do_setup_service {
-        setup_local_service(&install_dir, output_dir, &domain, args.synaptic_bin.as_deref(), args.synap_bin.as_deref())?;
+        setup_local_service(&install_dir, output_dir, &domain, args.synapcms_bin.as_deref(), args.synap_bin.as_deref())?;
     }
 
     // ── Install Summary ────────────────────────────────────────────────────
@@ -930,7 +930,7 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
 
     // In non-interactive mode the install script handles deployment — skip the manual steps.
     if !ni {
-        let pid_file = std::path::Path::new(&install_dir).join(".synaptic.pid");
+        let pid_file = std::path::Path::new(&install_dir).join(".synapcms.pid");
         let app_sh   = std::path::Path::new(&install_dir).join("app.sh");
 
         println!("\n── Next Steps ───────────────────────────────────────────");
@@ -1250,7 +1250,7 @@ fn backup_if_exists(live_path: &str, backup_dir: &std::path::Path, label: &str) 
 }
 
 /// Local equivalent of install-vps.sh's do_ship_files (binary placement only)
-/// + do_caddy_systemd: places the built binaries at {install_dir}/{synaptic,synap},
+/// + do_caddy_systemd: places the built binaries at {install_dir}/{synapcms,synap},
 /// copies the already-generated Caddyfile/service files into place, and
 /// enables/starts both Caddy and the synapcms service. No ssh/scp —
 /// everything runs directly on this machine, gated by an explicit opt-in.
@@ -1261,28 +1261,28 @@ fn setup_local_service(
     install_dir: &str,
     output_dir: &std::path::Path,
     domain: &str,
-    synaptic_bin_arg: Option<&str>,
+    synapcms_bin_arg: Option<&str>,
     synap_bin_arg: Option<&str>,
 ) -> anyhow::Result<()> {
     println!("\n── Local Service Setup ──────────────────────────────────");
     check_local_service_requirements()?;
 
-    let synaptic_src = resolve_binary(synaptic_bin_arg, "synaptic")?;
+    let synapcms_src = resolve_binary(synapcms_bin_arg, "synapcms")?;
     let synap_src    = resolve_binary(synap_bin_arg, "synap")?;
-    let synaptic_dst = std::path::Path::new(install_dir).join("synaptic");
+    let synapcms_dst = std::path::Path::new(install_dir).join("synapcms");
     let synap_dst    = std::path::Path::new(install_dir).join("synap");
-    std::fs::copy(&synaptic_src, &synaptic_dst)
-        .map_err(|e| anyhow::anyhow!("Failed to copy {} -> {}: {e}", synaptic_src.display(), synaptic_dst.display()))?;
+    std::fs::copy(&synapcms_src, &synapcms_dst)
+        .map_err(|e| anyhow::anyhow!("Failed to copy {} -> {}: {e}", synapcms_src.display(), synapcms_dst.display()))?;
     std::fs::copy(&synap_src, &synap_dst)
         .map_err(|e| anyhow::anyhow!("Failed to copy {} -> {}: {e}", synap_src.display(), synap_dst.display()))?;
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        for p in [&synaptic_dst, &synap_dst] {
+        for p in [&synapcms_dst, &synap_dst] {
             let _ = std::fs::set_permissions(p, std::fs::Permissions::from_mode(0o755));
         }
     }
-    println!("  Installed binaries to {}/{{synaptic,synap}}", install_dir);
+    println!("  Installed binaries to {}/{{synapcms,synap}}", install_dir);
 
     let generated_caddy = output_dir.join("Caddyfile");
     let generated_unit  = output_dir.join("synapcms.service");
