@@ -29,6 +29,8 @@ done.
 
 - [ ] decide how (or whether) to surface the install-wide (.env MAILGUN_*) email fallback account on a site's Email Settings tab — right now it's active but invisible in the UI when a form has no provider selected.
 
+- [ ] form_submissions.data has no GIN or expression index, so filtering by a specific field's value (not listing/paginating, but "find every submission where email = x") would currently mean scanning within whatever the site+form index already narrowed down to. That's fine today because nothing does that yet — and if it's ever needed, it's a single CREATE INDEX on the specific field, not a redesign.
+
 ## Done
 
 - [x] change the text field colors on post page — they were white/bright for a dark theme; rolled out site-wide via --field-bg/--field-text

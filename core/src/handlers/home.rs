@@ -332,6 +332,7 @@ pub(crate) async fn build_post_context(
     // computed from the raw (unexpanded) content, which is what we want.
     if let Some(site_id) = p.site_id {
         ctx.content = crate::models::form_def::expand_embeds(&state.db, site_id, &ctx.content).await;
+        ctx.content = crate::models::poll_def::expand_embeds(&state.db, site_id, &ctx.content).await;
     }
 
     Ok(ctx)

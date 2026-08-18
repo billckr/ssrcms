@@ -13,7 +13,7 @@ use crate::app_state::AppState;
 use crate::middleware::admin_auth::AdminUser;
 use crate::models::form_def::{self, CreateFormDef, FormField, FormSettings, UpdateFormDef};
 
-use admin::pages::form_designer::{forms_list_fragment, render_editor, render_list, FieldRow, FormEditData, FormRow, ProviderOption};
+use admin::pages::form_designer::{forms_list_fragment, render_editor, FieldRow, FormEditData, FormRow, ProviderOption};
 
 fn require_forms_cap(admin: &AdminUser) -> Result<(), Response> {
     if !admin.caps.can_manage_forms {
@@ -29,12 +29,19 @@ fn require_site_id(admin: &AdminUser) -> Result<Uuid, Response> {
 
 // ── list ─────────────────────────────────────────────────────────────────────
 
+/// `/admin/form-designer` (GET, no params) now redirects to the consolidated
+/// `/admin/designer?tab=forms` hub — kept as a route (rather than removed)
+/// so an old bookmark/link still lands somewhere sensible. `?partial=1`
+/// live-search requests still render `forms_list_fragment` directly, since
+/// nothing on the hub page issues those requests today, but the function
+/// stays in case a future hub redesign wants live search back.
 pub async fn list(State(state): State<AppState>, admin: AdminUser, Query(params): Query<HashMap<String, String>>) -> Response {
     if let Err(e) = require_forms_cap(&admin) { return e; }
     let site_id = match require_site_id(&admin) { Ok(id) => id, Err(e) => return e };
 
-    let cs = state.site_hostname(admin.site_id);
-    let ctx = super::page_ctx_full(&state, &admin, &cs).await;
+    if !params.contains_key("partial") {
+        return Redirect::to("/admin/designer?tab=forms").into_response();
+    }
 
     let forms = form_def::list_for_site(&state.db, site_id).await.unwrap_or_default();
     let blocked = crate::models::form_submission::blocked_names(&state.db, site_id).await;
@@ -47,9 +54,6 @@ pub async fn list(State(state): State<AppState>, admin: AdminUser, Query(params)
         updated_at: f.updated_at.format("%Y-%m-%d %H:%M UTC").to_string(),
     }).collect();
 
-    // In-memory search + pagination — same reasoning as /admin/sites: the
-    // list is small enough per site that a second SQL query isn't worth
-    // the added complexity over filtering/slicing the Vec already fetched.
     let search = params.get("search").map(|s| s.trim()).unwrap_or("");
     if !search.is_empty() {
         let needle = search.to_lowercase();
@@ -76,11 +80,7 @@ pub async fn list(State(state): State<AppState>, admin: AdminUser, Query(params)
     let end = (start + PER_PAGE as usize).min(rows.len());
     let page_rows = rows.get(start..end).unwrap_or(&[]);
 
-    if params.contains_key("partial") {
-        return Html(forms_list_fragment(page_rows, page, total_pages, search, sort, dir)).into_response();
-    }
-
-    Html(render_list(page_rows, page, total_pages, search, sort, dir, &ctx, None)).into_response()
+    Html(forms_list_fragment(page_rows, page, total_pages, search, sort, dir)).into_response()
 }
 
 // ── new / edit form ─────────────────────────────────────────────────────────

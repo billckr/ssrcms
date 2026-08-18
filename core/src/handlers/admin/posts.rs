@@ -278,6 +278,7 @@ async fn new_post_type(state: AppState, post_type: &str, site_id: Option<Uuid>, 
         live_url: None,
         preview_url: None,
         saved_forms: fetch_saved_forms(&state, site_id).await,
+        saved_polls: fetch_saved_polls(&state, site_id).await,
         form_analytics: vec![], // brand-new post has no content yet to embed a form in
         created_at: None,
         updated_at: None,
@@ -449,6 +450,7 @@ async fn edit_post_type(state: AppState, id: Uuid, site_id: Option<Uuid>, is_aut
         live_url,
         preview_url,
         saved_forms: fetch_saved_forms(&state, site_id).await,
+        saved_polls: fetch_saved_polls(&state, site_id).await,
         // post.site_id, not site_id (the viewing admin's current session
         // site) — a global admin can open a post belonging to a different
         // site than the one they're currently in, and forms are looked up
@@ -575,6 +577,7 @@ pub async fn save_new(
             live_url: None,
             preview_url: None,
             saved_forms: fetch_saved_forms(&state, admin.site_id).await,
+        saved_polls: fetch_saved_polls(&state, admin.site_id).await,
             form_analytics: vec![],
             created_at: None,
             updated_at: None,
@@ -657,6 +660,7 @@ pub async fn save_new(
                 live_url: None,
                 preview_url: None,
                 saved_forms: fetch_saved_forms(&state, admin.site_id).await,
+        saved_polls: fetch_saved_polls(&state, admin.site_id).await,
                 form_analytics: vec![],
                 created_at: None,
                 updated_at: None,
@@ -753,6 +757,7 @@ pub async fn save_edit(
             live_url: None,
             preview_url: None,
             saved_forms: fetch_saved_forms(&state, admin.site_id).await,
+        saved_polls: fetch_saved_polls(&state, admin.site_id).await,
             form_analytics: vec![],
             created_at: None,
             updated_at: None,
@@ -856,6 +861,7 @@ pub async fn save_edit(
                 live_url: None,
                 preview_url: None,
                 saved_forms: fetch_saved_forms(&state, admin.site_id).await,
+        saved_polls: fetch_saved_polls(&state, admin.site_id).await,
             form_analytics: vec![],
                 created_at: None,
                 updated_at: None,
@@ -1142,6 +1148,20 @@ async fn fetch_saved_forms(state: &AppState, site_id: Option<Uuid>) -> Vec<(Stri
         })
         .into_iter()
         .map(|f| (f.slug, f.name))
+        .collect()
+}
+
+/// (slug, name) pairs for every saved poll on this site — powers the
+/// editor's "Insert Poll" picker. Mirrors `fetch_saved_forms`.
+async fn fetch_saved_polls(state: &AppState, site_id: Option<Uuid>) -> Vec<(String, String)> {
+    let Some(site_id) = site_id else { return vec![] };
+    crate::models::poll_def::list_for_site(&state.db, site_id).await
+        .unwrap_or_else(|e| {
+            tracing::warn!("failed to fetch saved polls: {:?}", e);
+            vec![]
+        })
+        .into_iter()
+        .map(|p| (p.slug, p.name))
         .collect()
 }
 

@@ -12,8 +12,8 @@ use tower_sessions::SessionManagerLayer;
 use tower_sessions_sqlx_store::PostgresStore;
 
 use crate::app_state::AppState;
-use crate::handlers::{account, archive, auth, comment as comment_handler, form as form_handler, home, metrics as metrics_handler, page, plugin_route, post as post_handler, post_unlock, recover, search, subscribe, theme_static, uploads};
-use crate::handlers::admin::{activity_log, analytics as admin_analytics, themes, themes_editor, themes_publish, themes_upload, builder as admin_builder, comments as admin_comments, dashboard, dev_tools, documentation as admin_documentation, email_providers as admin_email_providers, form_designer as admin_form_designer, forms as admin_forms, logo_upload, media, menus as admin_menus, posts, profile, role_picker, settings, site_settings, sites as admin_sites, taxonomy, upload, users};
+use crate::handlers::{account, archive, auth, comment as comment_handler, form as form_handler, poll as poll_handler, home, metrics as metrics_handler, page, plugin_route, post as post_handler, post_unlock, recover, search, subscribe, theme_static, uploads};
+use crate::handlers::admin::{activity_log, analytics as admin_analytics, themes, themes_editor, themes_publish, themes_upload, builder as admin_builder, comments as admin_comments, dashboard, designer_hub as admin_designer_hub, dev_tools, documentation as admin_documentation, email_providers as admin_email_providers, form_designer as admin_form_designer, forms as admin_forms, logo_upload, media, menus as admin_menus, poll_designer as admin_poll_designer, poll_results as admin_poll_results, posts, profile, role_picker, settings, site_settings, sites as admin_sites, taxonomy, upload, users};
 
 /// Prevent browsers from caching admin and account pages.
 ///
@@ -97,6 +97,9 @@ pub fn build(
         .route("/sitemap.xml", get(plugin_route::sitemap))
         // ── Public form submissions ────────────────────────────────────────
         .route("/form/{name}", post(form_handler::submit))
+        // ── Public poll voting ──────────────────────────────────────────────
+        .route("/poll/{slug}", post(poll_handler::submit))
+        .route("/poll/{slug}/results", get(poll_handler::results))
         // ── Subscriber signup ──────────────────────────────────────────────
         .route("/subscribe", get(subscribe::subscribe_form).post(subscribe::subscribe_post))
         // ── Public login (subscriber-facing) ───────────────────────────────
@@ -266,11 +269,19 @@ pub fn build(
         .route("/admin/sites/{id}/email-providers/{provider_id}/delete", post(admin_email_providers::delete))
         .route("/admin/sites/{id}/delete", post(admin_sites::delete))
         .route("/admin/sites/{id}/provision-ssl", post(admin_sites::provision_ssl))
-        // ── Admin forms ────────────────────────────────────────────────────
+        // ── Admin forms / polls ──────────────────────────────────────────────
+        .route("/admin/designer", get(admin_designer_hub::list))
         .route("/admin/form-designer", get(admin_form_designer::list).post(admin_form_designer::create))
         .route("/admin/form-designer/new", get(admin_form_designer::new_form))
         .route("/admin/form-designer/{id}", get(admin_form_designer::edit_form).post(admin_form_designer::update))
         .route("/admin/form-designer/{id}/delete", post(admin_form_designer::delete))
+        .route("/admin/designer/polls", post(admin_poll_designer::create))
+        .route("/admin/designer/polls/new", get(admin_poll_designer::new_poll))
+        .route("/admin/designer/polls/{id}", get(admin_poll_designer::edit_poll).post(admin_poll_designer::update))
+        .route("/admin/designer/polls/{id}/delete", post(admin_poll_designer::delete))
+        .route("/admin/designer/polls/{id}/results", get(admin_poll_results::view))
+        .route("/admin/designer/polls/{id}/results/export", get(admin_poll_results::export_csv))
+        .route("/admin/designer/polls/{id}/results/reset", post(admin_poll_results::reset))
         .route("/admin/analytics", get(admin_analytics::list))
         .route("/admin/analytics/form/{id}", get(admin_analytics::form_detail))
         .route("/admin/form-data-analytics/{name}", get(admin_forms::view_form))

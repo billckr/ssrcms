@@ -4438,6 +4438,7 @@ dependencies = [
  "tantivy",
  "tera",
  "thiserror 2.0.19",
+ "time",
  "tokio",
  "toml 0.8.23",
  "tower",

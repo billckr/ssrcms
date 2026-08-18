@@ -15,6 +15,7 @@ path = "src/lib.rs"
 tokio.workspace = true
 axum.workspace = true
 axum-extra.workspace = true
+time.workspace = true
 tower.workspace = true
 tower-http.workspace = true
 tower-sessions.workspace = true

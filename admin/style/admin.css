@@ -166,7 +166,7 @@ a:hover { text-decoration: underline; }
 /* Matches .widget-card-header's grey bar (var(--tint)) — the dashboard's
    "Quick Tools"/"Drafts"/etc panel headers — instead of its own hardcoded
    grey, so it also adapts correctly in dark mode. */
-.site-indicator { margin-left: auto; flex-shrink: 0; font-size: .72rem; font-weight: 700; color: var(--text); background: var(--tint); text-decoration: none; border: 1px solid var(--border); border-radius: 4px; padding: .15rem .5rem; white-space: nowrap; }
+.site-indicator { margin-left: auto; flex-shrink: 0; font-size: .84rem; font-weight: 700; color: var(--text); background: var(--tint); text-decoration: none; border: 1px solid var(--border); border-radius: 4px; padding: .15rem .5rem; white-space: nowrap; }
 .site-indicator:hover { background: var(--border); border-color: var(--border); color: var(--text); }
 .ssl-badge { display:inline-flex; align-items:center; background:none; border:none; padding:0 2px; cursor:default; vertical-align:middle; }
 .ssl-inactive { cursor:pointer; border:none; border-radius:3px; padding:1px 3px; min-width:20px; min-height:20px; justify-content:center; }
@@ -1408,6 +1408,36 @@ legend {
 }
 :root[data-theme="dark"] .ql-editor ss-form::before {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23a5b4fc' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cline x1='22' y1='2' x2='11' y2='13'%3E%3C/line%3E%3Cpolygon points='22 2 15 22 11 13 2 9 22 2'%3E%3C/polygon%3E%3C/svg%3E");
+}
+
+/* Saved-poll embed placeholder — see PollEmbedBlot in posts.rs. Same
+   design as .ql-editor ss-form above, just a distinct bar-chart icon and
+   label text so the two embed types are visually distinguishable. */
+.ql-editor ss-poll {
+  display: flex; align-items: center; gap: .5rem;
+  margin: .5rem 0; padding: .6rem .85rem;
+  border: 1px dashed #94a3b8; border-radius: 6px;
+  background: #f8fafc; color: #475569; font-size: 13px;
+}
+.ql-editor ss-poll::before {
+  content: "";
+  display: inline-block;
+  width: 14px; height: 14px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23475569' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cline x1='18' y1='20' x2='18' y2='10'%3E%3C/line%3E%3Cline x1='12' y1='20' x2='12' y2='4'%3E%3C/line%3E%3Cline x1='6' y1='20' x2='6' y2='14'%3E%3C/line%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-size: contain;
+  flex-shrink: 0;
+}
+.ql-editor ss-poll::after {
+  content: "Poll: " attr(data-label);
+}
+:root[data-theme="dark"] .ql-editor ss-poll {
+  border-color: rgba(129,140,248,.4);
+  background: rgba(129,140,248,.12);
+  color: #a5b4fc;
+}
+:root[data-theme="dark"] .ql-editor ss-poll::before {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23a5b4fc' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cline x1='18' y1='20' x2='18' y2='10'%3E%3C/line%3E%3Cline x1='12' y1='20' x2='12' y2='4'%3E%3C/line%3E%3Cline x1='6' y1='20' x2='6' y2='14'%3E%3C/line%3E%3C/svg%3E");
 }
 
 /* ── /admin2 experiment: header truly position:fixed to the viewport top,

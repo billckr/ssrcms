@@ -5,6 +5,8 @@ pub mod page_composition;
 pub mod email_provider;
 pub mod form_def;
 pub mod form_submission;
+pub mod poll_def;
+pub mod poll_vote;
 pub mod mail_log;
 pub mod media;
 pub mod media_folder;

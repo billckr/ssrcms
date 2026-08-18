@@ -4,6 +4,7 @@ pub mod archive;
 pub mod auth;
 pub mod comment;
 pub mod form;
+pub mod poll;
 pub mod home;
 pub mod metrics;
 pub mod page;

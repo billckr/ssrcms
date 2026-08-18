@@ -279,12 +279,14 @@ pub fn sanitize_content(html: &str) -> String {
     // <ss-form> is the saved-form embed placeholder (FormEmbedBlot in
     // posts.rs) — expanded into real <form> HTML at render time by
     // form_def::expand_embeds; it must survive sanitization untouched or
-    // every inserted form silently vanishes on save.
+    // every inserted form silently vanishes on save. <ss-poll> is the same
+    // idea for Poll Designer embeds (PollEmbedBlot / poll_def::expand_embeds).
     ammonia::Builder::default()
-        .add_tags(&["audio", "source", "ss-form"])
+        .add_tags(&["audio", "source", "ss-form", "ss-poll"])
         .add_tag_attributes("audio", &["src", "controls", "preload", "loop", "autoplay", "muted"])
         .add_tag_attributes("source", &["src", "type"])
         .add_tag_attributes("ss-form", &["data-slug", "data-label"])
+        .add_tag_attributes("ss-poll", &["data-slug", "data-label"])
         .clean(html)
         .to_string()
 }

@@ -70,6 +70,9 @@ pub struct PostEdit {
     /// (slug, name) pairs for every form defined in Form Designer — powers
     /// the editor's "Insert Form" picker.
     pub saved_forms: Vec<(String, String)>,
+    /// (slug, name) pairs for every poll defined in Poll Designer — powers
+    /// the editor's "Insert Poll" picker.
+    pub saved_polls: Vec<(String, String)>,
     /// (form slug, form name, submission count) for each distinct form
     /// embedded in this post's content. Empty means "show nothing" — the
     /// sidebar section and the Publish Options pill's results link are only
@@ -1229,6 +1232,22 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
   }};
   Quill.register('formats/form-embed', FormEmbedBlot);
 
+  // Same pattern as FormEmbedBlot, for polls built in Poll Designer.
+  class PollEmbedBlot extends BlockEmbed {{}}
+  PollEmbedBlot.blotName = 'poll-embed';
+  PollEmbedBlot.tagName  = 'ss-poll';
+  PollEmbedBlot.create   = function(value) {{
+    var node = document.createElement('ss-poll');
+    node.setAttribute('data-slug', value.slug);
+    node.setAttribute('data-label', value.label || value.slug);
+    node.setAttribute('contenteditable', 'false');
+    return node;
+  }};
+  PollEmbedBlot.value = function(node) {{
+    return {{ slug: node.getAttribute('data-slug'), label: node.getAttribute('data-label') }};
+  }};
+  Quill.register('formats/poll-embed', PollEmbedBlot);
+
   var quill = new Quill('#quill-editor', {{
     theme: 'snow',
     modules: {{
@@ -1644,6 +1663,59 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
     }});
   }})();
 
+  // Add "Insert Poll" button to the Quill toolbar — same pattern as
+  // "Insert Form" above, dropping a saved poll (built in Poll Designer)
+  // into the content as an embed placeholder.
+  (function() {{
+    var savedPolls = {saved_polls_js};
+    var qlToolbar = document.querySelector('.ql-toolbar');
+    if (!qlToolbar) return;
+    var span = document.createElement('span');
+    span.className = 'ql-formats';
+    span.style.position = 'relative';
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.title = 'Insert poll';
+    btn.style.cssText = 'width:auto;padding:0 4px;color:var(--field-text)';
+    btn.innerHTML = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>';
+    btn.addEventListener('mouseenter', function() {{ btn.style.color = '#06c'; }});
+    btn.addEventListener('mouseleave', function() {{ btn.style.color = 'var(--field-text)'; }});
+
+    var menu = document.createElement('div');
+    menu.style.cssText = 'display:none;position:absolute;top:100%;left:0;z-index:20;min-width:180px;background:var(--field-bg);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:.3rem;margin-top:2px';
+    if (savedPolls.length === 0) {{
+      menu.innerHTML = '<div style="padding:.4rem .6rem;font-size:12px;color:var(--muted)">No polls yet — build one in <a href="/admin/designer?tab=polls" target="_blank">Poll Designer</a>.</div>';
+    }} else {{
+      savedPolls.forEach(function(p) {{
+        var item = document.createElement('button');
+        item.type = 'button';
+        item.textContent = p[1];
+        item.style.cssText = 'display:block;width:100%;text-align:left;padding:.4rem .6rem;font-size:13px;border:none;background:none;border-radius:4px;cursor:pointer;color:var(--field-text)';
+        item.addEventListener('mouseenter', function() {{ item.style.background = 'var(--tint)'; }});
+        item.addEventListener('mouseleave', function() {{ item.style.background = 'none'; }});
+        item.addEventListener('click', function() {{
+          var range = window._quillRange || quill.getSelection(true) || {{ index: quill.getLength() }};
+          quill.insertEmbed(range.index, 'poll-embed', {{ slug: p[0], label: p[1] }}, 'user');
+          quill.setSelection(range.index + 1, 0, 'user');
+          menu.style.display = 'none';
+        }});
+        menu.appendChild(item);
+      }});
+    }}
+    span.appendChild(btn);
+    span.appendChild(menu);
+    qlToolbar.appendChild(span);
+
+    btn.addEventListener('click', function(e) {{
+      e.stopPropagation();
+      window._quillRange = quill.getSelection(true);
+      menu.style.display = menu.style.display === 'none' ? '' : 'none';
+    }});
+    document.addEventListener('click', function(e) {{
+      if (!span.contains(e.target)) menu.style.display = 'none';
+    }});
+  }})();
+
   // Remaining character counters for title and excerpt
   (function() {{
     function initCount(inputId, countId, max) {{
@@ -1729,6 +1801,7 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
         slug = crate::html_escape(&post.slug),
         content_js = serde_json::to_string(&post.content).unwrap_or_else(|_| "\"\"".into()),
         saved_forms_js = serde_json::to_string(&post.saved_forms).unwrap_or_else(|_| "[]".into()),
+        saved_polls_js = serde_json::to_string(&post.saved_polls).unwrap_or_else(|_| "[]".into()),
         post_id_js = serde_json::to_string(&post.id).unwrap_or_else(|_| "null".into()),
         excerpt = crate::html_escape(&post.excerpt),
         status_options = status_options,
