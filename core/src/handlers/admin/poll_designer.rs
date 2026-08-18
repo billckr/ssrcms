@@ -2,18 +2,19 @@
 //! Mirrors `form_designer.rs`'s structure closely.
 
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::StatusCode,
     response::{Html, IntoResponse, Redirect, Response},
 };
 use serde::Deserialize;
+use std::collections::HashMap;
 use uuid::Uuid;
 
 use crate::app_state::AppState;
 use crate::middleware::admin_auth::AdminUser;
 use crate::models::poll_def::{self, CreatePollDef, PollOption, PollSettings, UpdatePollDef, VoteProtection};
 
-use admin::pages::poll_designer::{render_editor, PollEditData, PollOptionRow};
+use admin::pages::poll_designer::{polls_list_fragment, render_editor, PollEditData, PollOptionRow, PollRow};
 
 fn require_forms_cap(admin: &AdminUser) -> Result<(), Response> {
     if !admin.caps.can_manage_forms {
@@ -25,6 +26,30 @@ fn require_forms_cap(admin: &AdminUser) -> Result<(), Response> {
 
 fn require_site_id(admin: &AdminUser) -> Result<Uuid, Response> {
     admin.site_id.ok_or_else(|| (StatusCode::BAD_REQUEST, "No site selected.").into_response())
+}
+
+// ── list (partial, for the Designer hub's live search) ─────────────────────
+
+pub async fn list(State(state): State<AppState>, admin: AdminUser, Query(params): Query<HashMap<String, String>>) -> Response {
+    if let Err(e) = require_forms_cap(&admin) { return e; }
+    let site_id = match require_site_id(&admin) { Ok(id) => id, Err(e) => return e };
+
+    if !params.contains_key("partial") {
+        return Redirect::to("/admin/designer?tab=polls").into_response();
+    }
+
+    let polls = poll_def::list_for_site(&state.db, site_id).await.unwrap_or_default();
+    let rows: Vec<PollRow> = polls.into_iter().map(|p| PollRow {
+        id: p.id.to_string(),
+        name: p.name,
+        slug: p.slug,
+        option_count: p.options.len(),
+        total_votes: p.total_votes,
+        updated_at: p.updated_at.format("%Y-%m-%d %H:%M UTC").to_string(),
+    }).collect();
+
+    let search = params.get("search").map(|s| s.trim()).unwrap_or("");
+    Html(polls_list_fragment(&rows, search)).into_response()
 }
 
 // ── new / edit ───────────────────────────────────────────────────────────────

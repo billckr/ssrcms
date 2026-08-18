@@ -275,7 +275,7 @@ pub fn build(
         .route("/admin/form-designer/new", get(admin_form_designer::new_form))
         .route("/admin/form-designer/{id}", get(admin_form_designer::edit_form).post(admin_form_designer::update))
         .route("/admin/form-designer/{id}/delete", post(admin_form_designer::delete))
-        .route("/admin/designer/polls", post(admin_poll_designer::create))
+        .route("/admin/designer/polls", get(admin_poll_designer::list).post(admin_poll_designer::create))
         .route("/admin/designer/polls/new", get(admin_poll_designer::new_poll))
         .route("/admin/designer/polls/{id}", get(admin_poll_designer::edit_poll).post(admin_poll_designer::update))
         .route("/admin/designer/polls/{id}/delete", post(admin_poll_designer::delete))

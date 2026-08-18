@@ -47,25 +47,8 @@ pub async fn list(State(state): State<AppState>, admin: AdminUser, Query(_params
         updated_at: p.updated_at.format("%Y-%m-%d %H:%M UTC").to_string(),
     }).collect();
 
-    let forms_fragment = format!(
-        r#"<div style="display:flex;align-items:flex-end;justify-content:flex-end;gap:.75rem;margin-bottom:1.25rem;flex-wrap:wrap">
-  <div class="icon-pill" style="align-self:flex-end;margin-top:0">
-    <a href="/admin/form-designer/new" class="icon-btn" title="New Form" aria-label="New Form"><img src="/admin/static/icons/file-plus.svg" alt=""></a>
-  </div>
-</div>
-{table}"#,
-        table = forms_list_fragment(&form_rows, 1, 1, "", "", ""),
-    );
-
-    let polls_fragment = format!(
-        r#"<div style="display:flex;align-items:flex-end;justify-content:flex-end;gap:.75rem;margin-bottom:1.25rem;flex-wrap:wrap">
-  <div class="icon-pill" style="align-self:flex-end;margin-top:0">
-    <a href="/admin/designer/polls/new" class="icon-btn" title="New Poll" aria-label="New Poll"><img src="/admin/static/icons/file-plus.svg" alt=""></a>
-  </div>
-</div>
-{table}"#,
-        table = polls_list_fragment(&poll_rows, ""),
-    );
+    let forms_fragment = forms_list_fragment(&form_rows, 1, 1, "", "", "");
+    let polls_fragment = polls_list_fragment(&poll_rows, "");
 
     Html(admin::pages::designer_hub::render(&forms_fragment, &polls_fragment, &ctx, None)).into_response()
 }
