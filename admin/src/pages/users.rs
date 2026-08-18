@@ -679,26 +679,20 @@ pub fn render_editor(user: &UserEdit, flash: Option<&str>, ctx: &crate::PageCont
     // "admin" here means site_users.role = 'admin' (site admin), NOT users.role = 'super_admin'.
     let is_new = user.id.is_none();
 
-    // Save button (plus, on edit, the Back to Users and Change Role links)
-    // lives inside whichever section renders last, so its .card-boxed-section
-    // parent picks up the :has(.icon-pill) transparent-background rule and
-    // it aligns like other single-form icon-pills, rather than floating
-    // below the form as its own boxed pill. On edit, Back to Users and
-    // Change Role move down into this pill instead of sitting in the card
-    // header / Current Role section.
-    let (back_btn, change_role_btn) = if is_new {
-        (String::new(), String::new())
+    // Save button (plus, on edit, the Change Role link) lives inside
+    // whichever section renders last, so its .card-boxed-section parent
+    // picks up the :has(.icon-pill) transparent-background rule and it
+    // aligns like other single-form icon-pills, rather than floating below
+    // the form as its own boxed pill. On edit, Change Role moves down into
+    // this pill instead of sitting in the Current Role section.
+    let change_role_btn = if is_new {
+        String::new()
     } else {
-        (
-            r#"<a href="/admin/users" class="icon-btn" title="Back to Users" aria-label="Back to Users">
-        <img src="/admin/static/icons/corner-down-left.svg" alt="">
-      </a>"#.to_string(),
-            format!(
-                r#"<a href="/admin/users/{user_id}/site-access" class="icon-btn" title="Change Role" aria-label="Change Role">
+        format!(
+            r#"<a href="/admin/users/{user_id}/site-access" class="icon-btn" title="Change Role" aria-label="Change Role">
         <img src="/admin/static/icons/key.svg" alt="">
       </a>"#,
-                user_id = crate::html_escape(user.id.as_deref().unwrap_or("")),
-            ),
+            user_id = crate::html_escape(user.id.as_deref().unwrap_or("")),
         )
     };
     // Save starts disabled either way — on new-user it stays disabled until
@@ -706,13 +700,11 @@ pub fn render_editor(user: &UserEdit, flash: Option<&str>, ctx: &crate::PageCont
     // stays disabled until something actually changes (see isDirty()).
     let save_btn = format!(
         r#"<div class="icon-pill">
-      {back_btn}
       {change_role_btn}
       <button type="submit" form="user-editor-form" id="save-btn" class="icon-btn" title="Save" aria-label="Save" disabled>
         <img src="/admin/static/icons/save.svg" alt="">
       </button>
     </div>"#,
-        back_btn = back_btn,
         change_role_btn = change_role_btn,
     );
 
@@ -973,8 +965,8 @@ function toggleSiteFields() {{
         ""
     };
 
-    // Back to Users stays in the header on the new-user form; on edit it
-    // moves down into the icon-pill next to Save (see `back_btn` above).
+    // Back to Users stays in the header on the new-user form only — on edit
+    // there's no back icon at all any more (dropped from the Save pill).
     let header_back = if is_new {
         r#"<a href="/admin/users" class="icon-btn" title="Back to Users" aria-label="Back to Users">
       <img src="/admin/static/icons/corner-down-left.svg" alt="">
@@ -1272,8 +1264,12 @@ function toggleSiteFields() {{
         role_section      = role_section,
     );
 
-    let page_title: &str = if is_new { title } else { &user.display_name };
-    crate::admin_page(page_title, "/admin/users", flash, &content, ctx)
+    let page_title = if is_new {
+        title.to_string()
+    } else {
+        format!("Editing - {}", crate::html_escape(&user.display_name))
+    };
+    crate::admin_page(&page_title, "/admin/users", flash, &content, ctx)
 }
 
 // ── Site access management ──────────────────────────────────────────────────
@@ -1394,9 +1390,6 @@ pub fn render_site_access(
     </select>
   </div>
   <div class="icon-pill" style="margin-top:1.5rem">
-    <a href="/admin/users/{user_id}/edit" class="icon-btn" title="Back to User" aria-label="Back to User">
-      <img src="/admin/static/icons/corner-down-left.svg" alt="">
-    </a>
     <button type="submit" class="icon-btn" id="assign-btn" title="Assign" aria-label="Assign" disabled>
       <img src="/admin/static/icons/save.svg" alt="">
     </button>
@@ -1548,8 +1541,9 @@ pub fn render_site_access(
         add_form = add_form,
     );
 
+    let page_title = format!("User Role - {}", crate::html_escape(&data.display_name));
     crate::admin_page(
-        "User Access + Roles",
+        &page_title,
         "/admin/users",
         flash,
         &content,
