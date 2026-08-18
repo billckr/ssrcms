@@ -13,7 +13,7 @@ use tower_sessions_sqlx_store::PostgresStore;
 
 use crate::app_state::AppState;
 use crate::handlers::{account, archive, auth, comment as comment_handler, form as form_handler, home, metrics as metrics_handler, page, plugin_route, post as post_handler, post_unlock, recover, search, subscribe, theme_static, uploads};
-use crate::handlers::admin::{activity_log, analytics as admin_analytics, themes, themes_editor, themes_publish, themes_upload, builder as admin_builder, comments as admin_comments, dashboard, dev_tools, documentation as admin_documentation, email_providers as admin_email_providers, form_designer as admin_form_designer, forms as admin_forms, logo_upload, media, menus as admin_menus, posts, profile, role_picker, settings, sites as admin_sites, taxonomy, upload, users};
+use crate::handlers::admin::{activity_log, analytics as admin_analytics, themes, themes_editor, themes_publish, themes_upload, builder as admin_builder, comments as admin_comments, dashboard, dev_tools, documentation as admin_documentation, email_providers as admin_email_providers, form_designer as admin_form_designer, forms as admin_forms, logo_upload, media, menus as admin_menus, posts, profile, role_picker, settings, site_settings, sites as admin_sites, taxonomy, upload, users};
 
 /// Prevent browsers from caching admin and account pages.
 ///
@@ -243,6 +243,9 @@ pub fn build(
         .route("/admin/menus/{id}/items/reorder",                   post(admin_menus::reorder_items))
         // ── Admin settings ─────────────────────────────────────────────────
         .route("/admin/settings", get(settings::settings).post(settings::save_settings))
+        .route("/admin/site-settings", get(site_settings::view).post(site_settings::save_general))
+        .route("/admin/site-settings/logo", post(site_settings::upload_logo))
+        .route("/admin/site-settings/logo/reset", post(site_settings::reset_logo))
         .route("/admin/settings/logo", post(logo_upload::upload_logo))
         .route("/admin/settings/logo/reset", post(logo_upload::reset_logo))
         .route("/admin/settings/dev-tools/seed-users", post(dev_tools::seed_users))

@@ -14,7 +14,7 @@ use crate::middleware::admin_auth::AdminUser;
 
 /// Logos are tiny — deliberately not tied to the site's general
 /// `max_upload_mb` setting (which can be set as high as 1000 MB for media).
-const MAX_LOGO_BYTES: usize = 2 * 1024 * 1024;
+pub(crate) const MAX_LOGO_BYTES: usize = 2 * 1024 * 1024;
 const BRANDING_DIR: &str = "admin/static/branding";
 const LOGO_FILENAMES: &[&str] = &["logo.svg", "logo.png", "logo.webp"];
 
@@ -110,7 +110,7 @@ pub async fn reset_logo(State(state): State<AppState>, admin: AdminUser) -> impl
 /// magic-byte sniff of its actual content — the filename extension alone
 /// can't be trusted (client-controlled), and browsers don't reliably set a
 /// correct `Content-Type` on a multipart file part either.
-fn detect_logo_format(filename: &str, bytes: &[u8]) -> Option<&'static str> {
+pub(crate) fn detect_logo_format(filename: &str, bytes: &[u8]) -> Option<&'static str> {
     let lower = filename.to_lowercase();
     if lower.ends_with(".svg") && looks_like_svg(bytes) {
         return Some("svg");
@@ -136,7 +136,7 @@ fn looks_like_svg(bytes: &[u8]) -> bool {
 /// navigation to the file's own URL is not. Deliberately conservative: a
 /// false positive just means re-exporting a cleaner SVG; a false negative is
 /// a stored XSS on a URL any admin can be sent.
-fn validate_svg_safety(bytes: &[u8]) -> Result<(), &'static str> {
+pub(crate) fn validate_svg_safety(bytes: &[u8]) -> Result<(), &'static str> {
     let text = String::from_utf8_lossy(bytes).to_lowercase();
     if text.contains("<script") {
         return Err("contains <script>");

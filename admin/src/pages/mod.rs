@@ -16,6 +16,7 @@ pub mod profile;
 pub mod recover;
 pub mod role_picker;
 pub mod settings;
+pub mod site_settings;
 pub mod sites;
 pub mod subscribe;
 pub mod taxonomy;

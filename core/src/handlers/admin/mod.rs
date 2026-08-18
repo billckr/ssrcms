@@ -45,13 +45,29 @@ fn role_display_name(role: &str) -> String {
 /// Build a [`admin::PageContext`] synchronously (unread count defaults to 0).
 /// Prefer `page_ctx_full` in async handlers to include the live unread badge count.
 pub fn page_ctx(state: &AppState, admin: &AdminUser, current_site: &str) -> admin::PageContext {
-    let (app_name, default_theme) = {
+    let (mut app_name, default_theme) = {
         let s = state.app_settings.read();
         match s {
             Ok(s) => (s.app_name.clone(), s.default_theme.clone()),
             Err(_) => ("Synaptic".to_string(), "system".to_string()),
         }
     };
+
+    let mut logo_url = state.logo_url.read().ok().and_then(|g| g.clone());
+
+    // A site's own admin branding (set at /admin/site-settings) overrides
+    // the global app_name/logo for anyone viewing that site's admin —
+    // "consistent branding" regardless of which role they're logged in as.
+    if let Some(site_id) = admin.site_id {
+        if let Some((_, settings)) = state.get_site_by_id(site_id) {
+            if let Some(name) = settings.admin_brand_name {
+                app_name = name;
+            }
+        }
+        if let Some(site_logo) = crate::app_state::detect_site_admin_logo(site_id) {
+            logo_url = Some(site_logo);
+        }
+    }
 
     admin::PageContext {
         current_site: current_site.to_string(),
@@ -75,9 +91,10 @@ pub fn page_ctx(state: &AppState, admin: &AdminUser, current_site: &str) -> admi
         can_manage_taxonomies: admin.caps.can_manage_taxonomies,
         can_manage_forms: admin.caps.can_manage_forms,
         can_manage_pages: admin.caps.can_manage_pages,
+        can_manage_site_settings: admin.caps.can_manage_site_settings,
         unread_forms_count: 0,
         app_name,
-        logo_url: state.logo_url.read().ok().and_then(|g| g.clone()),
+        logo_url,
         default_theme,
     }
 }
@@ -142,6 +159,7 @@ pub mod posts;
 pub mod profile;
 pub mod role_picker;
 pub mod settings;
+pub mod site_settings;
 pub mod logo_upload;
 pub mod sites;
 pub mod taxonomy;

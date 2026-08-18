@@ -33,6 +33,9 @@ pub struct PageContext {
     pub can_manage_forms: bool,
     /// Can create, edit, and delete pages (not available to the author role).
     pub can_manage_pages: bool,
+    /// Can manage this site's own admin branding (sidebar name/logo).
+    /// Site-scoped admins only, never super_admin — see AdminCaps' doc comment.
+    pub can_manage_site_settings: bool,
     /// Number of unread form submissions across all forms on this site.
     pub unread_forms_count: i64,
     /// Admin chrome brand label — from app_settings.app_name.
@@ -187,6 +190,7 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
         {builder}
         {documentation}
         {settings}
+        {site_settings}
         {activity_log}
       </ul>
     </nav>
@@ -422,6 +426,7 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
         menus = if ctx.can_manage_themes { nav_link("/admin/menus", "Menus") } else { String::new() },
         builder = if ctx.can_manage_themes { nav_link("/admin/builder", "Page Builder") } else { String::new() },
         settings = if ctx.can_manage_settings { nav_link("/admin/settings", "System Settings") } else { String::new() },
+        site_settings = if ctx.can_manage_site_settings { nav_link("/admin/site-settings", "System Settings") } else { String::new() },
         activity_log = if ctx.can_manage_users { nav_link("/admin/activity-log", "Activity Log") } else { String::new() },
         flash_html = flash_html,
         content = content,

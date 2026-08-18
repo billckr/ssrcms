@@ -52,6 +52,11 @@ pub struct AdminCaps {
     pub can_manage_forms: bool,
     /// Can create, edit, and delete pages (not available to the author role).
     pub can_manage_pages: bool,
+    /// Can manage this site's own branding (name shown in the admin sidebar,
+    /// sidebar logo). Site-scoped admins only — deliberately excludes
+    /// super_admin, who already has the separate, agency-wide System
+    /// Settings page (can_manage_settings) for the global brand.
+    pub can_manage_site_settings: bool,
 }
 
 impl AdminCaps {
@@ -81,6 +86,7 @@ impl AdminCaps {
             can_manage_taxonomies: is_editor_or_above,
             can_manage_forms: is_admin,
             can_manage_pages: is_editor_or_above,
+            can_manage_site_settings: is_admin && !is_global_admin,
         }
     }
 }

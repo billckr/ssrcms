@@ -27,6 +27,11 @@ pub struct SiteSettings {
     pub active_theme: String,
     pub posts_per_page: i64,
     pub date_format: String,
+    /// Site-scoped override of the admin sidebar brand text, set by a site
+    /// admin at /admin/site-settings. `None` means "use the global app_name"
+    /// — this is opt-in, distinct from `site_name` (the public-facing site
+    /// title), so most sites keep showing the agency-wide brand by default.
+    pub admin_brand_name: Option<String>,
 }
 
 impl Default for SiteSettings {
@@ -39,6 +44,7 @@ impl Default for SiteSettings {
             active_theme: "default".to_string(),
             posts_per_page: 9,
             date_format: "%B %-d, %Y".to_string(),
+            admin_brand_name: None,
         }
     }
 }
@@ -69,6 +75,7 @@ impl SiteSettings {
             date_format: map
                 .remove("date_format")
                 .unwrap_or_else(|| "%B %-d, %Y".into()),
+            admin_brand_name: map.remove("admin_brand_name").filter(|s| !s.is_empty()),
         })
     }
 
@@ -101,6 +108,7 @@ impl SiteSettings {
             date_format: map
                 .remove("date_format")
                 .unwrap_or_else(|| "%B %-d, %Y".into()),
+            admin_brand_name: map.remove("admin_brand_name").filter(|s| !s.is_empty()),
         })
     }
 }
@@ -297,6 +305,21 @@ pub fn detect_admin_logo() -> Option<String> {
     CANDIDATES.iter().find_map(|name| {
         let path = std::path::Path::new("admin/static/branding").join(name);
         path.is_file().then(|| format!("/admin/static/branding/{name}"))
+    })
+}
+
+/// Look for `admin/static/branding/{site_id}/logo.{svg,png,webp}` and return
+/// its public URL if found — a site admin's own override of the sidebar
+/// logo, checked before falling back to the global `detect_admin_logo()`.
+/// A cheap `is_file()` stat, done fresh per page render (no caching, unlike
+/// the global logo) since site branding isn't a hot enough path to justify
+/// the extra state/reload-wiring complexity.
+pub fn detect_site_admin_logo(site_id: Uuid) -> Option<String> {
+    const CANDIDATES: &[&str] = &["logo.svg", "logo.png", "logo.webp"];
+    let dir = std::path::Path::new("admin/static/branding").join(site_id.to_string());
+    CANDIDATES.iter().find_map(|name| {
+        let path = dir.join(name);
+        path.is_file().then(|| format!("/admin/static/branding/{site_id}/{name}"))
     })
 }
 
