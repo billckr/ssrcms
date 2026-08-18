@@ -19,6 +19,7 @@ use crate::models::site_user::SiteRole;
 pub async fn show(
     State(state): State<AppState>,
     picker: PickRoleUser,
+    session: Session,
 ) -> impl IntoResponse {
     let Some(site_id) = picker.site_id else {
         return Redirect::to("/admin").into_response();
@@ -31,6 +32,19 @@ pub async fn show(
     // Nothing to pick (0 or 1 role) — nothing for this page to do, send them on.
     if roles.len() < 2 {
         return Redirect::to("/admin").into_response();
+    }
+
+    // A valid pin already exists for this session (e.g. the user hit the
+    // browser back button after already picking) — this page has nothing
+    // left to decide, so send them straight back rather than re-litigating
+    // a choice already made. Not a security boundary (submit() already
+    // re-validates independently of anything shown here) — purely to avoid
+    // a stale "pick a role" screen reappearing for someone already past it.
+    let pinned: Option<String> = session.get(SESSION_CURRENT_ROLE_KEY).await.unwrap_or(None);
+    if let Some(r) = pinned.as_deref().and_then(SiteRole::from_str) {
+        if roles.contains(&r) {
+            return Redirect::to("/admin").into_response();
+        }
     }
 
     let hostname = state.site_hostname(Some(site_id));
