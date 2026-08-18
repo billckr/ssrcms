@@ -37,6 +37,13 @@ pub struct AdminCaps {
     /// Can view, create, edit, and delete users.
     pub can_manage_users: bool,
     /// Can create new sites and edit site-level settings.
+    /// NOTE: `is_global_admin` is a *separate* field, not derived from this one.
+    /// `admin/src/pages/sites.rs::render_new()` branches on `is_global_admin` (not
+    /// `can_manage_sites`) to decide whether the new-site form shows the
+    /// existing/new-user picker or is auto-owned by the caller. If a future role
+    /// tier ever gets `can_manage_sites: true` without also being `is_global_admin`,
+    /// double-check that branch and the ownership logic in
+    /// `handlers/admin/sites.rs::create()` still match who should own what.
     pub can_manage_sites: bool,
     /// Can activate, configure, and remove plugins.
     pub can_manage_plugins: bool,
@@ -55,7 +62,11 @@ pub struct AdminCaps {
     /// Can manage this site's own branding (name shown in the admin sidebar,
     /// sidebar logo). Site-scoped admins only — deliberately excludes
     /// super_admin, who already has the separate, agency-wide System
-    /// Settings page (can_manage_settings) for the global brand.
+    /// Settings page (can_manage_settings) for the global brand — AND
+    /// excludes any site that is itself a child of another site
+    /// (`Site::parent_site_id.is_some()`): a site a site_admin created while
+    /// logged into another site inherits that parent's branding and cannot
+    /// set its own. See `Site::parent_site_id`'s doc comment.
     pub can_manage_site_settings: bool,
 }
 
@@ -64,11 +75,14 @@ impl AdminCaps {
     /// site, and whether a super-admin is visiting a foreign site.
     /// `is_on_default_site` must be true for `can_manage_settings` to be granted —
     /// system settings are restricted to super_admin on the system default site only.
+    /// `is_top_level_site` must be true for `can_manage_site_settings` to be granted —
+    /// false for any site created while a site_admin was logged into another site.
     pub fn from_roles(
         global_role: &str,
         site_role: Option<crate::models::site_user::SiteRole>,
         visiting_foreign: bool,
         is_on_default_site: bool,
+        is_top_level_site: bool,
     ) -> Self {
         use crate::models::site_user::SiteRole;
         let is_global_admin = global_role == "super_admin";
@@ -86,7 +100,7 @@ impl AdminCaps {
             can_manage_taxonomies: is_editor_or_above,
             can_manage_forms: is_admin,
             can_manage_pages: is_editor_or_above,
-            can_manage_site_settings: is_admin && !is_global_admin,
+            can_manage_site_settings: is_admin && !is_global_admin && is_top_level_site,
         }
     }
 }
@@ -349,7 +363,18 @@ impl FromRequestParts<AppState> for AdminUser {
             && user.default_site_id.is_some()
             && site_id == user.default_site_id;
 
-        let caps = AdminCaps::from_roles(&user.role, site_role, is_is_impersonating, is_on_default_site);
+        // A site's own branding controls are only available on top-level sites
+        // (no parent) — a site created by a site_admin while logged into
+        // another site inherits that parent's branding instead. Default to
+        // `true` (permissive) only in the edge case where there's no site
+        // context at all — is_admin already requires a site_role to be true
+        // in practice, so this branch shouldn't be reachable for a real admin.
+        let is_top_level_site = site_id
+            .and_then(|sid| state.get_site_by_id(sid))
+            .map(|(site, _)| site.parent_site_id.is_none())
+            .unwrap_or(true);
+
+        let caps = AdminCaps::from_roles(&user.role, site_role, is_is_impersonating, is_on_default_site, is_top_level_site);
 
         Ok(AdminUser { user, site_id, site_role, caps })
     }

@@ -360,7 +360,7 @@ async fn test_create_site_with_defaults_seeds_settings_and_admin_role() {
     let owner = make_test_user(&pool).await;
     let id = uid();
 
-    let s = site::create_with_defaults(&pool, &format!("{id}.example.com"), Some(owner.id))
+    let s = site::create_with_defaults(&pool, &format!("{id}.example.com"), Some(owner.id), None)
         .await
         .expect("create_with_defaults should succeed");
 
@@ -393,10 +393,10 @@ async fn test_list_by_owner_scoped_to_creator() {
     let admin2 = make_test_user(&pool).await;
     let id = uid();
 
-    let s1 = site::create_with_defaults(&pool, &format!("admin1-{id}.example.com"), Some(admin1.id))
+    let s1 = site::create_with_defaults(&pool, &format!("admin1-{id}.example.com"), Some(admin1.id), None)
         .await
         .expect("create s1");
-    let s2 = site::create_with_defaults(&pool, &format!("admin2-{id}.example.com"), Some(admin2.id))
+    let s2 = site::create_with_defaults(&pool, &format!("admin2-{id}.example.com"), Some(admin2.id), None)
         .await
         .expect("create s2");
 
@@ -423,7 +423,7 @@ async fn test_invited_by_recorded_on_site_user() {
     let invitee = make_test_user(&pool).await;
     let id = uid();
 
-    let s = site::create_with_defaults(&pool, &format!("invitetest-{id}.example.com"), Some(inviter.id))
+    let s = site::create_with_defaults(&pool, &format!("invitetest-{id}.example.com"), Some(inviter.id), None)
         .await
         .expect("create site");
 
@@ -457,7 +457,7 @@ async fn test_multi_role_add_is_idempotent_and_coexists() {
     let member = make_test_user(&pool).await;
     let id = uid();
 
-    let s = site::create_with_defaults(&pool, &format!("multirole-{id}.example.com"), Some(owner.id))
+    let s = site::create_with_defaults(&pool, &format!("multirole-{id}.example.com"), Some(owner.id), None)
         .await
         .expect("create site");
 

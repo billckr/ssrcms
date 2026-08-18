@@ -375,6 +375,7 @@ pub async fn list_for_user_scoped(
                 id: r.id,
                 hostname: r.hostname,
                 owner_user_id: r.owner_user_id,
+                parent_site_id: None, // not selected by this join; not needed by any caller
                 created_at: r.created_at,
                 updated_at: r.updated_at,
             };
@@ -409,6 +410,7 @@ pub async fn list_for_user(pool: &PgPool, user_id: Uuid) -> Result<Vec<(Site, St
                 id: r.id,
                 hostname: r.hostname,
                 owner_user_id: r.owner_user_id,
+                parent_site_id: None, // not selected by this join; not needed by any caller
                 created_at: r.created_at,
                 updated_at: r.updated_at,
             };

@@ -59,13 +59,37 @@ pub fn page_ctx(state: &AppState, admin: &AdminUser, current_site: &str) -> admi
     // the global app_name/logo for anyone viewing that site's admin —
     // "consistent branding" regardless of which role they're logged in as.
     if let Some(site_id) = admin.site_id {
-        if let Some((_, settings)) = state.get_site_by_id(site_id) {
-            if let Some(name) = settings.admin_brand_name {
-                app_name = name;
+        if let Some((site, settings)) = state.get_site_by_id(site_id) {
+            match site.parent_site_id {
+                Some(parent_id) => {
+                    // Child site: it can't set its own branding (see
+                    // can_manage_site_settings), so it never shows this site's
+                    // own agency-wide fallback either — only its immediate
+                    // parent's branding, or the parent's hostname as plain
+                    // text if the parent hasn't customized anything. Never
+                    // falls through to the global default beyond that, so
+                    // the agency's own logo can't leak onto a client's
+                    // sub-site.
+                    logo_url = None;
+                    match state.get_site_by_id(parent_id) {
+                        Some((parent_site, parent_settings)) => {
+                            app_name = parent_settings.admin_brand_name.unwrap_or(parent_site.hostname);
+                            if let Some(parent_logo) = crate::app_state::detect_site_admin_logo(parent_id) {
+                                logo_url = Some(parent_logo);
+                            }
+                        }
+                        None => app_name = site.hostname,
+                    }
+                }
+                None => {
+                    if let Some(name) = settings.admin_brand_name {
+                        app_name = name;
+                    }
+                    if let Some(site_logo) = crate::app_state::detect_site_admin_logo(site_id) {
+                        logo_url = Some(site_logo);
+                    }
+                }
             }
-        }
-        if let Some(site_logo) = crate::app_state::detect_site_admin_logo(site_id) {
-            logo_url = Some(site_logo);
         }
     }
 

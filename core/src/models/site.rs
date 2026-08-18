@@ -17,6 +17,12 @@ pub struct Site {
     /// directly via the CLI. Use site_users WHERE role='admin' AND site_id=X
     /// to find the current admin.
     pub owner_user_id: Option<Uuid>,
+    /// Site the creator was logged into when this site was created. NULL for
+    /// top-level sites (created by super_admin, or the system default site
+    /// itself). A non-NULL site cannot manage its own branding and instead
+    /// inherits it from this parent — see `AdminCaps::can_manage_site_settings`
+    /// and `page_ctx()` in `handlers/admin/mod.rs`.
+    pub parent_site_id: Option<Uuid>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -39,23 +45,27 @@ pub async fn create(pool: &PgPool, hostname: &str) -> Result<Site> {
 /// register them as admin in site_users, all in a single transaction. The
 /// admin UI always supplies an owner; `owner_user_id` is only `None` for
 /// sites created outside that flow (e.g. the CLI installer), which get no
-/// site_users row until an admin is assigned. Returns the new Site.
+/// site_users row until an admin is assigned. `parent_site_id` should be the
+/// site the creator was logged into when they are a site_admin (not global
+/// admin) — `None` when a super_admin creates it. Returns the new Site.
 pub async fn create_with_defaults(
     pool: &PgPool,
     hostname: &str,
     owner_user_id: Option<Uuid>,
+    parent_site_id: Option<Uuid>,
 ) -> Result<Site> {
     let mut tx = pool.begin().await?;
 
     let site = sqlx::query_as::<_, Site>(
         r#"
-        INSERT INTO sites (hostname, owner_user_id)
-        VALUES ($1, $2)
+        INSERT INTO sites (hostname, owner_user_id, parent_site_id)
+        VALUES ($1, $2, $3)
         RETURNING *
         "#,
     )
     .bind(hostname)
     .bind(owner_user_id)
+    .bind(parent_site_id)
     .fetch_one(&mut *tx)
     .await?;
 

@@ -729,7 +729,10 @@ pub async fn save_new(
                             tracing::warn!("new user {} created but no hostname for new site", new_user.id);
                             None
                         } else {
-                            match crate::models::site::create_with_defaults(&state.db, &hostname, Some(admin.user.id)).await {
+                            // This whole branch only runs for a site_admin (see the
+                            // `else` above), so the new site is always parented under
+                            // the site they're currently logged into.
+                            match crate::models::site::create_with_defaults(&state.db, &hostname, Some(admin.user.id), admin.site_id).await {
                                 Ok(site) => {
                                     if let Err(e) = state.reload_site_cache().await {
                                         tracing::warn!("site cache reload failed: {:?}", e);

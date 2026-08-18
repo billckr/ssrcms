@@ -363,6 +363,12 @@ pub async fn create(
     // the site had been reassigned to the super_admin account). Only a
     // global admin retains the existing/new-user sub-form flexibility,
     // since a super_admin is routinely creating sites on behalf of others.
+    // This branches on `is_global_admin`, not `can_manage_sites` — the two are
+    // currently equivalent in practice (only super_admin and site_admin ever
+    // reach this handler) but are separate fields on AdminCaps. See the note
+    // on `can_manage_sites` in middleware/admin_auth.rs: if a new role tier
+    // ever gets `can_manage_sites: true`, this branch (and render_new()'s
+    // template choice) need re-checking, not just assumed to still be correct.
     let owner_id: Uuid = if !admin.caps.is_global_admin {
         admin.user.id
     } else {
@@ -434,7 +440,13 @@ pub async fn create(
     }
     };
 
-    let result = crate::models::site::create_with_defaults(&state.db, &hostname, Some(owner_id))
+    // A site admin creating a site is always creating it "underneath" the
+    // site they're currently logged into — that's what makes this a
+    // non-top-level site (no System Settings, inherits branding — see
+    // Site::parent_site_id's doc comment). A global admin's sites are always
+    // top-level, regardless of which site they happened to be viewing.
+    let parent_site_id = if admin.caps.is_global_admin { None } else { admin.site_id };
+    let result = crate::models::site::create_with_defaults(&state.db, &hostname, Some(owner_id), parent_site_id)
         .await;
 
     match result {
