@@ -458,13 +458,15 @@ pub fn render_list(
     // wholesale by the live-search fetch, so listeners can't be bound once at load.
     let bulk_script = r#"<script>
 (function() {
-  function syncGroup(cbClass, btnId, cntId, selAllId) {
+  function syncGroup(cbClass, btnId, selAllId) {
     var checked = document.querySelectorAll('.' + cbClass + ':checked');
     var total = document.querySelectorAll('.' + cbClass).length;
     var btn = document.getElementById(btnId);
-    var cnt = document.getElementById(cntId);
-    if (cnt) cnt.textContent = checked.length;
-    if (btn) btn.style.display = checked.length > 0 ? '' : 'none';
+    if (btn) {
+      btn.title = 'Delete Selected (' + checked.length + ')';
+      btn.setAttribute('aria-label', btn.title);
+      btn.style.display = checked.length > 0 ? '' : 'none';
+    }
     var sa = document.getElementById(selAllId);
     if (sa) {
       sa.indeterminate = checked.length > 0 && checked.length < total;
@@ -474,15 +476,15 @@ pub fn render_list(
 
   document.addEventListener('change', function(e) {
     if (e.target.classList.contains('bulk-cb-staff')) {
-      syncGroup('bulk-cb-staff', 'bulk-delete-btn-staff', 'bulk-count-staff', 'select-all-staff');
+      syncGroup('bulk-cb-staff', 'bulk-delete-btn-staff', 'select-all-staff');
     } else if (e.target.classList.contains('bulk-cb-subs')) {
-      syncGroup('bulk-cb-subs', 'bulk-delete-btn-subs', 'bulk-count-subs', 'select-all-subs');
+      syncGroup('bulk-cb-subs', 'bulk-delete-btn-subs', 'select-all-subs');
     } else if (e.target.id === 'select-all-staff') {
       document.querySelectorAll('.bulk-cb-staff').forEach(function(c) { c.checked = e.target.checked; });
-      syncGroup('bulk-cb-staff', 'bulk-delete-btn-staff', 'bulk-count-staff', 'select-all-staff');
+      syncGroup('bulk-cb-staff', 'bulk-delete-btn-staff', 'select-all-staff');
     } else if (e.target.id === 'select-all-subs') {
       document.querySelectorAll('.bulk-cb-subs').forEach(function(c) { c.checked = e.target.checked; });
-      syncGroup('bulk-cb-subs', 'bulk-delete-btn-subs', 'bulk-count-subs', 'select-all-subs');
+      syncGroup('bulk-cb-subs', 'bulk-delete-btn-subs', 'select-all-subs');
     }
   });
 
@@ -596,8 +598,18 @@ document.addEventListener('click', function(e) {
     // ── Live search ──────────────────────────────────────────────────────────
     let search_toggle = crate::pill_search_toggle("user-search", "Search users&hellip;", search);
     // Staff tab already has a "New User" pill to merge the search icon into;
-    // the subscribers tab has no other pill, so it gets its own.
-    let search_pill_standalone = format!(r#"<div class="icon-pill" style="align-self:flex-end;margin-top:0">{search_toggle}</div>"#, search_toggle = search_toggle);
+    // the subscribers tab has no other pill, so it gets its own — with the
+    // bulk-delete button folded in too, same as the staff tab's pill.
+    let search_pill_standalone = format!(
+        r#"<div class="icon-pill" style="align-self:flex-end;margin-top:0">
+    <button id="bulk-delete-btn-subs" type="button" class="icon-btn icon-danger icon-danger-armed" style="display:none" title="Delete Selected" aria-label="Delete Selected"
+            onclick="bulkDeleteUsers('subscribers')">
+      <img src="/admin/static/icons/trash.svg" alt="">
+    </button>
+    {search_toggle}
+  </div>"#,
+        search_toggle = search_toggle,
+    );
     let site_qs = if selected_site_id.is_empty() {
         String::new()
     } else {
@@ -614,13 +626,13 @@ document.addEventListener('click', function(e) {
             r#"<div style="display:flex;align-items:flex-end;justify-content:space-between;gap:.75rem;margin-bottom:.75rem;flex-wrap:wrap">
   {tabs}
   <div class="icon-pill" style="align-self:flex-end;margin-top:0">
+    <button id="bulk-delete-btn-staff" type="button" class="icon-btn icon-danger icon-danger-armed" style="display:none" title="Delete Selected" aria-label="Delete Selected"
+            onclick="bulkDeleteUsers('site-users')">
+      <img src="/admin/static/icons/trash.svg" alt="">
+    </button>
     {search_toggle}
     <a href="/admin/users/new" class="icon-btn" title="New User" aria-label="New User"><img src="/admin/static/icons/file-plus.svg" alt=""></a>
   </div>
-</div>
-<div style="margin-bottom:1rem">
-  <button id="bulk-delete-btn-staff" type="button" class="btn btn-danger" style="display:none"
-          onclick="bulkDeleteUsers('site-users')">Delete Selected (<span id="bulk-count-staff">0</span>)</button>
 </div>
 <div id="users-list">{fragment}</div>
 {sole_admin_modal}
@@ -640,10 +652,6 @@ document.addEventListener('click', function(e) {
             r#"<div style="display:flex;align-items:flex-end;justify-content:space-between;gap:.75rem;margin-bottom:.75rem;flex-wrap:wrap">
   {tabs}
   {search_pill_standalone}
-</div>
-<div style="margin-bottom:1rem">
-  <button id="bulk-delete-btn-subs" type="button" class="btn btn-danger" style="display:none"
-          onclick="bulkDeleteUsers('subscribers')">Delete Selected (<span id="bulk-count-subs">0</span>)</button>
 </div>
 <div id="users-list">{fragment}</div>
 {sole_admin_modal}
