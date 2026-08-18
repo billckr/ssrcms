@@ -598,6 +598,21 @@ pub fn hash_password(password: &str) -> Result<String> {
         .map_err(|e| AppError::Internal(format!("password hashing failed: {e}")))
 }
 
+/// True when `site_id` is some super_admin's own default/home site — the
+/// one they manage System Settings (and the agency-wide logo) from. Used to
+/// decide whether the global logo may show on a top-level site's login page:
+/// it's the agency's own site, not a white-labeled client's, so no
+/// misattribution concern there.
+pub async fn is_super_admin_default_site(pool: &PgPool, site_id: Uuid) -> bool {
+    sqlx::query_scalar::<_, bool>(
+        "SELECT EXISTS(SELECT 1 FROM users WHERE role = 'super_admin' AND default_site_id = $1)",
+    )
+    .bind(site_id)
+    .fetch_one(pool)
+    .await
+    .unwrap_or(false)
+}
+
 /// Set (or clear) a user's default site. Pass `None` to clear.
 pub async fn set_default_site(pool: &PgPool, user_id: Uuid, site_id: Option<Uuid>) -> Result<()> {
     sqlx::query("UPDATE users SET default_site_id = $1, updated_at = NOW() WHERE id = $2")

@@ -4,18 +4,21 @@
 /// `action` is the form POST target — "/admin/login" for staff, "/login" for the public page.
 /// `default_theme` is the site-wide fallback appearance ("light"/"dark"/"system")
 /// from Settings → General → Appearance.
-pub fn render(error: Option<&str>, default_theme: &str) -> String {
-    render_with_action(error, None, "/admin/login", None, default_theme)
+#[allow(clippy::too_many_arguments)]
+pub fn render(error: Option<&str>, default_theme: &str, site_name: &str, logo_url: Option<&str>) -> String {
+    render_with_action(error, None, "/admin/login", None, default_theme, site_name, logo_url)
 }
 
 /// Same form rendered for the public-facing /login page.
 /// `redirect` is an optional path to send the user to after a successful login.
 /// `flash` is an optional one-shot success message (e.g. after a password reset).
-pub fn render_public(error: Option<&str>, flash: Option<&str>, redirect: Option<&str>, default_theme: &str) -> String {
-    render_with_action(error, flash, "/login", redirect, default_theme)
+#[allow(clippy::too_many_arguments)]
+pub fn render_public(error: Option<&str>, flash: Option<&str>, redirect: Option<&str>, default_theme: &str, site_name: &str, logo_url: Option<&str>) -> String {
+    render_with_action(error, flash, "/login", redirect, default_theme, site_name, logo_url)
 }
 
-fn render_with_action(error: Option<&str>, flash: Option<&str>, action: &str, redirect: Option<&str>, default_theme: &str) -> String {
+#[allow(clippy::too_many_arguments)]
+fn render_with_action(error: Option<&str>, flash: Option<&str>, action: &str, redirect: Option<&str>, default_theme: &str, site_name: &str, logo_url: Option<&str>) -> String {
     let error_html = match error {
         Some(msg) => format!(r#"<div class="error">{}</div>"#, crate::html_escape(msg)),
         None => String::new(),
@@ -49,6 +52,18 @@ fn render_with_action(error: Option<&str>, flash: Option<&str>, action: &str, re
         _ => "system",
     };
 
+    // Same site-logo-or-text-brand pattern as the admin sidebar (admin_page's
+    // brand_html) — an uploaded site logo takes over from the plain text
+    // heading when one exists for this site (or its parent, or the agency).
+    let brand_html = match logo_url {
+        Some(url) => format!(
+            r#"<img class="login-brand-logo" src="{}" alt="{}">"#,
+            crate::html_escape(url),
+            crate::html_escape(site_name)
+        ),
+        None => format!(r#"<h1 class="login-brand">{}</h1>"#, crate::html_escape(site_name)),
+    };
+
     format!(
         r#"<!DOCTYPE html>
 <html lang="en">
@@ -76,11 +91,12 @@ fn render_with_action(error: Option<&str>, flash: Option<&str>, action: &str, re
     .login-box .login-submit-row .icon-btn:hover {{ box-shadow: none; transform: none; }}
     .login-box .login-submit-row .icon-btn:focus {{ box-shadow: none; }}
     .login-box .login-submit-row .icon-btn img {{ width: 22px; height: 22px; }}
+    .login-box .login-brand-logo {{ display: block; max-width: 220px; max-height: 72px; width: auto; height: auto; margin: 0 0 .5rem; }}
   </style>
 </head>
 <body class="login-body">
   <div class="login-box">
-    <h1 class="login-brand">Synaptic</h1>
+    {brand_html}
     <h2>Sign in</h2>
     {error_html}
     {flash_html}
@@ -109,5 +125,6 @@ fn render_with_action(error: Option<&str>, flash: Option<&str>, action: &str, re
         action           = action,
         below_form_links = below_form_links,
         default_theme    = default_theme,
+        brand_html       = brand_html,
     )
 }

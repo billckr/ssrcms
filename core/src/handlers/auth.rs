@@ -52,6 +52,51 @@ fn host_to_hostname(raw: &str) -> String {
     raw.to_string()
 }
 
+/// Bare hostname from the request's Host header, defaulting to "localhost".
+fn hostname_from_headers(headers: &HeaderMap) -> String {
+    let raw_host = headers
+        .get(axum::http::header::HOST)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("localhost")
+        .to_string();
+    host_to_hostname(&raw_host)
+}
+
+/// The site name to show on the login page's heading — the resolved site's
+/// own `site_name` setting, or the global `app_name` when no site could be
+/// resolved for the request's Host header (e.g. an unrecognized domain).
+fn site_name_for_login(state: &AppState, resolved_site: &Option<(crate::models::site::Site, crate::app_state::SiteSettings)>) -> String {
+    match resolved_site {
+        Some((_, settings)) => settings.site_name.clone(),
+        None => state.app_settings.read().unwrap().app_name.clone(),
+    }
+}
+
+/// The logo to show on the login page — this site's own uploaded logo if it
+/// has one. Unlike the admin-sidebar chrome (which shows a child site's
+/// parent's logo, since that's an internal tool where "who manages this" is
+/// useful context), a sub-site's public login page must NOT show its
+/// parent's logo: sub-sites are white-labeled and should carry no visible
+/// affiliation with the account/site that owns them. Only a top-level site
+/// can ever have its own uploaded logo at all (sub-sites have no System
+/// Settings access), so a sub-site with no logo file simply has none.
+///
+/// The one exception: when the resolved site IS a super_admin's own default
+/// site — the site System Settings (and the agency-wide logo upload) are
+/// gated to — the agency-wide logo is allowed to show, since that site
+/// *is* the agency's own site, not a white-labeled client's. A regular
+/// top-level client site with no logo of its own still shows just its name.
+async fn logo_url_for_login(state: &AppState, resolved_site: &Option<(crate::models::site::Site, crate::app_state::SiteSettings)>) -> Option<String> {
+    let Some((site, _)) = resolved_site else { return None };
+    if let Some(logo) = crate::app_state::detect_site_admin_logo(site.id) {
+        return Some(logo);
+    }
+    if site.parent_site_id.is_none() && crate::models::user::is_super_admin_default_site(&state.db, site.id).await {
+        return state.logo_url.read().ok().and_then(|g| g.clone());
+    }
+    None
+}
+
 #[derive(Deserialize)]
 pub struct LoginForm {
     pub email: String,
@@ -67,9 +112,12 @@ pub struct RedirectQuery {
 }
 
 /// GET /admin/login — render login page.
-pub async fn login_form(State(state): State<AppState>) -> impl IntoResponse {
+pub async fn login_form(State(state): State<AppState>, headers: HeaderMap) -> impl IntoResponse {
     let default_theme = state.app_settings.read().unwrap().default_theme.clone();
-    Html(admin::pages::login::render(None, &default_theme))
+    let resolved_site = state.resolve_site(&hostname_from_headers(&headers));
+    let site_name = site_name_for_login(&state, &resolved_site);
+    let logo_url = logo_url_for_login(&state, &resolved_site).await;
+    Html(admin::pages::login::render(None, &default_theme, &site_name, logo_url.as_deref()))
 }
 
 /// POST /admin/login — verify credentials, create session.
@@ -81,40 +129,12 @@ pub async fn login_post(
 ) -> impl IntoResponse {
     let default_theme = state.app_settings.read().unwrap().default_theme.clone();
 
-    // Look up user by email.
-    let user = match crate::models::user::get_by_email(&state.db, &form.email).await {
-        Ok(u) => u,
-        Err(_) => {
-            log_staff_login(&state, None, &form.email, "unknown", None, false).await;
-            return Html(admin::pages::login::render(Some("Invalid email or password."), &default_theme)).into_response();
-        }
-    };
-
-    // Verify password.
-    if !user.verify_password(&form.password) {
-        log_staff_login(&state, Some(user.id), &user.email, &user.role, None, false).await;
-        return Html(admin::pages::login::render(Some("Invalid email or password."), &default_theme)).into_response();
-    }
-
-    // Check role — staff only. Subscribers must use /login.
-    match user.role.as_str() {
-        "super_admin" | "site_admin" | "editor" | "author" => {}
-        "subscriber" => {
-            return Html(admin::pages::login::render(
-                Some("Subscriber accounts sign in at /login."), &default_theme,
-            )).into_response();
-        }
-        _ => {
-            return Html(admin::pages::login::render(
-                Some("Your account does not have admin access."), &default_theme,
-            )).into_response();
-        }
-    }
-
     // ── Site resolution ───────────────────────────────────────────────────────
     // Resolve the site from the Host header so that logging in from
     // bckr.local:3000 lands on the bckr.local site, not whichever site
-    // happens to be first in the database.
+    // happens to be first in the database. Done up front (not just after a
+    // successful login) so every error re-render below can show this site's
+    // own name in the heading rather than the global app name.
     let raw_host = headers
         .get(axum::http::header::HOST)
         .and_then(|v| v.to_str().ok())
@@ -125,6 +145,38 @@ pub async fn login_post(
     tracing::info!("login: raw_host='{}' hostname='{}'", raw_host, hostname);
     let resolved_site = state.resolve_site(&hostname);
     tracing::info!("login: site resolved={}", resolved_site.is_some());
+    let site_name = site_name_for_login(&state, &resolved_site);
+    let logo_url = logo_url_for_login(&state, &resolved_site).await;
+
+    // Look up user by email.
+    let user = match crate::models::user::get_by_email(&state.db, &form.email).await {
+        Ok(u) => u,
+        Err(_) => {
+            log_staff_login(&state, None, &form.email, "unknown", None, false).await;
+            return Html(admin::pages::login::render(Some("Invalid email or password."), &default_theme, &site_name, logo_url.as_deref())).into_response();
+        }
+    };
+
+    // Verify password.
+    if !user.verify_password(&form.password) {
+        log_staff_login(&state, Some(user.id), &user.email, &user.role, None, false).await;
+        return Html(admin::pages::login::render(Some("Invalid email or password."), &default_theme, &site_name, logo_url.as_deref())).into_response();
+    }
+
+    // Check role — staff only. Subscribers must use /login.
+    match user.role.as_str() {
+        "super_admin" | "site_admin" | "editor" | "author" => {}
+        "subscriber" => {
+            return Html(admin::pages::login::render(
+                Some("Subscriber accounts sign in at /login."), &default_theme, &site_name, logo_url.as_deref(),
+            )).into_response();
+        }
+        _ => {
+            return Html(admin::pages::login::render(
+                Some("Your account does not have admin access."), &default_theme, &site_name, logo_url.as_deref(),
+            )).into_response();
+        }
+    }
 
     // Non-super-admin users must have an explicit site_users row for this domain.
     if user.role.as_str() != "super_admin" {
@@ -135,7 +187,7 @@ pub async fn login_post(
                     _ => {
                         log_staff_login(&state, Some(user.id), &user.email, &user.role, Some(site.id), false).await;
                         return Html(admin::pages::login::render(
-                            Some("Your account does not have access to this site."), &default_theme,
+                            Some("Your account does not have access to this site."), &default_theme, &site_name, logo_url.as_deref(),
                         )).into_response();
                     }
                 }
@@ -143,7 +195,7 @@ pub async fn login_post(
             None => {
                 log_staff_login(&state, Some(user.id), &user.email, &user.role, None, false).await;
                 return Html(admin::pages::login::render(
-                    Some("No site found for this domain."), &default_theme,
+                    Some("No site found for this domain."), &default_theme, &site_name, logo_url.as_deref(),
                 )).into_response();
             }
         }
@@ -152,7 +204,7 @@ pub async fn login_post(
     // Store user ID in session.
     if let Err(e) = session.insert(SESSION_USER_ID_KEY, user.id.to_string()).await {
         tracing::error!("session insert error: {}", e);
-        return Html(admin::pages::login::render(Some("Session error. Please try again."), &default_theme)).into_response();
+        return Html(admin::pages::login::render(Some("Session error. Please try again."), &default_theme, &site_name, logo_url.as_deref())).into_response();
     }
     tracing::info!("login: user_id stored in session for {}", form.email);
 
@@ -177,11 +229,15 @@ pub async fn login_post(
 /// GET /login — public-facing login form (for subscribers).
 pub async fn public_login_form(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Query(q): Query<RedirectQuery>,
 ) -> impl IntoResponse {
     let default_theme = state.app_settings.read().unwrap().default_theme.clone();
+    let resolved_site = state.resolve_site(&hostname_from_headers(&headers));
+    let site_name = site_name_for_login(&state, &resolved_site);
+    let logo_url = logo_url_for_login(&state, &resolved_site).await;
     let redirect = q.redirect.as_deref();
-    Html(admin::pages::login::render_public(None, q.flash.as_deref(), redirect, &default_theme))
+    Html(admin::pages::login::render_public(None, q.flash.as_deref(), redirect, &default_theme, &site_name, logo_url.as_deref()))
 }
 
 /// POST /login — subscriber login only.
@@ -197,12 +253,17 @@ pub async fn public_login_post(
     // Preserve the redirect path through error re-renders.
     let redirect_val = if form.redirect.is_empty() { None } else { Some(form.redirect.as_str()) };
 
+    let hostname = hostname_from_headers(&headers);
+    let resolved_site = state.resolve_site(&hostname);
+    let site_name = site_name_for_login(&state, &resolved_site);
+    let logo_url = logo_url_for_login(&state, &resolved_site).await;
+
     let user = match crate::models::user::get_by_email(&state.db, &form.email).await {
         Ok(u) => u,
-        Err(_) => return Html(admin::pages::login::render_public(Some("Invalid email or password."), None, redirect_val, &default_theme)).into_response(),
+        Err(_) => return Html(admin::pages::login::render_public(Some("Invalid email or password."), None, redirect_val, &default_theme, &site_name, logo_url.as_deref())).into_response(),
     };
     if !user.verify_password(&form.password) {
-        return Html(admin::pages::login::render_public(Some("Invalid email or password."), None, redirect_val, &default_theme)).into_response();
+        return Html(admin::pages::login::render_public(Some("Invalid email or password."), None, redirect_val, &default_theme, &site_name, logo_url.as_deref())).into_response();
     }
     match user.role.as_str() {
         "subscriber" => {}
@@ -214,18 +275,10 @@ pub async fn public_login_post(
         // staff account, which is useful targeting information even though
         // they already have valid creds for it.
         "super_admin" | "site_admin" | "editor" | "author" => {
-            return Html(admin::pages::login::render_public(Some("Invalid email or password."), None, redirect_val, &default_theme)).into_response();
+            return Html(admin::pages::login::render_public(Some("Invalid email or password."), None, redirect_val, &default_theme, &site_name, logo_url.as_deref())).into_response();
         }
-        _ => return Html(admin::pages::login::render_public(Some("Invalid email or password."), None, redirect_val, &default_theme)).into_response(),
+        _ => return Html(admin::pages::login::render_public(Some("Invalid email or password."), None, redirect_val, &default_theme, &site_name, logo_url.as_deref())).into_response(),
     }
-
-    let raw_host = headers
-        .get(axum::http::header::HOST)
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or("localhost")
-        .to_string();
-    let hostname = host_to_hostname(&raw_host);
-    let resolved_site = state.resolve_site(&hostname);
 
     match &resolved_site {
         Some((site, _)) => {
@@ -233,19 +286,19 @@ pub async fn public_login_post(
                 Ok(true) => {}
                 _ => return Html(admin::pages::login::render_public(
                     Some("Your account does not have access to this site."),
-                    None, redirect_val, &default_theme,
+                    None, redirect_val, &default_theme, &site_name, logo_url.as_deref(),
                 )).into_response(),
             }
         }
         None => return Html(admin::pages::login::render_public(
             Some("No site found for this domain."),
-            None, redirect_val, &default_theme,
+            None, redirect_val, &default_theme, &site_name, logo_url.as_deref(),
         )).into_response(),
     }
 
     if let Err(e) = session.insert(SESSION_ACCOUNT_USER_ID_KEY, user.id.to_string()).await {
         tracing::error!("account login session insert error: {}", e);
-        return Html(admin::pages::login::render_public(Some("Session error. Please try again."), None, redirect_val, &default_theme)).into_response();
+        return Html(admin::pages::login::render_public(Some("Session error. Please try again."), None, redirect_val, &default_theme, &site_name, logo_url.as_deref())).into_response();
     }
 
     // Redirect back to the page that sent the user to login, or fall back to /account.
