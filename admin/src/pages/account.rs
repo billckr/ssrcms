@@ -10,6 +10,9 @@ pub struct AccountContext {
     pub user_email: String,
     pub user_display_name: String,
     pub site_name: String,
+    /// Site-wide fallback appearance ("light" | "dark" | "system") from
+    /// Settings → General → Appearance — same convention as admin_page.
+    pub default_theme: String,
 }
 
 /// Wrap page content in the full account page shell (sidebar + nav + footer).
@@ -46,11 +49,18 @@ pub fn account_page(
     let dashboard_link  = nav_link("/account",              "Dashboard");
     let saved_link      = nav_link("/account/saved-posts",  "Saved Posts");
     let comments_link   = nav_link("/account/my-comments",  "My Comments");
-    let profile_link    = nav_link("/account/profile",      "Profile");
 
     let site_name         = crate::html_escape(&ctx.site_name);
-    let user_email        = crate::html_escape(&ctx.user_email);
     let user_display_name = crate::html_escape(&ctx.user_display_name);
+
+    // Account doesn't support a per-user theme setting yet, but it shares the
+    // same 'admin-theme' localStorage key, site-wide default, and
+    // system/dark-only switch as the admin area (light mode is disabled
+    // there for now too — see admin_page).
+    let default_theme = match ctx.default_theme.as_str() {
+        "light" | "dark" => ctx.default_theme.as_str(),
+        _ => "system",
+    };
 
     format!(
         r#"<!DOCTYPE html>
@@ -59,6 +69,17 @@ pub fn account_page(
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>{title} — {site_name}</title>
+  <script>
+    (function() {{
+      try {{
+        var pref = localStorage.getItem('admin-theme') || '{default_theme}';
+        var dark = pref === 'dark' || (pref === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        if (dark) {{
+          document.documentElement.setAttribute('data-theme', 'dark');
+        }}
+      }} catch (e) {{}}
+    }})();
+  </script>
   <style>{css}</style>
 </head>
 <body>
@@ -70,11 +91,7 @@ pub fn account_page(
         {dashboard_link}
         {saved_link}
         {comments_link}
-        {profile_link}
       </ul>
-      <div class="sidebar-footer">
-        <span class="sidebar-user-email">{user_email}</span>
-      </div>
     </nav>
     <main class="admin-main">
       <header class="admin-header">
@@ -83,9 +100,30 @@ pub fn account_page(
         </button>
         <h1>{title}</h1>
         <span class="admin-header-user">{user_display_name}</span>
-        <a href="/account/logout" class="icon-btn" title="Log out">
-          <img src="/admin/static/icons/log-out.svg" alt="Log out">
-        </a>
+        <div class="header-menu">
+          <button type="button" class="icon-btn" onclick="toggleHeaderMenu()" title="Menu" aria-label="Menu" aria-haspopup="true" aria-expanded="false" id="header-menu-btn">
+            <img src="/admin/static/icons/list.svg" alt="">
+          </button>
+          <div class="header-menu-dropdown" id="header-menu-dropdown">
+            <div class="theme-switch" role="group" aria-label="Theme" id="theme-switch">
+              <!-- Light mode disabled for now, same as admin — setTheme('light') logic kept intact for re-enabling later. -->
+              <button type="button" class="theme-switch-btn" data-theme-choice="system" onclick="setTheme('system')" title="Match system" aria-label="Match system">
+                <img src="/admin/static/icons/monitor.svg" alt="">
+              </button>
+              <button type="button" class="theme-switch-btn" data-theme-choice="dark" onclick="setTheme('dark')" title="Dark mode" aria-label="Dark mode">
+                <img src="/admin/static/icons/moon.svg" alt="">
+              </button>
+            </div>
+            <a href="/account/profile" class="header-menu-item">
+              <img src="/admin/static/icons/fingerprint-light.svg" alt="">
+              <span>Profile</span>
+            </a>
+            <a href="/account/logout" class="header-menu-item">
+              <img src="/admin/static/icons/log-out.svg" alt="">
+              <span>Log out</span>
+            </a>
+          </div>
+        </div>
       </header>
       <div class="admin-content">
         {flash_html}
@@ -100,6 +138,49 @@ pub fn account_page(
     function closeSidebar() {{
       document.body.classList.remove('sidebar-open');
     }}
+    function applyTheme(pref) {{
+      var dark = pref === 'dark' || (pref === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+      if (dark) {{
+        document.documentElement.setAttribute('data-theme', 'dark');
+      }} else {{
+        document.documentElement.removeAttribute('data-theme');
+      }}
+      var switchEl = document.getElementById('theme-switch');
+      if (switchEl) {{
+        var btns = switchEl.querySelectorAll('.theme-switch-btn');
+        for (var i = 0; i < btns.length; i++) {{
+          btns[i].classList.toggle('active', btns[i].getAttribute('data-theme-choice') === pref);
+        }}
+      }}
+    }}
+    function setTheme(pref) {{
+      try {{ localStorage.setItem('admin-theme', pref); }} catch (e) {{}}
+      applyTheme(pref);
+      document.getElementById('header-menu-dropdown').classList.remove('open');
+      document.getElementById('header-menu-btn').setAttribute('aria-expanded', 'false');
+    }}
+    applyTheme((function() {{
+      try {{ return localStorage.getItem('admin-theme') || '{default_theme}'; }} catch (e) {{ return '{default_theme}'; }}
+    }})());
+    function toggleHeaderMenu() {{
+      var dropdown = document.getElementById('header-menu-dropdown');
+      var btn = document.getElementById('header-menu-btn');
+      var open = dropdown.classList.toggle('open');
+      btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    }}
+    document.addEventListener('click', function(e) {{
+      var menu = document.querySelector('.header-menu');
+      if (menu && !menu.contains(e.target)) {{
+        document.getElementById('header-menu-dropdown').classList.remove('open');
+        document.getElementById('header-menu-btn').setAttribute('aria-expanded', 'false');
+      }}
+    }});
+    document.addEventListener('keydown', function(e) {{
+      if (e.key === 'Escape') {{
+        document.getElementById('header-menu-dropdown').classList.remove('open');
+        document.getElementById('header-menu-btn').setAttribute('aria-expanded', 'false');
+      }}
+    }});
     document.querySelectorAll('.admin-sidebar a').forEach(function(a) {{
       a.addEventListener('click', function(e) {{
         if (a.getAttribute('href') !== '#') closeSidebar();
@@ -129,11 +210,10 @@ pub fn account_page(
         dashboard_link = dashboard_link,
         saved_link    = saved_link,
         comments_link = comments_link,
-        profile_link  = profile_link,
-        user_email  = user_email,
         user_display_name = user_display_name,
         flash_html  = flash_html,
         content     = content,
+        default_theme = default_theme,
     )
 }
 
@@ -152,108 +232,288 @@ pub struct AccountProfileForm {
 }
 
 pub struct ProfileData {
+    pub username: String,
     pub email: String,
     pub display_name: String,
+    pub bio: String,
 }
 
+/// Up to two uppercase initials, preferring the display name over the username.
+fn initials(display_name: &str, username: &str) -> String {
+    let source = if display_name.trim().is_empty() { username } else { display_name };
+    let letters: String = source
+        .split_whitespace()
+        .filter_map(|word| word.chars().next())
+        .take(2)
+        .flat_map(|c| c.to_uppercase())
+        .collect();
+    if letters.is_empty() { "?".to_string() } else { letters }
+}
+
+/// Escaped bio, or a muted placeholder line when the user hasn't written one.
+fn display_or_placeholder(value: &str) -> String {
+    if value.trim().is_empty() {
+        r#"<span class="profile-summary-empty">&quot;The future has yet to be written...&quot;</span>"#.to_string()
+    } else {
+        format!("&quot;{}&quot;", crate::html_escape(value.trim()))
+    }
+}
+
+/// Same avatar-card / bio-card / modal layout as /admin/profile
+/// (admin/src/pages/profile.rs) — kept as a separate copy rather than a
+/// shared function since this one posts to /account/* routes and wraps in
+/// account_page instead of admin_page.
 pub fn render_profile(data: &ProfileData, flash: Option<&str>, ctx: &AccountContext) -> String {
     let content = format!(
-        r#"<div style="max-width:720px">
-  <div class="card-boxed">
-    <h2 class="card-boxed-header">Profile Management</h2>
-    <div class="card-boxed-body">
-      <form method="POST" action="/account/profile/update" class="profile-form">
-        <fieldset>
-
-          <div class="form-group">
-            <label for="display_name">Display Name</label>
-            <input type="text" id="display_name" name="display_name" value="{display_name}">
-          </div>
-
-          <div class="form-group">
-            <label for="email">Email</label>
-            <input type="email" id="email" name="email" value="{email}" required>
-          </div>
-        </fieldset>
-
-        <div class="icon-pill">
-          <button type="submit" class="icon-btn" id="profile-save-btn" title="Save Changes" aria-label="Save Changes" disabled>
-            <img src="/admin/static/icons/save.svg" alt="">
-          </button>
-        </div>
-      </form>
-    </div>
+        r#"<div class="profile-layout">
+  <div class="profile-main">
   </div>
 
-  <div class="card-boxed">
-    <h2 class="card-boxed-header">Password Management</h2>
-    <div class="card-boxed-body">
-      <form method="POST" action="/account/profile/change-password" class="password-form">
-        <fieldset>
+  <div class="profile-side">
+    <div class="profile-avatar-card">
+      <div class="profile-avatar" aria-hidden="true">{initials}</div>
+      <div class="profile-avatar-name">{display_name_or_username}</div>
+      <div class="profile-avatar-email">{email}</div>
+      <div class="icon-pill profile-avatar-btn">
+        <button type="button" class="icon-btn" disabled title="Change photo (coming soon)" aria-label="Change photo">
+          <img src="/admin/static/icons/camera.svg" alt="">
+        </button>
+        <button type="button" class="icon-btn" title="Edit Profile" aria-label="Edit Profile"
+                onclick="document.getElementById('edit-profile-dialog').showModal();document.querySelector('.admin-content').style.filter='blur(1.5px)'">
+          <img src="/admin/static/icons/fingerprint-light.svg" alt="">
+        </button>
+        <button type="button" class="icon-btn" title="Change password" aria-label="Change password"
+                onclick="document.getElementById('change-password-dialog').showModal();document.querySelector('.admin-content').style.filter='blur(1.5px)'">
+          <img src="/admin/static/icons/key.svg" alt="">
+        </button>
+      </div>
+      <p class="profile-avatar-hint">Custom avatars aren't supported yet — this is a placeholder.</p>
+    </div>
 
-          <div class="form-group">
-            <label for="current_password">Current Password</label>
-            <input type="password" id="current_password" name="current_password" required>
-          </div>
-
-          <div class="form-group">
-            <label for="new_password">New Password</label>
-            <input type="password" id="new_password" name="new_password" required>
-          </div>
-
-          <div class="form-group">
-            <label for="confirm_password">Confirm New Password</label>
-            <input type="password" id="confirm_password" name="confirm_password" required>
-          </div>
-
-          <div class="form-note">
-            <p><strong>Password requirements:</strong></p>
-            <ul>
-              <li>8&ndash;12 characters</li>
-              <li>At least one uppercase letter</li>
-              <li>At least one number</li>
-              <li>At least one symbol: ! @ # $ % &amp;</li>
-            </ul>
-          </div>
-        </fieldset>
-
-        <div class="icon-pill">
-          <button type="submit" class="icon-btn" id="password-save-btn" title="Change Password" aria-label="Change Password" disabled>
-            <img src="/admin/static/icons/key.svg" alt="">
-          </button>
-        </div>
-      </form>
+    <div class="profile-bio-card">
+      <p class="profile-bio">{bio_shown}</p>
     </div>
   </div>
 </div>
+
+<dialog id="edit-profile-dialog" class="modal-card">
+  <form method="POST" action="/account/profile/update">
+    <h3 class="modal-card-header">Edit Profile</h3>
+    <div class="modal-card-body">
+      <div class="form-group">
+        <label>Username</label>
+        <p class="form-static-value">{username}</p>
+        <small>Username cannot be changed.</small>
+      </div>
+
+      <div class="form-group">
+        <label for="email">Email</label>
+        <input type="email" id="email" name="email" value="{email}" required>
+      </div>
+
+      <div class="form-group">
+        <label for="display_name">Display Name</label>
+        <input type="text" id="display_name" name="display_name" value="{display_name}">
+      </div>
+
+      <div class="form-group">
+        <label for="bio">Bio</label>
+        <textarea id="bio" name="bio" rows="4">{bio}</textarea>
+      </div>
+
+      <div style="display:flex;justify-content:flex-end;margin-top:1rem">
+      <div class="icon-pill">
+        <button type="button" class="icon-btn" title="Cancel" aria-label="Cancel" onclick="document.getElementById('edit-profile-dialog').close()">
+          <img src="/admin/static/icons/x.svg" alt="">
+        </button>
+        <button type="submit" class="icon-btn" title="Update Profile" aria-label="Update Profile" id="edit-profile-save-btn" disabled>
+          <img src="/admin/static/icons/save.svg" alt="">
+        </button>
+      </div>
+      </div>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="change-password-dialog" class="modal-card">
+  <form method="POST" action="/account/profile/change-password" id="change-password-form" novalidate>
+    <h3 class="modal-card-header">Change Password</h3>
+    <div class="modal-card-body">
+      <div class="form-group">
+        <label for="current_password">Current Password</label>
+        <input type="password" id="current_password" name="current_password" required>
+      </div>
+
+      <div class="form-group">
+        <label for="new_password">New Password</label>
+        <input type="password" id="new_password" name="new_password" required minlength="8" maxlength="12">
+      </div>
+
+      <div class="form-group">
+        <label for="confirm_password">Confirm New Password</label>
+        <input type="password" id="confirm_password" name="confirm_password" required minlength="8" maxlength="12">
+      </div>
+
+      <div class="form-note">
+        <p><strong>Password requirements:</strong></p>
+        <ul style="list-style:none;padding-left:0;margin:0.25rem 0 0">
+          <li id="np-req-len"><span class="pw-dot" style="display:inline-block;width:1.1rem;font-style:normal">&middot;</span>8–12 characters</li>
+          <li id="np-req-upper"><span class="pw-dot" style="display:inline-block;width:1.1rem;font-style:normal">&middot;</span>At least one uppercase letter</li>
+          <li id="np-req-num"><span class="pw-dot" style="display:inline-block;width:1.1rem;font-style:normal">&middot;</span>At least one number</li>
+          <li id="np-req-sym"><span class="pw-dot" style="display:inline-block;width:1.1rem;font-style:normal">&middot;</span>At least one symbol: ! @ # $ % &amp;</li>
+          <li id="np-req-match"><span class="pw-dot" style="display:inline-block;width:1.1rem;font-style:normal">&middot;</span>Passwords match</li>
+        </ul>
+      </div>
+
+      <p id="change-password-error" class="profile-form-error" hidden></p>
+
+      <div style="display:flex;justify-content:flex-end;margin-top:1rem">
+      <div class="icon-pill">
+        <button type="button" class="icon-btn" title="Cancel" aria-label="Cancel" onclick="document.getElementById('change-password-dialog').close()">
+          <img src="/admin/static/icons/x.svg" alt="">
+        </button>
+        <button type="submit" class="icon-btn" title="Change Password" aria-label="Change Password" id="change-password-save-btn" disabled>
+          <img src="/admin/static/icons/save.svg" alt="">
+        </button>
+      </div>
+      </div>
+    </div>
+  </form>
+</dialog>
+
 <script>
+document.getElementById('edit-profile-dialog').addEventListener('close', function() {{
+  document.querySelector('.admin-content').style.filter = '';
+}});
+document.getElementById('change-password-dialog').addEventListener('close', function() {{
+  document.querySelector('.admin-content').style.filter = '';
+}});
+
 (function() {{
-  var form = document.querySelector('.profile-form');
-  var btn  = document.getElementById('profile-save-btn');
-  function checkChanged() {{
-    var changed = false;
-    form.querySelectorAll('input').forEach(function(inp) {{
-      if (inp.value !== inp.defaultValue) changed = true;
-    }});
-    btn.disabled = !changed;
-  }}
-  form.addEventListener('input', checkChanged);
+  var emailInput = document.getElementById('email');
+  var displayNameInput = document.getElementById('display_name');
+  var bioInput = document.getElementById('bio');
+  var saveBtn = document.getElementById('edit-profile-save-btn');
+
+  var original = {{
+    email: emailInput.value,
+    display_name: displayNameInput.value,
+    bio: bioInput.value,
+  }};
+
+  var syncSaveBtn = function() {{
+    var changed = emailInput.value !== original.email
+      || displayNameInput.value !== original.display_name
+      || bioInput.value !== original.bio;
+    var active = changed && emailInput.checkValidity();
+    saveBtn.disabled = !active;
+    saveBtn.classList.toggle('icon-btn-active-blue', active);
+  }};
+
+  [emailInput, displayNameInput, bioInput].forEach(function(el) {{
+    el.addEventListener('input', syncSaveBtn);
+  }});
 }})();
+
 (function() {{
-  var form = document.querySelector('.password-form');
-  var btn  = document.getElementById('password-save-btn');
-  function checkFilled() {{
-    var filled = true;
-    form.querySelectorAll('input[type=password]').forEach(function(inp) {{
-      if (!inp.value) filled = false;
+  var currentPwInput = document.getElementById('current_password');
+  var newPwInput = document.getElementById('new_password');
+  var confirmPwInput = document.getElementById('confirm_password');
+  var saveBtn = document.getElementById('change-password-save-btn');
+
+  var npReqs = [
+    {{ id: 'np-req-len',   test: function(p) {{ return p.length >= 8 && p.length <= 12; }} }},
+    {{ id: 'np-req-upper', test: function(p) {{ return /[A-Z]/.test(p); }} }},
+    {{ id: 'np-req-num',   test: function(p) {{ return /[0-9]/.test(p); }} }},
+    {{ id: 'np-req-sym',   test: function(p) {{ return /[!@#$%&]/.test(p); }} }},
+  ];
+
+  var updateFeedback = function() {{
+    var errorEl = document.getElementById('change-password-error');
+    if (errorEl) errorEl.hidden = true;
+
+    var pw = newPwInput ? newPwInput.value : '';
+    npReqs.forEach(function(req) {{
+      var li = document.getElementById(req.id);
+      var dot = li ? li.querySelector('.pw-dot') : null;
+      if (!li) return;
+      if (!pw) {{
+        li.style.color = ''; if (dot) dot.textContent = '·';
+      }} else if (req.test(pw)) {{
+        li.style.color = '#16a34a'; if (dot) dot.textContent = '✓';
+      }} else {{
+        li.style.color = '#dc2626'; if (dot) dot.textContent = '✗';
+      }}
     }});
-    btn.disabled = !filled;
-  }}
-  form.addEventListener('input', checkFilled);
+
+    var matchLi = document.getElementById('np-req-match');
+    var matchDot = matchLi ? matchLi.querySelector('.pw-dot') : null;
+    var confirmPw = confirmPwInput ? confirmPwInput.value : '';
+    var matches = !!pw && pw === confirmPw;
+    if (matchLi) {{
+      if (!pw && !confirmPw) {{
+        matchLi.style.color = ''; if (matchDot) matchDot.textContent = '·';
+      }} else if (matches) {{
+        matchLi.style.color = '#16a34a'; if (matchDot) matchDot.textContent = '✓';
+      }} else {{
+        matchLi.style.color = '#dc2626'; if (matchDot) matchDot.textContent = '✗';
+      }}
+    }}
+
+    var meetsAllReqs = npReqs.every(function(req) {{ return req.test(pw); }});
+    var currentPw = currentPwInput ? currentPwInput.value : '';
+    var active = !!(currentPw && meetsAllReqs && matches);
+    if (saveBtn) {{
+      saveBtn.disabled = !active;
+      saveBtn.classList.toggle('icon-btn-active-blue', active);
+    }}
+  }};
+
+  if (currentPwInput) currentPwInput.addEventListener('input', updateFeedback);
+  if (newPwInput) newPwInput.addEventListener('input', updateFeedback);
+  if (confirmPwInput) confirmPwInput.addEventListener('input', updateFeedback);
+
+  document.getElementById('change-password-form').addEventListener('submit', function(e) {{
+    var newPw = newPwInput.value;
+    var confirmPw = confirmPwInput.value;
+    var errorEl = document.getElementById('change-password-error');
+    var errors = [];
+
+    if (newPw.length < 8 || newPw.length > 12) {{
+      errors.push('Password must be 8-12 characters.');
+    }}
+    if (!/[A-Z]/.test(newPw)) {{
+      errors.push('Password must contain at least one uppercase letter.');
+    }}
+    if (!/[0-9]/.test(newPw)) {{
+      errors.push('Password must contain at least one number.');
+    }}
+    if (!/[!@#$%&]/.test(newPw)) {{
+      errors.push('Password must contain at least one symbol: ! @ # $ % &');
+    }}
+    if (newPw !== confirmPw) {{
+      errors.push('New passwords do not match.');
+    }}
+
+    if (errors.length > 0) {{
+      e.preventDefault();
+      errorEl.textContent = errors[0];
+      errorEl.hidden = false;
+    }} else {{
+      errorEl.hidden = true;
+    }}
+  }});
 }})();
 </script>"#,
-        email        = crate::html_escape(&data.email),
+        username = crate::html_escape(&data.username),
+        email = crate::html_escape(&data.email),
         display_name = crate::html_escape(&data.display_name),
+        bio = crate::html_escape(&data.bio),
+        bio_shown = display_or_placeholder(&data.bio),
+        initials = crate::html_escape(&initials(&data.display_name, &data.username)),
+        display_name_or_username = crate::html_escape(
+            if data.display_name.trim().is_empty() { &data.username } else { &data.display_name }
+        ),
     );
 
     account_page("Profile", "/account/profile", flash, &content, ctx)
@@ -368,22 +628,21 @@ pub fn render_saved_posts(rows: &[SavedPostRow], page: i64, total_pages: i64, se
     );
 
     let top_pagination = saved_posts_pagination(page, total_pages, search);
+    let search_toggle = crate::pill_search_toggle("saved-posts-search", "Search saved posts&hellip;", search);
 
     let content = format!(
         r#"<div style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;margin-bottom:.75rem">
-  <input id="saved-posts-search"
-         type="search"
-         placeholder="Search saved posts&hellip;"
-         value="{search_val}"
-         style="width:100%;max-width:320px;padding:.4rem .75rem;border:1px solid var(--border);border-radius:4px;font-size:14px;background:var(--field-bg);color:var(--field-text)">
+  <div class="icon-pill" style="align-self:flex-end;margin-top:0">{search_toggle}</div>
   <div>{top_pagination}</div>
 </div>
 <div id="saved-posts-list">{fragment}</div>
-{script}"#,
+{script}
+{pill_search_init}"#,
         top_pagination = top_pagination,
-        search_val     = crate::html_escape(search),
+        search_toggle  = search_toggle,
         fragment       = fragment,
         script         = script,
+        pill_search_init = crate::pill_search_init_script(),
     );
 
     account_page("Saved Posts", "/account/saved-posts", None, &content, ctx)
@@ -541,21 +800,20 @@ pub fn render_my_comments(rows: &[MyCommentRow], page: i64, total_pages: i64, se
     // Top pagination rendered outside the fragment div so the search input
     // (also outside) is never wiped by the JS live-search swap.
     let top_pagination = comments_pagination(page, total_pages, search);
+    let search_toggle = crate::pill_search_toggle("comment-search", "Search comments&hellip;", search);
 
     let content = format!(
         r#"<div style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;margin-bottom:.75rem">
-  <input id="comment-search"
-         type="search"
-         placeholder="Search comments&hellip;"
-         value="{search_val}"
-         style="width:100%;max-width:320px;padding:.4rem .75rem;border:1px solid var(--border);border-radius:4px;font-size:14px;background:var(--field-bg);color:var(--field-text)">
+  <div class="icon-pill" style="align-self:flex-end;margin-top:0">{search_toggle}</div>
   <div>{top_pagination}</div>
 </div>
 <div id="comments-list">{fragment}</div>
-{script}"#,
+{script}
+{pill_search_init}"#,
         top_pagination = top_pagination,
-        search_val     = crate::html_escape(search),
+        search_toggle  = search_toggle,
         fragment       = fragment,
+        pill_search_init = crate::pill_search_init_script(),
         script         = script,
     );
 

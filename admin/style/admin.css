@@ -143,9 +143,6 @@ a:hover { text-decoration: underline; }
 .admin-sidebar ul { list-style: none; padding: .5rem 0; flex: 1; }
 .admin-sidebar ul li a { display: block; padding: .5rem 1.25rem; color: #94a3b8; font-size: 13px; }
 .admin-sidebar ul li a:hover, .admin-sidebar ul li a.active { color: #f8fafc; background: #334155; text-decoration: none; }
-.sidebar-footer { padding: 1rem 1.25rem; }
-.sidebar-footer a { color: #94a3b8; font-size: 13px; }
-.sidebar-footer a:first-child { color: #f8fafc; font-weight: 700; }
 
 /* padding-top offsets .admin-header, which is now position:fixed and out of
    flow — without it, the flash message / .admin-content would start at
@@ -1202,37 +1199,6 @@ legend {
 }
 
 .form-note li {
-  margin-bottom: 0.25rem;
-}
-
-.sidebar-footer {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.sidebar-footer a {
-  display: block;
-  padding: 0.5rem 0;
-  text-decoration: none;
-}
-
-/* Explicit class rather than relying on `a:first-child` — the account-area
-   footer uses a <span> (not a link), so tag-dependent selectors would give
-   it different styling from the admin footer's email link. */
-.sidebar-user-email {
-  display: block;
-  padding: 0.5rem 0;
-  color: #f8fafc;
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.sidebar-user-role {
-  font-size: 11px;
-  color: #64748b;
-  text-transform: capitalize;
-  margin-top: -0.25rem;
   margin-bottom: 0.25rem;
 }
 

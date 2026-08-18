@@ -13,19 +13,21 @@ use crate::app_state::AppState;
 use crate::middleware::account_auth::AccountUser;
 use admin::pages::account::{AccountContext, MyCommentRow, ProfileData};
 
-fn build_ctx(account: &AccountUser) -> AccountContext {
+fn build_ctx(state: &AppState, account: &AccountUser) -> AccountContext {
+    let default_theme = state.app_settings.read().unwrap().default_theme.clone();
     AccountContext {
         user_email:        account.user.email.clone(),
         user_display_name: account.user.display_name.clone(),
         site_name:         account.site_name.clone(),
+        default_theme,
     }
 }
 
 // ── Dashboard ────────────────────────────────────────────────────────
 
 /// GET /account — dashboard (default landing page).
-pub async fn dashboard(account: AccountUser) -> Html<String> {
-    let ctx = build_ctx(&account);
+pub async fn dashboard(State(state): State<AppState>, account: AccountUser) -> Html<String> {
+    let ctx = build_ctx(&state, &account);
     Html(admin::pages::account::render_dashboard(&ctx))
 }
 
@@ -33,13 +35,16 @@ pub async fn dashboard(account: AccountUser) -> Html<String> {
 
 /// GET /account/profile — profile view.
 pub async fn profile_view(
+    State(state): State<AppState>,
     account: AccountUser,
     Query(params): Query<std::collections::HashMap<String, String>>,
 ) -> Html<String> {
-    let ctx = build_ctx(&account);
+    let ctx = build_ctx(&state, &account);
     let data = ProfileData {
+        username:     account.user.username.clone(),
         email:        account.user.email.clone(),
         display_name: account.user.display_name.clone(),
+        bio:          account.user.bio.clone(),
     };
     let flash = params.get("flash").map(|s| s.as_str());
     Html(admin::pages::account::render_profile(&data, flash, &ctx))
@@ -49,6 +54,7 @@ pub async fn profile_view(
 pub struct UpdateForm {
     pub email:        String,
     pub display_name: Option<String>,
+    pub bio:          Option<String>,
 }
 
 /// POST /account/profile/update
@@ -58,13 +64,16 @@ pub async fn profile_update(
     Form(form): Form<UpdateForm>,
 ) -> Redirect {
     use crate::models::user::UpdateUser;
+    // Always Some(...) — including Some("") — so clearing display name/bio to
+    // empty actually persists instead of update() silently falling back to
+    // the current DB value (its None means "leave untouched", not "clear").
     let update = UpdateUser {
         username:      None,
         email:         Some(form.email),
-        display_name:  form.display_name.filter(|s| !s.is_empty()),
+        display_name:  Some(form.display_name.unwrap_or_default()),
         password_hash: None,
         role:          None,
-        bio:           None,
+        bio:           Some(form.bio.unwrap_or_default()),
     };
 
     let flash = match crate::models::user::update(&state.db, account.user.id, &update).await {
@@ -138,7 +147,7 @@ pub async fn saved_posts(
     account: AccountUser,
     Query(query): Query<SavedPostsQuery>,
 ) -> Html<String> {
-    let ctx = build_ctx(&account);
+    let ctx = build_ctx(&state, &account);
     let per_page = 20i64;
     let page = query.page.unwrap_or(1).max(1);
     let offset = (page - 1) * per_page;
@@ -210,7 +219,7 @@ pub async fn my_comments(
     account: AccountUser,
     Query(query): Query<CommentsQuery>,
 ) -> Html<String> {
-    let ctx = build_ctx(&account);
+    let ctx = build_ctx(&state, &account);
     let per_page = 20i64;
     let page = query.page.unwrap_or(1).max(1);
     let offset = (page - 1) * per_page;

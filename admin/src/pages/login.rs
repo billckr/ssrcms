@@ -70,7 +70,13 @@ fn render_with_action(error: Option<&str>, flash: Option<&str>, action: &str, re
       }} catch (e) {{}}
     }})();
   </script>
-  <style>{css}</style>
+  <style>{css}
+    .login-box .login-submit-row {{ display: flex; justify-content: center; margin-top: .5rem; }}
+    .login-box .login-submit-row .icon-btn {{ width: 40px; height: 40px; padding: 0; background: none; background-image: none; border: 1px solid transparent; box-shadow: none; }}
+    .login-box .login-submit-row .icon-btn:hover {{ box-shadow: none; transform: none; }}
+    .login-box .login-submit-row .icon-btn:focus {{ box-shadow: none; }}
+    .login-box .login-submit-row .icon-btn img {{ width: 22px; height: 22px; }}
+  </style>
 </head>
 <body class="login-body">
   <div class="login-box">
@@ -84,7 +90,13 @@ fn render_with_action(error: Option<&str>, flash: Option<&str>, action: &str, re
       <input type="email" id="email" name="email" required autofocus>
       <label for="password">Password</label>
       <input type="password" id="password" name="password" required>
-      <button type="submit">Sign in</button>
+      <div class="login-submit-row">
+        <div class="icon-pill">
+          <button type="submit" class="icon-btn" title="Sign in" aria-label="Sign in">
+            <img src="/admin/static/icons/fingerprint-light.svg" alt="">
+          </button>
+        </div>
+      </div>
     </form>
     {below_form_links}
   </div>
