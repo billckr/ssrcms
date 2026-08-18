@@ -58,10 +58,26 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
     };
     let site_indicator = if ctx.current_site.is_empty() || ctx.is_impersonating {
         String::new()
+    } else if ctx.is_global_admin {
+        // A super_admin isn't scoped to a site the way other roles are —
+        // showing a domain here when they're not impersonating (that case
+        // is already handled above by visiting_badge) would misleadingly
+        // suggest they're confined to it, so just label the badge by their
+        // actual role instead.
+        r#"<a href="/admin/sites" class="site-indicator">Super Admin</a>"#.to_string()
     } else {
+        // Include the actively logged-into role next to the site — most
+        // relevant for a user with multiple roles on this site (see the
+        // login-time role picker), where it's otherwise not visible anywhere
+        // in the chrome which role the current session is acting as.
+        let label = if ctx.user_role.is_empty() {
+            ctx.current_site.clone()
+        } else {
+            format!("{} - {}", ctx.current_site, ctx.user_role.to_lowercase())
+        };
         format!(
             r#"<a href="/admin/sites" class="site-indicator">{}</a>"#,
-            html_escape(&ctx.current_site)
+            html_escape(&label)
         )
     };
     let flash_html = match flash {

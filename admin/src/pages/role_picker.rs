@@ -58,12 +58,16 @@ pub fn render(roles: &[&str], site_hostname: &str, default_theme: &str) -> Strin
   <style>{css}
     .role-pick-select {{ width: 100%; padding: .5rem .75rem; border: 1px solid var(--border); border-radius: var(--radius); font-size: 14px; margin-bottom: 1rem; background: var(--field-bg); color: var(--field-text); }}
     .role-pick-submit-row {{ display: flex; justify-content: center; }}
+    .role-pick-submit-row .icon-pill {{ padding: .4rem; }}
     /* .login-box button applies a blue gradient submit-button look to every
        button in the box — override it back to a plain blend-in icon button
-       here so the hexagon just sits in its pill, not inside a blue chip. */
-    .login-box .role-pick-submit-row button {{ width: 32px; height: 32px; padding: 0; background: none; background-image: none; border: 1px solid transparent; box-shadow: none; }}
+       here so the icon just sits in its pill, not inside a blue chip.
+       Sized up slightly from the default 32px/18px icon-btn since this is
+       the page's single primary action, not a row of small toolbar icons. */
+    .login-box .role-pick-submit-row button {{ width: 40px; height: 40px; padding: 0; background: none; background-image: none; border: 1px solid transparent; box-shadow: none; }}
     .login-box .role-pick-submit-row button:hover {{ box-shadow: none; transform: none; }}
     .login-box .role-pick-submit-row button:focus {{ box-shadow: none; }}
+    .role-pick-submit-row button img {{ width: 22px; height: 22px; }}
   </style>
 </head>
 <body class="login-body">
@@ -77,7 +81,7 @@ pub fn render(roles: &[&str], site_hostname: &str, default_theme: &str) -> Strin
       <div class="role-pick-submit-row">
         <div class="icon-pill">
           <button type="submit" class="icon-btn" title="Continue" aria-label="Continue">
-            <img src="/admin/static/icons/hexagon.svg" alt="">
+            <img src="/admin/static/icons/fingerprint-light.svg" alt="">
           </button>
         </div>
       </div>
