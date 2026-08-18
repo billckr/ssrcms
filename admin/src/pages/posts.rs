@@ -1800,6 +1800,7 @@ mod tests {
             can_manage_taxonomies: false,
             can_manage_forms: false,
             can_manage_pages: true,
+            can_manage_site_settings: false,
             unread_forms_count: 0,
             app_name: "Synaptic".to_string(),
             logo_url: None,

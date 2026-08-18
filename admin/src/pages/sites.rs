@@ -930,15 +930,14 @@ fn render_new_for_site_admin(data: &NewSiteData, flash: Option<&str>, ctx: &crat
   </div>
 
   <div class="card-boxed-section">
-    <p style="color:var(--muted);font-size:.875rem;margin:0">
+    <p style="color:var(--muted);font-size:.875rem;margin:0 0 .75rem">
       You'll be this site's owner and admin.
     </p>
-  </div>
-  </div>
-  <div class="icon-pill">
-    <button type="submit" form="new-site-form" id="create-btn" class="icon-btn" title="Create Site" aria-label="Create Site" disabled>
-      <img src="/admin/static/icons/file-plus.svg" alt="">
-    </button>
+    <div class="icon-pill">
+      <button type="submit" form="new-site-form" id="create-btn" class="icon-btn" title="Create Site" aria-label="Create Site" disabled>
+        <img src="/admin/static/icons/file-plus.svg" alt="">
+      </button>
+    </div>
   </div>
   </form>
   </div>
@@ -1076,11 +1075,11 @@ pub fn render_new(data: &NewSiteData, flash: Option<&str>, ctx: &crate::PageCont
       <small>A new account is created and assigned as this site's admin and owner.</small>
     </div>
   </div>
-  </div>
   <div class="icon-pill">
     <button type="submit" form="new-site-form" id="create-btn" class="icon-btn" title="Create Site" aria-label="Create Site" disabled>
       <img src="/admin/static/icons/file-plus.svg" alt="">
     </button>
+  </div>
   </div>
   </form>
   </div>
