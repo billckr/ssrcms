@@ -352,11 +352,21 @@ pub async fn create(
         )).into_response();
     }
 
-    // Resolve who owns/admins the new site, per the Site Admin sub-form. Every
-    // site must have an owner from creation onward — "assign later" no longer
-    // exists — so this always resolves to a concrete user or bails with a
-    // validation error.
-    let owner_id: Uuid = match form.user_assignment.as_deref() {
+    // Resolve who owns/admins the new site. A site admin (non-global) is
+    // always the owner of anything they create — no user picker at all, and
+    // any submitted user_assignment/existing_user_id/new_* fields are
+    // ignored — this used to let a site admin hand a new site off to a
+    // brand-new user, who then became the sole owner while the creating
+    // site admin got no site_users row at all, so the site silently
+    // vanished from their own /admin/sites list (still visible to
+    // super_admin, who sees everything, which is what made it look like
+    // the site had been reassigned to the super_admin account). Only a
+    // global admin retains the existing/new-user sub-form flexibility,
+    // since a super_admin is routinely creating sites on behalf of others.
+    let owner_id: Uuid = if !admin.caps.is_global_admin {
+        admin.user.id
+    } else {
+    match form.user_assignment.as_deref() {
         Some("existing") => {
             let Some(uid) = form.existing_user_id.as_deref().and_then(|s| s.parse::<Uuid>().ok()) else {
                 let data = rebuild_new_site_data(&state, &admin, &form, &hostname).await;
@@ -421,6 +431,7 @@ pub async fn create(
             let data = rebuild_new_site_data(&state, &admin, &form, &hostname).await;
             return Html(admin::pages::sites::render_new(&data, Some("Please select a site admin."), &ctx)).into_response();
         }
+    }
     };
 
     let result = crate::models::site::create_with_defaults(&state.db, &hostname, Some(owner_id))
