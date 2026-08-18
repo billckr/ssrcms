@@ -66,8 +66,8 @@ pub fn render_with_flash(themes: &[ThemeInfo], flash: Option<&str>, ctx: &crate:
             )
         };
         format!(
-            r#"<div class="card-boxed" style="max-width:520px;margin-bottom:1.5rem">
-  <h2 class="card-boxed-header">Themes</h2>
+            r#"<div class="card-boxed">
+  <h2 class="card-boxed-header">Theme Options</h2>
   <div class="card-boxed-body">
   <form method="GET" action="/admin/appearance">
     <div class="form-group" style="max-width:280px">
@@ -77,33 +77,20 @@ pub fn render_with_flash(themes: &[ThemeInfo], flash: Option<&str>, ctx: &crate:
       </select>
     </div>
   </form>
+  <div class="card-boxed-section" style="margin-top:1rem">
+    <p class="muted" style="font-size:1.0625rem;margin-bottom:1.25rem;">Upload a <code>.zip</code> file containing a valid theme. The zip must include <code>theme.toml</code> and all required templates.</p>
+    <form method="post" action="/admin/appearance/upload" enctype="multipart/form-data" class="upload-form" id="theme-upload-form">
+      <div class="form-group">
+        <input type="file" id="theme_zip" name="file" accept=".zip" required>
+      </div>
+    </form>
+  </div>
   <div class="icon-pill" style="margin-top:1rem">
     <a href="/admin/appearance/create" class="icon-btn" title="Create Theme" aria-label="Create Theme"><img src="/admin/static/icons/file-plus.svg" alt=""></a>
+    <button type="submit" form="theme-upload-form" class="icon-btn" id="theme-upload-btn" title="Upload &amp; Install" aria-label="Upload &amp; Install" disabled>
+      <img src="/admin/static/icons/upload.svg" alt="">
+    </button>
   </div>
-  </div>
-</div>"#,
-            filter_options = filter_options,
-        )
-    } else {
-        String::new()
-    };
-
-    let content = format!(
-        r#"{toolbar}<div class="theme-list">{cards}</div>
-<div class="card-boxed" style="margin-top:2.5rem;max-width:520px;">
-  <h2 class="card-boxed-header">Upload Theme</h2>
-  <div class="card-boxed-body">
-  <p class="muted" style="font-size:1.0625rem;margin-bottom:1.25rem;">Upload a <code>.zip</code> file containing a valid theme. The zip must include <code>theme.toml</code> and all required templates.</p>
-  <form method="post" action="/admin/appearance/upload" enctype="multipart/form-data" class="upload-form">
-    <div class="form-group">
-      <input type="file" id="theme_zip" name="file" accept=".zip" required>
-    </div>
-    <div class="icon-pill">
-      <button type="submit" class="icon-btn" id="theme-upload-btn" title="Upload &amp; Install" aria-label="Upload &amp; Install" disabled>
-        <img src="/admin/static/icons/upload.svg" alt="">
-      </button>
-    </div>
-  </form>
   </div>
 </div>
 <script>
@@ -114,10 +101,25 @@ pub fn render_with_flash(themes: &[ThemeInfo], flash: Option<&str>, ctx: &crate:
     btn.disabled = !input.files.length;
   }});
 }})();
-</script>"#
+</script>"#,
+            filter_options = filter_options,
+        )
+    } else {
+        String::new()
+    };
+
+    let content = format!(
+        r#"<div class="two-col two-col-reorder-mobile">
+  <div>
+    <div class="theme-list">{cards}</div>
+  </div>
+  <div>
+    {toolbar}
+  </div>
+</div>"#
     );
 
-    admin_page("Appearance", "/admin/appearance", flash, &content, ctx)
+    admin_page("Themes", "/admin/appearance", flash, &content, ctx)
 }
 
 pub fn render_create_theme_form(flash: Option<&str>, ctx: &crate::PageContext) -> String {
@@ -1173,14 +1175,19 @@ fn render_card(t: &ThemeInfo, ctx: &crate::PageContext, filter: &str) -> String 
     // can edit the private original directly without getting a site copy first.
     if filter == "global" || filter == "private" {
         let source_val = crate::html_escape(&t.source);
-        let get_html = if t.has_site_copy {
+        let in_my_themes_badge = if t.has_site_copy {
             r#"<span class="badge badge-in-use">In My Themes</span>"#.to_string()
+        } else {
+            String::new()
+        };
+        let get_html = if t.has_site_copy {
+            String::new()
         } else {
             format!(
                 r#"<form method="post" action="/admin/appearance/get-theme" style="display:inline;">
     <input type="hidden" name="theme" value="{name}">
     <input type="hidden" name="source" value="{source}">
-    <button type="submit" class="btn btn-primary">Get Theme</button>
+    <button type="submit" class="icon-btn" title="Get Theme" aria-label="Get Theme"><img src="/admin/static/icons/download.svg" alt=""></button>
 </form>"#,
                 name   = name_esc,
                 source = source_val,
@@ -1191,7 +1198,7 @@ fn render_card(t: &ThemeInfo, ctx: &crate::PageContext, filter: &str) -> String 
         // publish it to global, or remove it entirely.
         let (edit_html, make_global_html, remove_html) = if filter == "private" {
             let edit = format!(
-                r#"<div class="icon-pill"><a href="/admin/appearance/editor/{name}?source=private" class="icon-btn" title="Edit" aria-label="Edit"><img src="/admin/static/icons/edit.svg" alt=""></a></div>"#,
+                r#"<a href="/admin/appearance/editor/{name}?source=private" class="icon-btn" title="Edit" aria-label="Edit"><img src="/admin/static/icons/edit.svg" alt=""></a>"#,
                 name = name_esc,
             );
 
@@ -1207,7 +1214,7 @@ fn render_card(t: &ThemeInfo, ctx: &crate::PageContext, filter: &str) -> String 
             let make_global = format!(
                 r#"<form method="post" action="/admin/appearance/publish-theme" style="display:inline;">
     <input type="hidden" name="theme" value="{name}">
-    <button type="submit" class="btn btn-primary"{confirm}>Pub</button>
+    <button type="submit" class="icon-btn" title="Publish to Global" aria-label="Publish to Global"{confirm}><img src="/admin/static/icons/upload-cloud.svg" alt=""></button>
 </form>"#,
                 name    = name_esc,
                 confirm = confirm_attr,
@@ -1215,12 +1222,12 @@ fn render_card(t: &ThemeInfo, ctx: &crate::PageContext, filter: &str) -> String 
 
             let remove = if t.can_delete {
                 format!(
-                    r#"<div class="icon-pill"><form method="post" action="/admin/appearance/delete" style="display:inline;"
+                    r#"<form method="post" action="/admin/appearance/delete" style="display:inline;"
      onsubmit="return confirm('Remove private theme &quot;{name}&quot;? This only deletes the private copy — any site copies are unaffected.')">
     <input type="hidden" name="theme" value="{name}">
     <input type="hidden" name="source" value="private">
     <button type="submit" class="icon-btn icon-danger" title="Remove" aria-label="Remove"><img src="/admin/static/icons/delete.svg" alt=""></button>
-</form></div>"#,
+</form>"#,
                     name = name_esc,
                 )
             } else {
@@ -1232,18 +1239,31 @@ fn render_card(t: &ThemeInfo, ctx: &crate::PageContext, filter: &str) -> String 
             (String::new(), String::new(), String::new())
         };
 
+        let actions_pill = if get_html.is_empty() && make_global_html.is_empty() && edit_html.is_empty() && remove_html.is_empty() {
+            String::new()
+        } else {
+            format!(
+                r#"<div class="icon-pill">{get}{make_global}{edit}{remove}</div>"#,
+                get         = get_html,
+                make_global = make_global_html,
+                edit        = edit_html,
+                remove      = remove_html,
+            )
+        };
+
         return format!(
             r#"<div class="theme-card">
   {screenshot}
   {header}
-  <div class="theme-actions">{get}{make_global}{edit}{remove}</div>
+  <div class="theme-actions">
+    {badge}
+    {actions_pill}
+  </div>
 </div>"#,
-            screenshot  = screenshot_html,
-            header      = header,
-            get         = get_html,
-            edit        = edit_html,
-            make_global = make_global_html,
-            remove      = remove_html,
+            screenshot   = screenshot_html,
+            header       = header,
+            badge        = in_my_themes_badge,
+            actions_pill = actions_pill,
         );
     }
 

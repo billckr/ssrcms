@@ -711,8 +711,10 @@ a.author-card-site:hover { text-decoration: underline; }
 .media-card form { padding: 0 .5rem .5rem; }
 
 /* Two column layout */
-.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; }
+.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; align-items: start; }
+.two-col > div { min-width: 0; }
 .two-col h2:not(.card-boxed-header) { font-size: 1rem; margin-bottom: 1rem; }
+.two-col > div:last-child { position: sticky; top: 1rem; }
 
 /* Documentation markdown content */
 .doc-content { font-size: 13.5px; line-height: 1.75; color: var(--text); }
@@ -845,6 +847,14 @@ body.sidebar-open .sidebar-overlay {
   .two-col {
     grid-template-columns: 1fr;
     gap: 1rem;
+  }
+  .two-col > div:last-child {
+    position: static;
+  }
+  /* On /admin/appearance, "Appearance options" (the second column) should
+     lead when stacked, ahead of the theme list. */
+  .two-col-reorder-mobile > div:last-child {
+    order: -1;
   }
 
   /* Plugin list: single column */
@@ -1222,7 +1232,7 @@ legend {
    them the box comes out a different size even with identical padding,
    since that's the only place a select's total height is pinned. */
 .appearance-filter-select { height: 2rem; box-sizing: border-box; line-height: 1.4; padding: .35rem .6rem; font-size: .875rem; font-family: inherit; border: 1px solid var(--border); border-radius: var(--radius); background: var(--field-bg); color: var(--field-text); cursor: pointer; }
-.theme-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 1.5rem; margin-top: 1rem; }
+.theme-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(320px, 100%), 1fr)); gap: 1.5rem; margin-top: 1rem; }
 .theme-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.25rem 1.5rem; box-shadow: var(--shadow); transition: box-shadow .2s; }
 .theme-card.active { border: 2px solid var(--primary); box-shadow: 0 0 0 3px rgba(79,70,229,.1); }
 .theme-card-header { display: flex; align-items: center; gap: .35rem; margin-bottom: .4rem; }
