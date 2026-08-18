@@ -170,7 +170,7 @@ a:hover { text-decoration: underline; }
 .site-indicator:hover { background: var(--border); border-color: var(--border); color: var(--text); }
 .ssl-badge { display:inline-flex; align-items:center; background:none; border:none; padding:0 2px; cursor:default; vertical-align:middle; }
 .ssl-inactive { cursor:pointer; border:none; border-radius:3px; padding:1px 3px; min-width:20px; min-height:20px; justify-content:center; }
-.badge-visiting { margin-left: auto; flex-shrink: 0; font-size: .72rem; font-weight: 700; color: var(--text); background: var(--tint); border: 1px solid var(--border); border-radius: 4px; padding: .15rem .5rem; white-space: nowrap; text-decoration: none; display: inline-flex; align-items: center; gap: .25rem; }
+.badge-visiting { margin-left: auto; flex-shrink: 0; font-size: .84rem; font-weight: 700; color: var(--text); background: var(--tint); border: 1px solid var(--border); border-radius: 4px; padding: .15rem .5rem; white-space: nowrap; text-decoration: none; display: inline-flex; align-items: center; gap: .25rem; }
 .badge-visiting:hover { background: var(--border); border-color: var(--border); color: var(--text); }
 /* Same theme-based look as the header .site-indicator badge, sized to
    match the row's count badges (padding .15rem .5rem). */
