@@ -226,6 +226,8 @@ rather than return a JSON error response.
 
 ---
 
+Modal and form UI conventions (structure, buttons, save-button validation) live in `docs/admin-ui-conventions.md`, not here.
+
 ## Anti-Patterns (never do these)
 
 ```rust
@@ -272,4 +274,4 @@ async fn activate(...) -> Result<Redirect, String>
 
 ---
 
-*Synaptic Signals admin handler patterns — last updated 2026-02-23*
+*Synaptic Signals admin handler patterns — last updated 2026-08-18*
