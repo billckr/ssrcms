@@ -201,9 +201,9 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
         {builder}
         {forms}
         {documentation}
+        {activity_log}
         {settings}
         {site_settings}
-        {activity_log}
       </ul>
     </nav>
     <main class="admin-main">

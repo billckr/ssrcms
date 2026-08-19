@@ -534,15 +534,15 @@ pub fn render_settings(data: &SiteSettingsData, flash: Option<&str>, ctx: &crate
         <label for="site_description">Site Description</label>
         <textarea id="site_description" name="site_description" rows="3">{site_description}</textarea>
       </div>
-      <div class="form-group">
+      <div class="form-group" style="max-width:220px">
         <label for="language">Language</label>
         <input type="text" id="language" name="language" value="{language}">
       </div>
-      <div class="form-group">
+      <div class="form-group" style="max-width:220px">
         <label for="posts_per_page">Posts Per Page</label>
         <input type="number" id="posts_per_page" name="posts_per_page" value="{posts_per_page}" min="1" max="100">
       </div>
-      <div class="form-group">
+      <div class="form-group" style="max-width:220px">
         <label for="date_format">Date Format</label>
         <input type="text" id="date_format" name="date_format" value="{date_format}">
         <small>Uses chrono format strings, e.g. "%B %-d, %Y" &rarr; January 1, 2026</small>

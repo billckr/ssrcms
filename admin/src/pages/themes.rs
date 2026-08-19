@@ -1314,7 +1314,7 @@ fn render_card(t: &ThemeInfo, ctx: &crate::PageContext, filter: &str) -> String 
     };
 
     let edit_html = format!(
-        r#"<a href="/admin/themes/editor/{name}?source={source}" class="icon-btn" title="Edit" aria-label="Edit"><img src="/admin/static/icons/edit.svg" alt=""></a>"#,
+        r#"<a href="/admin/themes/editor/{name}?source={source}" class="icon-btn" title="Customize Theme" aria-label="Customize Theme"><img src="/admin/static/icons/edit.svg" alt=""></a>"#,
         name   = name_esc,
         source = crate::html_escape(&t.source),
     );
