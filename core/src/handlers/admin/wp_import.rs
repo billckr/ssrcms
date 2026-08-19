@@ -689,9 +689,7 @@ async fn unique_import_username(state: &AppState, login: &str) -> String {
         base.push('0');
     }
 
-    if !user::is_reserved_username(&base)
-        && user::get_by_username_include_inactive(&state.db, &base).await.is_err()
-    {
+    if user::get_by_username_include_inactive(&state.db, &base).await.is_err() {
         return base;
     }
     for _ in 0..25 {
@@ -703,9 +701,7 @@ async fn unique_import_username(state: &AppState, login: &str) -> String {
             while trimmed.ends_with('-') { trimmed.pop(); }
         }
         let candidate = format!("{trimmed}-{suffix}");
-        if !user::is_reserved_username(&candidate)
-            && user::get_by_username_include_inactive(&state.db, &candidate).await.is_err()
-        {
+        if user::get_by_username_include_inactive(&state.db, &candidate).await.is_err() {
             return candidate;
         }
     }

@@ -292,16 +292,6 @@ fn validate_password(password: &str) -> Result<(), &'static str> {
     Ok(())
 }
 
-/// Mirrors `synaptic_core::models::user::RESERVED_USERNAMES`. Keep in sync.
-const RESERVED_USERNAMES: &[&str] = &[
-    "admin", "administrator", "root", "superuser", "sysadmin", "system",
-    "support", "help", "helpdesk", "webmaster", "postmaster", "hostmaster",
-    "info", "contact", "sales", "billing", "security", "abuse", "noreply",
-    "no-reply", "mail", "email", "ftp", "www", "api", "null", "undefined",
-    "test", "guest", "anonymous", "moderator", "mod", "staff", "owner",
-    "service", "bot", "official", "synapcms",
-];
-
 /// Mirrors `synaptic_core::models::user::validate_username` — duplicated
 /// rather than imported (same reasoning as `validate_password` above: the
 /// CLI doesn't depend on the core crate). Keep in sync if the web rule changes.
@@ -318,9 +308,6 @@ fn validate_username(username: &str) -> Result<(), &'static str> {
     }
     if username.starts_with('-') || username.ends_with('-') {
         return Err("Username cannot start or end with a symbol");
-    }
-    if RESERVED_USERNAMES.contains(&username) {
-        return Err("This username is reserved and cannot be used");
     }
     Ok(())
 }

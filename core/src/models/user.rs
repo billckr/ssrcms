@@ -104,25 +104,10 @@ pub fn validate_password(password: &str) -> std::result::Result<(), &'static str
     Ok(())
 }
 
-/// Usernames that can never be assigned to an account, regardless of how
-/// they're created (signup form, admin New User, CLI, or WP import). Covers
-/// system/role-sounding names that could be used to impersonate staff or
-/// site infrastructure. Keep in sync with `cli/src/commands/user.rs`'s
-/// mirrored copy.
-const RESERVED_USERNAMES: &[&str] = &[
-    "admin", "administrator", "root", "superuser", "sysadmin", "system",
-    "support", "help", "helpdesk", "webmaster", "postmaster", "hostmaster",
-    "info", "contact", "sales", "billing", "security", "abuse", "noreply",
-    "no-reply", "mail", "email", "ftp", "www", "api", "null", "undefined",
-    "test", "guest", "anonymous", "moderator", "mod", "staff", "owner",
-    "service", "bot", "official", "synapcms",
-];
-
 /// Validate a username against site-wide requirements.
 ///
-/// Rules: 5–15 characters, lowercase letters/digits/hyphens only, cannot
-/// start or end with a hyphen (the only symbol the character set allows),
-/// and cannot be a reserved system/role name.
+/// Rules: 5–15 characters, lowercase letters/digits/hyphens only, and cannot
+/// start or end with a hyphen (the only symbol the character set allows).
 pub fn validate_username(username: &str) -> std::result::Result<(), &'static str> {
     let len = username.len();
     if len < 5 {
@@ -137,17 +122,7 @@ pub fn validate_username(username: &str) -> std::result::Result<(), &'static str
     if username.starts_with('-') || username.ends_with('-') {
         return Err("Username cannot start or end with a symbol");
     }
-    if RESERVED_USERNAMES.contains(&username) {
-        return Err("This username is reserved and cannot be used");
-    }
     Ok(())
-}
-
-/// Whether `username` is on the reserved list, exposed for callers (like WP
-/// import's collision-avoidance loop) that need to check it directly rather
-/// than through `validate_username`'s full rule set.
-pub fn is_reserved_username(username: &str) -> bool {
-    RESERVED_USERNAMES.contains(&username)
 }
 
 /// Validate a display name against a sane length ceiling. No character
