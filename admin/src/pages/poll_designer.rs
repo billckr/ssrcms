@@ -60,7 +60,7 @@ pub fn polls_list_fragment(rows: &[PollRow], search: &str) -> String {
     };
 
     let body = if filtered.is_empty() {
-        r#"<tr><td colspan="5" style="text-align:center;color:var(--muted)">No polls yet. Create one to get started.</td></tr>"#.to_string()
+        r#"<tr><td colspan="5" style="text-align:center;color:var(--muted)">No polls yet. Create one to get started. <a href="/admin/designer/polls/new">Create</a></td></tr>"#.to_string()
     } else {
         filtered.iter().map(|p| {
             format!(

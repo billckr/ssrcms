@@ -176,7 +176,7 @@ pub fn forms_list_fragment(rows: &[FormRow], page: i64, total_pages: i64, search
     // icon rather than the name itself now, matching the Forms tab's
     // Edit/Analytics pattern on /admin/analytics?tab=forms.
     let body = if rows.is_empty() {
-        r#"<tr><td colspan="4" style="text-align:center;color:var(--muted)">No forms yet. Create one to get started.</td></tr>"#.to_string()
+        r#"<tr><td colspan="4" style="text-align:center;color:var(--muted)">No forms yet. Create one to get started. <a href="/admin/form-designer/new">Create</a></td></tr>"#.to_string()
     } else {
         rows.iter().map(|f| {
             format!(
