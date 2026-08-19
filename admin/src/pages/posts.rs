@@ -10,6 +10,10 @@ pub struct PostRow {
     pub published_at: Option<String>,
     pub post_password_set: bool,
     pub site_hostname: String,
+    /// Path this row's View link should point to — for posts, built from the
+    /// site's configured `permalink_structure` (see `models::post::build_permalink`);
+    /// for pages, the flat `/{slug}` path.
+    pub view_path: String,
 }
 
 pub struct PostEdit {
@@ -176,15 +180,10 @@ pub fn posts_list_fragment(
     }
 
     let rows = posts.iter().map(|p| {
-        let path = if p.post_type == "page" {
-            format!("/{}", p.slug)
-        } else {
-            format!("/{}", p.slug)
-        };
         let view_href = if ctx.current_site.is_empty() {
-            path
+            p.view_path.clone()
         } else {
-            format!("//{}{}", ctx.current_site, path)
+            format!("//{}{}", ctx.current_site, p.view_path)
         };
         // Authors cannot edit scheduled or published posts — show view only.
         let author_read_only = ctx.user_role.eq_ignore_ascii_case("author")
@@ -1854,6 +1853,7 @@ mod tests {
             published_at: None,
             post_password_set: false,
             site_hostname: String::new(),
+            view_path: format!("/{}", slug),
         }
     }
 

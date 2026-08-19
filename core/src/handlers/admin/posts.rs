@@ -162,9 +162,17 @@ async fn list_type(state: AppState, post_type: &str, page: Option<i64>, status_f
         vec![]
     });
 
-    // Snapshot site hostname map once so we don't hold the lock per-row.
-    let site_hostnames: std::collections::HashMap<Uuid, String> = state.site_cache.read()
-        .map(|cache| cache.values().map(|(s, _)| (s.id, s.hostname.clone())).collect())
+    // Snapshot site hostname + permalink_structure once so we don't hold the
+    // lock (or re-fetch settings) per-row.
+    let (site_hostnames, permalink_structures): (
+        std::collections::HashMap<Uuid, String>,
+        std::collections::HashMap<Uuid, String>,
+    ) = state.site_cache.read()
+        .map(|cache| {
+            let hostnames = cache.values().map(|(s, _)| (s.id, s.hostname.clone())).collect();
+            let structures = cache.values().map(|(s, settings)| (s.id, settings.permalink_structure.clone())).collect();
+            (hostnames, structures)
+        })
         .unwrap_or_default();
 
     let mut rows: Vec<PostRow> = Vec::new();
@@ -182,6 +190,29 @@ async fn list_type(state: AppState, post_type: &str, page: Option<i64>, status_f
             .and_then(|sid| site_hostnames.get(&sid).cloned())
             .unwrap_or_default();
 
+        // View link: pages keep the flat `/{slug}` path (unaffected by
+        // permalink_structure — see SiteSettings::permalink_structure's doc
+        // comment); posts use the site's configured structure, same as the
+        // public-facing URL PostContext.url would build.
+        let view_path = if p.post_type == "page" {
+            format!("/{}", p.slug)
+        } else {
+            let structure = p.site_id
+                .and_then(|sid| permalink_structures.get(&sid))
+                .map(|s| s.as_str())
+                .unwrap_or("/%postname%");
+            let category_slug = if structure.contains("%category%") {
+                crate::models::taxonomy::for_post(&state.db, p.id).await
+                    .unwrap_or_default()
+                    .into_iter()
+                    .find(|t| t.taxonomy == "category")
+                    .map(|t| t.slug)
+            } else {
+                None
+            };
+            crate::models::post::build_permalink(structure, p, category_slug.as_deref())
+        };
+
         rows.push(PostRow {
             id: p.id.to_string(),
             title: p.title.clone(),
@@ -192,6 +223,7 @@ async fn list_type(state: AppState, post_type: &str, page: Option<i64>, status_f
             published_at: p.published_at.map(|d| d.format("%Y-%m-%d %H:%M").to_string()),
             post_password_set: p.post_password.is_some(),
             site_hostname,
+            view_path,
         });
     }
 
@@ -391,18 +423,30 @@ async fn edit_post_type(state: AppState, id: Uuid, site_id: Option<Uuid>, is_aut
         vec![]
     };
 
-    let post_path = if post.post_type == "page" {
-        crate::models::post::get_full_page_path(&state.db, &post).await
-    } else {
-        format!("/{}", post.slug)
-    };
     // Absolute, not relative: admin for a site other than the one currently
     // in the address bar is routine here (super admin browsing another
     // site's content, or admin reached via the shared bckr.local host) — a
     // relative href would resolve against whatever origin the admin page
     // itself loaded from instead of the post's own site.
-    let post_base_url = post.site_id
-        .and_then(|sid| state.get_site_by_id(sid))
+    let site_lookup = post.site_id.and_then(|sid| state.get_site_by_id(sid));
+    let post_path = if post.post_type == "page" {
+        crate::models::post::get_full_page_path(&state.db, &post).await
+    } else {
+        let structure = site_lookup.as_ref()
+            .map(|(_, settings)| settings.permalink_structure.as_str())
+            .unwrap_or("/%postname%");
+        let category_slug = if structure.contains("%category%") {
+            crate::models::taxonomy::for_post(&state.db, post.id).await
+                .unwrap_or_default()
+                .into_iter()
+                .find(|t| t.taxonomy == "category")
+                .map(|t| t.slug)
+        } else {
+            None
+        };
+        crate::models::post::build_permalink(structure, &post, category_slug.as_deref())
+    };
+    let post_base_url = site_lookup
         .map(|(site, settings)| {
             if settings.base_url != "http://localhost:3000" {
                 settings.base_url
