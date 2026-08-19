@@ -35,6 +35,8 @@
 //! clobbers an existing `can_self_publish` grant.
 
 use std::collections::HashMap;
+use std::io::Read as _;
+use std::path::Path as StdPath;
 
 use axum::{
     extract::{Multipart, Path, State},
@@ -312,6 +314,144 @@ fn percent_decode(s: &str) -> String {
     String::from_utf8_lossy(&out).into_owned()
 }
 
+/// A local fallback for attachment bytes, built from an optional
+/// `wp-content/uploads/`-style zip uploaded alongside the WXR file — for
+/// migrations where the old WordPress site is no longer reachable over
+/// HTTP. Every non-directory entry is indexed by its lowercased path
+/// components so it can be matched against an attachment URL regardless of
+/// how deep the zip nests the uploads folder (e.g. `uploads.zip` containing
+/// either `2024/03/photo.jpg` or `wordpress/wp-content/uploads/2024/03/photo.jpg`
+/// both match a URL ending in `.../uploads/2024/03/photo.jpg`).
+struct ZipMediaIndex {
+    entries: Vec<(Vec<String>, Vec<u8>)>,
+}
+
+impl ZipMediaIndex {
+    /// Finds the best-matching file for a WP attachment URL: prefers an
+    /// unambiguous match on the `{year}/{month}/{filename}` suffix (WP's
+    /// upload path shape), falling back to a match on filename alone when
+    /// exactly one zip entry has that name.
+    fn find(&self, attachment_url: &str) -> Option<&[u8]> {
+        let wanted = wp_upload_path_components(attachment_url);
+        if wanted.is_empty() {
+            return None;
+        }
+
+        let suffix_matches: Vec<&(Vec<String>, Vec<u8>)> = self.entries.iter()
+            .filter(|(comp, _)| {
+                comp.len() >= wanted.len() && comp[comp.len() - wanted.len()..] == wanted[..]
+            })
+            .collect();
+        if let [only] = suffix_matches.as_slice() {
+            return Some(&only.1);
+        }
+        if suffix_matches.len() > 1 {
+            // Multiple entries share the same year/month/filename tail
+            // (e.g. the zip has duplicate nested copies) — take the first
+            // rather than guessing wrong silently in either direction.
+            return Some(&suffix_matches[0].1);
+        }
+
+        let filename = wanted.last()?;
+        let filename_matches: Vec<&(Vec<String>, Vec<u8>)> = self.entries.iter()
+            .filter(|(comp, _)| comp.last().map(|c| c == filename).unwrap_or(false))
+            .collect();
+        if let [only] = filename_matches.as_slice() {
+            return Some(&only.1);
+        }
+        None
+    }
+}
+
+/// Splits the `{year}/{month}/{filename}` tail off a WP attachment URL
+/// (everything after `wp-content/uploads/`, case-insensitively), percent-
+/// decoded and lowercased for matching. Falls back to just the filename if
+/// the URL doesn't contain that marker (some exports rewrite media through
+/// a CDN/proxy path that drops it).
+fn wp_upload_path_components(attachment_url: &str) -> Vec<String> {
+    let marker = "wp-content/uploads/";
+    let lower = attachment_url.to_lowercase();
+    let tail = match lower.find(marker) {
+        Some(idx) => &attachment_url[idx + marker.len()..],
+        None => attachment_url.rsplit('/').next().unwrap_or(""),
+    };
+    percent_decode(tail)
+        .to_lowercase()
+        .split('/')
+        .filter(|c| !c.is_empty())
+        .map(|c| c.to_string())
+        .collect()
+}
+
+/// Builds a `ZipMediaIndex` from raw zip bytes (the "media files zip"
+/// upload). Skips directory entries and macOS zip cruft (`__MACOSX/`,
+/// `.DS_Store`).
+fn build_zip_media_index(zip_bytes: &[u8]) -> Result<ZipMediaIndex, String> {
+    let cursor = std::io::Cursor::new(zip_bytes);
+    let mut archive = zip::ZipArchive::new(cursor)
+        .map_err(|_| "Media zip is not a valid zip archive.".to_string())?;
+
+    let mut entries = Vec::new();
+    for i in 0..archive.len() {
+        let mut entry = archive.by_index(i)
+            .map_err(|e| format!("failed to read zip entry: {e}"))?;
+        if entry.is_dir() {
+            continue;
+        }
+        let name = entry.name().to_string();
+        if name.starts_with("__MACOSX/") || name.rsplit('/').next().is_some_and(|f| f.starts_with('.')) {
+            continue;
+        }
+        let mut buf = Vec::new();
+        entry.read_to_end(&mut buf).map_err(|e| format!("failed to read zip entry '{name}': {e}"))?;
+        let components: Vec<String> = name.to_lowercase()
+            .split('/')
+            .filter(|c| !c.is_empty())
+            .map(|c| c.to_string())
+            .collect();
+        if components.is_empty() {
+            continue;
+        }
+        entries.push((components, buf));
+    }
+    Ok(ZipMediaIndex { entries })
+}
+
+/// Guesses a MIME type from a filename's extension. Only needed for zip-
+/// sourced attachments — a live HTTP fetch gets its MIME from the
+/// `Content-Type` response header instead.
+fn guess_mime_from_extension(filename: &str) -> String {
+    let ext = StdPath::new(filename)
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_lowercase();
+    match ext.as_str() {
+        "jpg" | "jpeg" => "image/jpeg",
+        "png" => "image/png",
+        "gif" => "image/gif",
+        "webp" => "image/webp",
+        "svg" => "image/svg+xml",
+        "bmp" => "image/bmp",
+        "ico" => "image/x-icon",
+        "avif" => "image/avif",
+        "pdf" => "application/pdf",
+        "mp4" => "video/mp4",
+        "webm" => "video/webm",
+        "mov" => "video/quicktime",
+        "mp3" => "audio/mpeg",
+        "wav" => "audio/wav",
+        "ogg" => "audio/ogg",
+        "doc" => "application/msword",
+        "docx" => "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "zip" => "application/zip",
+        "txt" => "text/plain",
+        "csv" => "text/csv",
+        _ => "application/octet-stream",
+    }
+    .to_string()
+}
+
 /// "2024-03-15 10:22:00" (WXR's `<wp:post_date>` format) → Some("2024-03").
 fn parse_year_month(post_date: &str) -> Option<String> {
     let s = post_date.trim();
@@ -367,14 +507,37 @@ pub async fn import(
     }
 
     let mut xml_bytes: Option<Vec<u8>> = None;
+    let mut zip_bytes: Option<Vec<u8>> = None;
     while let Ok(Some(field)) = multipart.next_field().await {
-        if field.name().unwrap_or("") == "wxr_file" {
-            xml_bytes = field.bytes().await.ok().map(|b| b.to_vec());
+        match field.name().unwrap_or("") {
+            "wxr_file" => xml_bytes = field.bytes().await.ok().map(|b| b.to_vec()),
+            "media_zip" => {
+                zip_bytes = field.bytes().await.ok().map(|b| b.to_vec()).filter(|b| !b.is_empty());
+            }
+            _ => {}
         }
     }
 
     let Some(xml_bytes) = xml_bytes else {
         return redirect_with_flash(site_id, "No file uploaded.").into_response();
+    };
+
+    // Optional local fallback for attachment bytes, for when the old WP site
+    // is no longer reachable over HTTP — see ZipMediaIndex's docs. A bad zip
+    // just means every attachment falls back to the HTTP fetch, same as if
+    // no zip had been uploaded at all; it doesn't abort the import.
+    let zip_index = match &zip_bytes {
+        Some(bytes) => match build_zip_media_index(bytes) {
+            Ok(idx) => {
+                tracing::info!("WP import (site {}): media zip uploaded, {} file(s) indexed", site_id, idx.entries.len());
+                Some(idx)
+            }
+            Err(e) => {
+                tracing::warn!("WP import (site {}): media zip ignored — {}", site_id, e);
+                None
+            }
+        },
+        None => None,
     };
 
     let xml = String::from_utf8_lossy(&xml_bytes).into_owned();
@@ -404,6 +567,7 @@ pub async fn import(
         .unwrap_or_else(|_| reqwest::Client::new());
 
     let mut media_ok = 0usize;
+    let mut media_from_zip = 0usize;
     let mut media_reused = 0usize;
     let mut media_failed = 0usize;
     // wp_post_id (of the attachment item) → its old URL — needed to resolve
@@ -429,9 +593,12 @@ pub async fn import(
             Err(e) => tracing::warn!("wp_import_media_map lookup failed for {}: {:?}", item.attachment_url, e),
         }
 
-        match import_attachment(&state, &client, site_id, admin.user.id, item).await {
-            Ok(media_id) => {
+        match import_attachment(&state, &client, site_id, admin.user.id, item, zip_index.as_ref()).await {
+            Ok((media_id, from_zip)) => {
                 media_ok += 1;
+                if from_zip {
+                    media_from_zip += 1;
+                }
                 run_media_map.insert(item.attachment_url.clone(), media_id);
             }
             Err(e) => {
@@ -548,7 +715,15 @@ pub async fn import(
     // for words like "failed"/"error" anywhere in the text — so those words
     // only appear here when the corresponding count is actually nonzero,
     // otherwise a fully successful run would render in red for no reason.
-    let mut parts = vec![format!("Media: {} imported, {} reused.", media_ok, media_reused)];
+    let media_line = if zip_index.is_some() {
+        format!(
+            "Media: {} imported ({} from zip, {} fetched over HTTP), {} reused.",
+            media_ok, media_from_zip, media_ok.saturating_sub(media_from_zip), media_reused,
+        )
+    } else {
+        format!("Media: {} imported, {} reused.", media_ok, media_reused)
+    };
+    let mut parts = vec![media_line];
     if media_failed > 0 {
         parts.push(format!("{} media item(s) failed to import.", media_failed));
     }
@@ -586,8 +761,8 @@ pub async fn import(
     }
     let msg = parts.join(" ");
     tracing::info!(
-        "WP import (site {}) done: media {} imported/{} reused/{} failed; content {} imported/{} failed/{} skipped-status/{} skipped-type; {} author(s) unmatched, {} new author account(s), {} existing author(s) granted site access, {} parent link(s) unresolved",
-        site_id, media_ok, media_reused, media_failed,
+        "WP import (site {}) done: media {} imported ({} from zip)/{} reused/{} failed; content {} imported/{} failed/{} skipped-status/{} skipped-type; {} author(s) unmatched, {} new author account(s), {} existing author(s) granted site access, {} parent link(s) unresolved",
+        site_id, media_ok, media_from_zip, media_reused, media_failed,
         posts_ok, posts_failed, posts_skipped_status, posts_skipped_type,
         authors_unmatched, new_author_creds.len(), granted_author_access, parents_unresolved,
     );
@@ -722,18 +897,25 @@ async fn import_attachment(
     site_id: Uuid,
     uploaded_by: Uuid,
     item: &WxrItem,
-) -> Result<Uuid, String> {
-    let resp = client.get(&item.attachment_url).send().await.map_err(|e| format!("fetch failed: {e}"))?;
-    if !resp.status().is_success() {
-        return Err(format!("fetch failed: HTTP {}", resp.status()));
-    }
-    let mime = resp
-        .headers()
-        .get(reqwest::header::CONTENT_TYPE)
-        .and_then(|v| v.to_str().ok())
-        .map(|s| s.split(';').next().unwrap_or(s).trim().to_string())
-        .unwrap_or_else(|| "application/octet-stream".to_string());
-    let bytes = resp.bytes().await.map_err(|e| format!("read body failed: {e}"))?.to_vec();
+    zip_index: Option<&ZipMediaIndex>,
+) -> Result<(Uuid, bool), String> {
+    let (bytes, mime, from_zip) = if let Some(local) = zip_index.and_then(|idx| idx.find(&item.attachment_url)) {
+        let filename_guess = item.attachment_url.rsplit('/').next().unwrap_or("attachment");
+        (local.to_vec(), guess_mime_from_extension(filename_guess), true)
+    } else {
+        let resp = client.get(&item.attachment_url).send().await.map_err(|e| format!("fetch failed: {e}"))?;
+        if !resp.status().is_success() {
+            return Err(format!("fetch failed: HTTP {}", resp.status()));
+        }
+        let mime = resp
+            .headers()
+            .get(reqwest::header::CONTENT_TYPE)
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.split(';').next().unwrap_or(s).trim().to_string())
+            .unwrap_or_else(|| "application/octet-stream".to_string());
+        let bytes = resp.bytes().await.map_err(|e| format!("read body failed: {e}"))?.to_vec();
+        (bytes, mime, false)
+    };
 
     let filename = item
         .attachment_url
@@ -771,7 +953,7 @@ async fn import_attachment(
         tracing::warn!("failed to record wp_import_media_map for {}: {:?}", item.attachment_url, e);
     }
 
-    Ok(media.id)
+    Ok((media.id, from_zip))
 }
 
 /// Builds two lookup tables from old attachment URL → new Synap media URL:
@@ -1094,5 +1276,71 @@ mod tests {
         assert_eq!(parse_year_month("2024-03-15 09:30:00"), Some("2024-03".to_string()));
         assert_eq!(parse_year_month(""), None);
         assert_eq!(parse_year_month("bogus"), None);
+    }
+
+    #[test]
+    fn wp_upload_path_components_extracts_year_month_filename() {
+        assert_eq!(
+            wp_upload_path_components("https://old-site.example/wp-content/uploads/2024/03/Sunset%20Photo.jpg"),
+            vec!["2024", "03", "sunset photo.jpg"],
+        );
+        // No wp-content/uploads marker (e.g. rewritten through a CDN) — falls
+        // back to just the filename.
+        assert_eq!(
+            wp_upload_path_components("https://cdn.example/img/abc123/sunset-photo.jpg"),
+            vec!["sunset-photo.jpg"],
+        );
+    }
+
+    #[test]
+    fn zip_media_index_matches_by_year_month_filename_regardless_of_nesting() {
+        let index = ZipMediaIndex {
+            entries: vec![
+                (
+                    vec!["wordpress".into(), "wp-content".into(), "uploads".into(), "2024".into(), "03".into(), "sunset-photo.jpg".into()],
+                    b"deep-nested-bytes".to_vec(),
+                ),
+                (
+                    vec!["2024".into(), "05".into(), "other.jpg".into()],
+                    b"unrelated-bytes".to_vec(),
+                ),
+            ],
+        };
+        let found = index.find("https://old-site.example/wp-content/uploads/2024/03/sunset-photo.jpg");
+        assert_eq!(found, Some(b"deep-nested-bytes".as_slice()));
+    }
+
+    #[test]
+    fn zip_media_index_falls_back_to_unique_filename_match() {
+        // Zip was flattened (no year/month subfolders) — the year/month
+        // suffix won't match, but the filename alone is unambiguous.
+        let index = ZipMediaIndex {
+            entries: vec![(vec!["sunset-photo.jpg".into()], b"flat-bytes".to_vec())],
+        };
+        let found = index.find("https://old-site.example/wp-content/uploads/2024/03/sunset-photo.jpg");
+        assert_eq!(found, Some(b"flat-bytes".as_slice()));
+    }
+
+    #[test]
+    fn zip_media_index_refuses_ambiguous_filename_fallback() {
+        let index = ZipMediaIndex {
+            entries: vec![
+                (vec!["2024".into(), "03".into(), "photo.jpg".into()], b"march".to_vec()),
+                (vec!["2024".into(), "05".into(), "photo.jpg".into()], b"may".to_vec()),
+            ],
+        };
+        // Neither entry's year/month tail matches "2024/07", and the
+        // filename alone is ambiguous between the two — no match, not a
+        // guess.
+        let found = index.find("https://old-site.example/wp-content/uploads/2024/07/photo.jpg");
+        assert_eq!(found, None);
+    }
+
+    #[test]
+    fn guess_mime_from_extension_covers_common_types() {
+        assert_eq!(guess_mime_from_extension("photo.JPG"), "image/jpeg");
+        assert_eq!(guess_mime_from_extension("photo.png"), "image/png");
+        assert_eq!(guess_mime_from_extension("clip.mp4"), "video/mp4");
+        assert_eq!(guess_mime_from_extension("mystery.xyz"), "application/octet-stream");
     }
 }

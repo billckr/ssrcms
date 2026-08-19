@@ -945,18 +945,30 @@ function toggleProviderEdit(id) {{
     <div class="card-boxed-section">
       <p class="form-note" style="margin:0 0 .75rem">
         Export your WordPress site via <strong>Tools &rarr; Export &rarr; All content</strong> to get
-        a WXR (<code>.xml</code>) file, then upload it here. The old site must still be reachable
-        &mdash; every attachment's original file is fetched from the URL recorded in the export.
-        Imports, in one pass: media (sorted into folders by upload year/month), and posts/pages
-        (with categories, tags, featured images, and inline content images all pointed at the newly
-        imported files). Not imported: custom post types (only Posts and Pages), WP passwords
-        (migrated users will need a password reset), and shortcodes (left as literal text &mdash;
-        WP plugin shortcodes have no equivalent here).
+        a WXR (<code>.xml</code>) file, then upload it here. Every attachment's original file is
+        fetched from the URL recorded in the export &mdash; if the old site is no longer reachable,
+        zip up its <code>wp-content/uploads/</code> folder and upload that too (below); files found
+        there are used instead of fetching, and anything missing from the zip still falls back to
+        the export's URL. Imports, in one pass: media (sorted into folders by upload year/month), and
+        posts/pages (with categories, tags, featured images, and inline content images all pointed at
+        the newly imported files). Not imported: custom post types (only Posts and Pages), WP
+        passwords (migrated users will need a password reset), and shortcodes (left as literal text
+        &mdash; WP plugin shortcodes have no equivalent here).
       </p>
       <form method="post" action="/admin/sites/{id}/import-wp" enctype="multipart/form-data" class="edit-form">
         <div class="form-group">
           <label for="wxr_file">WordPress export file (.xml)</label>
           <input type="file" id="wxr_file" name="wxr_file" accept=".xml" required>
+        </div>
+        <div class="form-group">
+          <label for="media_zip">Media files zip (optional)</label>
+          <input type="file" id="media_zip" name="media_zip" accept=".zip">
+          <p class="form-note" style="margin:.35rem 0 0">
+            Only needed if the old WordPress site can't be reached anymore. Zip the
+            <code>wp-content/uploads/</code> folder (any nesting is fine); files are matched to
+            export attachments by their <code>year/month/filename</code> path, or by filename alone
+            if unambiguous.
+          </p>
         </div>
         <div class="icon-pill">
           <button type="submit" class="icon-btn" title="Import" aria-label="Import">

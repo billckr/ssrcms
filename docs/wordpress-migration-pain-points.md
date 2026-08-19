@@ -93,8 +93,19 @@ bulk operation, not a media-picker action.
 posts/pages import together from one WXR upload, and the `<img>`/`href`
 rewriting this section originally called "not yet done" is implemented
 (`rewrite_content_urls` in `wp_import.rs`, exact + size-suffix-stripped
-fuzzy match). Still no zip-upload fallback for when the old WP site isn't
-reachable.
+fuzzy match).
+
+**Update:** zip-upload fallback for when the old WP site isn't reachable is
+now built too. The Import Content form takes an optional second file — a zip
+of `wp-content/uploads/` at any nesting depth. `ZipMediaIndex` (`wp_import.rs`)
+indexes every non-directory entry by its lowercased path components and
+matches each attachment against it by `{year}/{month}/{filename}` suffix
+first, falling back to filename alone only when that's unambiguous; anything
+not found in the zip (or no zip uploaded at all) still falls back to the
+existing HTTP fetch, so partial zips degrade gracefully instead of failing
+the whole import. MIME type for zip-sourced files is guessed from the file
+extension (`guess_mime_from_extension`) since there's no `Content-Type`
+header to read, unlike the HTTP path.
 
 ---
 
