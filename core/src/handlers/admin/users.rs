@@ -70,6 +70,20 @@ fn split_by_role(rows: Vec<UserRow>) -> (Vec<UserRow>, Vec<UserRow>) {
     (staff, subs)
 }
 
+/// Short site-role label — mirrors `admin::pages::users::role_display` but
+/// for `site_users.role` values (no `super_admin` case, "admin" -> "Admin"
+/// rather than "Site Admin") since this is used to build comma-joined
+/// multi-role labels (e.g. "Author, Editor") for a single site.
+fn role_label(role: &str) -> &str {
+    match role {
+        "admin" => "Admin",
+        "editor" => "Editor",
+        "author" => "Author",
+        "subscriber" => "Subscriber",
+        other => other,
+    }
+}
+
 pub async fn list(
     State(state): State<AppState>,
     admin: AdminUser,
@@ -112,43 +126,55 @@ pub async fn list(
 
     let rows: Vec<UserRow> = if admin.caps.is_global_admin {
         if let Some(filter_site_id) = effective_site_filter {
-            // Filtered: show only users assigned to this specific site.
-            crate::models::site_user::list_for_site(&state.db, filter_site_id)
+            // Filtered: show only users assigned to this specific site. A
+            // user can hold more than one role on the same site (multi-role
+            // support), so list_for_site returns one row per role — grouped
+            // here into one UserRow per user with every role joined, rather
+            // than one duplicated row per role.
+            let raw = crate::models::site_user::list_for_site(&state.db, filter_site_id)
                 .await.unwrap_or_else(|e| {
                     tracing::warn!("failed to list site users for filter: {:?}", e);
                     vec![]
-                })
-                .into_iter()
-                .map(|(u, site_role)| UserRow {
-                    id: u.id.to_string(),
-                    username: u.username.clone(),
-                    email: u.email.clone(),
-                    role: site_role,
-                    display_name: u.display_name.clone(),
-                    is_protected: u.is_protected,
-                    is_active: u.is_active,
-                    is_super_admin: u.role == "super_admin",
-                    site_hostnames: vec![],
-                    site_ids: vec![],
-                    site_role_labels: vec![],
-                    default_site_id: None,
-                    sole_admin_hostnames: vec![],
-                })
-                .collect()
+                });
+            let mut grouped: Vec<(crate::models::user::User, Vec<String>)> = Vec::new();
+            for (u, role) in raw {
+                match grouped.iter_mut().find(|(existing, _)| existing.id == u.id) {
+                    Some((_, roles)) => roles.push(role),
+                    None => grouped.push((u, vec![role])),
+                }
+            }
+            grouped.into_iter().map(|(u, roles)| UserRow {
+                id: u.id.to_string(),
+                username: u.username.clone(),
+                email: u.email.clone(),
+                role: roles.iter().map(|r| role_label(r)).collect::<Vec<_>>().join(", "),
+                display_name: u.display_name.clone(),
+                is_protected: u.is_protected,
+                is_active: u.is_active,
+                is_super_admin: u.role == "super_admin",
+                site_hostnames: vec![],
+                site_ids: vec![],
+                site_role_labels: vec![],
+                default_site_id: None,
+                sole_admin_hostnames: vec![],
+            }).collect()
         } else {
             // All sites: show every user, with site-context role when available.
             let users = crate::models::user::list_all(&state.db).await.unwrap_or_else(|e| {
                 tracing::warn!("failed to list users: {:?}", e);
                 vec![]
             });
-            let site_role_map: std::collections::HashMap<uuid::Uuid, String> =
+            // A user can hold more than one role on the current site
+            // (multi-role support) — collect all of them per user rather
+            // than overwriting to just the last one list_for_site happens
+            // to return.
+            let site_role_map: std::collections::HashMap<uuid::Uuid, Vec<String>> =
                 if let Some(sid) = admin.site_id {
-                    crate::models::site_user::list_for_site(&state.db, sid)
-                        .await
-                        .unwrap_or_default()
-                        .into_iter()
-                        .map(|(u, r)| (u.id, r))
-                        .collect()
+                    let mut map: std::collections::HashMap<uuid::Uuid, Vec<String>> = std::collections::HashMap::new();
+                    for (u, r) in crate::models::site_user::list_for_site(&state.db, sid).await.unwrap_or_default() {
+                        map.entry(u.id).or_default().push(r);
+                    }
+                    map
                 } else {
                     std::collections::HashMap::new()
                 };
@@ -156,7 +182,9 @@ pub async fn list(
                 id: u.id.to_string(),
                 username: u.username.clone(),
                 email: u.email.clone(),
-                role: site_role_map.get(&u.id).cloned().unwrap_or_else(|| u.role.clone()),
+                role: site_role_map.get(&u.id)
+                    .map(|roles| roles.iter().map(|r| role_label(r)).collect::<Vec<_>>().join(", "))
+                    .unwrap_or_else(|| u.role.clone()),
                 display_name: u.display_name.clone(),
                 is_protected: u.is_protected,
                     is_active: u.is_active,
@@ -169,14 +197,23 @@ pub async fn list(
             }).collect()
         }
     } else if let Some(site_id) = admin.site_id {
-        crate::models::site_user::list_for_site(&state.db, site_id).await.unwrap_or_else(|e| {
+        let raw = crate::models::site_user::list_for_site(&state.db, site_id).await.unwrap_or_else(|e| {
             tracing::warn!("failed to list site users: {:?}", e);
             vec![]
-        }).into_iter().filter(|(u, _)| u.role != "super_admin").map(|(u, site_role)| UserRow {
+        });
+        let mut grouped: Vec<(crate::models::user::User, Vec<String>)> = Vec::new();
+        for (u, role) in raw {
+            if u.role == "super_admin" { continue; }
+            match grouped.iter_mut().find(|(existing, _)| existing.id == u.id) {
+                Some((_, roles)) => roles.push(role),
+                None => grouped.push((u, vec![role])),
+            }
+        }
+        grouped.into_iter().map(|(u, roles)| UserRow {
             id: u.id.to_string(),
             username: u.username.clone(),
             email: u.email.clone(),
-            role: site_role.clone(),
+            role: roles.iter().map(|r| role_label(r)).collect::<Vec<_>>().join(", "),
             display_name: u.display_name.clone(),
             is_protected: u.is_protected,
                     is_active: u.is_active,
@@ -271,16 +308,6 @@ pub async fn list(
                 None => entries.push((site_id, hostname, vec![role])),
             }
         }
-        fn role_label(role: &str) -> &str {
-            match role {
-                "admin" => "Admin",
-                "editor" => "Editor",
-                "author" => "Author",
-                "subscriber" => "Subscriber",
-                other => other,
-            }
-        }
-
         // Preflight which of these users are a site's sole admin, so Delete
         // can be disabled up front instead of round-tripping to find out.
         let sole_admin_map = crate::models::site_user::sole_admin_hostnames_batch(&state.db, &all_ids)
