@@ -1,9 +1,21 @@
 # >>> SynapCMS managed block: {DOMAIN} >>>
 {DOMAIN} {
-    # Serve uploads directly — bypass Axum. Rooted at THIS site's own
-    # uploads/{DOMAIN}/ -> uploads/{site-uuid}/ symlink (the app maintains
-    # one per site), so URLs are just /uploads/{filename} — no need to repeat
-    # the domain in the path, since this block is already scoped to it.
+    # Serve uploads directly — bypass Axum — but ONLY the bare-filename shape
+    # (/uploads/{filename}, what public pages use via Media::url()). Rooted
+    # at THIS site's own uploads/{DOMAIN}/ -> uploads/{site-uuid}/ symlink
+    # (the app maintains one per site), so a bare filename resolves with no
+    # need to repeat the domain in the path.
+    #
+    # The admin media UI instead builds UUID-prefixed URLs
+    # (/uploads/{site-uuid}/{filename} — see core/src/handlers/admin/media.rs
+    # and media-app/src/components.rs), since admin can be browsed via a host
+    # that isn't this site's own domain (e.g. a shared dev host). Matching
+    # bare filenames only (path_regexp, no further `/` after the filename)
+    # means anything with more path segments — including that UUID-prefixed
+    # shape — falls through to reverse_proxy -> Axum below, whose
+    # handlers/uploads.rs already resolves that shape correctly. A blanket
+    # /uploads/* match here would otherwise double up the site's own
+    # directory with the UUID segment and 404 every admin-uploaded image.
     #
     # /theme/static/*path is NOT handled here — it deliberately falls through
     # to Axum below. The URL never includes a theme name (every theme's
@@ -13,7 +25,11 @@
     # falling back to the global active theme). A flat Caddy file_server has
     # no way to do that resolution, so bypassing Axum here 404s for any theme
     # whose assets aren't coincidentally reachable at the literal request path.
-    handle_path /uploads/* {
+    @upload_file {
+        path_regexp ^/uploads/[^/]+$
+    }
+    handle @upload_file {
+        uri strip_prefix /uploads
         root * {UPLOADS_DIR}/{DOMAIN}
         file_server
     }
