@@ -37,22 +37,9 @@ fn rand_suffix(n: usize) -> String {
         .collect()
 }
 
-/// 8-char password satisfying the app's validate_password rule: 1 upper, 1 digit,
-/// 1 symbol from !@#$%&, rest lowercase, then shuffled. Mirrors seed_users.sh's
-/// gen_password() bash function.
+/// Mirrors seed_users.sh's gen_password() bash function.
 fn gen_password() -> String {
-    let mut rng = StdRng::from_entropy();
-    let lower = b"abcdefghijklmnopqrstuvwxyz";
-    let symbols = b"!@#$%&";
-    let mut chars: Vec<char> = Vec::with_capacity(8);
-    chars.push((lower[rng.gen_range(0..lower.len())] as char).to_ascii_uppercase());
-    chars.push(char::from_digit(rng.gen_range(0..10), 10).unwrap());
-    chars.push(symbols[rng.gen_range(0..symbols.len())] as char);
-    for _ in 0..5 {
-        chars.push(lower[rng.gen_range(0..lower.len())] as char);
-    }
-    chars.shuffle(&mut rng);
-    chars.into_iter().collect()
+    user::generate_password()
 }
 
 const FIRST_NAMES: &[&str] = &[

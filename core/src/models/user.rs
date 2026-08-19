@@ -56,6 +56,29 @@ impl UserRole {
     }
 }
 
+/// Generate an 8-char password satisfying `validate_password`'s rule: 1
+/// uppercase, 1 digit, 1 symbol from `!@#$%&`, rest lowercase, shuffled.
+/// Used to seed accounts nobody has typed a password for yet (e.g. WP
+/// author import) — the caller is responsible for getting it to the user.
+pub fn generate_password() -> String {
+    use rand::rngs::StdRng;
+    use rand::seq::SliceRandom;
+    use rand::{Rng, SeedableRng};
+
+    let mut rng = StdRng::from_entropy();
+    let lower = b"abcdefghijklmnopqrstuvwxyz";
+    let symbols = b"!@#$%&";
+    let mut chars: Vec<char> = Vec::with_capacity(8);
+    chars.push((lower[rng.gen_range(0..lower.len())] as char).to_ascii_uppercase());
+    chars.push(char::from_digit(rng.gen_range(0..10), 10).unwrap());
+    chars.push(symbols[rng.gen_range(0..symbols.len())] as char);
+    for _ in 0..5 {
+        chars.push(lower[rng.gen_range(0..lower.len())] as char);
+    }
+    chars.shuffle(&mut rng);
+    chars.into_iter().collect()
+}
+
 /// Validate a plaintext password against site-wide requirements.
 ///
 /// Rules: 8–12 characters, at least one uppercase letter, at least one digit,

@@ -12,11 +12,27 @@
 //! Shortcodes and Gutenberg block comments in `content:encoded` are left
 //! as-is (not executed or stripped) — Synap has no shortcode runtime, so
 //! they'll render as literal text; `<iframe>`/`<script>` tags (WP embeds)
-//! are stripped by the existing post-content sanitizer. WP password hashes
-//! aren't imported — that's a separate concern (see the pain-points doc's
-//! "User accounts & passwords" section) and out of scope here entirely;
-//! authors are matched to *existing* Synap users by email only, falling
-//! back to the importing admin when no match is found.
+//! are stripped by the existing post-content sanitizer.
+//!
+//! Authors: matched to an *existing* Synap user by email first; if none
+//! exists, a new Author account is created (role `author`, site role
+//! `author`, `can_self_publish = false`) with a random password — WP
+//! doesn't export password hashes, so there's nothing else to seed it
+//! with. Generated credentials are echoed back in the flash message; staff
+//! self-service password recovery isn't built (see the pain-points doc's
+//! "User accounts & passwords" section), so handing them out is on the
+//! importing admin for now. An author with no `<wp:author>` entry at all
+//! (some minimal exports omit it) falls back to the importing admin.
+//!
+//! WP multisite: there's no network-wide WXR export — each subsite exports
+//! its own file, so a multisite migration just means running this import
+//! once per subsite, into its corresponding Synap site. If the same person
+//! authors on more than one subsite, they'll typically share one email
+//! across those exports; when a matched-by-email author has no existing
+//! access to *this* site (e.g. their account was created on an earlier
+//! import into a different site), they're granted `author` access here
+//! too — but only if they hold no role on this site yet, so a re-run never
+//! clobbers an existing `can_self_publish` grant.
 
 use std::collections::HashMap;
 
@@ -33,7 +49,9 @@ use uuid::Uuid;
 use crate::app_state::AppState;
 use crate::middleware::admin_auth::AdminUser;
 use crate::models::post::{CreatePost, PostStatus, PostType, UpdatePost};
+use crate::models::site_user::{self, SiteRole};
 use crate::models::taxonomy::{CreateTaxonomy, Taxonomy, TaxonomyType};
+use crate::models::user::{self, CreateUser, UserRole};
 use super::media_store::{store_and_create, StoreInput};
 use super::sanitize_media_text;
 use super::sites::require_site_manager;
@@ -50,6 +68,27 @@ const SKIP_META_KEYS: &[&str] = &[
     "_wp_old_slug",
     "_wp_old_date",
     "_wp_desired_post_slug",
+];
+
+/// WP `post_type`s that are internal to WP's block editor / site editor,
+/// never content in any meaningful sense, and never going to be imported —
+/// as opposed to a genuine custom post type a plugin registered, which is
+/// still worth flagging to the admin as skipped. Kept out of the flash
+/// message's "skipped (unsupported type)" count so it doesn't read as a
+/// migration gap; still logged at import time for anyone who wants detail.
+const WP_INTERNAL_TYPES: &[&str] = &[
+    "nav_menu_item",
+    "wp_navigation",
+    "wp_global_styles",
+    "wp_template",
+    "wp_template_part",
+    "wp_block",
+    "wp_font_family",
+    "wp_font_face",
+    "custom_css",
+    "customize_changeset",
+    "oembed_cache",
+    "user_request",
 ];
 
 #[derive(Default, Clone)]
@@ -342,7 +381,20 @@ pub async fn import(
     let (items, authors) = parse_wxr(&xml);
 
     if items.is_empty() {
+        tracing::warn!("WP import (site {}): 0 items parsed from a {}-byte export — likely not a WXR file, or an empty one", site_id, xml_bytes.len());
         return redirect_with_flash(site_id, "No content found in that export file.").into_response();
+    }
+
+    tracing::info!(
+        "WP import (site {}) starting: {} items parsed ({} authors listed) from a {}-byte export",
+        site_id, items.len(), authors.len(), xml_bytes.len(),
+    );
+    {
+        let mut type_counts: HashMap<&str, usize> = HashMap::new();
+        for item in &items {
+            *type_counts.entry(item.post_type.as_str()).or_insert(0) += 1;
+        }
+        tracing::info!("WP import (site {}): item post_types breakdown: {:?}", site_id, type_counts);
     }
 
     // ── Pass 1: attachments ──────────────────────────────────────────────
@@ -401,6 +453,9 @@ pub async fn import(
     let base_url = site_base_url(&state, site_id);
     let (exact_rewrite, fuzzy_rewrite) = build_rewrite_maps(&state, &media_map, &base_url).await;
 
+    // ── Pass 1.5: authors — match or create ──────────────────────────────
+    let (author_map, new_author_creds, granted_author_access) = ensure_author_accounts(&state, site_id, &admin, &authors).await;
+
     // ── Pass 2: posts/pages — create ─────────────────────────────────────
     let mut posts_ok = 0usize;
     let mut posts_failed = 0usize;
@@ -417,19 +472,38 @@ pub async fn import(
     for item in items.iter() {
         if item.post_type != "post" && item.post_type != "page" {
             if item.post_type != "attachment" {
-                posts_skipped_type += 1;
+                if WP_INTERNAL_TYPES.contains(&item.post_type.as_str()) {
+                    tracing::info!(
+                        "WP import (site {}): skipped wp_post_id={} title={:?} — WP-internal post_type={:?} (block-theme/site-editor data, never imported, not counted toward the summary)",
+                        site_id, item.wp_post_id, item.title, item.post_type,
+                    );
+                } else {
+                    posts_skipped_type += 1;
+                    tracing::info!(
+                        "WP import (site {}): skipped wp_post_id={} title={:?} — unsupported post_type={:?} (only post/page are imported)",
+                        site_id, item.wp_post_id, item.title, item.post_type,
+                    );
+                }
             }
             continue;
         }
-        match import_post(&state, site_id, &admin, item, &authors, &attachment_id_to_url, &media_map, &exact_rewrite, &fuzzy_rewrite).await {
+        match import_post(&state, site_id, &admin, item, &author_map, &attachment_id_to_url, &media_map, &exact_rewrite, &fuzzy_rewrite).await {
             Ok(ImportedPost { post_id, author_matched, skipped_status }) => {
                 if skipped_status {
                     posts_skipped_status += 1;
+                    tracing::info!(
+                        "WP import (site {}): skipped wp_post_id={} title={:?} — WP status={:?} has no Synap equivalent worth importing (trash/auto-draft/inherit/unrecognized)",
+                        site_id, item.wp_post_id, item.title, item.status,
+                    );
                     continue;
                 }
                 posts_ok += 1;
                 if !author_matched {
                     authors_unmatched += 1;
+                    tracing::info!(
+                        "WP import (site {}): post {} (wp_post_id={}) — dc:creator={:?} had no email on file, assigned to importing admin",
+                        site_id, post_id, item.wp_post_id, item.creator,
+                    );
                 }
                 post_id_map.insert(item.wp_post_id.clone(), post_id);
                 if item.post_parent.trim() != "0" && !item.post_parent.trim().is_empty() {
@@ -460,7 +534,13 @@ pub async fn import(
                     tracing::warn!("failed to set parent on imported post {}: {:?}", post_id, e);
                 }
             }
-            None => parents_unresolved += 1,
+            None => {
+                parents_unresolved += 1;
+                tracing::info!(
+                    "WP import (site {}): post {} — parent wp_post_id={} was never imported (deleted, unsupported type, or skipped status), left without a parent",
+                    site_id, post_id, old_parent_id,
+                );
+            }
         }
     }
 
@@ -488,8 +568,152 @@ pub async fn import(
     if parents_unresolved > 0 {
         parts.push(format!("{} parent link(s) could not be resolved.", parents_unresolved));
     }
+    if !new_author_creds.is_empty() {
+        let list = new_author_creds.iter()
+            .map(|(username, password)| format!("{username} / {password}"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        parts.push(format!(
+            "{} new author account(s) created — hand out these credentials (username / temp password): {}.",
+            new_author_creds.len(), list,
+        ));
+    }
+    if granted_author_access > 0 {
+        parts.push(format!(
+            "{} existing author(s) (matched by email) granted access to this site.",
+            granted_author_access,
+        ));
+    }
     let msg = parts.join(" ");
+    tracing::info!(
+        "WP import (site {}) done: media {} imported/{} reused/{} failed; content {} imported/{} failed/{} skipped-status/{} skipped-type; {} author(s) unmatched, {} new author account(s), {} existing author(s) granted site access, {} parent link(s) unresolved",
+        site_id, media_ok, media_reused, media_failed,
+        posts_ok, posts_failed, posts_skipped_status, posts_skipped_type,
+        authors_unmatched, new_author_creds.len(), granted_author_access, parents_unresolved,
+    );
     redirect_with_flash(site_id, &msg).into_response()
+}
+
+/// Ensures every WP author referenced in the export has a Synap user:
+/// matched by email if one already exists, otherwise created fresh (role
+/// `author`, granted site role `author` with `can_self_publish = false`,
+/// random password). Returns a WP login → Synap user id map for
+/// `import_post` to consume, plus the (username, password) pairs for any
+/// account actually created (so the caller can hand them to the admin).
+///
+/// Authors with no email on file (some minimal exports omit it) are left
+/// out of the returned map entirely — `import_post` falls back to the
+/// importing admin for those, same as an unrecognized login.
+async fn ensure_author_accounts(
+    state: &AppState,
+    site_id: Uuid,
+    admin: &AdminUser,
+    authors: &HashMap<String, String>,
+) -> (HashMap<String, Uuid>, Vec<(String, String)>, usize) {
+    let mut login_to_id: HashMap<String, Uuid> = HashMap::new();
+    let mut created: Vec<(String, String)> = Vec::new();
+    let mut granted_access = 0usize;
+
+    for (login, email) in authors {
+        let email = email.trim();
+        if email.is_empty() {
+            continue;
+        }
+        if let Ok(existing) = user::get_by_email(&state.db, email).await {
+            login_to_id.insert(login.clone(), existing.id);
+            // A user matched by email may be a real Synap account with no
+            // access to *this* site at all — e.g. someone who authors on
+            // more than one WP subsite of the same network, matched here
+            // by an import into a second Synap site. Grant them 'author'
+            // access on this site too, but only if they hold no role here
+            // yet — site_user::add() upserts can_self_publish on conflict,
+            // so blindly re-calling it on every run would silently reset an
+            // existing author's self-publish flag back to false.
+            match site_user::has_any_role(&state.db, site_id, existing.id).await {
+                Ok(false) => {
+                    match site_user::add(&state.db, site_id, existing.id, SiteRole::Author, Some(admin.user.id), false).await {
+                        Ok(_) => granted_access += 1,
+                        Err(e) => tracing::warn!("failed to grant site access to matched author {} <{}>: {:?}", login, email, e),
+                    }
+                }
+                Ok(true) => {}
+                Err(e) => tracing::warn!("failed to check existing site access for matched author {} <{}>: {:?}", login, email, e),
+            }
+            continue;
+        }
+
+        let username = unique_import_username(state, login).await;
+        let password = user::generate_password();
+        let create = CreateUser {
+            username: username.clone(),
+            email: email.to_string(),
+            display_name: if login.trim().is_empty() { username.clone() } else { login.trim().to_string() },
+            password: password.clone(),
+            role: UserRole::Author,
+        };
+        match user::create(&state.db, &create).await {
+            Ok(new_user) => {
+                if let Err(e) = site_user::add(&state.db, site_id, new_user.id, SiteRole::Author, Some(admin.user.id), false).await {
+                    tracing::warn!("failed to grant site access to imported author {}: {:?}", username, e);
+                }
+                login_to_id.insert(login.clone(), new_user.id);
+                created.push((username, password));
+            }
+            Err(e) => tracing::warn!("failed to create account for WP author '{}' <{}>: {:?}", login, email, e),
+        }
+    }
+
+    (login_to_id, created, granted_access)
+}
+
+/// Derives a valid, unique username from a WP author login: lowercased,
+/// non-conforming characters collapsed to hyphens, padded/truncated to
+/// `validate_username`'s 5-15 char rule, then suffixed with a short random
+/// string on collision (WP logins can't be trusted to be unique against
+/// Synap's existing users, or even valid Synap usernames at all).
+async fn unique_import_username(state: &AppState, login: &str) -> String {
+    let mut base: String = login.trim().to_lowercase()
+        .chars()
+        .map(|c| if c.is_ascii_lowercase() || c.is_ascii_digit() { c } else { '-' })
+        .collect();
+    while base.starts_with('-') { base.remove(0); }
+    while base.ends_with('-') { base.pop(); }
+    if base.is_empty() {
+        base = "wpauthor".to_string();
+    }
+    if base.len() > 15 {
+        base.truncate(15);
+        while base.ends_with('-') { base.pop(); }
+    }
+    while base.len() < 5 {
+        base.push('0');
+    }
+
+    if user::get_by_username_include_inactive(&state.db, &base).await.is_err() {
+        return base;
+    }
+    for _ in 0..25 {
+        let suffix = rand_suffix(4);
+        let max_base_len = 15 - 1 - suffix.len();
+        let mut trimmed = base.clone();
+        if trimmed.len() > max_base_len {
+            trimmed.truncate(max_base_len);
+            while trimmed.ends_with('-') { trimmed.pop(); }
+        }
+        let candidate = format!("{trimmed}-{suffix}");
+        if user::get_by_username_include_inactive(&state.db, &candidate).await.is_err() {
+            return candidate;
+        }
+    }
+    format!("wp{}", &Uuid::new_v4().simple().to_string()[..13])
+}
+
+fn rand_suffix(n: usize) -> String {
+    use rand::rngs::StdRng;
+    use rand::{Rng, SeedableRng};
+    let chars: &[u8] = b"abcdefghijklmnopqrstuvwxyz0123456789";
+    let mut rng = StdRng::from_entropy();
+    (0..n).map(|_| chars[rng.gen_range(0..chars.len())] as char).collect()
 }
 
 async fn import_attachment(
@@ -645,7 +869,7 @@ async fn import_post(
     site_id: Uuid,
     admin: &AdminUser,
     item: &WxrItem,
-    authors: &HashMap<String, String>,
+    author_map: &HashMap<String, Uuid>,
     attachment_id_to_url: &HashMap<String, String>,
     media_map: &HashMap<String, Uuid>,
     exact_rewrite: &HashMap<String, String>,
@@ -670,16 +894,13 @@ async fn import_post(
     let post_type = if item.post_type == "page" { PostType::Page } else { PostType::Post };
     let published_at = parse_wp_datetime(&item.post_date, &item.post_date_gmt);
 
-    // Author: match dc:creator (a WP login) → its email via the channel's
-    // <wp:author> list → an existing Synap user with that email. No match
-    // (including no <wp:author> entry at all, which some minimal exports
-    // omit) falls back to the importing admin.
+    // Author: dc:creator (a WP login) → the Synap user id resolved by
+    // ensure_author_accounts (matched-by-email or freshly created). No
+    // entry (no email on file, or no <wp:author> block at all) falls back
+    // to the importing admin.
     let mut author_matched = true;
-    let author_id = match authors.get(&item.creator).filter(|e| !e.is_empty()) {
-        Some(email) => match crate::models::user::get_by_email(&state.db, email).await {
-            Ok(u) => u.id,
-            Err(_) => { author_matched = false; admin.user.id }
-        },
+    let author_id = match author_map.get(&item.creator) {
+        Some(&id) => id,
         None => { author_matched = false; admin.user.id }
     };
 

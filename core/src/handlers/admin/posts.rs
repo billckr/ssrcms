@@ -81,18 +81,20 @@ async fn list_type(state: AppState, post_type: &str, page: Option<i64>, status_f
     // Fixed params: $1=site_id, $2=post_type, $3=author_id, $4=status, $5=exclude_trashed,
     // $6=template (always NULL now — the pages-list template filter dropdown was
     // removed, but the query keeps this param slot rather than renumbering
-    // everything after it); search terms start at $7.
-    let mut count_sql = "SELECT COUNT(*) FROM posts \
-                         WHERE ($1::uuid IS NULL OR site_id = $1) \
-                           AND post_type = $2 \
-                           AND ($3::uuid IS NULL OR author_id = $3) \
-                           AND ($4::text IS NULL OR status = $4) \
-                           AND (NOT $5::bool OR status != 'trashed') \
-                           AND ($6::text IS NULL OR ($6 = '__default__' AND template IS NULL) OR template = $6)"
+    // everything after it); search terms start at $7. LEFT JOIN users so a
+    // search term can match the author's display name as well as the title.
+    let mut count_sql = "SELECT COUNT(*) FROM posts p \
+                         LEFT JOIN users u ON u.id = p.author_id \
+                         WHERE ($1::uuid IS NULL OR p.site_id = $1) \
+                           AND p.post_type = $2 \
+                           AND ($3::uuid IS NULL OR p.author_id = $3) \
+                           AND ($4::text IS NULL OR p.status = $4) \
+                           AND (NOT $5::bool OR p.status != 'trashed') \
+                           AND ($6::text IS NULL OR ($6 = '__default__' AND p.template IS NULL) OR p.template = $6)"
         .to_string();
     for i in 0..terms.len() {
         let n = i + 7;
-        count_sql.push_str(&format!(" AND LOWER(title) LIKE ${n}"));
+        count_sql.push_str(&format!(" AND (LOWER(p.title) LIKE ${n} OR LOWER(u.display_name) LIKE ${n})"));
     }
     let mut count_q = sqlx::query_scalar::<_, i64>(&count_sql)
         .bind(site_id)

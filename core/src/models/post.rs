@@ -789,9 +789,9 @@ pub async fn list(pool: &PgPool, filter: &ListFilter) -> Result<Vec<Post>> {
         .fetch_all(pool)
         .await?
     } else {
-        // Build dynamic SQL so optional title search terms can be appended as
-        // AND LOWER(title) LIKE $n clauses. Fixed params are $1–$4; search terms
-        // start at $5; LIMIT/OFFSET come last.
+        // Build dynamic SQL so optional search terms can be appended as
+        // AND (title or author display_name LIKE $n) clauses. Fixed params
+        // are $1–$4; search terms start at $5; LIMIT/OFFSET come last.
         let terms = filter.search.as_deref().map(search_terms).unwrap_or_default();
 
         // $6 = NULL means "no template filter"; $6 = '__default__' means "filter to
@@ -812,7 +812,7 @@ pub async fn list(pool: &PgPool, filter: &ListFilter) -> Result<Vec<Post>> {
 
         for i in 0..terms.len() {
             let n = i + 7;
-            sql.push_str(&format!(" AND LOWER(p.title) LIKE ${n}"));
+            sql.push_str(&format!(" AND (LOWER(p.title) LIKE ${n} OR LOWER(u.display_name) LIKE ${n})"));
         }
 
         // Whitelisted sort column/direction — never interpolate the raw query string.
