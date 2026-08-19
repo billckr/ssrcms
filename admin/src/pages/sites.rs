@@ -540,11 +540,11 @@ pub fn render_settings(data: &SiteSettingsData, flash: Option<&str>, ctx: &crate
         <input type="text" id="date_format" name="date_format" value="{date_format}">
         <small>Uses chrono format strings, e.g. "%B %-d, %Y" &rarr; January 1, 2026</small>
       </div>
-    </div>
-    <div class="icon-pill">
-      <button type="submit" id="save-settings-btn" class="icon-btn" title="Save Settings" aria-label="Save Settings" disabled>
-        <img src="/admin/static/icons/save.svg" alt="">
-      </button>
+      <div class="icon-pill">
+        <button type="submit" id="save-settings-btn" class="icon-btn" title="Save Settings" aria-label="Save Settings" disabled>
+          <img src="/admin/static/icons/save.svg" alt="">
+        </button>
+      </div>
     </div>
   </form>
   </div>
@@ -647,11 +647,11 @@ function legacyCopy(el, onDone) {{
         <textarea id="maintenance_message" name="maintenance_message" rows="3" maxlength="250">{maintenance_message}</textarea>
         <small id="maintenance-message-count" style="color:var(--muted)">250/250</small>
       </div>
-    </div>
-    <div class="icon-pill">
-      <button type="submit" id="save-maintenance-btn" class="icon-btn" title="Save Maintenance" aria-label="Save Maintenance" disabled>
-        <img src="/admin/static/icons/save.svg" alt="">
-      </button>
+      <div class="icon-pill">
+        <button type="submit" id="save-maintenance-btn" class="icon-btn" title="Save Maintenance" aria-label="Save Maintenance" disabled>
+          <img src="/admin/static/icons/save.svg" alt="">
+        </button>
+      </div>
     </div>
   </form>
   </div>
@@ -751,6 +751,11 @@ function toggleProviderEdit(id) {{
         <input type="password" id="mailgun_api_key" name="mailgun_api_key" autocomplete="off" placeholder="e.g. key-xxxxxxxx">
         <small>Use the domain's Sending key (Domains &rarr; select domain &rarr; Sending Keys), not the account-wide Private API key.</small>
       </div>
+      <div class="icon-pill">
+        <button type="submit" id="add-provider-btn-mailgun" class="icon-btn" title="Add Provider" aria-label="Add Provider">
+          <img src="/admin/static/icons/save.svg" alt="">
+        </button>
+      </div>
     </div>
     <div class="card-boxed-section provider-fields" data-provider="smtp" style="display:none">
       <div class="form-group">
@@ -777,6 +782,11 @@ function toggleProviderEdit(id) {{
         <label for="smtp_password">Password</label>
         <input type="password" id="smtp_password" name="smtp_password" autocomplete="off">
       </div>
+      <div class="icon-pill">
+        <button type="submit" id="add-provider-btn-smtp" class="icon-btn" title="Add Provider" aria-label="Add Provider">
+          <img src="/admin/static/icons/save.svg" alt="">
+        </button>
+      </div>
     </div>
     <div class="card-boxed-section provider-fields" data-provider="sendgrid" style="display:none">
       <div class="form-group">
@@ -787,6 +797,11 @@ function toggleProviderEdit(id) {{
         <label for="sendgrid_from_email">From address</label>
         <input type="text" id="sendgrid_from_email" name="sendgrid_from_email" placeholder="e.g. noreply@example.com">
         <small>Must be a verified sender or domain in your SendGrid account.</small>
+      </div>
+      <div class="icon-pill">
+        <button type="submit" id="add-provider-btn-sendgrid" class="icon-btn" title="Add Provider" aria-label="Add Provider">
+          <img src="/admin/static/icons/save.svg" alt="">
+        </button>
       </div>
     </div>
     <div class="card-boxed-section provider-fields" data-provider="postmark" style="display:none">
@@ -803,11 +818,11 @@ function toggleProviderEdit(id) {{
         <input type="text" id="postmark_from_email" name="postmark_from_email" placeholder="e.g. noreply@example.com">
         <small>Must be a verified sender signature in your Postmark account.</small>
       </div>
-    </div>
-    <div class="icon-pill">
-      <button type="submit" id="add-provider-btn" class="icon-btn" title="Add Provider" aria-label="Add Provider">
-        <img src="/admin/static/icons/save.svg" alt="">
-      </button>
+      <div class="icon-pill">
+        <button type="submit" id="add-provider-btn-postmark" class="icon-btn" title="Add Provider" aria-label="Add Provider">
+          <img src="/admin/static/icons/save.svg" alt="">
+        </button>
+      </div>
     </div>
   </form>
   </div>
@@ -844,7 +859,14 @@ function toggleProviderEdit(id) {{
     }});
   }}
   settingsTabs.forEach(function(btn) {{
-    btn.addEventListener('click', function() {{ activate(btn); }});
+    btn.addEventListener('click', function() {{
+      activate(btn);
+      // Keep ?tab= in sync so a refresh stays on the tab you were viewing,
+      // and this URL can be shared/linked to open directly on that tab.
+      var url = new URL(window.location.href);
+      url.searchParams.set('tab', btn.dataset.tab);
+      history.replaceState(null, '', url);
+    }});
   }});
   var wantedTab = new URLSearchParams(window.location.search).get('tab');
   if (wantedTab) {{
