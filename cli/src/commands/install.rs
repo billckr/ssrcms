@@ -432,7 +432,7 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
                 std::env::current_dir()
                     .ok()
                     .and_then(|p| p.to_str().map(String::from))
-                    .unwrap_or_else(|| "/opt/synaptic-signals".to_string()),
+                    .unwrap_or_else(|| "/opt/synapcms".to_string()),
             )
             .interact_text()
             .map_err(Into::into)

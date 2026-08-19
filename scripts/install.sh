@@ -6,7 +6,7 @@
 #
 # Environment variable overrides (all optional except where noted):
 #   SYNAPTIC_VERSION   — release tag to install (default: latest)
-#   INSTALL_DIR        — where to install (default: /opt/synaptic-signals)
+#   INSTALL_DIR        — where to install (default: /opt/synapcms)
 #   PORT               — port Axum listens on (default: 3000)
 #   SYNAPTIC_USER      — OS user to run the service (default: www-data)
 #   SYNAPTIC_DOMAIN    — domain name (prompted if not set)
@@ -45,7 +45,7 @@ ENVIRONMENT VARIABLES
   NOTIFICATION_EMAIL   Reply-to address for system emails                   (default: ADMIN_EMAIL)
 
   SYNAPTIC_USER        OS user to run the service — must not be root        (default: www-data)
-  INSTALL_DIR          Installation directory                               (default: <current-dir>/synaptic-signals)
+  INSTALL_DIR          Installation directory                               (default: <current-dir>/synapcms)
   PORT                 Port the app listens on                              (default: 3000)
   SYNAPTIC_VERSION     Release tag to install, e.g. v0.1.0-alpha11         (default: latest)
 
@@ -90,7 +90,7 @@ done
 
 # ── Configuration ──────────────────────────────────────────────────────────────
 SYNAPTIC_VERSION="${SYNAPTIC_VERSION:-latest}"
-INSTALL_DIR="${INSTALL_DIR:-${PWD}/synaptic-signals}"
+INSTALL_DIR="${INSTALL_DIR:-${PWD}/synapcms}"
 PORT="${PORT:-3000}"
 SYNAPTIC_USER="${SYNAPTIC_USER:-www-data}"
 GITHUB_REPO="billckr/ssrcms"

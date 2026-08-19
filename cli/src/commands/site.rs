@@ -25,7 +25,7 @@ pub enum SiteAction {
         /// Hostname for the new site (e.g. client.example.com)
         #[arg(long)]
         hostname: String,
-        /// Path to the install directory (e.g. /opt/synaptic-signals) so the
+        /// Path to the install directory (e.g. /opt/synapcms) so the
         /// default theme can be seeded into sites/{uuid}/themes/default/ and
         /// the uploads directory can be created at uploads/{uuid}/.
         /// If omitted the directory setup is skipped.
