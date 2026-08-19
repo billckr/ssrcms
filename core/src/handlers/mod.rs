@@ -17,12 +17,13 @@ pub mod subscribe;
 pub mod theme_static;
 pub mod uploads;
 
+use axum::http::HeaderMap;
 use tower_sessions::Session;
 use uuid::Uuid;
 
 use crate::app_state::AppState;
 use crate::middleware::account_auth::SESSION_ACCOUNT_USER_ID_KEY;
-use crate::middleware::admin_auth::SESSION_USER_ID_KEY;
+use crate::middleware::admin_auth::{ADMIN_SESSION_COOKIE_NAME, SESSION_USER_ID_KEY};
 use crate::templates::context::{SessionContext, SessionUserContext};
 
 /// Resolve the subscriber session into a `SessionContext` for Tera templates.
@@ -112,10 +113,8 @@ pub(super) async fn insert_theme_options(ctx: &mut tera::Context, state: &AppSta
 /// preview draft/pending/scheduled posts that the public and subscribers
 /// cannot see. Never redirects; a false result just means "no preview access",
 /// falling through to the normal published-only lookup.
-pub(super) async fn can_preview_site(state: &AppState, session: &Session, site_id: Uuid) -> bool {
-    let user_id_str: Option<String> = session.get(SESSION_USER_ID_KEY).await.unwrap_or(None);
-    let Some(user_id_str) = user_id_str else { return false };
-    let Ok(user_id) = user_id_str.parse::<Uuid>() else { return false };
+pub(super) async fn can_preview_site(state: &AppState, headers: &HeaderMap, site_id: Uuid) -> bool {
+    let Some(user_id) = admin_user_id_from_cookie(state, headers).await else { return false };
     let Ok(user) = crate::models::user::get_by_id(&state.db, user_id).await else { return false };
 
     match user.role.as_str() {
@@ -127,4 +126,32 @@ pub(super) async fn can_preview_site(state: &AppState, session: &Session, site_i
         }
         _ => false,
     }
+}
+
+/// Reads the *admin* session's user id directly off the `admin_session`
+/// cookie, bypassing the `Session` extractor entirely.
+///
+/// The public/front-end routes (where this is called from) are wired to the
+/// separate *account* `SessionManagerLayer` (cookie name `"session"`, see
+/// `main.rs`) — an admin logged into `/admin` has no `SESSION_USER_ID_KEY`
+/// in that session at all, since admin login only ever writes it into the
+/// `admin_session` cookie's session. Without this, `can_preview_site` could
+/// never return `true` for anyone who only logged into `/admin`, which is
+/// the normal (only) way to log in as staff — the preview feature was
+/// silently dead. Both session layers share one Postgres-backed store (just
+/// different cookie names), so a session loaded this way is the exact same
+/// data an admin route would see via the normal extractor.
+async fn admin_user_id_from_cookie(state: &AppState, headers: &HeaderMap) -> Option<Uuid> {
+    let cookie_header = headers.get(axum::http::header::COOKIE)?.to_str().ok()?;
+    let session_id_str = cookie_header.split(';').find_map(|part| {
+        let part = part.trim();
+        part.strip_prefix(ADMIN_SESSION_COOKIE_NAME)?.strip_prefix('=')
+    })?;
+    let session_id: tower_sessions::session::Id = session_id_str.parse().ok()?;
+
+    let store = std::sync::Arc::new(tower_sessions_sqlx_store::PostgresStore::new(state.db.clone()));
+    let admin_session = Session::new(Some(session_id), store, None);
+
+    let user_id_str: String = admin_session.get(SESSION_USER_ID_KEY).await.ok().flatten()?;
+    user_id_str.parse().ok()
 }

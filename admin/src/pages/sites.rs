@@ -1022,7 +1022,7 @@ function toggleProviderEdit(id) {{
   window.wpImportModalClose = function() {{
     modal.style.display = 'none';
     if (pollTimer) {{ clearTimeout(pollTimer); pollTimer = null; }}
-    if (finished) {{ form.reset(); }}
+    if (finished) {{ window.location.href = '/admin'; }}
   }};
 
   function renderProgress(p) {{

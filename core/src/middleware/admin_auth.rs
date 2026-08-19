@@ -17,6 +17,15 @@ use crate::models::user::User;
 /// Session key where the logged-in user's UUID is stored.
 pub const SESSION_USER_ID_KEY: &str = "admin_user_id";
 
+/// Cookie name for the admin session (set via `SessionManagerLayer::with_name`
+/// in `main.rs`) — kept as a named constant, not a literal, because
+/// `handlers::can_preview_site` also needs to name this exact cookie to read
+/// it directly on public/front-end routes, which are wired to the separate
+/// account session layer and never see this one via the normal `Session`
+/// extractor. Two independent literals here previously drifting apart was
+/// exactly how that preview feature ended up silently dead.
+pub const ADMIN_SESSION_COOKIE_NAME: &str = "admin_session";
+
 /// Session key where the currently selected site UUID is stored.
 pub const SESSION_CURRENT_SITE_KEY: &str = "current_site_id";
 

@@ -129,7 +129,7 @@ pub(crate) async fn render_single_post_response(
         }
     }
 
-    let preview_allowed = super::can_preview_site(state, session, site_id).await;
+    let preview_allowed = super::can_preview_site(state, headers, site_id).await;
 
     match render_post(state.clone(), slug, uri, site_id, base_url, session_ctx, cpage, preview_allowed).await {
         Ok(html) => Html(html).into_response(),

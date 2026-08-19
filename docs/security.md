@@ -171,6 +171,42 @@ Use `| json_encode | safe` for string values in JSON-LD:
 - In production, `SECRET_KEY` must be a cryptographically random 64+ byte string.
   The default development key must never be used in production.
 
+### Two session cookies, and how staff preview drafts on the public site
+
+There are two entirely separate `tower_sessions` cookies, each its own
+`SessionManagerLayer` (`main.rs`), sharing one Postgres-backed session store:
+
+| Cookie name | Route group | Written by | Idle timeout |
+|---|---|---|---|
+| `admin_session` (`middleware::admin_auth::ADMIN_SESSION_COOKIE_NAME`) | `/admin/*` | Staff login (`handlers::auth`) | 2h |
+| `session` | Public/front-end + `/account/*` | Subscriber login | 24h |
+
+They're split so idle timeout can differ by risk level (staff can change site
+config/content/users; subscribers can only touch their own profile/comments)
+— `tower_sessions` recomputes expiry from the layer's own config, so one
+shared session can't have two different timeouts.
+
+**Consequence:** an admin logged into `/admin` has no session data in the
+`session` cookie at all — `SESSION_USER_ID_KEY` (`admin_user_id`) only ever
+gets written into the `admin_session` cookie's session. Any public/front-end
+code that needs to recognize a logged-in staff member (e.g. letting them
+preview a draft/pending/scheduled post — `handlers::can_preview_site`) must
+read the `admin_session` cookie directly rather than relying on the `Session`
+extractor, which on public routes only ever resolves to the `session`
+(account) cookie. `can_preview_site` does this by parsing the raw cookie
+header, loading a `tower_sessions::Session` from the shared store by that
+cookie's session ID, and reading `admin_user_id` out of it — the same data
+an actual `/admin` route sees, just reached without that route's layer. This
+was a real, live bug for a while: the check existed but read the wrong
+session, so it silently never returned `true` for anyone — the "Preview"
+link on a draft always 404'd, including for the logged-in admin who created
+it, until this was fixed.
+
+This preview-gate does not affect what the public sees: `get_published_by_slug`
+and friends still hard-filter `status = 'published'`; `can_preview_site` only
+ever widens what gets rendered *to the requesting staff member's own
+response*, never what's queryable by anyone else.
+
 ---
 
 ## Role Hierarchy and Admin Account Protection

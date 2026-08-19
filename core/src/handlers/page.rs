@@ -75,7 +75,7 @@ pub async fn single_page(
     };
 
     let session_ctx = super::resolve_session(&state, &session).await;
-    let preview_allowed = super::can_preview_site(&state, &session, site_id).await;
+    let preview_allowed = super::can_preview_site(&state, &headers, site_id).await;
     let page_result = render_page(state.clone(), segments.clone(), uri.clone(), site_id, &base_url, session_ctx, preview_allowed).await;
 
     match page_result {

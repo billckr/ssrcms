@@ -85,7 +85,7 @@ async fn main() -> anyhow::Result<()> {
     // recomputes expiry from the layer's config on every save — so this requires
     // two distinct SessionManagerLayers (and cookie names) split by route group.
     let admin_session_layer = SessionManagerLayer::new(session_store.clone())
-        .with_name("admin_session")
+        .with_name(synaptic_core::middleware::admin_auth::ADMIN_SESSION_COOKIE_NAME)
         // Axum always runs behind Caddy on plain HTTP — never directly over HTTPS.
         // Secure:true means the browser will never send the cookie back over HTTP,
         // which breaks every login. Caddy handles TLS; we own the cookie content.
