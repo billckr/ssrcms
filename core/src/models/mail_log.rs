@@ -74,6 +74,30 @@ pub async fn list_for_form(pool: &PgPool, form_id: Uuid, limit: i64) -> Result<V
     Ok(rows)
 }
 
+/// Finds sends to a given email on a site — used by GDPR erasure to
+/// surface likely matches for an admin to review before deleting.
+pub async fn find_by_email(pool: &PgPool, site_id: Uuid, email: &str) -> Result<Vec<MailLogEntry>> {
+    let rows = sqlx::query_as::<_, MailLogEntry>(
+        "SELECT * FROM mail_log WHERE site_id = $1 AND to_email ILIKE $2 ORDER BY created_at DESC",
+    )
+    .bind(site_id)
+    .bind(email)
+    .fetch_all(pool)
+    .await?;
+    Ok(rows)
+}
+
+/// Delete a specific set of mail log entries on a site (e.g. an admin's
+/// picks from a GDPR-erasure review list).
+pub async fn delete_many(pool: &PgPool, site_id: Uuid, ids: &[Uuid]) -> Result<()> {
+    sqlx::query("DELETE FROM mail_log WHERE site_id = $1 AND id = ANY($2)")
+        .bind(site_id)
+        .bind(ids)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
 /// Send counts for a form: (total, succeeded, failed).
 pub async fn counts_for_form(pool: &PgPool, form_id: Uuid) -> Result<(i64, i64, i64)> {
     let row: (i64, i64) = sqlx::query_as(

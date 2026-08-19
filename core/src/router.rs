@@ -199,6 +199,7 @@ pub fn build(
         .route("/admin/users/{id}/delete", post(users::delete_user))
         .route("/admin/users/{id}/suspend", post(users::suspend_user))
         .route("/admin/users/{id}/reactivate", post(users::reactivate_user))
+        .route("/admin/users/{id}/erase-personal-data", get(users::erase_personal_data_review).post(users::erase_personal_data))
         .route("/admin/users/bulk-delete", post(users::bulk_delete_users))
         .route("/admin/users/{id}/site-access", get(users::site_access_page))
         .route("/admin/users/{id}/site-access/add", post(users::add_site_access))

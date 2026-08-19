@@ -355,3 +355,17 @@ pub async fn count_for_post(pool: &PgPool, post_id: Uuid) -> Result<i64> {
     .await
     .map_err(AppError::from)
 }
+
+/// Strips the stored IP from every comment by this author — part of GDPR
+/// erasure. The author's identity itself doesn't need touching here: it's
+/// a pure FK to `users`, not duplicated onto the comment row, so
+/// anonymizing the user (`user::erase_personal_data`) already anonymizes
+/// every comment they ever left. IP is the one thing stored per-comment.
+pub async fn clear_ip_for_author(pool: &PgPool, author_id: Uuid) -> Result<()> {
+    sqlx::query("UPDATE comments SET ip_address = NULL WHERE author_id = $1")
+        .bind(author_id)
+        .execute(pool)
+        .await
+        .map_err(AppError::from)?;
+    Ok(())
+}

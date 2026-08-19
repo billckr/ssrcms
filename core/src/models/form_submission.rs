@@ -141,6 +141,37 @@ pub async fn list_submissions(
     Ok(rows)
 }
 
+/// Finds submissions on a site whose `data` JSON contains the given email
+/// address as a substring anywhere in it — used by GDPR erasure to surface
+/// likely matches for an admin to review, since `form_submissions` has no
+/// `user_id` FK to search by directly (submitters aren't required to have
+/// an account). Deliberately best-effort: a form's email field could be
+/// named anything, so this is a text search over the whole JSON blob, not
+/// an exact key lookup — expect it to need a human glance, not blind trust.
+pub async fn find_by_email(pool: &PgPool, site_id: Uuid, email: &str) -> Result<Vec<FormSubmission>> {
+    let rows = sqlx::query_as::<_, FormSubmission>(
+        r#"SELECT * FROM form_submissions
+           WHERE site_id = $1 AND data::text ILIKE $2
+           ORDER BY submitted_at DESC"#,
+    )
+    .bind(site_id)
+    .bind(format!("%{email}%"))
+    .fetch_all(pool)
+    .await?;
+    Ok(rows)
+}
+
+/// Delete a specific set of submissions on a site (e.g. an admin's picks
+/// from a GDPR-erasure review list).
+pub async fn delete_many(pool: &PgPool, site_id: Uuid, ids: &[Uuid]) -> Result<()> {
+    sqlx::query("DELETE FROM form_submissions WHERE site_id = $1 AND id = ANY($2)")
+        .bind(site_id)
+        .bind(ids)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
 /// Delete a single submission by ID, enforcing site ownership.
 pub async fn delete(pool: &PgPool, site_id: Uuid, id: Uuid) -> Result<()> {
     sqlx::query(

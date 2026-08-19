@@ -71,3 +71,12 @@ pub async fn consume(pool: &PgPool, token: &str) -> Option<Uuid> {
     .ok()
     .flatten()
 }
+
+/// Deletes any pending reset tokens for a user — part of GDPR erasure.
+pub async fn delete_all_for_user(pool: &PgPool, user_id: Uuid) -> Result<()> {
+    sqlx::query("DELETE FROM password_resets WHERE user_id = $1")
+        .bind(user_id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}

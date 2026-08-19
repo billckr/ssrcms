@@ -66,6 +66,10 @@ pub struct UserRow {
     /// Sites where this user is the sole 'admin' — deleting them would leave
     /// these sites with no admin, so Delete is disabled when non-empty.
     pub sole_admin_hostnames: Vec<String>,
+    /// True once this subscriber's account has been through GDPR erasure
+    /// (`personal_data_erased_at` is non-NULL) — hides the Erase action and
+    /// shows an "Erased" badge instead.
+    pub personal_data_erased: bool,
 }
 
 pub struct UserEdit {
@@ -248,6 +252,16 @@ fn build_sub_rows(subscribers: &[UserRow], current_user_id: &str) -> String {
         } else {
             String::new()
         };
+        let erase_btn = if u.personal_data_erased {
+            r#"<span class="badge" style="background:#e5e7eb;color:#374151" title="This account's personal data has been erased">Erased</span>"#.to_string()
+        } else {
+            format!(
+                r#"<a href="/admin/users/{id}/erase-personal-data" class="icon-btn" title="Erase Personal Data (GDPR)">
+                  <img src="/admin/static/icons/shield.svg" alt="Erase Personal Data">
+                </a>"#,
+                id = crate::html_escape(&u.id),
+            )
+        };
         let domain_badges = if u.site_hostnames.is_empty() {
             r#"<span style="color:var(--muted);font-size:0.8rem">—</span>"#.to_string()
         } else {
@@ -283,6 +297,7 @@ fn build_sub_rows(subscribers: &[UserRow], current_user_id: &str) -> String {
                   <a href="/admin/users/{id}/edit" class="icon-btn" title="Edit">
                     <img src="/admin/static/icons/edit.svg" alt="Edit">
                   </a>
+                  {erase_btn}
                   {delete_btn}
                 </div>
               </td>
@@ -296,6 +311,7 @@ fn build_sub_rows(subscribers: &[UserRow], current_user_id: &str) -> String {
             email = crate::html_escape(&u.email),
             email_raw = crate::html_escape(&u.email),
             domain_badges = domain_badges,
+            erase_btn = erase_btn,
             delete_btn = delete_btn,
         )
     }).collect::<Vec<_>>().join("\n")
@@ -1629,5 +1645,125 @@ pub fn render_site_access(
         &content,
         ctx,
     )
+}
+
+/// A form_submissions or mail_log row found while searching for a
+/// subscriber's email, shown on the GDPR erasure review page for the
+/// admin to confirm before it's deleted.
+pub struct ErasureMatch {
+    /// Record UUID.
+    pub id: String,
+    pub site_id: String,
+    pub hostname: String,
+    /// Form name, or email subject line.
+    pub label: String,
+    /// e.g. "submitted 2026-08-19 14:03 UTC".
+    pub detail: String,
+}
+
+pub struct ErasureReviewData {
+    pub user_id: String,
+    pub display_name: String,
+    pub email: String,
+    pub form_matches: Vec<ErasureMatch>,
+    pub mail_matches: Vec<ErasureMatch>,
+}
+
+fn render_erasure_match_rows(matches: &[ErasureMatch], checkbox_prefix: &str) -> String {
+    matches.iter().map(|m| {
+        format!(
+            r#"<tr>
+              <td style="width:2rem;text-align:center">
+                <input type="checkbox" name="{prefix}_{site_id}_{id}" checked>
+              </td>
+              <td>{hostname}</td>
+              <td>{label}</td>
+              <td style="color:var(--muted);font-size:0.85rem">{detail}</td>
+            </tr>"#,
+            prefix   = checkbox_prefix,
+            site_id  = crate::html_escape(&m.site_id),
+            id       = crate::html_escape(&m.id),
+            hostname = crate::html_escape(&m.hostname),
+            label    = crate::html_escape(&m.label),
+            detail   = crate::html_escape(&m.detail),
+        )
+    }).collect::<Vec<_>>().join("\n")
+}
+
+/// GDPR "Erase Personal Data" review/confirm page for one subscriber.
+pub fn render_erase_review(data: &ErasureReviewData, flash: Option<&str>, ctx: &crate::PageContext) -> String {
+    let form_section = if data.form_matches.is_empty() {
+        String::new()
+    } else {
+        format!(
+            r#"<div class="card-boxed" style="margin-top:1rem">
+  <h2 class="card-boxed-header">Form Submissions matching this email</h2>
+  <div class="card-boxed-body">
+    <p class="form-note" style="margin:0 0 1rem">
+      Found by searching submitted form data for this address — review before deleting, since a
+      submission's email field could belong to someone else quoting them, and this table also
+      holds unrelated business records.
+    </p>
+    <table class="data-table">
+      <thead><tr><th style="width:2rem"></th><th>Site</th><th>Form</th><th>Submitted</th></tr></thead>
+      <tbody>{rows}</tbody>
+    </table>
+  </div>
+</div>"#,
+            rows = render_erasure_match_rows(&data.form_matches, "fs"),
+        )
+    };
+
+    let mail_section = if data.mail_matches.is_empty() {
+        String::new()
+    } else {
+        format!(
+            r#"<div class="card-boxed" style="margin-top:1rem">
+  <h2 class="card-boxed-header">Mail Log entries to this email</h2>
+  <div class="card-boxed-body">
+    <table class="data-table">
+      <thead><tr><th style="width:2rem"></th><th>Site</th><th>Subject</th><th>Sent</th></tr></thead>
+      <tbody>{rows}</tbody>
+    </table>
+  </div>
+</div>"#,
+            rows = render_erasure_match_rows(&data.mail_matches, "ml"),
+        )
+    };
+
+    let content = format!(
+        r#"<div class="card-boxed">
+  <h2 class="card-boxed-header">Erase Personal Data</h2>
+  <div class="card-boxed-body">
+    <p class="form-note" style="margin:0 0 1rem">
+      This will anonymize <strong>{display_name}</strong>'s account (<code>{email}</code>) —
+      username, email, display name, bio, and avatar are replaced with placeholders, the account
+      is deactivated, and its password is reset to a random unusable value. Comments they left
+      keep their text but lose their identity and stored IP address. Saved posts and any pending
+      password-reset tokens are deleted. This cannot be undone.
+    </p>
+    <form method="POST" action="/admin/users/{user_id}/erase-personal-data">
+      <div class="icon-pill-actionbuttons" style="margin-top:1rem">
+        <a href="/admin/users?tab=subscribers" class="icon-btn" title="Cancel" aria-label="Cancel">
+          <img src="/admin/static/icons/x.svg" alt="Cancel">
+        </a>
+        <button type="submit" class="btn btn-danger" onclick="return confirm('Erase personal data for {display_name_js}? This cannot be undone.')">
+          Erase Personal Data
+        </button>
+      </div>
+      {form_section}
+      {mail_section}
+    </form>
+  </div>
+</div>"#,
+        display_name    = crate::html_escape(&data.display_name),
+        display_name_js = data.display_name.replace('\'', "\\'"),
+        email           = crate::html_escape(&data.email),
+        user_id         = crate::html_escape(&data.user_id),
+        form_section    = form_section,
+        mail_section    = mail_section,
+    );
+
+    crate::admin_page("Erase Personal Data", "/admin/users", flash, &content, ctx)
 }
 

@@ -159,6 +159,10 @@ pub struct User {
     pub deleted_at: Option<DateTime<Utc>>,
     /// The user's preferred/default site. NULL until first site is created.
     pub default_site_id: Option<Uuid>,
+    /// Non-NULL = this account has been through GDPR erasure
+    /// (`erase_personal_data`) — every personal-data field on the row has
+    /// already been overwritten with anonymized placeholders.
+    pub personal_data_erased_at: Option<DateTime<Utc>>,
 }
 
 #[allow(dead_code)]
@@ -389,6 +393,61 @@ pub async fn deactivate(pool: &PgPool, id: Uuid) -> Result<()> {
     .execute(pool)
     .await?;
     Ok(())
+}
+
+/// GDPR erasure for a subscriber account: overwrites every personal-data
+/// field on the row with anonymized placeholders and blocks login, rather
+/// than deleting the row outright. A hard delete isn't an option here —
+/// `posts.author_id`/`media.uploaded_by` are `ON DELETE RESTRICT`, and
+/// `comments.author_id` is `ON DELETE CASCADE`, which would silently wipe
+/// their comment history off other people's posts. Since `comments`
+/// doesn't duplicate author identity onto the comment row (it's a pure FK
+/// to `users`), anonymizing this row is enough to anonymize every comment
+/// they ever left — callers still need to clear `comments.ip_address`
+/// separately (see `comment::clear_ip_for_author`), since that's stored
+/// per-comment, not on the user.
+///
+/// Returns the account's original email — the caller needs it, before it's
+/// gone, to search `form_submissions`/`mail_log` for related rows (neither
+/// table has a `user_id` FK to search by directly).
+///
+/// Errors if the account isn't a subscriber, or has already been erased —
+/// callers should treat both as "nothing to do", not retry.
+pub async fn erase_personal_data(pool: &PgPool, id: Uuid) -> Result<String> {
+    let target = get_by_id_include_inactive(pool, id).await?;
+    if target.role != "subscriber" {
+        return Err(AppError::BadRequest("Personal data erasure is only available for subscriber accounts".to_string()));
+    }
+    if target.personal_data_erased_at.is_some() {
+        return Err(AppError::BadRequest("This account's personal data has already been erased".to_string()));
+    }
+
+    let suffix = id.simple().to_string();
+    let anon_username = format!("erased-{}", &suffix[..12]);
+    let anon_email = format!("erased-{suffix}@erased.invalid");
+    let unusable_hash = hash_password(&generate_password())?;
+
+    sqlx::query(
+        r#"UPDATE users SET
+            username = $2,
+            email = $3,
+            display_name = 'Deleted User',
+            bio = '',
+            avatar_media_id = NULL,
+            password_hash = $4,
+            is_active = FALSE,
+            personal_data_erased_at = NOW(),
+            updated_at = NOW()
+        WHERE id = $1"#,
+    )
+    .bind(id)
+    .bind(&anon_username)
+    .bind(&anon_email)
+    .bind(&unusable_hash)
+    .execute(pool)
+    .await?;
+
+    Ok(target.email)
 }
 
 /// Reverse `deactivate` — restores login access.
@@ -807,6 +866,7 @@ mod tests {
             updated_at: Utc::now(),
             deleted_at: None,
             default_site_id: None,
+            personal_data_erased_at: None,
         };
         let ctx = UserContext::from_user(&user, "https://example.com");
         assert_eq!(ctx.url, "https://example.com/author/janedoe");

@@ -70,6 +70,20 @@ fn split_by_role(rows: Vec<UserRow>) -> (Vec<UserRow>, Vec<UserRow>) {
     (staff, subs)
 }
 
+/// Builds `UserRow.role` from a user's (possibly several) roles on a site:
+/// the raw role slug unchanged when there's exactly one (so callers like
+/// `split_by_role`, which does an exact `== "subscriber"` check, keep
+/// working — role_display()/role_badge_class() also expect a raw slug),
+/// or a comma-joined human-readable label when there's more than one
+/// (e.g. "Author, Editor" — a combination that was never a real role slug
+/// to begin with, so nothing downstream depends on it being one).
+fn multi_role_display(roles: &[String]) -> String {
+    match roles {
+        [single] => single.clone(),
+        many => many.iter().map(|r| role_label(r)).collect::<Vec<_>>().join(", "),
+    }
+}
+
 /// Short site-role label — mirrors `admin::pages::users::role_display` but
 /// for `site_users.role` values (no `super_admin` case, "admin" -> "Admin"
 /// rather than "Site Admin") since this is used to build comma-joined
@@ -147,7 +161,7 @@ pub async fn list(
                 id: u.id.to_string(),
                 username: u.username.clone(),
                 email: u.email.clone(),
-                role: roles.iter().map(|r| role_label(r)).collect::<Vec<_>>().join(", "),
+                role: multi_role_display(&roles),
                 display_name: u.display_name.clone(),
                 is_protected: u.is_protected,
                 is_active: u.is_active,
@@ -157,6 +171,7 @@ pub async fn list(
                 site_role_labels: vec![],
                 default_site_id: None,
                 sole_admin_hostnames: vec![],
+                personal_data_erased: u.personal_data_erased_at.is_some(),
             }).collect()
         } else {
             // All sites: show every user, with site-context role when available.
@@ -183,7 +198,7 @@ pub async fn list(
                 username: u.username.clone(),
                 email: u.email.clone(),
                 role: site_role_map.get(&u.id)
-                    .map(|roles| roles.iter().map(|r| role_label(r)).collect::<Vec<_>>().join(", "))
+                    .map(|roles| multi_role_display(roles))
                     .unwrap_or_else(|| u.role.clone()),
                 display_name: u.display_name.clone(),
                 is_protected: u.is_protected,
@@ -194,6 +209,7 @@ pub async fn list(
                 site_role_labels: vec![],
                     default_site_id: None,
                 sole_admin_hostnames: vec![],
+                personal_data_erased: u.personal_data_erased_at.is_some(),
             }).collect()
         }
     } else if let Some(site_id) = admin.site_id {
@@ -213,7 +229,7 @@ pub async fn list(
             id: u.id.to_string(),
             username: u.username.clone(),
             email: u.email.clone(),
-            role: roles.iter().map(|r| role_label(r)).collect::<Vec<_>>().join(", "),
+            role: multi_role_display(&roles),
             display_name: u.display_name.clone(),
             is_protected: u.is_protected,
                     is_active: u.is_active,
@@ -223,6 +239,7 @@ pub async fn list(
             site_role_labels: vec![],
                     default_site_id: None,
             sole_admin_hostnames: vec![],
+            personal_data_erased: u.personal_data_erased_at.is_some(),
         }).collect()
     } else {
         vec![]
@@ -373,6 +390,7 @@ pub async fn new_user(
 #[derive(Deserialize, Default)]
 pub struct EditUserQuery {
     pub success: Option<String>,
+    pub error: Option<String>,
 }
 
 pub async fn edit_user(
@@ -383,8 +401,11 @@ pub async fn edit_user(
 ) -> impl IntoResponse {
     let cs = state.site_hostname(admin.site_id);
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
-    let flash = match q.success.as_deref() {
-        Some("user_updated") => Some("User updated successfully."),
+    let flash = match (q.success.as_deref(), q.error.as_deref()) {
+        (Some("user_updated"), _) => Some("User updated successfully."),
+        (Some("personal_data_erased"), _) => Some("This account's personal data has been erased."),
+        (Some("already_erased"), _) => Some("This account's personal data was already erased."),
+        (_, Some("erase_failed")) => Some("Could not erase this account's personal data — see the server log for details."),
         _ => None,
     };
 
@@ -1079,6 +1100,7 @@ pub async fn delete_user(
                         site_role_labels: vec![],
                     default_site_id: None,
                     sole_admin_hostnames: vec![],
+                    personal_data_erased: u.personal_data_erased_at.is_some(),
                     }).collect()
             } else if let Some(site_id) = admin.site_id {
                 crate::models::site_user::list_for_site(&state.db, site_id).await.unwrap_or_default()
@@ -1096,6 +1118,7 @@ pub async fn delete_user(
                         site_role_labels: vec![],
                     default_site_id: None,
                     sole_admin_hostnames: vec![],
+                    personal_data_erased: u.personal_data_erased_at.is_some(),
                     }).collect()
             } else {
                 vec![]
@@ -1250,6 +1273,169 @@ pub async fn reactivate_user(
         super::audit(&state, &admin, "user.reactivated", "user", Some(id), &label, admin.site_id).await;
     }
     Redirect::to(&redirect_url).into_response()
+}
+
+/// GET /admin/users/{id}/erase-personal-data — review page for GDPR
+/// erasure. Shows what erasing this subscriber's account will do, plus any
+/// form_submissions/mail_log rows found by searching for their email (both
+/// tables lack a user_id FK, so this is a best-effort surface for the
+/// admin to confirm, not an automatic match).
+pub async fn erase_personal_data_review(
+    State(state): State<AppState>,
+    admin: AdminUser,
+    Path(id): Path<Uuid>,
+) -> impl IntoResponse {
+    if !admin.caps.can_manage_users {
+        return Html("<h1>403 Forbidden</h1>".to_string()).into_response();
+    }
+    let cs = state.site_hostname(admin.site_id);
+    let ctx = super::page_ctx_full(&state, &admin, &cs).await;
+
+    let target = match crate::models::user::get_by_id_include_inactive(&state.db, id).await {
+        Ok(u) => u,
+        Err(_) => return Html("<h1>User not found</h1>".to_string()).into_response(),
+    };
+
+    if target.role != "subscriber" {
+        return Html("<h1>Personal data erasure is only available for subscriber accounts.</h1>".to_string()).into_response();
+    }
+
+    // Site isolation: non-global admins may only act on subscribers assigned to their site.
+    if !admin.caps.is_global_admin {
+        let allowed = match admin.site_id {
+            Some(sid) => crate::models::site_user::has_any_role(&state.db, sid, id).await.unwrap_or(false),
+            None => false,
+        };
+        if !allowed {
+            return Redirect::to("/admin/users?tab=subscribers").into_response();
+        }
+    }
+
+    if target.personal_data_erased_at.is_some() {
+        return Redirect::to(&format!("/admin/users/{}/edit?success=already_erased", id)).into_response();
+    }
+
+    // Which sites this subscriber holds a role on — search form_submissions/
+    // mail_log on each, since neither table has a user_id FK to search by.
+    let sites = crate::models::site_user::list_for_user(&state.db, id).await.unwrap_or_default();
+
+    let mut form_matches = Vec::new();
+    let mut mail_matches = Vec::new();
+    for (site, _role) in &sites {
+        if let Ok(subs) = crate::models::form_submission::find_by_email(&state.db, site.id, &target.email).await {
+            for s in subs {
+                form_matches.push(admin::pages::users::ErasureMatch {
+                    id: s.id.to_string(),
+                    site_id: site.id.to_string(),
+                    hostname: site.hostname.clone(),
+                    label: s.form_name.clone(),
+                    detail: format!("submitted {}", s.submitted_at.format("%Y-%m-%d %H:%M UTC")),
+                });
+            }
+        }
+        if let Ok(entries) = crate::models::mail_log::find_by_email(&state.db, site.id, &target.email).await {
+            for e in entries {
+                mail_matches.push(admin::pages::users::ErasureMatch {
+                    id: e.id.to_string(),
+                    site_id: site.id.to_string(),
+                    hostname: site.hostname.clone(),
+                    label: e.subject.clone(),
+                    detail: format!("sent {}", e.created_at.format("%Y-%m-%d %H:%M UTC")),
+                });
+            }
+        }
+    }
+
+    let data = admin::pages::users::ErasureReviewData {
+        user_id: id.to_string(),
+        display_name: target.display_name.clone(),
+        email: target.email.clone(),
+        form_matches,
+        mail_matches,
+    };
+
+    Html(admin::pages::users::render_erase_review(&data, None, &ctx)).into_response()
+}
+
+/// POST /admin/users/{id}/erase-personal-data — performs the erasure:
+/// anonymizes the account (see `user::erase_personal_data`), clears
+/// comment IPs, deletes saved posts and pending password-reset tokens, and
+/// deletes whichever form_submissions/mail_log rows the admin checked on
+/// the review page. Checkbox names encode both the target site and record
+/// id (`fs_<site_id>_<record_id>` / `ml_<site_id>_<record_id>`) rather
+/// than using repeated-name array fields, which serde_urlencoded (what
+/// axum's Form extractor uses) doesn't support.
+pub async fn erase_personal_data(
+    State(state): State<AppState>,
+    admin: AdminUser,
+    Path(id): Path<Uuid>,
+    Form(form): Form<std::collections::HashMap<String, String>>,
+) -> impl IntoResponse {
+    if !admin.caps.can_manage_users {
+        return (axum::http::StatusCode::FORBIDDEN, "Forbidden").into_response();
+    }
+
+    if crate::models::user::get_by_id_include_inactive(&state.db, id).await.is_err() {
+        return Redirect::to("/admin/users?tab=subscribers").into_response();
+    }
+
+    if !admin.caps.is_global_admin {
+        let allowed = match admin.site_id {
+            Some(sid) => crate::models::site_user::has_any_role(&state.db, sid, id).await.unwrap_or(false),
+            None => false,
+        };
+        if !allowed {
+            return Redirect::to("/admin/users?tab=subscribers").into_response();
+        }
+    }
+
+    let mut fs_by_site: std::collections::HashMap<Uuid, Vec<Uuid>> = std::collections::HashMap::new();
+    let mut ml_by_site: std::collections::HashMap<Uuid, Vec<Uuid>> = std::collections::HashMap::new();
+    for key in form.keys() {
+        let (prefix, rest) = match key.split_once('_') {
+            Some(pair) => pair,
+            None => continue,
+        };
+        let mut parts = rest.splitn(2, '_');
+        let (Some(site_str), Some(record_str)) = (parts.next(), parts.next()) else { continue };
+        let (Ok(site_id), Ok(record_id)) = (site_str.parse::<Uuid>(), record_str.parse::<Uuid>()) else { continue };
+        match prefix {
+            "fs" => fs_by_site.entry(site_id).or_default().push(record_id),
+            "ml" => ml_by_site.entry(site_id).or_default().push(record_id),
+            _ => {}
+        }
+    }
+
+    match crate::models::user::erase_personal_data(&state.db, id).await {
+        Ok(original_email) => {
+            if let Err(e) = crate::models::comment::clear_ip_for_author(&state.db, id).await {
+                tracing::warn!("erase_personal_data: failed to clear comment IPs for {}: {:?}", id, e);
+            }
+            if let Err(e) = crate::models::saved_post::delete_all_for_user(&state.db, id).await {
+                tracing::warn!("erase_personal_data: failed to delete saved posts for {}: {:?}", id, e);
+            }
+            if let Err(e) = crate::models::password_reset::delete_all_for_user(&state.db, id).await {
+                tracing::warn!("erase_personal_data: failed to delete password resets for {}: {:?}", id, e);
+            }
+            for (site_id, ids) in &fs_by_site {
+                if let Err(e) = crate::models::form_submission::delete_many(&state.db, *site_id, ids).await {
+                    tracing::warn!("erase_personal_data: failed to delete form submissions on site {}: {:?}", site_id, e);
+                }
+            }
+            for (site_id, ids) in &ml_by_site {
+                if let Err(e) = crate::models::mail_log::delete_many(&state.db, *site_id, ids).await {
+                    tracing::warn!("erase_personal_data: failed to delete mail log entries on site {}: {:?}", site_id, e);
+                }
+            }
+
+            super::audit(&state, &admin, "user.personal_data_erased", "user", Some(id), &original_email, admin.site_id).await;
+            Redirect::to(&format!("/admin/users/{}/edit?success=personal_data_erased", id)).into_response()
+        }
+        Err(e) => {
+            tracing::warn!("erase_personal_data failed for {}: {:?}", id, e);
+            Redirect::to(&format!("/admin/users/{}/edit?error=erase_failed", id)).into_response()
+        }
+    }
 }
 
 #[derive(Deserialize)]

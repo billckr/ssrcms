@@ -122,3 +122,13 @@ pub async fn list_for_user_paginated(
     .fetch_all(pool)
     .await?)
 }
+
+/// Deletes every saved-post bookmark for a user — part of GDPR erasure;
+/// pure personal preference data, no content-integrity reason to keep it.
+pub async fn delete_all_for_user(pool: &PgPool, user_id: Uuid) -> Result<()> {
+    sqlx::query("DELETE FROM saved_posts WHERE user_id = $1")
+        .bind(user_id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
