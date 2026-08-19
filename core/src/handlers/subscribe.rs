@@ -125,6 +125,7 @@ pub async fn subscribe_post(
                         existing.id,
                         crate::models::site_user::SiteRole::Subscriber,
                         None,
+                        false,
                     )
                     .await
                     {
@@ -162,6 +163,7 @@ pub async fn subscribe_post(
                     new_user.id,
                     crate::models::site_user::SiteRole::Subscriber,
                     None,
+                    false,
                 )
                 .await
                 {

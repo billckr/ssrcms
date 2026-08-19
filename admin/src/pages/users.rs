@@ -1312,6 +1312,9 @@ pub struct SiteAssignmentRow {
     /// True when this row is the only 'admin'-role user on the site — removing
     /// or demoting them would leave the site with no site-scoped admin.
     pub is_last_admin: bool,
+    /// Only meaningful when `role == "author"` — whether this user can
+    /// publish their own posts on this site directly.
+    pub can_self_publish: bool,
 }
 
 pub struct SiteAccessData {
@@ -1359,14 +1362,20 @@ pub fn render_site_access(
                     confirm_msg = crate::html_escape(&confirm_msg),
                 )
             };
+            let publish_badge = if a.role == "author" && a.can_self_publish {
+                r#" <span class="badge badge-published" title="Can publish own posts without an Editor">Can publish</span>"#
+            } else {
+                ""
+            };
             format!(
                 r#"<tr>
                   <td>{hostname}</td>
-                  <td><span class="badge">{role}</span></td>
+                  <td><span class="badge">{role}</span>{publish_badge}</td>
                   <td class="actions"><div class="icon-pill-actionbuttons">{remove_action}</div></td>
                 </tr>"#,
                 hostname      = crate::html_escape(&a.hostname),
                 role          = crate::html_escape(role_display(&a.role)),
+                publish_badge = publish_badge,
                 remove_action = remove_action,
             )
         }).collect::<Vec<_>>().join("\n")
@@ -1420,6 +1429,16 @@ pub fn render_site_access(
       <option value="subscriber"{subscriber_selected}>Subscriber</option>
     </select>
   </div>
+  <div class="form-group" id="can-self-publish-group" style="display:none">
+    <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;font-weight:400">
+      <input type="checkbox" id="can-self-publish-cb" name="can_self_publish" value="on">
+      Can publish own posts
+    </label>
+    <p class="form-note" style="margin:.35rem 0 0">
+      Off (default): this author's posts always go to an Editor for review before going live.
+      On: they can publish their own posts directly, like WordPress's "Author" role.
+    </p>
+  </div>
   <div class="icon-pill" style="margin-top:1.5rem">
     <button type="submit" class="icon-btn" id="assign-btn" title="Assign" aria-label="Assign" disabled>
       <img src="/admin/static/icons/save.svg" alt="">
@@ -1465,9 +1484,17 @@ pub fn render_site_access(
   var roleSelect = document.getElementById('role-select');
   var siteSelect = document.getElementById('site-select');
   var assignBtn  = document.getElementById('assign-btn');
+  var publishGroup = document.getElementById('can-self-publish-group');
+  var publishCb     = document.getElementById('can-self-publish-cb');
 
   function syncAssignBtn() {{
     assignBtn.disabled = !siteSelect.value || !roleSelect.value;
+  }}
+
+  function syncPublishGroup() {{
+    var isAuthor = roleSelect.value === 'author';
+    publishGroup.style.display = isAuthor ? '' : 'none';
+    if (!isAuthor) publishCb.checked = false;
   }}
 
   // Enable role only once a real site is chosen.
@@ -1475,7 +1502,15 @@ pub fn render_site_access(
     roleSelect.disabled = !siteSelect.value;
     syncAssignBtn();
   }});
-  roleSelect.addEventListener('change', syncAssignBtn);
+  roleSelect.addEventListener('change', function() {{ syncAssignBtn(); syncPublishGroup(); }});
+
+  // A back/forward navigation can restore the <select>'s prior value from
+  // bfcache without firing 'change' — sync once on load too, so the publish
+  // checkbox's visibility (and the assign button's disabled state) reflect
+  // whatever the browser actually put in the fields, not just the fresh
+  // server-rendered defaults.
+  syncAssignBtn();
+  syncPublishGroup();
 
   var targetUserId = '{user_id}';
 

@@ -41,6 +41,12 @@ pub struct PageContext {
     /// Can manage this site's own admin branding (sidebar name/logo).
     /// Site-scoped admins only, never super_admin — see AdminCaps' doc comment.
     pub can_manage_site_settings: bool,
+    /// Only meaningful for the Author role — lets this specific author
+    /// publish their own posts directly instead of only draft/pending. See
+    /// `docs/wordpress-migration-pain-points.md`'s "User accounts &
+    /// passwords" section for why this exists as a per-user flag rather
+    /// than a whole new role.
+    pub can_self_publish: bool,
     /// Number of unread form submissions across all forms on this site.
     pub unread_forms_count: i64,
     /// Admin chrome brand label — from app_settings.app_name.

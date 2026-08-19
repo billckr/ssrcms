@@ -64,6 +64,10 @@ pub struct SiteUser {
     pub role: String,
     /// Who added this user to this site. NULL for legacy / CLI-seeded rows.
     pub invited_by: Option<Uuid>,
+    /// Only meaningful when `role == "author"` — lets this specific author
+    /// publish their own posts directly instead of only draft/pending. See
+    /// `set_can_self_publish`.
+    pub can_self_publish: bool,
     pub created_at: DateTime<Utc>,
 }
 
@@ -78,20 +82,23 @@ impl SiteUser {
 /// a different role does not remove any role they already hold — a user can
 /// now hold several roles on the same site simultaneously.
 /// Pass `invited_by: None` for CLI-seeded rows or super_admin-initiated entries
-/// where attribution is not required.
+/// where attribution is not required. `can_self_publish` is only meaningful
+/// when `role` is `Author` — pass `false` for every other role.
 pub async fn add(
     pool: &PgPool,
     site_id: Uuid,
     user_id: Uuid,
     role: SiteRole,
     invited_by: Option<Uuid>,
+    can_self_publish: bool,
 ) -> Result<SiteUser> {
     let su = sqlx::query_as::<_, SiteUser>(
         r#"
-        INSERT INTO site_users (site_id, user_id, role, invited_by)
-        VALUES ($1, $2, $3, $4)
+        INSERT INTO site_users (site_id, user_id, role, invited_by, can_self_publish)
+        VALUES ($1, $2, $3, $4, $5)
         ON CONFLICT (site_id, user_id, role)
-        DO UPDATE SET invited_by = COALESCE(site_users.invited_by, EXCLUDED.invited_by)
+        DO UPDATE SET invited_by = COALESCE(site_users.invited_by, EXCLUDED.invited_by),
+                      can_self_publish = EXCLUDED.can_self_publish
         RETURNING *
         "#,
     )
@@ -99,9 +106,39 @@ pub async fn add(
     .bind(user_id)
     .bind(role.as_str())
     .bind(invited_by)
+    .bind(can_self_publish)
     .fetch_one(pool)
     .await?;
     Ok(su)
+}
+
+/// Whether this user can publish their own posts on this site without an
+/// Editor's involvement — only meaningful for the Author role; `false` for
+/// anyone with no `author` row at all (including users with a different
+/// role, who don't need this check applied to them in the first place).
+pub async fn get_can_self_publish(pool: &PgPool, site_id: Uuid, user_id: Uuid) -> Result<bool> {
+    let value: Option<bool> = sqlx::query_scalar(
+        "SELECT can_self_publish FROM site_users WHERE site_id = $1 AND user_id = $2 AND role = 'author'",
+    )
+    .bind(site_id)
+    .bind(user_id)
+    .fetch_optional(pool)
+    .await?;
+    Ok(value.unwrap_or(false))
+}
+
+/// Toggles the self-publish flag on a user's existing Author row. No-op
+/// (affects zero rows) if they don't currently hold the Author role here.
+pub async fn set_can_self_publish(pool: &PgPool, site_id: Uuid, user_id: Uuid, value: bool) -> Result<()> {
+    sqlx::query(
+        "UPDATE site_users SET can_self_publish = $1 WHERE site_id = $2 AND user_id = $3 AND role = 'author'",
+    )
+    .bind(value)
+    .bind(site_id)
+    .bind(user_id)
+    .execute(pool)
+    .await?;
+    Ok(())
 }
 
 /// Remove ALL roles a user holds on a site (e.g. full offboarding from the

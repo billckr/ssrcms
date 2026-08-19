@@ -186,7 +186,9 @@ pub fn posts_list_fragment(
             format!("//{}{}", ctx.current_site, p.view_path)
         };
         // Authors cannot edit scheduled or published posts — show view only.
+        // A self-publishing author is exempt, same as edit_post_type's check.
         let author_read_only = ctx.user_role.eq_ignore_ascii_case("author")
+            && !ctx.can_self_publish
             && (p.status == "scheduled" || p.status == "published");
         let display_title = if p.title.chars().count() > 100 {
             format!("{}...", p.title.chars().take(100).collect::<String>())
@@ -524,13 +526,14 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
         )
     }).collect::<Vec<_>>().join("\n");
 
-    let status_options = if ctx.user_role.eq_ignore_ascii_case("author") {
+    let status_options = if ctx.user_role.eq_ignore_ascii_case("author") && !ctx.can_self_publish {
         [("draft", "Draft"), ("pending", "Submit for Review")].iter().map(|(val, label)| {
             let selected = if *val == post.status { " selected" } else { "" };
             format!(r#"<option value="{val}"{selected}>{label}</option>"#, val = val, label = label, selected = selected)
         }).collect::<Vec<_>>().join("")
     } else {
-        // Editors/admins: include pending so they can see/change it too.
+        // Editors/admins, and any author granted can_self_publish: include
+        // pending so they can see/change it too.
         // Trashed only makes sense once a post exists to trash — a brand-new,
         // never-saved post has nothing for it to do, and Delete already
         // covers removing real content.
@@ -664,8 +667,8 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
         _ => String::new(),
     };
 
-    // Hint displayed below the status dropdown for authors
-    let status_hint = if ctx.user_role.eq_ignore_ascii_case("author") {
+    // Hint displayed below the status dropdown for restricted authors
+    let status_hint = if ctx.user_role.eq_ignore_ascii_case("author") && !ctx.can_self_publish {
         r#"<small id="status-hint" style="color:var(--muted);display:block;margin-top:.3rem"></small>
 <script>
 (function(){
@@ -680,12 +683,13 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
     };
 
     // Default published_at:
-    // - Authors: always empty (field is hidden, value not user-controlled)
+    // - Restricted authors: always empty (field is hidden, value not user-controlled)
+    // - Self-publishing authors: same as Editors/admins below
     // - Editors/admins opening a pending post: default to now so they can publish immediately
     // - New posts (non-author): prefill with now
     // - Existing non-pending posts: use stored value
-    let published_at = if ctx.user_role.eq_ignore_ascii_case("author") {
-        // Authors don't control publish time; send an empty hidden value
+    let published_at = if ctx.user_role.eq_ignore_ascii_case("author") && !ctx.can_self_publish {
+        // Restricted authors don't control publish time; send an empty hidden value
         String::new()
     } else if let Some(val) = &post.published_at {
         if post.status == "pending" {
@@ -1812,7 +1816,7 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
         datetime_section_display = datetime_section_display,
         datetime_picker_display = datetime_picker_display,
         post_dates_info = post_dates_info,
-        datetime_field = if ctx.user_role.eq_ignore_ascii_case("author") {
+        datetime_field = if ctx.user_role.eq_ignore_ascii_case("author") && !ctx.can_self_publish {
             format!(r#"<input type="hidden" name="published_at" value="{}">"#, crate::html_escape(&published_at))
         } else {
             format!(
@@ -1875,6 +1879,7 @@ mod tests {
             can_manage_forms: false,
             can_manage_pages: true,
             can_manage_site_settings: false,
+            can_self_publish: false,
             unread_forms_count: 0,
             app_name: "Synaptic".to_string(),
             logo_url: None,

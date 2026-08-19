@@ -698,7 +698,7 @@ pub async fn save_new(
                     }
                 };
                 if let (Some(sid), Some(role)) = (site_id, site_role) {
-                    if let Err(e) = crate::models::site_user::add(&state.db, sid, new_user.id, role, None).await {
+                    if let Err(e) = crate::models::site_user::add(&state.db, sid, new_user.id, role, None, false).await {
                         tracing::warn!("failed to add user {} to site {}: {:?}", new_user.id, sid, e);
                     }
                     // If assigning as admin and the site has no owner yet, claim ownership.
@@ -781,7 +781,7 @@ pub async fn save_new(
                 // Site admins can never produce a super_admin target (capped above),
                 // so site_role is always Some here.
                 if let (Some(site_id), Some(role)) = (target_site_id, site_role) {
-                    if let Err(e) = crate::models::site_user::add(&state.db, site_id, new_user.id, role, Some(admin.user.id)).await {
+                    if let Err(e) = crate::models::site_user::add(&state.db, site_id, new_user.id, role, Some(admin.user.id), false).await {
                         tracing::warn!("failed to add new user {} to site {}: {:?}", new_user.id, site_id, e);
                     }
                     if role == crate::models::site_user::SiteRole::Admin {
@@ -1480,11 +1480,14 @@ pub async fn site_access_page(
     for (s, role) in raw_assignments {
         let is_last_admin = role == "admin"
             && crate::models::site_user::count_admins(&state.db, s.id).await.unwrap_or(0) <= 1;
+        let can_self_publish = role == "author"
+            && crate::models::site_user::get_can_self_publish(&state.db, s.id, user_id).await.unwrap_or(false);
         assignments.push(admin::pages::users::SiteAssignmentRow {
             site_id: s.id.to_string(),
             hostname: s.hostname.clone(),
             role,
             is_last_admin,
+            can_self_publish,
         });
     }
 
@@ -1560,6 +1563,11 @@ pub struct SiteAccessAddForm {
     /// the same 'admin' site role alongside the existing Site Admin, with no
     /// change to site ownership.
     pub displaced_action: Option<String>,
+    /// Checkbox, only meaningful (and only shown in the UI) when role ==
+    /// "author" — lets this specific author publish their own posts
+    /// directly instead of only draft/pending. Ignored for every other role.
+    #[serde(default)]
+    pub can_self_publish: Option<String>,
 }
 
 /// POST /admin/users/:id/site-access/add — assign a user to a site.
@@ -1630,7 +1638,7 @@ pub async fn add_site_access(
                             &state.db, site_uuid, old_owner_id, crate::models::site_user::SiteRole::Admin,
                         ).await;
                         let _ = crate::models::site_user::add(
-                            &state.db, site_uuid, old_owner_id, crate::models::site_user::SiteRole::Author, None,
+                            &state.db, site_uuid, old_owner_id, crate::models::site_user::SiteRole::Author, None, false,
                         )
                         .await;
                     }
@@ -1696,7 +1704,9 @@ pub async fn add_site_access(
     // `role` above is sanitised to always be one of "admin"/"editor"/"author"/"subscriber".
     let role = crate::models::site_user::SiteRole::from_str(role)
         .expect("add_site_access role is sanitised to a valid SiteRole above");
-    if let Err(e) = crate::models::site_user::add(&state.db, site_uuid, user_id, role, Some(admin.user.id)).await {
+    let can_self_publish = role == crate::models::site_user::SiteRole::Author
+        && form.can_self_publish.as_deref() == Some("on");
+    if let Err(e) = crate::models::site_user::add(&state.db, site_uuid, user_id, role, Some(admin.user.id), can_self_publish).await {
         tracing::warn!("failed to add user {} to site {}: {:?}", user_id, site_uuid, e);
         return Redirect::to(&format!("/admin/users/{}/site-access?error=db_error", user_id)).into_response();
     }

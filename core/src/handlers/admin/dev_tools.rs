@@ -175,7 +175,7 @@ pub async fn seed_users(
             }
         };
 
-        if let Err(e) = site_user::add(&state.db, site.id, new_user.id, site_role, admin.user.id.into()).await {
+        if let Err(e) = site_user::add(&state.db, site.id, new_user.id, site_role, admin.user.id.into(), false).await {
             tracing::error!("seed_users: site_user::add failed: {e}");
             skipped += 1;
             continue;

@@ -427,7 +427,7 @@ async fn test_invited_by_recorded_on_site_user() {
         .await
         .expect("create site");
 
-    site_user::add(&pool, s.id, invitee.id, site_user::SiteRole::Author, Some(inviter.id))
+    site_user::add(&pool, s.id, invitee.id, site_user::SiteRole::Author, Some(inviter.id), false)
         .await
         .expect("add invitee");
 
@@ -462,10 +462,10 @@ async fn test_multi_role_add_is_idempotent_and_coexists() {
         .expect("create site");
 
     // Grant two different roles on the same site.
-    site_user::add(&pool, s.id, member.id, site_user::SiteRole::Editor, Some(owner.id))
+    site_user::add(&pool, s.id, member.id, site_user::SiteRole::Editor, Some(owner.id), false)
         .await
         .expect("add editor role");
-    site_user::add(&pool, s.id, member.id, site_user::SiteRole::Author, Some(owner.id))
+    site_user::add(&pool, s.id, member.id, site_user::SiteRole::Author, Some(owner.id), false)
         .await
         .expect("add author role");
 
@@ -477,7 +477,7 @@ async fn test_multi_role_add_is_idempotent_and_coexists() {
     assert!(roles.contains(&site_user::SiteRole::Author));
 
     // Re-adding an already-held role is a no-op, not an error, and doesn't duplicate.
-    site_user::add(&pool, s.id, member.id, site_user::SiteRole::Editor, Some(owner.id))
+    site_user::add(&pool, s.id, member.id, site_user::SiteRole::Editor, Some(owner.id), false)
         .await
         .expect("re-adding an existing role should succeed idempotently");
     let roles_after = site_user::list_roles_for_user_and_site(&pool, s.id, member.id)

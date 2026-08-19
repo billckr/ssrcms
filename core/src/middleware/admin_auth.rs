@@ -118,6 +118,10 @@ pub struct AdminUser {
     /// site_admin with no row on this particular site) isn't a valid
     /// per-site role either. Global admins always get `Some(SiteRole::Admin)`.
     pub site_role: Option<crate::models::site_user::SiteRole>,
+    /// Only meaningful when `site_role == Some(SiteRole::Author)` — lets
+    /// this specific author publish their own posts directly instead of
+    /// only draft/pending. `false` (and irrelevant) for every other role.
+    pub can_self_publish: bool,
     /// Derived capabilities — use these for all permission checks.
     pub caps: AdminCaps,
 }
@@ -376,6 +380,15 @@ impl FromRequestParts<AppState> for AdminUser {
 
         let caps = AdminCaps::from_roles(&user.role, site_role, is_is_impersonating, is_on_default_site, is_top_level_site);
 
-        Ok(AdminUser { user, site_id, site_role, caps })
+        let can_self_publish = if site_role == Some(crate::models::site_user::SiteRole::Author) {
+            match site_id {
+                Some(sid) => crate::models::site_user::get_can_self_publish(&state.db, sid, user_id).await.unwrap_or(false),
+                None => false,
+            }
+        } else {
+            false
+        };
+
+        Ok(AdminUser { user, site_id, site_role, can_self_publish, caps })
     }
 }

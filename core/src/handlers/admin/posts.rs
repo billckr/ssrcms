@@ -331,7 +331,8 @@ pub async fn edit_post(
 ) -> impl IntoResponse {
     let cs = state.site_hostname(admin.site_id);
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
-    edit_post_type(state, id, admin.site_id, admin.site_role == Some(crate::models::site_user::SiteRole::Author), admin.user.id, ctx, q.success.as_deref()).await
+    let is_restricted_author = admin.site_role == Some(crate::models::site_user::SiteRole::Author) && !admin.can_self_publish;
+    edit_post_type(state, id, admin.site_id, is_restricted_author, admin.user.id, ctx, q.success.as_deref()).await
 }
 
 pub async fn edit_page(
@@ -348,6 +349,9 @@ pub async fn edit_page(
     edit_post_type(state, id, admin.site_id, false, admin.user.id, ctx, q.success.as_deref()).await.into_response()
 }
 
+/// `is_author` here really means "is a *restricted* Author" — callers
+/// already fold in `!admin.can_self_publish`, so a self-publishing author
+/// reaches this function with `false`, same as an Editor.
 async fn edit_post_type(state: AppState, id: Uuid, site_id: Option<Uuid>, is_author: bool, user_id: Uuid, ctx: admin::PageContext, success: Option<&str>) -> impl IntoResponse {
     let post = match crate::models::post::get_by_id(&state.db, id).await {
         Ok(p) => p,
@@ -565,8 +569,11 @@ pub async fn save_new(
     if form.post_type == "page" && !admin.caps.can_manage_pages {
         return Redirect::to("/admin").into_response();
     }
-    // Authors may only save as draft or pending — clamp anything else to draft.
-    let status = if admin.site_role == Some(crate::models::site_user::SiteRole::Author) {
+    // Authors may only save as draft or pending — clamp anything else to
+    // draft — unless this specific author has been granted can_self_publish
+    // (see PageContext::can_self_publish's doc comment), in which case they
+    // behave like an Editor for status purposes.
+    let status = if admin.site_role == Some(crate::models::site_user::SiteRole::Author) && !admin.can_self_publish {
         match parse_status(&form.status) {
             PostStatus::Pending => PostStatus::Pending,
             _ => PostStatus::Draft,
@@ -733,12 +740,18 @@ pub async fn save_edit(
                 if p.site_id != admin.site_id {
                     return Redirect::to(redirect).into_response();
                 }
-                // Author restriction: authors can only edit their own draft/pending posts.
+                // Author restriction: authors can only edit their own posts,
+                // and (unless can_self_publish) only while still
+                // draft/pending — once an Editor publishes it, a restricted
+                // author can no longer touch it. A self-publishing author
+                // keeps editing their own published/scheduled work, same as
+                // any other status, since they don't need an Editor's
+                // involvement to begin with.
                 if admin.site_role == Some(crate::models::site_user::SiteRole::Author) {
                     if p.author_id != admin.user.id {
                         return Redirect::to(redirect).into_response();
                     }
-                    if p.status == "published" || p.status == "scheduled" {
+                    if !admin.can_self_publish && (p.status == "published" || p.status == "scheduled") {
                         return Redirect::to(redirect).into_response();
                     }
                 }
@@ -747,8 +760,11 @@ pub async fn save_edit(
         }
     }
 
-    // Authors may only save as draft or pending — clamp anything else to draft.
-    let status = if admin.site_role == Some(crate::models::site_user::SiteRole::Author) {
+    // Authors may only save as draft or pending — clamp anything else to
+    // draft — unless this specific author has been granted can_self_publish
+    // (see PageContext::can_self_publish's doc comment), in which case they
+    // behave like an Editor for status purposes.
+    let status = if admin.site_role == Some(crate::models::site_user::SiteRole::Author) && !admin.can_self_publish {
         match parse_status(&form.status) {
             PostStatus::Pending => PostStatus::Pending,
             _ => PostStatus::Draft,

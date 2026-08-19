@@ -121,6 +121,7 @@ pub fn page_ctx(state: &AppState, admin: &AdminUser, current_site: &str) -> admi
         can_manage_forms: admin.caps.can_manage_forms,
         can_manage_pages: admin.caps.can_manage_pages,
         can_manage_site_settings: admin.caps.can_manage_site_settings,
+        can_self_publish: admin.can_self_publish,
         unread_forms_count: 0,
         app_name,
         logo_url,
