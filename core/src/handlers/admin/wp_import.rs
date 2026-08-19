@@ -40,7 +40,7 @@ use std::path::Path as StdPath;
 
 use axum::{
     extract::{Multipart, Path, State},
-    response::{IntoResponse, Redirect},
+    response::IntoResponse,
 };
 use chrono::{DateTime, NaiveDateTime, Utc};
 use quick_xml::events::Event;
@@ -48,7 +48,7 @@ use quick_xml::reader::Reader;
 use regex_lite::Regex;
 use uuid::Uuid;
 
-use crate::app_state::AppState;
+use crate::app_state::{AppState, WpImportCredential, WpImportPhase, WpImportProgress};
 use crate::middleware::admin_auth::AdminUser;
 use crate::models::post::{CreatePost, PostStatus, PostType, UpdatePost};
 use crate::models::site_user::{self, SiteRole};
@@ -482,16 +482,47 @@ fn site_base_url(state: &AppState, site_id: Uuid) -> String {
         .unwrap_or_default()
 }
 
-fn redirect_with_flash(site_id: Uuid, msg: &str) -> Redirect {
-    Redirect::to(&format!(
-        "/admin/sites/{}/settings?tab=import&flash={}",
-        site_id,
-        msg.replace(' ', "+")
-    ))
+/// Reads the live progress for site_id, if any import has ever run for it
+/// this process's lifetime. Doesn't distinguish "never run" from "state was
+/// lost on restart" — both just mean no polling data exists yet.
+fn read_progress(state: &AppState, site_id: Uuid) -> Option<WpImportProgress> {
+    state.wp_import_progress.read().unwrap().get(&site_id).cloned()
 }
 
-/// POST /admin/sites/{id}/import-wp — parses the uploaded WXR file and
-/// imports its attachments and posts/pages into this site.
+fn write_progress(state: &AppState, site_id: Uuid, f: impl FnOnce(&mut WpImportProgress)) {
+    if let Some(entry) = state.wp_import_progress.write().unwrap().get_mut(&site_id) {
+        f(entry);
+    }
+}
+
+/// GET /admin/sites/{id}/import-wp/status — polled by the Import Content
+/// modal's progress bar while a background import (spawned by `import`,
+/// below) is running.
+pub async fn status(
+    State(state): State<AppState>,
+    admin: AdminUser,
+    Path(site_id): Path<Uuid>,
+) -> impl IntoResponse {
+    let site = match crate::models::site::get_by_id(&state.db, site_id).await {
+        Ok(s) => s,
+        Err(_) => return (axum::http::StatusCode::NOT_FOUND, axum::Json(serde_json::json!({"error": "Site not found."}))).into_response(),
+    };
+    if !require_site_manager(&state, &admin, &site).await {
+        return (axum::http::StatusCode::FORBIDDEN, axum::Json(serde_json::json!({"error": "Forbidden."}))).into_response();
+    }
+
+    match read_progress(&state, site_id) {
+        Some(progress) => axum::Json(progress).into_response(),
+        None => (axum::http::StatusCode::NOT_FOUND, axum::Json(serde_json::json!({"error": "No import has been started for this site."}))).into_response(),
+    }
+}
+
+/// POST /admin/sites/{id}/import-wp — parses the uploaded WXR file, kicks
+/// off the actual import (`run_import`) as a background task, and returns
+/// immediately so the browser can show a progress modal that polls `status`
+/// above rather than blocking on one long request. See this module's doc
+/// comment for the import's scope/behavior — only what's needed to start
+/// the background task and report why it *didn't* start lives here now.
 pub async fn import(
     State(state): State<AppState>,
     admin: AdminUser,
@@ -500,10 +531,16 @@ pub async fn import(
 ) -> impl IntoResponse {
     let site = match crate::models::site::get_by_id(&state.db, site_id).await {
         Ok(s) => s,
-        Err(_) => return Redirect::to("/admin/sites").into_response(),
+        Err(_) => return (axum::http::StatusCode::NOT_FOUND, axum::Json(serde_json::json!({"error": "Site not found."}))).into_response(),
     };
     if !require_site_manager(&state, &admin, &site).await {
-        return (axum::http::StatusCode::FORBIDDEN, "Forbidden").into_response();
+        return (axum::http::StatusCode::FORBIDDEN, axum::Json(serde_json::json!({"error": "Forbidden."}))).into_response();
+    }
+
+    if let Some(existing) = read_progress(&state, site_id) {
+        if !matches!(existing.phase, WpImportPhase::Done | WpImportPhase::Error) {
+            return (axum::http::StatusCode::CONFLICT, axum::Json(serde_json::json!({"error": "An import is already running for this site."}))).into_response();
+        }
     }
 
     let mut xml_bytes: Option<Vec<u8>> = None;
@@ -519,8 +556,28 @@ pub async fn import(
     }
 
     let Some(xml_bytes) = xml_bytes else {
-        return redirect_with_flash(site_id, "No file uploaded.").into_response();
+        return (axum::http::StatusCode::BAD_REQUEST, axum::Json(serde_json::json!({"error": "No file uploaded."}))).into_response();
     };
+
+    let xml = String::from_utf8_lossy(&xml_bytes).into_owned();
+    let (items, authors) = parse_wxr(&xml);
+
+    if items.is_empty() {
+        tracing::warn!("WP import (site {}): 0 items parsed from a {}-byte export — likely not a WXR file, or an empty one", site_id, xml_bytes.len());
+        return (axum::http::StatusCode::BAD_REQUEST, axum::Json(serde_json::json!({"error": "No content found in that export file."}))).into_response();
+    }
+
+    tracing::info!(
+        "WP import (site {}) starting: {} items parsed ({} authors listed) from a {}-byte export",
+        site_id, items.len(), authors.len(), xml_bytes.len(),
+    );
+    {
+        let mut type_counts: HashMap<&str, usize> = HashMap::new();
+        for item in &items {
+            *type_counts.entry(item.post_type.as_str()).or_insert(0) += 1;
+        }
+        tracing::info!("WP import (site {}): item post_types breakdown: {:?}", site_id, type_counts);
+    }
 
     // Optional local fallback for attachment bytes, for when the old WP site
     // is no longer reachable over HTTP — see ZipMediaIndex's docs. A bad zip
@@ -540,26 +597,42 @@ pub async fn import(
         None => None,
     };
 
-    let xml = String::from_utf8_lossy(&xml_bytes).into_owned();
-    let (items, authors) = parse_wxr(&xml);
+    let media_total = items.iter().filter(|i| i.post_type == "attachment").count();
+    let content_total = items.iter().filter(|i| i.post_type == "post" || i.post_type == "page").count();
+    state.wp_import_progress.write().unwrap().insert(site_id, WpImportProgress {
+        phase: WpImportPhase::Media,
+        media_total,
+        media_done: 0,
+        content_total,
+        content_done: 0,
+        message: None,
+        credentials: Vec::new(),
+        new_author_count: 0,
+        granted_author_access: 0,
+        error: None,
+    });
 
-    if items.is_empty() {
-        tracing::warn!("WP import (site {}): 0 items parsed from a {}-byte export — likely not a WXR file, or an empty one", site_id, xml_bytes.len());
-        return redirect_with_flash(site_id, "No content found in that export file.").into_response();
-    }
+    let admin_user_id = admin.user.id;
+    let bg_state = state.clone();
+    tokio::spawn(async move {
+        run_import(bg_state, site_id, admin_user_id, items, authors, zip_index).await;
+    });
 
-    tracing::info!(
-        "WP import (site {}) starting: {} items parsed ({} authors listed) from a {}-byte export",
-        site_id, items.len(), authors.len(), xml_bytes.len(),
-    );
-    {
-        let mut type_counts: HashMap<&str, usize> = HashMap::new();
-        for item in &items {
-            *type_counts.entry(item.post_type.as_str()).or_insert(0) += 1;
-        }
-        tracing::info!("WP import (site {}): item post_types breakdown: {:?}", site_id, type_counts);
-    }
+    axum::Json(serde_json::json!({"started": true})).into_response()
+}
 
+/// Does the actual import work (spawned by `import`, above), updating
+/// `state.wp_import_progress[site_id]` as it goes so `status` has something
+/// live to report. Scope/behavior notes for the import itself live in this
+/// module's top doc comment, not here.
+async fn run_import(
+    state: AppState,
+    site_id: Uuid,
+    admin_user_id: Uuid,
+    items: Vec<WxrItem>,
+    authors: HashMap<String, String>,
+    zip_index: Option<ZipMediaIndex>,
+) {
     // ── Pass 1: attachments ──────────────────────────────────────────────
     let client = reqwest::Client::builder()
         .user_agent("SynapCMS-WP-Importer/1.0")
@@ -579,6 +652,7 @@ pub async fn import(
 
     for item in items.iter().filter(|i| i.post_type == "attachment") {
         if item.attachment_url.trim().is_empty() {
+            write_progress(&state, site_id, |p| p.media_done += 1);
             continue;
         }
         attachment_id_to_url.insert(item.wp_post_id.clone(), item.attachment_url.clone());
@@ -587,13 +661,14 @@ pub async fn import(
             Ok(Some(existing_id)) => {
                 media_reused += 1;
                 run_media_map.insert(item.attachment_url.clone(), existing_id);
+                write_progress(&state, site_id, |p| p.media_done += 1);
                 continue;
             }
             Ok(None) => {}
             Err(e) => tracing::warn!("wp_import_media_map lookup failed for {}: {:?}", item.attachment_url, e),
         }
 
-        match import_attachment(&state, &client, site_id, admin.user.id, item, zip_index.as_ref()).await {
+        match import_attachment(&state, &client, site_id, admin_user_id, item, zip_index.as_ref()).await {
             Ok((media_id, from_zip)) => {
                 media_ok += 1;
                 if from_zip {
@@ -606,6 +681,7 @@ pub async fn import(
                 tracing::warn!("WP media import failed for {}: {}", item.attachment_url, e);
             }
         }
+        write_progress(&state, site_id, |p| p.media_done += 1);
     }
 
     // Merge with anything already recorded from a previous run (e.g. a
@@ -621,7 +697,9 @@ pub async fn import(
     let (exact_rewrite, fuzzy_rewrite) = build_rewrite_maps(&state, &media_map, &base_url).await;
 
     // ── Pass 1.5: authors — match or create ──────────────────────────────
-    let (author_map, new_author_creds, granted_author_access) = ensure_author_accounts(&state, site_id, &admin, &authors).await;
+    let (author_map, new_author_creds, granted_author_access) = ensure_author_accounts(&state, site_id, admin_user_id, &authors).await;
+
+    write_progress(&state, site_id, |p| p.phase = WpImportPhase::Content);
 
     // ── Pass 2: posts/pages — create ─────────────────────────────────────
     let mut posts_ok = 0usize;
@@ -654,7 +732,7 @@ pub async fn import(
             }
             continue;
         }
-        match import_post(&state, site_id, &admin, item, &author_map, &attachment_id_to_url, &media_map, &exact_rewrite, &fuzzy_rewrite).await {
+        match import_post(&state, site_id, admin_user_id, item, &author_map, &attachment_id_to_url, &media_map, &exact_rewrite, &fuzzy_rewrite).await {
             Ok(ImportedPost { post_id, author_matched, skipped_status }) => {
                 if skipped_status {
                     posts_skipped_status += 1;
@@ -662,6 +740,7 @@ pub async fn import(
                         "WP import (site {}): skipped wp_post_id={} title={:?} — WP status={:?} has no Synap equivalent worth importing (trash/auto-draft/inherit/unrecognized)",
                         site_id, item.wp_post_id, item.title, item.status,
                     );
+                    write_progress(&state, site_id, |p| p.content_done += 1);
                     continue;
                 }
                 posts_ok += 1;
@@ -682,6 +761,7 @@ pub async fn import(
                 tracing::warn!("WP post import failed for wp_post_id={}: {}", item.wp_post_id, e);
             }
         }
+        write_progress(&state, site_id, |p| p.content_done += 1);
     }
 
     // ── Pass 3: patch parent_id now that every post has a new UUID ───────
@@ -711,62 +791,97 @@ pub async fn import(
         }
     }
 
-    // admin_page's flash renderer flags a message as an error by scanning
-    // for words like "failed"/"error" anywhere in the text — so those words
-    // only appear here when the corresponding count is actually nonzero,
-    // otherwise a fully successful run would render in red for no reason.
-    let media_line = if zip_index.is_some() {
-        format!(
-            "Media: {} imported ({} from zip, {} fetched over HTTP), {} reused.",
-            media_ok, media_from_zip, media_ok.saturating_sub(media_from_zip), media_reused,
-        )
-    } else {
-        format!("Media: {} imported, {} reused.", media_ok, media_reused)
-    };
-    let mut parts = vec![media_line];
-    if media_failed > 0 {
-        parts.push(format!("{} media item(s) failed to import.", media_failed));
-    }
-    parts.push(format!("Content: {} imported.", posts_ok));
-    if posts_failed > 0 {
-        parts.push(format!("{} post(s)/page(s) failed to import.", posts_failed));
-    }
-    if posts_skipped_status > 0 {
-        parts.push(format!("{} skipped (draft/trash/etc.).", posts_skipped_status));
-    }
-    if posts_skipped_type > 0 {
-        parts.push(format!("{} skipped (unsupported type).", posts_skipped_type));
-    }
-    if authors_unmatched > 0 {
-        parts.push(format!("{} post(s) assigned to you (no matching author).", authors_unmatched));
-    }
-    if parents_unresolved > 0 {
-        parts.push(format!("{} parent link(s) could not be resolved.", parents_unresolved));
-    }
-    if !new_author_creds.is_empty() {
-        let list = new_author_creds.iter()
-            .map(|(username, password)| format!("{username} / {password}"))
-            .collect::<Vec<_>>()
-            .join(", ");
-        parts.push(format!(
-            "{} new author account(s) created — hand out these credentials (username / temp password): {}.",
-            new_author_creds.len(), list,
-        ));
-    }
-    if granted_author_access > 0 {
-        parts.push(format!(
-            "{} existing author(s) (matched by email) granted access to this site.",
-            granted_author_access,
-        ));
-    }
-    let msg = parts.join(" ");
+    // Full item-by-item breakdown goes to the server log only — the modal
+    // shows just a short success/partial/failure line plus any new author
+    // credentials (the one thing that can't be recovered from the log,
+    // since passwords are deliberately not logged in plaintext).
     tracing::info!(
         "WP import (site {}) done: media {} imported ({} from zip)/{} reused/{} failed; content {} imported/{} failed/{} skipped-status/{} skipped-type; {} author(s) unmatched, {} new author account(s), {} existing author(s) granted site access, {} parent link(s) unresolved",
         site_id, media_ok, media_from_zip, media_reused, media_failed,
         posts_ok, posts_failed, posts_skipped_status, posts_skipped_type,
         authors_unmatched, new_author_creds.len(), granted_author_access, parents_unresolved,
     );
-    redirect_with_flash(site_id, &msg).into_response()
+
+    let total_ok = media_ok + posts_ok;
+    let total_failed = media_failed + posts_failed;
+    let msg = if total_failed == 0 {
+        "Import completed successfully.".to_string()
+    } else if total_ok == 0 {
+        "Import failed. Check server logs for details.".to_string()
+    } else {
+        format!(
+            "Import completed with some failures ({} item(s) failed). Check server logs for details.",
+            total_failed,
+        )
+    };
+    let credentials: Vec<WpImportCredential> = new_author_creds.into_iter()
+        .map(|(username, password)| WpImportCredential { username, password })
+        .collect();
+    let new_author_count = credentials.len();
+
+    write_progress(&state, site_id, |p| {
+        p.phase = WpImportPhase::Done;
+        p.message = Some(msg);
+        p.credentials = credentials;
+        p.new_author_count = new_author_count;
+        p.granted_author_access = granted_author_access;
+    });
+}
+
+/// RFC 4180 CSV field escaping — same rule `forms::export_csv` uses.
+fn csv_escape(s: &str) -> String {
+    if s.contains('"') || s.contains(',') || s.contains('\n') || s.contains('\r') {
+        format!("\"{}\"", s.replace('"', "\"\""))
+    } else {
+        s.to_string()
+    }
+}
+
+/// GET /admin/sites/{id}/import-wp/credentials.csv — downloads the new
+/// author accounts created by the most recent import as a CSV, then drains
+/// them from the progress state so the same one-time passwords can't be
+/// re-downloaded. 404s if no import has completed with new accounts (either
+/// none were created, or they were already downloaded once).
+pub async fn credentials_csv(
+    State(state): State<AppState>,
+    admin: AdminUser,
+    Path(site_id): Path<Uuid>,
+) -> impl IntoResponse {
+    let site = match crate::models::site::get_by_id(&state.db, site_id).await {
+        Ok(s) => s,
+        Err(_) => return (axum::http::StatusCode::NOT_FOUND, "Site not found.").into_response(),
+    };
+    if !require_site_manager(&state, &admin, &site).await {
+        return (axum::http::StatusCode::FORBIDDEN, "Forbidden.").into_response();
+    }
+
+    let credentials = {
+        let mut map = state.wp_import_progress.write().unwrap();
+        match map.get_mut(&site_id) {
+            Some(entry) => std::mem::take(&mut entry.credentials),
+            None => Vec::new(),
+        }
+    };
+
+    if credentials.is_empty() {
+        return (axum::http::StatusCode::NOT_FOUND, "No new-account credentials available (none were created, or they were already downloaded).").into_response();
+    }
+
+    let mut csv = String::from("username,password\n");
+    for c in &credentials {
+        csv.push_str(&csv_escape(&c.username));
+        csv.push(',');
+        csv.push_str(&csv_escape(&c.password));
+        csv.push('\n');
+    }
+
+    (
+        [
+            (axum::http::header::CONTENT_TYPE, "text/csv; charset=utf-8".to_string()),
+            (axum::http::header::CONTENT_DISPOSITION, "attachment; filename=\"wp-import-credentials.csv\"".to_string()),
+        ],
+        csv,
+    ).into_response()
 }
 
 /// Ensures every WP author referenced in the export has a Synap user:
@@ -782,7 +897,7 @@ pub async fn import(
 async fn ensure_author_accounts(
     state: &AppState,
     site_id: Uuid,
-    admin: &AdminUser,
+    admin_user_id: Uuid,
     authors: &HashMap<String, String>,
 ) -> (HashMap<String, Uuid>, Vec<(String, String)>, usize) {
     let mut login_to_id: HashMap<String, Uuid> = HashMap::new();
@@ -806,7 +921,7 @@ async fn ensure_author_accounts(
             // existing author's self-publish flag back to false.
             match site_user::has_any_role(&state.db, site_id, existing.id).await {
                 Ok(false) => {
-                    match site_user::add(&state.db, site_id, existing.id, SiteRole::Author, Some(admin.user.id), false).await {
+                    match site_user::add(&state.db, site_id, existing.id, SiteRole::Author, Some(admin_user_id), false).await {
                         Ok(_) => granted_access += 1,
                         Err(e) => tracing::warn!("failed to grant site access to matched author {} <{}>: {:?}", login, email, e),
                     }
@@ -828,7 +943,7 @@ async fn ensure_author_accounts(
         };
         match user::create(&state.db, &create).await {
             Ok(new_user) => {
-                if let Err(e) = site_user::add(&state.db, site_id, new_user.id, SiteRole::Author, Some(admin.user.id), false).await {
+                if let Err(e) = site_user::add(&state.db, site_id, new_user.id, SiteRole::Author, Some(admin_user_id), false).await {
                     tracing::warn!("failed to grant site access to imported author {}: {:?}", username, e);
                 }
                 login_to_id.insert(login.clone(), new_user.id);
@@ -1049,7 +1164,7 @@ async fn create_post_unique_slug(state: &AppState, mut create: CreatePost) -> Re
 async fn import_post(
     state: &AppState,
     site_id: Uuid,
-    admin: &AdminUser,
+    admin_user_id: Uuid,
     item: &WxrItem,
     author_map: &HashMap<String, Uuid>,
     attachment_id_to_url: &HashMap<String, String>,
@@ -1083,7 +1198,7 @@ async fn import_post(
     let mut author_matched = true;
     let author_id = match author_map.get(&item.creator) {
         Some(&id) => id,
-        None => { author_matched = false; admin.user.id }
+        None => { author_matched = false; admin_user_id }
     };
 
     // Featured image via _thumbnail_id → attachment's old URL → media_id.

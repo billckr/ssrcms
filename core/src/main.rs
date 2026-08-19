@@ -271,6 +271,7 @@ async fn main() -> anyhow::Result<()> {
         app_settings: Arc::new(std::sync::RwLock::new(app_settings)),
         view_buffer: view_buffer.clone(),
         logo_url: Arc::new(std::sync::RwLock::new(logo_url)),
+        wp_import_progress: Arc::new(std::sync::RwLock::new(std::collections::HashMap::new())),
     };
 
     // ── Scheduled post publisher ─────────────────────────────────────────────

@@ -955,7 +955,7 @@ function toggleProviderEdit(id) {{
         passwords (migrated users will need a password reset), and shortcodes (left as literal text
         &mdash; WP plugin shortcodes have no equivalent here).
       </p>
-      <form method="post" action="/admin/sites/{id}/import-wp" enctype="multipart/form-data" class="edit-form">
+      <form method="post" action="/admin/sites/{id}/import-wp" enctype="multipart/form-data" class="edit-form" id="wpImportForm">
         <div class="form-group">
           <label for="wxr_file">WordPress export file (.xml)</label>
           <input type="file" id="wxr_file" name="wxr_file" accept=".xml" required>
@@ -970,6 +970,7 @@ function toggleProviderEdit(id) {{
             if unambiguous.
           </p>
         </div>
+        <p id="wpImportFormError" style="display:none;font-size:13px;color:var(--danger);margin:0 0 .75rem"></p>
         <div class="icon-pill">
           <button type="submit" class="icon-btn" title="Import" aria-label="Import">
             <img src="/admin/static/icons/upload.svg" alt="">
@@ -981,6 +982,155 @@ function toggleProviderEdit(id) {{
 </div>
 </div>
 </div>
+
+<!-- Import progress modal -->
+<div id="wpImportModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:200;align-items:center;justify-content:center">
+  <div class="modal-card" style="max-width:440px;width:90%">
+    <h3 class="modal-card-header">Importing from WordPress</h3>
+    <div class="modal-card-body">
+      <p id="wpImportPhaseLabel" style="font-size:14px;color:var(--muted);margin:0 0 .6rem">Starting&hellip;</p>
+      <div style="background:var(--tint);border-radius:var(--radius);overflow:hidden;height:10px;margin-bottom:1rem">
+        <div id="wpImportBarFill" style="height:100%;width:0%;background:var(--primary);transition:width .25s ease"></div>
+      </div>
+      <p id="wpImportSummary" style="display:none;font-size:14px;font-weight:600;margin:0 0 .75rem"></p>
+      <p id="wpImportAuthorCounts" style="display:none;font-size:13px;color:var(--muted);margin:0 0 1rem"></p>
+      <div style="text-align:right">
+        <div class="icon-pill" id="wpImportModalActions" style="margin-top:0;display:none">
+          <a id="wpImportCredsDownload" href="javascript:void(0)" style="display:none" class="icon-btn" title="Download new account credentials (CSV)" aria-label="Download new account credentials (CSV)"><img src="/admin/static/icons/download.svg" alt=""></a>
+          <button class="icon-btn" title="Close" aria-label="Close" onclick="wpImportModalClose()"><img src="/admin/static/icons/x.svg" alt=""></button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+(function() {{
+  var form = document.getElementById('wpImportForm');
+  var modal = document.getElementById('wpImportModal');
+  var phaseLabel = document.getElementById('wpImportPhaseLabel');
+  var barFill = document.getElementById('wpImportBarFill');
+  var summary = document.getElementById('wpImportSummary');
+  var authorCounts = document.getElementById('wpImportAuthorCounts');
+  var credsDownload = document.getElementById('wpImportCredsDownload');
+  var actions = document.getElementById('wpImportModalActions');
+  var formError = document.getElementById('wpImportFormError');
+  var statusUrl = '/admin/sites/{id}/import-wp/status';
+  var credentialsCsvUrl = '/admin/sites/{id}/import-wp/credentials.csv';
+  var pollTimer = null;
+  var finished = false;
+
+  window.wpImportModalClose = function() {{
+    modal.style.display = 'none';
+    if (pollTimer) {{ clearTimeout(pollTimer); pollTimer = null; }}
+    if (finished) {{ form.reset(); }}
+  }};
+
+  function renderProgress(p) {{
+    var total = (p.media_total || 0) + (p.content_total || 0);
+    var done = (p.media_done || 0) + (p.content_done || 0);
+    var pct = total > 0 ? Math.min(100, Math.round((done / total) * 100)) : (p.phase === 'done' ? 100 : 0);
+    barFill.style.width = pct + '%';
+    if (p.phase === 'media') {{
+      phaseLabel.textContent = 'Importing media… (' + p.media_done + ' / ' + p.media_total + ')';
+    }} else if (p.phase === 'content') {{
+      phaseLabel.textContent = 'Importing content… (' + p.content_done + ' / ' + p.content_total + ')';
+    }} else if (p.phase === 'done') {{
+      phaseLabel.textContent = 'Import complete.';
+      barFill.style.width = '100%';
+    }} else if (p.phase === 'error') {{
+      phaseLabel.textContent = 'Import failed.';
+    }}
+    if (p.phase === 'done' || p.phase === 'error') {{
+      finished = true;
+      summary.style.display = 'block';
+      summary.textContent = p.message || p.error || '';
+      summary.style.color = (p.error || (p.message && /failed/i.test(p.message))) ? 'var(--danger)' : 'var(--success)';
+      var newAuthors = p.new_author_count || 0;
+      var granted = p.granted_author_access || 0;
+      if (newAuthors > 0 || granted > 0) {{
+        var bits = [];
+        if (newAuthors > 0) {{ bits.push(newAuthors + ' new author account(s) created'); }}
+        if (granted > 0) {{ bits.push(granted + ' existing author(s) granted access'); }}
+        authorCounts.textContent = bits.join(', ') + '.';
+        authorCounts.style.display = 'block';
+      }} else {{
+        authorCounts.style.display = 'none';
+      }}
+      if (newAuthors > 0) {{
+        credsDownload.style.display = 'inline-flex';
+        credsDownload.onclick = function() {{ window.location.href = credentialsCsvUrl; }};
+      }} else {{
+        credsDownload.style.display = 'none';
+      }}
+      actions.style.display = 'inline-flex';
+      if (pollTimer) {{ clearTimeout(pollTimer); pollTimer = null; }}
+    }}
+  }}
+
+  function poll() {{
+    fetch(statusUrl, {{ credentials: 'same-origin' }})
+      .then(function(r) {{ return r.json(); }})
+      .then(function(p) {{
+        if (p && p.phase) {{ renderProgress(p); }}
+        if (!finished) {{ pollTimer = setTimeout(poll, 1000); }}
+      }})
+      .catch(function() {{
+        if (!finished) {{ pollTimer = setTimeout(poll, 2000); }}
+      }});
+  }}
+
+  form.addEventListener('submit', function(e) {{
+    e.preventDefault();
+    formError.style.display = 'none';
+
+    // Show the modal immediately, with real upload progress — the server
+    // doesn't respond (and background work doesn't start) until the whole
+    // multipart body, including a potentially large media zip, has finished
+    // uploading, so waiting for fetch() to resolve before showing anything
+    // left a dead-feeling gap for big uploads. XMLHttpRequest is used
+    // instead of fetch() specifically because fetch has no upload-progress
+    // event.
+    finished = false;
+    phaseLabel.textContent = 'Uploading files…';
+    barFill.style.width = '0%';
+    summary.style.display = 'none';
+    authorCounts.style.display = 'none';
+    credsDownload.style.display = 'none';
+    actions.style.display = 'none';
+    modal.style.display = 'flex';
+
+    var data = new FormData(form);
+    var xhr = new XMLHttpRequest();
+    xhr.open('POST', form.action, true);
+    xhr.upload.onprogress = function(evt) {{
+      if (evt.lengthComputable) {{
+        var pct = Math.round((evt.loaded / evt.total) * 100);
+        barFill.style.width = pct + '%';
+        phaseLabel.textContent = 'Uploading files… (' + pct + '%)';
+      }}
+    }};
+    xhr.onload = function() {{
+      var body = {{}};
+      try {{ body = JSON.parse(xhr.responseText); }} catch (err) {{}}
+      if (xhr.status < 200 || xhr.status >= 300) {{
+        modal.style.display = 'none';
+        formError.textContent = (body && body.error) || 'Import failed to start.';
+        formError.style.display = 'block';
+        return;
+      }}
+      phaseLabel.textContent = 'Starting…';
+      barFill.style.width = '0%';
+      poll();
+    }};
+    xhr.onerror = function() {{
+      modal.style.display = 'none';
+      formError.textContent = 'Import failed to start — please try again.';
+      formError.style.display = 'block';
+    }};
+    xhr.send(data);
+  }});
+}})();
+</script>
 <script>
 (function() {{
   var settingsTabs = document.querySelectorAll('.page-tab[data-tab]');

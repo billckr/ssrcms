@@ -308,6 +308,66 @@ pub type PluginRoutes = Arc<HashMap<String, RouteRegistration>>;
 /// Tuple payload: (post_id, anonymized_ip_hash, viewed_date).
 pub type ViewBuffer = mpsc::UnboundedSender<(Uuid, String, chrono::NaiveDate)>;
 
+/// Live progress for one running (or just-finished) WP import, keyed by
+/// site_id — polled by the Import Content modal's progress bar. Produced by
+/// `handlers::admin::wp_import::import`'s background task; see that module
+/// for how the counts are updated and `GET /admin/sites/{id}/import-wp/status`
+/// for how this is served as JSON. A `Done`/`Error` entry is left in the map
+/// (not removed) so a late poll still gets the final result; a new import
+/// for the same site simply overwrites it.
+#[derive(Clone, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WpImportPhase {
+    Media,
+    Content,
+    Done,
+    Error,
+}
+
+/// A freshly-created author account's one-time login, surfaced in the
+/// completion modal since there's no other way to hand it out — WP imports
+/// don't carry password hashes, and staff self-service password recovery
+/// isn't built yet (see the WordPress migration pain-points doc).
+#[derive(Clone, serde::Serialize)]
+pub struct WpImportCredential {
+    pub username: String,
+    pub password: String,
+}
+
+#[derive(Clone, serde::Serialize)]
+pub struct WpImportProgress {
+    pub phase: WpImportPhase,
+    pub media_total: usize,
+    pub media_done: usize,
+    pub content_total: usize,
+    pub content_done: usize,
+    /// Short completion status ("Import completed successfully." /
+    /// "...with some failures — check server logs." / "Import failed —
+    /// check server logs."), set once `phase == Done`. The full
+    /// item-by-item breakdown is logged server-side, not surfaced here —
+    /// see `wp_import::run_import`.
+    pub message: Option<String>,
+    /// Newly-created author accounts' one-time logins — deliberately never
+    /// serialized (`#[serde(skip)]`) so they never appear in the polled
+    /// `status` JSON. Only readable by the CSV download handler
+    /// (`wp_import::credentials_csv`), which drains this to empty on first
+    /// download so the same credentials can't be re-served.
+    #[serde(skip)]
+    pub credentials: Vec<WpImportCredential>,
+    /// Count of `credentials` at completion time — shown in the modal so
+    /// the admin knows whether there's anything to download, without the
+    /// passwords themselves ever reaching the browser except via download.
+    pub new_author_count: usize,
+    /// Existing authors (matched by email) granted access to this site —
+    /// informational only, no credentials involved.
+    pub granted_author_access: usize,
+    /// Set only when `phase == Error` (e.g. an unparseable export) —
+    /// distinct from `message`, which is a normal completion summary.
+    pub error: Option<String>,
+}
+
+pub type WpImportProgressMap = Arc<RwLock<HashMap<Uuid, WpImportProgress>>>;
+
 /// Cloneable application state shared across all handlers.
 #[derive(Clone)]
 pub struct AppState {
@@ -345,6 +405,9 @@ pub struct AppState {
     /// since the URL itself doesn't — the browser would otherwise keep serving
     /// a stale cached file at the old logo's URL.
     pub logo_url: Arc<std::sync::RwLock<Option<String>>>,
+    /// Live progress for running/recently-finished WP imports — see
+    /// `WpImportProgress`.
+    pub wp_import_progress: WpImportProgressMap,
 }
 
 /// Look for `admin/static/branding/logo.{svg,png,webp}` (checked in that

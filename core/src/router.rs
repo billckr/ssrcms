@@ -270,6 +270,8 @@ pub fn build(
         .route("/admin/sites/{id}/site-config", post(admin_sites::save_site_config))
         .route("/admin/sites/{id}/maintenance", post(admin_sites::save_maintenance))
         .route("/admin/sites/{id}/import-wp", post(wp_import::import).layer(upload_limit.clone()))
+        .route("/admin/sites/{id}/import-wp/status", get(wp_import::status))
+        .route("/admin/sites/{id}/import-wp/credentials.csv", get(wp_import::credentials_csv))
         .route("/admin/sites/{id}/email-providers", post(admin_email_providers::create))
         .route("/admin/sites/{id}/email-providers/{provider_id}", post(admin_email_providers::update))
         .route("/admin/sites/{id}/email-providers/{provider_id}/test", post(admin_email_providers::test))
