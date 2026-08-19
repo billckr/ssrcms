@@ -403,7 +403,7 @@ pub fn users_list_fragment(
   <tbody id="users-tbody">{rows}{empty_msg}</tbody>
 </table>
 {pagination}"#,
-            name_th = sort_th("Name", "name"),
+            name_th = sort_th("Display Name", "name"),
             username_th = sort_th("Username", "username"),
             email_th = sort_th("Email", "email"),
             role_th = sort_th("Role", "role"),
@@ -425,7 +425,7 @@ pub fn users_list_fragment(
   <tbody id="users-tbody">{rows}{empty_msg}</tbody>
 </table>
 {pagination}"#,
-            name_th = sort_th("Name", "name"),
+            name_th = sort_th("Display Name", "name"),
             username_th = sort_th("Username", "username"),
             email_th = sort_th("Email", "email"),
         )
