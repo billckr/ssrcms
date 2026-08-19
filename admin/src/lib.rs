@@ -191,15 +191,15 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
         {posts}
         {pages}
         {users}
-        {menus}
         {media}
+        {menus}
         {cats}
         {tags}
         {plugins}
         {appearance}
-        {forms}
         {form_designer}
         {builder}
+        {forms}
         {documentation}
         {settings}
         {site_settings}
