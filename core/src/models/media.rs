@@ -151,6 +151,16 @@ pub async fn get_by_id(pool: &PgPool, id: Uuid) -> Result<Media> {
         .ok_or_else(|| AppError::NotFound(format!("media {id}")))
 }
 
+/// Bulk fetch — used by the WP content importer to build a URL rewrite map
+/// for every attachment it referenced without a query per media item.
+pub async fn get_by_ids(pool: &PgPool, ids: &[Uuid]) -> Result<Vec<Media>> {
+    let rows = sqlx::query_as::<_, Media>("SELECT * FROM media WHERE id = ANY($1)")
+        .bind(ids)
+        .fetch_all(pool)
+        .await?;
+    Ok(rows)
+}
+
 #[allow(dead_code)]
 pub async fn update_alt_text(pool: &PgPool, id: Uuid, alt_text: &str) -> Result<()> {
     let affected = sqlx::query("UPDATE media SET alt_text = $1 WHERE id = $2")

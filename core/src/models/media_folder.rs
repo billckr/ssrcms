@@ -33,6 +33,23 @@ pub async fn create(pool: &PgPool, site_id: Uuid, name: &str) -> Result<MediaFol
     Ok(row)
 }
 
+/// Returns the existing folder with this name for the site, or creates it.
+/// Used by importers that need one folder per source-side grouping (e.g.
+/// one per WordPress upload year/month) without erroring on repeat runs.
+pub async fn get_or_create(pool: &PgPool, site_id: Uuid, name: &str) -> Result<MediaFolder> {
+    if let Some(row) = sqlx::query_as::<_, MediaFolder>(
+        "SELECT * FROM media_folders WHERE site_id = $1 AND name = $2"
+    )
+    .bind(site_id)
+    .bind(name)
+    .fetch_optional(pool)
+    .await?
+    {
+        return Ok(row);
+    }
+    create(pool, site_id, name).await
+}
+
 pub async fn delete(pool: &PgPool, id: Uuid, site_id: Uuid) -> Result<()> {
     sqlx::query(
         "DELETE FROM media_folders WHERE id = $1 AND site_id = $2"

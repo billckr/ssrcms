@@ -20,3 +20,4 @@ pub mod site_user;
 pub mod taxonomy;
 pub mod theme_options;
 pub mod user;
+pub mod wp_import;

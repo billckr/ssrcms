@@ -67,6 +67,7 @@ glob = { version = "0.3" }
 regex-lite = { version = "0.1" }
 zip = { version = "2", default-features = false, features = ["deflate"] }
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "multipart", "json"] }
+quick-xml = { version = "0.36" }
 aes-gcm = { version = "0.10" }
 sha2 = { version = "0.10" }
 base64 = { version = "0.22" }

@@ -516,6 +516,7 @@ pub fn render_settings(data: &SiteSettingsData, flash: Option<&str>, ctx: &crate
   <button type="button" class="page-tab active" role="tab" aria-selected="true" aria-controls="tab-general" data-tab="general">General</button>
   <button type="button" class="page-tab" role="tab" aria-selected="false" aria-controls="tab-maintenance" data-tab="maintenance">Maintenance</button>
   <button type="button" class="page-tab" role="tab" aria-selected="false" aria-controls="tab-email" data-tab="email">Email Settings</button>
+  <button type="button" class="page-tab" role="tab" aria-selected="false" aria-controls="tab-import" data-tab="import">Import Content</button>
 </div>
 
 <div id="tab-general" class="settings-tab-panel active" role="tabpanel">
@@ -933,6 +934,38 @@ function toggleProviderEdit(id) {{
 }})();
 </script>
 </div>
+</div>
+</div>
+
+<div id="tab-import" class="settings-tab-panel" role="tabpanel">
+<div style="max-width:720px">
+<div class="card-boxed">
+  <h2 class="card-boxed-header">Import from WordPress</h2>
+  <div class="card-boxed-body">
+    <div class="card-boxed-section">
+      <p class="form-note" style="margin:0 0 .75rem">
+        Export your WordPress site via <strong>Tools &rarr; Export &rarr; All content</strong> to get
+        a WXR (<code>.xml</code>) file, then upload it here. The old site must still be reachable
+        &mdash; every attachment's original file is fetched from the URL recorded in the export.
+        Imports, in one pass: media (sorted into folders by upload year/month), and posts/pages
+        (with categories, tags, featured images, and inline content images all pointed at the newly
+        imported files). Not imported: custom post types (only Posts and Pages), WP passwords
+        (migrated users will need a password reset), and shortcodes (left as literal text &mdash;
+        WP plugin shortcodes have no equivalent here).
+      </p>
+      <form method="post" action="/admin/sites/{id}/import-wp" enctype="multipart/form-data" class="edit-form">
+        <div class="form-group">
+          <label for="wxr_file">WordPress export file (.xml)</label>
+          <input type="file" id="wxr_file" name="wxr_file" accept=".xml" required>
+        </div>
+        <div class="icon-pill">
+          <button type="submit" class="icon-btn" title="Import" aria-label="Import">
+            <img src="/admin/static/icons/upload.svg" alt="">
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
 </div>
 </div>
 </div>

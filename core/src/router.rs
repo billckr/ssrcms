@@ -13,7 +13,7 @@ use tower_sessions_sqlx_store::PostgresStore;
 
 use crate::app_state::AppState;
 use crate::handlers::{account, archive, auth, comment as comment_handler, form as form_handler, poll as poll_handler, home, metrics as metrics_handler, page, plugin_route, post as post_handler, post_unlock, recover, search, subscribe, theme_static, uploads};
-use crate::handlers::admin::{activity_log, analytics as admin_analytics, themes, themes_editor, themes_publish, themes_upload, builder as admin_builder, comments as admin_comments, dashboard, designer_hub as admin_designer_hub, dev_tools, documentation as admin_documentation, email_providers as admin_email_providers, form_designer as admin_form_designer, forms as admin_forms, logo_upload, media, menus as admin_menus, poll_designer as admin_poll_designer, poll_results as admin_poll_results, posts, profile, role_picker, settings, site_settings, sites as admin_sites, taxonomy, upload, users};
+use crate::handlers::admin::{activity_log, analytics as admin_analytics, themes, themes_editor, themes_publish, themes_upload, builder as admin_builder, comments as admin_comments, dashboard, designer_hub as admin_designer_hub, dev_tools, documentation as admin_documentation, email_providers as admin_email_providers, form_designer as admin_form_designer, forms as admin_forms, logo_upload, media, menus as admin_menus, poll_designer as admin_poll_designer, poll_results as admin_poll_results, posts, profile, role_picker, settings, site_settings, sites as admin_sites, taxonomy, upload, users, wp_import};
 
 /// Prevent browsers from caching admin and account pages.
 ///
@@ -213,7 +213,7 @@ pub fn build(
         .route("/admin/themes/get-theme", post(themes_publish::get_theme))
         .route("/admin/themes/publish-theme", post(themes_publish::publish_theme))
         .route("/admin/themes/delete", post(themes::delete))
-        .route("/admin/themes/upload", post(themes_upload::upload_theme).layer(upload_limit))
+        .route("/admin/themes/upload", post(themes_upload::upload_theme).layer(upload_limit.clone()))
         .route("/admin/theme-screenshot/{theme_name}", get(themes::screenshot))
         .route("/admin/themes/create", get(themes_upload::create_form).post(themes_upload::create_theme))
         .route("/admin/themes/editor/{theme}", get(themes_editor::edit_file))
@@ -268,6 +268,7 @@ pub fn build(
         .route("/admin/sites/{id}/settings", get(admin_sites::site_settings))
         .route("/admin/sites/{id}/site-config", post(admin_sites::save_site_config))
         .route("/admin/sites/{id}/maintenance", post(admin_sites::save_maintenance))
+        .route("/admin/sites/{id}/import-wp", post(wp_import::import).layer(upload_limit.clone()))
         .route("/admin/sites/{id}/email-providers", post(admin_email_providers::create))
         .route("/admin/sites/{id}/email-providers/{provider_id}", post(admin_email_providers::update))
         .route("/admin/sites/{id}/email-providers/{provider_id}/test", post(admin_email_providers::test))
