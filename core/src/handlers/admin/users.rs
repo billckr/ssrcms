@@ -444,6 +444,11 @@ pub struct UserForm {
     pub site_assignment: Option<String>,
     pub existing_site_id: Option<String>,
     pub new_hostname: Option<String>,
+    /// Checkbox, only meaningful (and only shown in the UI) when role ==
+    /// "author" — lets this specific author publish their own posts
+    /// directly instead of only draft/pending. Ignored for every other role.
+    #[serde(default)]
+    pub can_self_publish: Option<String>,
 }
 
 pub async fn save_new(
@@ -626,6 +631,8 @@ pub async fn save_new(
     // site_users row; super_admin access bypasses site_users entirely.
     let site_role: Option<crate::models::site_user::SiteRole> =
         crate::models::site_user::SiteRole::from_str(requested_role);
+    let can_self_publish = site_role == Some(crate::models::site_user::SiteRole::Author)
+        && form.can_self_publish.as_deref() == Some("on");
     let create = CreateUser {
         username: form.username.clone(),
         email: form.email.clone(),
@@ -698,7 +705,7 @@ pub async fn save_new(
                     }
                 };
                 if let (Some(sid), Some(role)) = (site_id, site_role) {
-                    if let Err(e) = crate::models::site_user::add(&state.db, sid, new_user.id, role, None, false).await {
+                    if let Err(e) = crate::models::site_user::add(&state.db, sid, new_user.id, role, None, can_self_publish).await {
                         tracing::warn!("failed to add user {} to site {}: {:?}", new_user.id, sid, e);
                     }
                     // If assigning as admin and the site has no owner yet, claim ownership.
@@ -781,7 +788,7 @@ pub async fn save_new(
                 // Site admins can never produce a super_admin target (capped above),
                 // so site_role is always Some here.
                 if let (Some(site_id), Some(role)) = (target_site_id, site_role) {
-                    if let Err(e) = crate::models::site_user::add(&state.db, site_id, new_user.id, role, Some(admin.user.id), false).await {
+                    if let Err(e) = crate::models::site_user::add(&state.db, site_id, new_user.id, role, Some(admin.user.id), can_self_publish).await {
                         tracing::warn!("failed to add new user {} to site {}: {:?}", new_user.id, site_id, e);
                     }
                     if role == crate::models::site_user::SiteRole::Admin {
@@ -1532,7 +1539,6 @@ pub async fn site_access_page(
         email: target_user.email.clone(),
         assignments,
         available_sites,
-        default_role: target_user.role.clone(),
     };
 
     let flash = match query.error.as_deref() {

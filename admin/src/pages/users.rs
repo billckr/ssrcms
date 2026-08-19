@@ -777,10 +777,34 @@ pub fn render_editor(user: &UserEdit, flash: Option<&str>, ctx: &crate::PageCont
 
         if is_new {
             // New user: plain dropdown, no lock needed.
-            format!(r#"<div class="form-group">
+            format!(r#"<div class="form-group" style="max-width:220px">
   <label for="role">Role</label>
   <select id="role" name="role" required>{placeholder}{role_options}</select>
-</div>"#)
+</div>
+<div class="form-group" id="can-self-publish-group" style="display:none;margin-top:1rem">
+  <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;font-weight:400">
+    <input type="checkbox" id="can-self-publish-cb" name="can_self_publish" value="on">
+    Can publish own posts
+  </label>
+  <p class="form-note" style="margin:.35rem 0 0">
+    Off (default): this author's posts always go to an Editor for review before going live.
+    On: they can publish their own posts directly, like WordPress's "Author" role.
+  </p>
+</div>
+<script>
+(function() {{
+  var roleSelect = document.getElementById('role');
+  var group = document.getElementById('can-self-publish-group');
+  var cb = document.getElementById('can-self-publish-cb');
+  function sync() {{
+    var isAuthor = roleSelect.value === 'author';
+    group.style.display = isAuthor ? '' : 'none';
+    if (!isAuthor) cb.checked = false;
+  }}
+  roleSelect.addEventListener('change', sync);
+  sync();
+}})();
+</script>"#)
         } else {
             // Edit: role is read-only here. Site-scoped roles can only be changed
             // from /site-access, which shows exactly which site is affected and
@@ -1325,9 +1349,6 @@ pub struct SiteAccessData {
     pub assignments: Vec<SiteAssignmentRow>,
     /// Sites the acting admin can assign this user to (their owned/managed sites).
     pub available_sites: Vec<SiteOption>,
-    /// The user's global role at the time this page was created — used to
-    /// pre-select a matching, non-privileged role in the assignment form.
-    pub default_role: String,
 }
 
 pub fn render_site_access(
@@ -1400,15 +1421,12 @@ pub fn render_site_access(
     let add_form = if data.available_sites.is_empty() {
         "<p><em>No sites available to assign.</em></p>".to_string()
     } else {
-        // Pre-select the role matching the user's existing global role when it maps
-        // cleanly onto a site role. Never pre-select Site Admin — that must always
-        // be a deliberate choice, since it grants ownership of the site.
-        let sel = |role: &str| if data.default_role == role { " selected" } else { "" };
-        let placeholder_selected = if matches!(data.default_role.as_str(), "editor" | "author" | "subscriber") {
-            ""
-        } else {
-            " selected"
-        };
+        // Always start on the placeholder — no role should look pre-chosen
+        // before a site is even picked (the role select is disabled until
+        // then anyway). Previously this pre-selected a role matching the
+        // target user's existing *global* role, which was confusing for
+        // someone with zero site access: the dropdown showed e.g. "Editor"
+        // as if it had already been deliberately chosen.
         format!(
             r#"<form id="site-access-form" method="post" action="/admin/users/{user_id}/site-access/add">
   <input type="hidden" name="displaced_action" id="displaced-action-field" value="">
@@ -1422,14 +1440,14 @@ pub fn render_site_access(
   <div class="form-group">
     <label for="role-select">Role</label>
     <select name="role" id="role-select" style="width:100%" disabled required>
-      <option value="" disabled{placeholder_selected}>Select role&hellip;</option>
+      <option value="" disabled selected>Select role&hellip;</option>
       {site_admin_opt}
-      <option value="editor"{editor_selected}>Editor</option>
-      <option value="author"{author_selected}>Author</option>
-      <option value="subscriber"{subscriber_selected}>Subscriber</option>
+      <option value="editor">Editor</option>
+      <option value="author">Author</option>
+      <option value="subscriber">Subscriber</option>
     </select>
   </div>
-  <div class="form-group" id="can-self-publish-group" style="display:none">
+  <div class="form-group" id="can-self-publish-group" style="display:none;margin-top:1rem">
     <label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;font-weight:400">
       <input type="checkbox" id="can-self-publish-cb" name="can_self_publish" value="on">
       Can publish own posts
@@ -1575,10 +1593,6 @@ pub fn render_site_access(
 </script>"#,
             user_id              = crate::html_escape(&data.user_id),
             site_opts            = site_options,
-            placeholder_selected = placeholder_selected,
-            editor_selected      = sel("editor"),
-            author_selected      = sel("author"),
-            subscriber_selected  = sel("subscriber"),
             site_admin_opt = if ctx.is_global_admin {
                 r#"<option value="site_admin">Site Admin</option>"#
             } else {
@@ -1597,7 +1611,7 @@ pub fn render_site_access(
     </table>
   </div>
   <div class="card-boxed">
-    <h2 class="card-boxed-header">Site Access</h2>
+    <h2 class="card-boxed-header">Site Assignment</h2>
     <div class="card-boxed-body">
     {add_form}
     </div>
