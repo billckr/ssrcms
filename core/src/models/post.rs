@@ -118,12 +118,64 @@ pub struct PostContext {
     pub meta: HashMap<String, String>,
 }
 
+/// Build a post's URL path (no base_url, no trailing query) from a
+/// WordPress-style permalink structure by substituting its tokens.
+///
+/// Uses `published_at` for date tokens, falling back to `created_at` for a
+/// post that's never been published (draft preview links, etc.) so the
+/// tokens are never empty. `%category%` uses `category_slug` if given, else
+/// falls back to "uncategorized" (matching WordPress's own fallback when a
+/// post has no category and the structure requests one).
+///
+/// Deliberately does NOT validate the resulting path against how requests
+/// get resolved — see the doc comment on `SiteSettings::permalink_structure`
+/// for why decorative segments don't need to round-trip.
+pub fn build_permalink(structure: &str, post: &Post, category_slug: Option<&str>) -> String {
+    let dt = post.published_at.unwrap_or(post.created_at);
+    let path = structure
+        .replace("%year%", &dt.format("%Y").to_string())
+        .replace("%monthnum%", &dt.format("%m").to_string())
+        .replace("%day%", &dt.format("%d").to_string())
+        .replace("%hour%", &dt.format("%H").to_string())
+        .replace("%minute%", &dt.format("%M").to_string())
+        .replace("%second%", &dt.format("%S").to_string())
+        .replace("%post_id%", &post.id.to_string())
+        .replace("%category%", category_slug.unwrap_or("uncategorized"))
+        .replace("%author%", "") // no author-username token surface yet — left blank rather than guessing
+        .replace("%postname%", &post.slug);
+
+    // Collapse any doubled slashes left by an empty token (e.g. %author%
+    // above) and guarantee a leading slash. Trailing slash is NOT forced —
+    // the structure's own trailing character (or lack of one) is respected
+    // exactly, since the app's own default ("/%postname%", no trailing
+    // slash) must keep producing today's existing bare-slug URL shape.
+    let mut normalized = String::with_capacity(path.len() + 1);
+    if !path.starts_with('/') {
+        normalized.push('/');
+    }
+    let mut last_was_slash = false;
+    for c in path.chars() {
+        if c == '/' {
+            if last_was_slash { continue; }
+            last_was_slash = true;
+        } else {
+            last_was_slash = false;
+        }
+        normalized.push(c);
+    }
+    normalized
+}
+
 impl PostContext {
     /// Build a PostContext from a Post and its related data.
     ///
     /// `page_path` overrides the URL for hierarchical pages (e.g. `/services/service-1`).
     /// For non-page post types, pass `None`.
     /// `breadcrumbs` is populated for pages with ancestors.
+    /// `permalink_structure` is the site's configured post-URL structure
+    /// (e.g. `/%year%/%monthnum%/%postname%/`) — only used for non-page
+    /// posts; pages always keep their existing flat/hierarchical path.
+    #[allow(clippy::too_many_arguments)]
     pub fn build(
         post: &Post,
         author: &User,
@@ -135,13 +187,17 @@ impl PostContext {
         base_url: &str,
         page_path: Option<String>,
         breadcrumbs: Vec<BreadcrumbItem>,
+        permalink_structure: &str,
     ) -> Self {
         let url = if let Some(ref path) = page_path {
             format!("{}{}", base_url, path)
         } else {
             match post.post_type.as_str() {
                 "page" => format!("{}/{}", base_url, post.slug),
-                _ => format!("{}/{}", base_url, post.slug),
+                _ => {
+                    let category_slug = categories.first().map(|c| c.slug.as_str());
+                    format!("{}{}", base_url, build_permalink(permalink_structure, post, category_slug))
+                }
             }
         };
 
@@ -415,7 +471,7 @@ mod tests {
         let user = make_user();
         let post = make_post("post", "my-post", "content", None);
         let ctx = PostContext::build(
-            &post, &user, vec![], vec![], None, HashMap::new(), 0, "https://example.com", None, vec![],
+            &post, &user, vec![], vec![], None, HashMap::new(), 0, "https://example.com", None, vec![], "/%postname%",
         );
         assert_eq!(ctx.url, "https://example.com/my-post");
     }
@@ -425,7 +481,7 @@ mod tests {
         let user = make_user();
         let post = make_post("page", "about", "content", None);
         let ctx = PostContext::build(
-            &post, &user, vec![], vec![], None, HashMap::new(), 0, "https://example.com", None, vec![],
+            &post, &user, vec![], vec![], None, HashMap::new(), 0, "https://example.com", None, vec![], "/%postname%",
         );
         assert_eq!(ctx.url, "https://example.com/about");
     }
@@ -435,7 +491,7 @@ mod tests {
         let user = make_user();
         let post = make_post("post", "slug", "Some content.", Some("Custom excerpt.".to_string()));
         let ctx = PostContext::build(
-            &post, &user, vec![], vec![], None, HashMap::new(), 0, "https://example.com", None, vec![],
+            &post, &user, vec![], vec![], None, HashMap::new(), 0, "https://example.com", None, vec![], "/%postname%",
         );
         assert_eq!(ctx.excerpt, "Custom excerpt.");
     }
@@ -446,7 +502,7 @@ mod tests {
         let content = "word ".repeat(100);
         let post = make_post("post", "slug", &content, None);
         let ctx = PostContext::build(
-            &post, &user, vec![], vec![], None, HashMap::new(), 0, "https://example.com", None, vec![],
+            &post, &user, vec![], vec![], None, HashMap::new(), 0, "https://example.com", None, vec![], "/%postname%",
         );
         assert!(ctx.excerpt.ends_with(" ..."), "excerpt should end with ' ...'");
         let word_count = ctx.excerpt.trim_end_matches(" ...").split_whitespace().count();
@@ -458,7 +514,7 @@ mod tests {
         let user = make_user();
         let post = make_post("post", "slug", "short content here", None);
         let ctx = PostContext::build(
-            &post, &user, vec![], vec![], None, HashMap::new(), 0, "https://example.com", None, vec![],
+            &post, &user, vec![], vec![], None, HashMap::new(), 0, "https://example.com", None, vec![], "/%postname%",
         );
         assert!(!ctx.excerpt.ends_with(" ..."));
     }
@@ -469,7 +525,7 @@ mod tests {
         let content = "word ".repeat(200);
         let post = make_post("post", "slug", &content, None);
         let ctx = PostContext::build(
-            &post, &user, vec![], vec![], None, HashMap::new(), 0, "https://example.com", None, vec![],
+            &post, &user, vec![], vec![], None, HashMap::new(), 0, "https://example.com", None, vec![], "/%postname%",
         );
         assert_eq!(ctx.reading_time, 1);
     }
@@ -480,7 +536,7 @@ mod tests {
         let content = "word ".repeat(400);
         let post = make_post("post", "slug", &content, None);
         let ctx = PostContext::build(
-            &post, &user, vec![], vec![], None, HashMap::new(), 0, "https://example.com", None, vec![],
+            &post, &user, vec![], vec![], None, HashMap::new(), 0, "https://example.com", None, vec![], "/%postname%",
         );
         assert_eq!(ctx.reading_time, 2);
     }
@@ -490,9 +546,56 @@ mod tests {
         let user = make_user();
         let post = make_post("post", "slug", "", None);
         let ctx = PostContext::build(
-            &post, &user, vec![], vec![], None, HashMap::new(), 0, "https://example.com", None, vec![],
+            &post, &user, vec![], vec![], None, HashMap::new(), 0, "https://example.com", None, vec![], "/%postname%",
         );
         assert_eq!(ctx.reading_time, 1);
+    }
+
+    // --- build_permalink ---
+
+    fn dated_post(slug: &str) -> Post {
+        let mut post = make_post("post", slug, "content", None);
+        post.published_at = Some("2026-03-05T00:00:00Z".parse().unwrap());
+        post
+    }
+
+    #[test]
+    fn build_permalink_default_structure_matches_bare_slug() {
+        let post = dated_post("my-post");
+        assert_eq!(build_permalink("/%postname%", &post, None), "/my-post");
+    }
+
+    #[test]
+    fn build_permalink_date_and_name() {
+        let post = dated_post("my-post");
+        assert_eq!(
+            build_permalink("/%year%/%monthnum%/%postname%/", &post, None),
+            "/2026/03/my-post/"
+        );
+    }
+
+    #[test]
+    fn build_permalink_category_falls_back_when_none() {
+        let post = dated_post("my-post");
+        assert_eq!(build_permalink("/%category%/%postname%/", &post, None), "/uncategorized/my-post/");
+    }
+
+    #[test]
+    fn build_permalink_category_uses_given_slug() {
+        let post = dated_post("my-post");
+        assert_eq!(build_permalink("/%category%/%postname%/", &post, Some("news")), "/news/my-post/");
+    }
+
+    #[test]
+    fn build_permalink_adds_leading_slash_if_missing() {
+        let post = dated_post("my-post");
+        assert_eq!(build_permalink("%postname%", &post, None), "/my-post");
+    }
+
+    #[test]
+    fn build_permalink_preserves_configured_trailing_slash() {
+        let post = dated_post("my-post");
+        assert_eq!(build_permalink("/%postname%/", &post, None), "/my-post/");
     }
 }
 

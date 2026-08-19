@@ -64,10 +64,35 @@ pub async fn single_post(
     }
     // ── End builder check ──────────────────────────────────────────────────
 
+    render_single_post_response(&state, site_id, &base_url, slug, uri, &jar, &session, addr, &headers, cpage).await
+}
+
+/// Full "render a single post" pipeline — password gate, view tracking, then
+/// the actual render. Shared between the direct `/{slug}` route above and
+/// `page::single_page`'s permalink-structure fallback (any unmatched
+/// multi-segment path whose last segment matches a post slug — see the doc
+/// comment on `SiteSettings::permalink_structure`), so a request arriving on
+/// a decorated permalink gets identical password-gate/view-tracking/render
+/// behavior to a bare-slug request for the same post.
+#[allow(clippy::too_many_arguments)]
+pub(crate) async fn render_single_post_response(
+    state: &AppState,
+    site_id: Uuid,
+    base_url: &str,
+    slug: String,
+    uri: axum::http::Uri,
+    jar: &SignedCookieJar,
+    session: &Session,
+    addr: SocketAddr,
+    headers: &HeaderMap,
+    cpage: usize,
+) -> Response {
+    let path = uri.path().to_string();
+
     // Password gate: check before full render.
     if let Ok(post_record) = post::get_published_by_slug(&state.db, Some(site_id), &slug).await {
         if let Some(ref hash) = post_record.post_password {
-            if !super::post_unlock::is_unlocked(&jar, post_record.id, hash) {
+            if !super::post_unlock::is_unlocked(jar, post_record.id, hash) {
                 let default_theme = state.app_settings.read().unwrap().default_theme.clone();
                 return super::post_unlock::gate_response(
                     &post_record.title,
@@ -80,7 +105,7 @@ pub async fn single_post(
     }
 
     // Resolve subscriber session (optional — never fails).
-    let session_ctx = super::resolve_session(&state, &session).await;
+    let session_ctx = super::resolve_session(state, session).await;
 
     // Record a unique view (skips bots and logged-in account users).
     if !session_ctx.is_logged_in {
@@ -89,7 +114,7 @@ pub async fn single_post(
             .and_then(|v| v.to_str().ok())
             .unwrap_or("");
         if !is_bot(ua) {
-            let client_ip = real_ip(&headers, addr);
+            let client_ip = real_ip(headers, addr);
             let ip_hash = anonymize_ip(&client_ip);
             // Resolve post_id without a second DB query by re-fetching only if needed.
             // We use a lightweight slug→id lookup path here.
@@ -104,11 +129,11 @@ pub async fn single_post(
         }
     }
 
-    let preview_allowed = super::can_preview_site(&state, &session, site_id).await;
+    let preview_allowed = super::can_preview_site(state, session, site_id).await;
 
-    match render_post(state.clone(), slug, uri, site_id, &base_url, session_ctx, cpage, preview_allowed).await {
+    match render_post(state.clone(), slug, uri, site_id, base_url, session_ctx, cpage, preview_allowed).await {
         Ok(html) => Html(html).into_response(),
-        Err(e) => render_error_page(e, &state, &path, Some(current_site.site.id)).await,
+        Err(e) => render_error_page(e, state, &path, Some(site_id)).await,
     }
 }
 

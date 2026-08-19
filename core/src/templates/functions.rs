@@ -269,6 +269,13 @@ async fn fetch_posts_for_function(
             None
         };
 
+        let permalink_structure = match p.site_id {
+            Some(sid) => crate::app_state::get_site_setting(pool, sid, "permalink_structure")
+                .await
+                .unwrap_or_else(|| "/%postname%".to_string()),
+            None => "/%postname%".to_string(),
+        };
+
         result.push(post::PostContext::build(
             p,
             &author_rec,
@@ -280,6 +287,7 @@ async fn fetch_posts_for_function(
             base_url,
             page_path,
             vec![],
+            &permalink_structure,
         ));
     }
 

@@ -32,6 +32,34 @@ pub struct SiteSettings {
     /// — this is opt-in, distinct from `site_name` (the public-facing site
     /// title), so most sites keep showing the agency-wide brand by default.
     pub admin_brand_name: Option<String>,
+    /// Notification address for this site (e.g. shown as the site's contact
+    /// point, used as a fallback recipient). `None` means "use the site
+    /// owner's own account email" (see `models::site::admin_email`) —
+    /// distinct from that, this is explicitly settable so a site's notices
+    /// don't have to go to the owner's personal inbox.
+    pub admin_email: Option<String>,
+    /// Whether the public /subscribe self-service signup form accepts new
+    /// subscribers for this site. Defaults to true (WordPress's "Anyone can
+    /// register" membership setting, on by default).
+    pub allow_registration: bool,
+    /// WordPress-style permalink structure for POST urls (pages are
+    /// unaffected — they always use their existing flat/hierarchical slug
+    /// path). Supported tokens: %postname% (required, must be the final
+    /// token), %year%, %monthnum%, %day%, %post_id%, %category%. Defaults to
+    /// "/%postname%", matching this app's original bare-slug behavior.
+    ///
+    /// Only ever consumed when GENERATING a post's canonical URL
+    /// (`models::post::build_permalink`) — the segments before %postname%
+    /// are purely decorative on the way in: `handlers::page::single_page`'s
+    /// fallback resolves ANY unmatched multi-segment path by its LAST
+    /// segment as a post slug, without validating the earlier segments
+    /// against this structure. That's deliberate: slugs are already unique
+    /// per site (see `posts_site_slug_unique`), so there's nothing to
+    /// disambiguate, and it means a site's OLD bare `/post-name` links keep
+    /// resolving even after switching to a date-prefixed structure — never
+    /// breaking an already-published/indexed URL, which is the whole point
+    /// of this setting for a site migrating off WordPress.
+    pub permalink_structure: String,
 }
 
 impl Default for SiteSettings {
@@ -45,6 +73,9 @@ impl Default for SiteSettings {
             posts_per_page: 9,
             date_format: "%B %-d, %Y".to_string(),
             admin_brand_name: None,
+            admin_email: None,
+            allow_registration: true,
+            permalink_structure: "/%postname%".to_string(),
         }
     }
 }
@@ -76,6 +107,15 @@ impl SiteSettings {
                 .remove("date_format")
                 .unwrap_or_else(|| "%B %-d, %Y".into()),
             admin_brand_name: map.remove("admin_brand_name").filter(|s| !s.is_empty()),
+            admin_email: map.remove("admin_email").filter(|s| !s.is_empty()),
+            allow_registration: map
+                .remove("allow_registration")
+                .map(|v| v != "false")
+                .unwrap_or(true),
+            permalink_structure: map
+                .remove("permalink_structure")
+                .filter(|s| !s.is_empty())
+                .unwrap_or_else(|| "/%postname%".to_string()),
         })
     }
 
@@ -109,6 +149,15 @@ impl SiteSettings {
                 .remove("date_format")
                 .unwrap_or_else(|| "%B %-d, %Y".into()),
             admin_brand_name: map.remove("admin_brand_name").filter(|s| !s.is_empty()),
+            admin_email: map.remove("admin_email").filter(|s| !s.is_empty()),
+            allow_registration: map
+                .remove("allow_registration")
+                .map(|v| v != "false")
+                .unwrap_or(true),
+            permalink_structure: map
+                .remove("permalink_structure")
+                .filter(|s| !s.is_empty())
+                .unwrap_or_else(|| "/%postname%".to_string()),
         })
     }
 }

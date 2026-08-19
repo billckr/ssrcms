@@ -585,6 +585,10 @@ pub async fn site_settings(
     let cfg = state.get_site_by_id(id)
         .map(|(_, s)| s)
         .unwrap_or_else(|| (*state.settings).clone());
+    let admin_email_placeholder = crate::models::site::admin_email(&state.db, id).await
+        .ok()
+        .flatten()
+        .unwrap_or_default();
     let maintenance_mode = crate::app_state::get_site_setting(&state.db, id, "maintenance_mode")
         .await
         .as_deref() == Some("true");
@@ -617,6 +621,10 @@ pub async fn site_settings(
         language: cfg.language.clone(),
         posts_per_page: cfg.posts_per_page,
         date_format: cfg.date_format.clone(),
+        admin_email: cfg.admin_email.clone().unwrap_or_default(),
+        admin_email_placeholder,
+        allow_registration: cfg.allow_registration,
+        permalink_structure: cfg.permalink_structure.clone(),
         maintenance_mode,
         maintenance_message,
         providers,
@@ -713,6 +721,12 @@ pub struct SiteConfigForm {
     pub language: String,
     pub posts_per_page: i64,
     pub date_format: String,
+    #[serde(default)]
+    pub admin_email: String,
+    #[serde(default)]
+    pub allow_registration: Option<String>,
+    #[serde(default)]
+    pub permalink_structure: String,
 }
 
 /// POST /admin/sites/{id}/site-config — save site name, description, language, etc.
@@ -730,11 +744,27 @@ pub async fn save_site_config(
         return (axum::http::StatusCode::FORBIDDEN, "Forbidden").into_response();
     }
 
+    // %postname% is what post-URL lookups key off of (see
+    // handlers::page::try_post_permalink) — required, and must be the final
+    // token so the "last segment = slug" resolution rule always holds.
+    let permalink_structure = form.permalink_structure.trim();
+    let valid_permalink = permalink_structure.ends_with("%postname%")
+        || permalink_structure.ends_with("%postname%/");
+    if !valid_permalink {
+        return Redirect::to(&format!(
+            "/admin/sites/{id}/settings?flash=Permalink+structure+must+end+with+%25postname%25&tab=general"
+        )).into_response();
+    }
+
+    let allow_registration = if form.allow_registration.is_some() { "true" } else { "false" };
     let settings = [
         ("site_name", form.site_name.as_str()),
         ("site_description", form.site_description.as_str()),
         ("language", form.language.as_str()),
         ("date_format", form.date_format.as_str()),
+        ("admin_email", form.admin_email.trim()),
+        ("allow_registration", allow_registration),
+        ("permalink_structure", permalink_structure),
     ];
     for (key, value) in &settings {
         if let Err(e) = crate::app_state::set_site_setting(&state.db, id, key, value).await {

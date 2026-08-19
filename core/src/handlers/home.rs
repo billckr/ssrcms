@@ -312,6 +312,11 @@ pub(crate) async fn build_post_context(
         (None, vec![])
     };
 
+    let permalink_structure = p.site_id
+        .and_then(|sid| state.get_site_by_id(sid))
+        .map(|(_, settings)| settings.permalink_structure)
+        .unwrap_or_else(|| "/%postname%/".to_string());
+
     let mut ctx = PostContext::build(
         p,
         &author,
@@ -323,6 +328,7 @@ pub(crate) async fn build_post_context(
         base_url,
         page_path,
         breadcrumbs,
+        &permalink_structure,
     );
 
     // Expand any saved-form embeds (dropped in via the editor's "Insert

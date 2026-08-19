@@ -83,6 +83,7 @@ async fn test_single_post_renders_html() {
         base_url,
         None,         // page_path
         vec![],       // breadcrumbs
+        "/%postname%", // permalink_structure
     );
 
     // ── Initialise TemplateEngine ─────────────────────────────────────────────

@@ -49,6 +49,8 @@ pub async fn subscribe_form(
     let default_theme = state.app_settings.read().unwrap().default_theme.clone();
     if q.subscribed.as_deref() == Some("1") {
         Html(admin::pages::subscribe::render_success(&site.settings.site_name, &default_theme)).into_response()
+    } else if !site.settings.allow_registration {
+        Html(admin::pages::subscribe::render_closed(&site.settings.site_name, &default_theme)).into_response()
     } else {
         Html(admin::pages::subscribe::render(None, &site.settings.site_name, &default_theme)).into_response()
     }
@@ -63,6 +65,12 @@ pub async fn subscribe_post(
     let site_name = site.settings.site_name.clone();
     let site_id = site.site.id;
     let default_theme = state.app_settings.read().unwrap().default_theme.clone();
+
+    // Re-checked here, not just on the GET form — a direct POST (bypassing
+    // the UI) must not be able to create an account when registration is off.
+    if !site.settings.allow_registration {
+        return Html(admin::pages::subscribe::render_closed(&site_name, &default_theme)).into_response();
+    }
 
     macro_rules! err {
         ($msg:expr) => {

@@ -98,7 +98,7 @@ pub fn sites_list_fragment(sites: &[SiteRow], page: i64, total_pages: i64, searc
             };
             format!(
                 r#"<a href="/admin/sites/{id}/settings" class="icon-btn" title="Site Settings">
-                  <img src="/admin/static/icons/edit.svg" alt="Site Settings">
+                  <img src="/admin/static/icons/settings.svg" alt="Site Settings">
                 </a>
                 {delete}"#,
                 id = crate::html_escape(&s.id),
@@ -278,6 +278,13 @@ pub struct SiteSettingsData {
     pub language: String,
     pub posts_per_page: i64,
     pub date_format: String,
+    pub admin_email: String,
+    /// The site owner's own account email — shown as the input's placeholder
+    /// when `admin_email` is unset, since that's what site notices fall back
+    /// to (see `models::site::admin_email`).
+    pub admin_email_placeholder: String,
+    pub allow_registration: bool,
+    pub permalink_structure: String,
     pub maintenance_mode: bool,
     pub maintenance_message: String,
     pub providers: Vec<EmailProviderSummary>,
@@ -540,6 +547,59 @@ pub fn render_settings(data: &SiteSettingsData, flash: Option<&str>, ctx: &crate
         <input type="text" id="date_format" name="date_format" value="{date_format}">
         <small>Uses chrono format strings, e.g. "%B %-d, %Y" &rarr; January 1, 2026</small>
       </div>
+      <div class="form-group">
+        <label for="admin_email">Administration Email</label>
+        <input type="email" id="admin_email" name="admin_email" value="{admin_email}" placeholder="{admin_email_placeholder}">
+        <small>Where this site's notices go. Leave blank to use the site owner's own account email.</small>
+      </div>
+      <div class="form-group">
+        <label style="display:inline;font-weight:400">
+          <input type="checkbox" id="allow_registration" name="allow_registration" style="display:inline;width:auto;height:auto"{allow_registration_checked}>
+          Anyone can register
+        </label>
+        <p class="form-note" style="margin:.4rem 0 0">
+          Turns the public <code>/subscribe</code> signup form on or off for this site. New accounts
+          created this way always get the Subscriber role.
+        </p>
+      </div>
+    </div>
+    <div class="card-boxed-section">
+      <h3 style="margin:0 0 .5rem;font-size:.95rem">Permalinks</h3>
+      <p class="form-note" style="margin:0 0 .75rem">
+        Controls the URL structure for posts (pages always keep their own slug/path,
+        unaffected by this setting). Matching a site's old WordPress permalink structure
+        here means links that were already published or indexed keep working after a
+        migration — nothing needs to change on the visitor's end.
+      </p>
+      <div style="display:flex;flex-direction:column;gap:.5rem">
+        <label class="radio-label">
+          <input type="radio" name="permalink_preset" value="/%postname%" class="permalink-preset">
+          Post name &mdash; <code>/sample-post</code>
+        </label>
+        <label class="radio-label">
+          <input type="radio" name="permalink_preset" value="/%year%/%monthnum%/%postname%/" class="permalink-preset">
+          Month and name &mdash; <code>/2026/03/sample-post/</code>
+        </label>
+        <label class="radio-label">
+          <input type="radio" name="permalink_preset" value="/%year%/%monthnum%/%day%/%postname%/" class="permalink-preset">
+          Day and name &mdash; <code>/2026/03/05/sample-post/</code>
+        </label>
+        <label class="radio-label">
+          <input type="radio" name="permalink_preset" value="/%category%/%postname%/" class="permalink-preset">
+          Category &mdash; <code>/news/sample-post/</code>
+        </label>
+        <label class="radio-label">
+          <input type="radio" name="permalink_preset" value="custom" id="permalink-preset-custom" class="permalink-preset">
+          Custom Structure
+        </label>
+      </div>
+      <div class="form-group" style="margin-top:.5rem">
+        <input type="text" id="permalink_structure" name="permalink_structure" value="{permalink_structure}">
+        <small>
+          Tokens: <code>%postname%</code> (required, must be the last token), <code>%year%</code>,
+          <code>%monthnum%</code>, <code>%day%</code>, <code>%category%</code>, <code>%post_id%</code>.
+        </small>
+      </div>
       <div class="icon-pill">
         <button type="submit" id="save-settings-btn" class="icon-btn" title="Save Settings" aria-label="Save Settings" disabled>
           <img src="/admin/static/icons/save.svg" alt="">
@@ -553,16 +613,48 @@ pub fn render_settings(data: &SiteSettingsData, flash: Option<&str>, ctx: &crate
 (function() {{
   var form   = document.getElementById('site-settings-form');
   var saveBtn = document.getElementById('save-settings-btn');
+
+  // Permalinks: pick the radio matching the currently-saved structure (or
+  // Custom if it doesn't match any preset) before the dirty-check below
+  // takes its initial snapshot, so loading the page doesn't itself look
+  // like a change.
+  var permalinkInput = document.getElementById('permalink_structure');
+  var presetRadios = Array.prototype.slice.call(document.querySelectorAll('.permalink-preset'));
+  var customRadio = document.getElementById('permalink-preset-custom');
+  (function selectMatchingPreset() {{
+    var matched = presetRadios.some(function(r) {{
+      if (r.value === permalinkInput.value) {{ r.checked = true; return true; }}
+      return false;
+    }});
+    if (!matched) customRadio.checked = true;
+  }})();
+  presetRadios.forEach(function(r) {{
+    r.addEventListener('change', function() {{
+      if (r.value !== 'custom') {{
+        permalinkInput.value = r.value;
+        permalinkInput.dispatchEvent(new Event('input'));
+      }} else {{
+        permalinkInput.focus();
+      }}
+    }});
+  }});
+  permalinkInput.addEventListener('input', function() {{
+    var matched = presetRadios.some(function(r) {{ return r.value === permalinkInput.value; }});
+    if (!matched) customRadio.checked = true;
+  }});
+
   var fields = Array.prototype.slice.call(form.querySelectorAll('input, textarea'));
-  var initial = fields.map(function(f) {{ return f.value; }});
+  function fieldValue(f) {{ return f.type === 'checkbox' || f.type === 'radio' ? f.checked : f.value; }}
+  var initial = fields.map(fieldValue);
 
   function syncSaveBtn() {{
-    var changed = fields.some(function(f, i) {{ return f.value !== initial[i]; }});
+    var changed = fields.some(function(f, i) {{ return fieldValue(f) !== initial[i]; }});
     saveBtn.disabled = !changed;
   }}
 
   fields.forEach(function(f) {{
     f.addEventListener('input', syncSaveBtn);
+    f.addEventListener('change', syncSaveBtn);
   }});
 }})();
 </script>
@@ -882,6 +974,10 @@ function toggleProviderEdit(id) {{
         language = crate::html_escape(&data.language),
         posts_per_page = data.posts_per_page,
         date_format = crate::html_escape(&data.date_format),
+        admin_email = crate::html_escape(&data.admin_email),
+        admin_email_placeholder = crate::html_escape(&data.admin_email_placeholder),
+        allow_registration_checked = if data.allow_registration { " checked" } else { "" },
+        permalink_structure = crate::html_escape(&data.permalink_structure),
         maintenance_checked = if data.maintenance_mode { " checked" } else { "" },
         maintenance_message = crate::html_escape(&data.maintenance_message),
         providers_list_html = providers_list_html,

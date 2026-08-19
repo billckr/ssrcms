@@ -199,3 +199,48 @@ pub fn render_success(site_name: &str, default_theme: &str) -> String {
         site_name = site_name,
     )
 }
+
+/// Render the "registrations are closed" page — shown instead of the signup
+/// form when a site's `allow_registration` setting is off.
+pub fn render_closed(site_name: &str, default_theme: &str) -> String {
+    let site_name = crate::html_escape(site_name);
+    let default_theme = match default_theme {
+        "light" | "dark" => default_theme,
+        _ => "system",
+    };
+
+    format!(
+        r#"<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Registration Closed — {site_name}</title>
+  <script>
+    (function() {{
+      try {{
+        var pref = localStorage.getItem('admin-theme') || '{default_theme}';
+        var dark = pref === 'dark' || (pref === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        if (dark) {{
+          document.documentElement.setAttribute('data-theme', 'dark');
+        }}
+      }} catch (e) {{}}
+    }})();
+  </script>
+  <style>{css}</style>
+</head>
+<body class="login-body">
+  <div class="login-box">
+    <h1 class="login-brand">{site_name}</h1>
+    <h2>Registration is closed</h2>
+    <p style="color:var(--muted);margin-top:.5rem">
+      This site isn&rsquo;t accepting new accounts right now. Already have one?
+      <a href="/login">Sign in</a>.
+    </p>
+  </div>
+</body>
+</html>"#,
+        css = crate::ADMIN_CSS,
+        site_name = site_name,
+    )
+}
