@@ -371,6 +371,7 @@ mod tests {
             deleted_at: None,
             default_site_id: None,
             personal_data_erased_at: None,
+            welcome_panel_dismissed_at: None,
         }
     }
 

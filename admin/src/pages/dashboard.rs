@@ -47,6 +47,9 @@ pub struct DashboardData {
     /// Next 5 upcoming scheduled posts, soonest first (scoped to the current
     /// user/site), for the "Scheduled" widget.
     pub upcoming_scheduled: Vec<RecentPostSummary>,
+    /// Whether the dashboard Welcome panel should render — false once the
+    /// current user has dismissed it (`users.welcome_panel_dismissed_at`).
+    pub show_welcome_panel: bool,
 }
 
 pub struct RecentPostSummary {
@@ -279,6 +282,74 @@ fn quick_tools_widget(ctx: &crate::PageContext) -> String {
     )
 }
 
+/// Dismissible hero banner shown above the widget grid until the user
+/// closes it (persisted per-user via `users.welcome_panel_dismissed_at`,
+/// see `dismiss_welcome_panel` in `core::handlers::admin::dashboard`).
+/// Placeholder copy/links per the current plan — headline and the three
+/// feature cards will get real copy later; the "what makes us different"
+/// link target doesn't exist yet either.
+fn welcome_panel_html() -> String {
+    r##"<div class="welcome-panel" id="welcome-panel">
+  <button type="button" class="welcome-panel-dismiss" title="Dismiss" aria-label="Dismiss" onclick="dismissWelcomePanel()">
+    <img src="/admin/static/icons/x.svg" alt="">
+  </button>
+  <div class="welcome-panel-hero">
+    <h1>Welcome to SynapCMS!</h1>
+    <a href="/admin/whats-different" target="_blank" rel="noopener">What makes SynapCMS different.</a>
+  </div>
+  <div class="welcome-panel-cards">
+    <div class="welcome-panel-card">
+      <div class="welcome-panel-icon"><img src="/admin/static/icons/layers.svg" alt=""></div>
+      <div>
+        <h3>Run every client site from one install</h3>
+        <p>Manage content, media, and users across every site without juggling separate installs or databases.</p>
+        <a href="/admin/sites">Go to Sites</a>
+      </div>
+    </div>
+    <div class="welcome-panel-card">
+      <div class="welcome-panel-icon"><img src="/admin/static/icons/layout.svg" alt=""></div>
+      <div>
+        <h3>Build pages visually</h3>
+        <p>Drag-and-drop sections with the built-in page builder — no separate plugin to install or keep updated.</p>
+        <a href="/admin/builder">Open the Builder</a>
+      </div>
+    </div>
+    <div class="welcome-panel-card">
+      <div class="welcome-panel-icon"><img src="/admin/static/icons/zap.svg" alt=""></div>
+      <div>
+        <h3>Fast by default</h3>
+        <p>A single compiled Rust binary behind the scenes — no PHP runtime, no plugin soup dragging pages down.</p>
+        <a href="/admin/whats-different" target="_blank" rel="noopener">Read more</a>
+      </div>
+    </div>
+  </div>
+</div>
+<style>
+  .welcome-panel { position: relative; margin-bottom: 1rem; border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow); border: 1px solid var(--border); }
+  .welcome-panel-dismiss { position: absolute; top: .75rem; right: .75rem; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; background: none; border: 1px solid transparent; border-radius: var(--radius); cursor: pointer; z-index: 1; }
+  .welcome-panel-dismiss:hover { background: var(--surface); }
+  .welcome-panel-dismiss img { width: 16px; height: 16px; }
+  .welcome-panel-hero { padding: 2rem 2rem 1.75rem; background: var(--tint); border-bottom: 1px solid var(--border); }
+  .welcome-panel-hero h1 { margin: 0 0 .6rem; font-size: 1.9rem; font-weight: 700; color: var(--text); }
+  .welcome-panel-hero a { color: var(--primary); text-decoration: underline; font-size: .95rem; }
+  .welcome-panel-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem; padding: 1.5rem 2rem; background: var(--surface); }
+  .welcome-panel-card { display: flex; gap: .85rem; align-items: flex-start; }
+  .welcome-panel-icon { flex-shrink: 0; width: 34px; height: 34px; display: flex; align-items: center; justify-content: center; background: var(--primary); border-radius: var(--radius); }
+  .welcome-panel-icon img { width: 17px; height: 17px; filter: invert(1); }
+  .welcome-panel-card h3 { margin: 0 0 .35rem; font-size: .95rem; font-weight: 600; color: var(--text); }
+  .welcome-panel-card p { margin: 0 0 .4rem; font-size: .82rem; color: var(--muted); line-height: 1.4; }
+  .welcome-panel-card a { font-size: .82rem; }
+  @media (max-width: 900px) { .welcome-panel-cards { grid-template-columns: 1fr; } }
+</style>
+<script>
+function dismissWelcomePanel() {
+  var panel = document.getElementById('welcome-panel');
+  if (panel) { panel.remove(); }
+  fetch('/admin/dashboard/dismiss-welcome', { method: 'POST', credentials: 'same-origin' });
+}
+</script>"##.to_string()
+}
+
 pub fn render(data: &DashboardData, flash: Option<&str>, ctx: &crate::PageContext) -> String {
     let is_author = ctx.user_role.eq_ignore_ascii_case("author");
     let mut widget_bodies: HashMap<&'static str, String> = HashMap::new();
@@ -497,7 +568,8 @@ pub fn render(data: &DashboardData, flash: Option<&str>, ctx: &crate::PageContex
         })
     };
 
-    let content = widgets_section(&data.widget_layout, &default_layout, &widget_bodies);
+    let welcome_panel = if data.show_welcome_panel { welcome_panel_html() } else { String::new() };
+    let content = format!("{welcome_panel}{}", widgets_section(&data.widget_layout, &default_layout, &widget_bodies));
 
     crate::admin_page("Dashboard", "/admin", flash, &content, ctx)
 }

@@ -163,6 +163,9 @@ pub struct User {
     /// (`erase_personal_data`) — every personal-data field on the row has
     /// already been overwritten with anonymized placeholders.
     pub personal_data_erased_at: Option<DateTime<Utc>>,
+    /// Non-NULL = this user has dismissed the dashboard's Welcome panel —
+    /// see `dismiss_welcome_panel`.
+    pub welcome_panel_dismissed_at: Option<DateTime<Utc>>,
 }
 
 #[allow(dead_code)]
@@ -255,6 +258,28 @@ pub async fn create(pool: &PgPool, data: &CreateUser) -> Result<User> {
     .await?;
 
     Ok(user)
+}
+
+/// Marks the dashboard Welcome panel dismissed for this user — it won't be
+/// shown to them again. Idempotent (re-dismissing just overwrites the
+/// timestamp, no error).
+pub async fn dismiss_welcome_panel(pool: &PgPool, id: Uuid) -> Result<()> {
+    sqlx::query("UPDATE users SET welcome_panel_dismissed_at = now() WHERE id = $1")
+        .bind(id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+/// Undoes `dismiss_welcome_panel` — the Welcome panel will render again on
+/// this user's next dashboard visit. Reachable from Settings → General
+/// ("Show Welcome Panel Again"). Idempotent.
+pub async fn reset_welcome_panel(pool: &PgPool, id: Uuid) -> Result<()> {
+    sqlx::query("UPDATE users SET welcome_panel_dismissed_at = NULL WHERE id = $1")
+        .bind(id)
+        .execute(pool)
+        .await?;
+    Ok(())
 }
 
 pub async fn get_by_id(pool: &PgPool, id: Uuid) -> Result<User> {
@@ -867,6 +892,7 @@ mod tests {
             deleted_at: None,
             default_site_id: None,
             personal_data_erased_at: None,
+            welcome_panel_dismissed_at: None,
         };
         let ctx = UserContext::from_user(&user, "https://example.com");
         assert_eq!(ctx.url, "https://example.com/author/janedoe");

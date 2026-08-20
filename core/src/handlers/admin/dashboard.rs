@@ -378,6 +378,10 @@ pub async fn dashboard(
         available_views_years,
         selected_views_year,
         author_total_views,
+        // Super-admin (agency/app owner) only, for now — see the Settings →
+        // General "Welcome Panel" card's doc comment for the plan to
+        // eventually let this be delegated to other roles.
+        show_welcome_panel: admin.caps.is_global_admin && admin.user.welcome_panel_dismissed_at.is_none(),
     };
 
     Html(admin::pages::dashboard::render(&data, None, &ctx))
@@ -393,6 +397,19 @@ pub async fn save_widget_layout(
         Err(e) => {
             tracing::error!("dashboard widget layout save error: {e}");
             (StatusCode::INTERNAL_SERVER_ERROR, "Save failed").into_response()
+        }
+    }
+}
+
+pub async fn dismiss_welcome_panel(
+    State(state): State<AppState>,
+    admin: AdminUser,
+) -> Response {
+    match user::dismiss_welcome_panel(&state.db, admin.user.id).await {
+        Ok(()) => StatusCode::NO_CONTENT.into_response(),
+        Err(e) => {
+            tracing::error!("dashboard welcome-panel dismiss error: {e}");
+            (StatusCode::INTERNAL_SERVER_ERROR, "Dismiss failed").into_response()
         }
     }
 }

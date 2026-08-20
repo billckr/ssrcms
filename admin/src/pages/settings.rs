@@ -34,6 +34,34 @@ pub fn render(
         String::new()
     };
 
+    // Only the app owner sees the Welcome panel at all right now (dashboard.rs
+    // gates it on is_global_admin too) — no point offering a "bring it back"
+    // control to anyone who could never have seen it. Delegating this to other
+    // roles is a later "we'll adjust this" item, not a decision yet.
+    let welcome_panel_card = if ctx.is_global_admin {
+        r#"<div class="card-boxed">
+    <h2 class="card-boxed-header">Welcome Panel</h2>
+    <div class="card-boxed-body">
+    <form method="post" action="/admin/settings">
+      <input type="hidden" name="tab" value="welcome_panel">
+      <div class="card-boxed-section">
+        <p class="form-note" style="margin:0 0 .75rem">
+          Dismissed the dashboard's Welcome panel? Bring it back for your own account &mdash;
+          it'll show again next time you visit the Dashboard.
+        </p>
+        <div class="icon-pill" style="margin-top:0">
+          <button type="submit" class="icon-btn" title="Show Welcome Panel Again" aria-label="Show Welcome Panel Again">
+            <img src="/admin/static/icons/refresh-cw.svg" alt="">
+          </button>
+        </div>
+      </div>
+    </form>
+    </div>
+  </div>"#.to_string()
+    } else {
+        String::new()
+    };
+
     let theme_options = [
         ("system", "Match system"),
         ("light", "Light"),
@@ -177,6 +205,8 @@ pub fn render(
     </form>
     </div>
   </div>
+
+  {welcome_panel_card}
 
   <div class="card-boxed">
     <h2 class="card-boxed-header">Sidebar Logo</h2>
@@ -619,6 +649,7 @@ window.resetLogoConfirm = function() {{
         app_name = app_name_escaped,
         current_logo_preview = current_logo_preview,
         reset_logo_btn = reset_logo_btn,
+        welcome_panel_card = welcome_panel_card,
         tz_options = tz_options,
         max_upload_mb = max_upload_mb,
         site_options = site_options,

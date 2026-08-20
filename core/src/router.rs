@@ -158,6 +158,7 @@ pub fn build(
         .route("/admin", get(dashboard::dashboard))
         .route("/admin2", get(dashboard::dashboard2))
         .route("/admin/dashboard/widget-layout", post(dashboard::save_widget_layout))
+        .route("/admin/dashboard/dismiss-welcome", post(dashboard::dismiss_welcome_panel))
         // ── Admin posts ────────────────────────────────────────────────────
         .route("/admin/posts", get(posts::list))
         .route("/admin/posts/new", get(posts::new_post).post(posts::save_new))

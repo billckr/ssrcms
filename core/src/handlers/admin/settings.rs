@@ -127,5 +127,16 @@ pub async fn save_settings(
         return Redirect::to(&format!("/admin/settings?flash={}", flash.replace(' ', "+"))).into_response();
     }
 
+    if tab == "welcome_panel" {
+        let flash = match crate::models::user::reset_welcome_panel(&state.db, admin.user.id).await {
+            Ok(()) => "The Welcome panel will show again next time you visit the Dashboard.",
+            Err(e) => {
+                tracing::error!("failed to reset welcome_panel_dismissed_at: {}", e);
+                "Failed to reset the Welcome panel. Please try again."
+            }
+        };
+        return Redirect::to(&format!("/admin/settings?flash={}", flash.replace(' ', "+"))).into_response();
+    }
+
     Redirect::to("/admin/settings").into_response()
 }
