@@ -383,15 +383,31 @@ fn wp_upload_path_components(attachment_url: &str) -> Vec<String> {
         .collect()
 }
 
+/// Per-entry decompression cap — a defense against zip bombs (a tiny
+/// compressed file that expands to gigabytes), not a real expectation about
+/// media file size. Enforced by bounding the *read*, not by trusting the
+/// entry's declared uncompressed size (a crafted zip can lie about that) —
+/// `Read::take` stops pulling bytes from the decompressor once the limit is
+/// hit regardless of what the header claims.
+const MAX_ZIP_ENTRY_BYTES: u64 = 200 * 1024 * 1024; // 200 MiB
+
+/// Aggregate cap across every entry in one zip — guards against many
+/// individually-under-the-cap entries still adding up to unbounded memory.
+const MAX_ZIP_TOTAL_BYTES: u64 = 2 * 1024 * 1024 * 1024; // 2 GiB
+
 /// Builds a `ZipMediaIndex` from raw zip bytes (the "media files zip"
 /// upload). Skips directory entries and macOS zip cruft (`__MACOSX/`,
-/// `.DS_Store`).
+/// `.DS_Store`). Oversized entries (see `MAX_ZIP_ENTRY_BYTES`) are skipped
+/// rather than failing the whole import — the affected attachment(s) just
+/// fall back to the normal HTTP fetch, same as anything else missing from
+/// the zip.
 fn build_zip_media_index(zip_bytes: &[u8]) -> Result<ZipMediaIndex, String> {
     let cursor = std::io::Cursor::new(zip_bytes);
     let mut archive = zip::ZipArchive::new(cursor)
         .map_err(|_| "Media zip is not a valid zip archive.".to_string())?;
 
     let mut entries = Vec::new();
+    let mut total_bytes = 0u64;
     for i in 0..archive.len() {
         let mut entry = archive.by_index(i)
             .map_err(|e| format!("failed to read zip entry: {e}"))?;
@@ -402,8 +418,24 @@ fn build_zip_media_index(zip_bytes: &[u8]) -> Result<ZipMediaIndex, String> {
         if name.starts_with("__MACOSX/") || name.rsplit('/').next().is_some_and(|f| f.starts_with('.')) {
             continue;
         }
+        if total_bytes >= MAX_ZIP_TOTAL_BYTES {
+            tracing::warn!("media zip: aggregate size cap ({} bytes) reached, skipping remaining entries", MAX_ZIP_TOTAL_BYTES);
+            break;
+        }
+
+        // Read one more byte than the cap so we can tell "exactly at the
+        // cap" apart from "would have kept going" without ever buffering
+        // more than MAX_ZIP_ENTRY_BYTES + 1.
         let mut buf = Vec::new();
-        entry.read_to_end(&mut buf).map_err(|e| format!("failed to read zip entry '{name}': {e}"))?;
+        entry.by_ref().take(MAX_ZIP_ENTRY_BYTES + 1)
+            .read_to_end(&mut buf)
+            .map_err(|e| format!("failed to read zip entry '{name}': {e}"))?;
+        if buf.len() as u64 > MAX_ZIP_ENTRY_BYTES {
+            tracing::warn!("media zip: entry '{}' exceeds the {}-byte cap, skipped", name, MAX_ZIP_ENTRY_BYTES);
+            continue;
+        }
+
+        total_bytes += buf.len() as u64;
         let components: Vec<String> = name.to_lowercase()
             .split('/')
             .filter(|c| !c.is_empty())
@@ -634,8 +666,13 @@ async fn run_import(
     zip_index: Option<ZipMediaIndex>,
 ) {
     // ── Pass 1: attachments ──────────────────────────────────────────────
+    // Redirects disabled deliberately — see is_safe_import_url's doc comment:
+    // the SSRF host check only covers the request's initial target, and
+    // following a redirect would let a same-origin-looking URL 302 its way
+    // to an internal address after passing that check.
     let client = reqwest::Client::builder()
         .user_agent("SynapCMS-WP-Importer/1.0")
+        .redirect(reqwest::redirect::Policy::none())
         .build()
         .unwrap_or_else(|_| reqwest::Client::new());
 
@@ -1006,6 +1043,96 @@ fn rand_suffix(n: usize) -> String {
     (0..n).map(|_| chars[rng.gen_range(0..chars.len())] as char).collect()
 }
 
+/// Rejects any IP that isn't routable on the public internet — loopback,
+/// RFC1918/CGNAT private ranges, link-local (this is what closes off cloud
+/// metadata endpoints like `169.254.169.254`), unspecified, multicast,
+/// broadcast, and their IPv6 equivalents (including IPv4-mapped IPv6
+/// addresses, checked against the same IPv4 rules).
+fn is_public_ip(ip: &std::net::IpAddr) -> bool {
+    match ip {
+        std::net::IpAddr::V4(v4) => {
+            !(v4.is_private()
+                || v4.is_loopback()
+                || v4.is_link_local()
+                || v4.is_unspecified()
+                || v4.is_broadcast()
+                || v4.is_multicast()
+                || v4.is_documentation()
+                || is_cgnat_v4(v4))
+        }
+        std::net::IpAddr::V6(v6) => {
+            if let Some(mapped) = v6.to_ipv4_mapped() {
+                return is_public_ip(&std::net::IpAddr::V4(mapped));
+            }
+            !(v6.is_loopback()
+                || v6.is_unspecified()
+                || v6.is_multicast()
+                || is_unique_local_v6(v6)
+                || is_link_local_v6(v6))
+        }
+    }
+}
+
+/// 100.64.0.0/10 — carrier-grade NAT range, not covered by `Ipv4Addr::is_private()`.
+fn is_cgnat_v4(v4: &std::net::Ipv4Addr) -> bool {
+    let o = v4.octets();
+    o[0] == 100 && (o[1] & 0b1100_0000) == 0b0100_0000
+}
+
+/// fc00::/7 — IPv6 unique local addresses (the IPv6 analog of RFC1918).
+fn is_unique_local_v6(v6: &std::net::Ipv6Addr) -> bool {
+    (v6.segments()[0] & 0xfe00) == 0xfc00
+}
+
+/// fe80::/10 — IPv6 link-local.
+fn is_link_local_v6(v6: &std::net::Ipv6Addr) -> bool {
+    (v6.segments()[0] & 0xffc0) == 0xfe80
+}
+
+/// SSRF guard for attachment URLs pulled straight out of an uploaded WXR
+/// file: only `http`/`https` are allowed, and every IP the host resolves to
+/// must be public — rejects if *any* resolved address is internal, since an
+/// attacker only needs one A/AAAA record to point somewhere sensitive.
+/// Literal IPs in the URL are checked directly, no DNS lookup needed.
+///
+/// This only checks the request's initial target — the `reqwest::Client`
+/// this guards is built with redirects disabled (`Policy::none()`)
+/// specifically so a same-origin-looking URL can't 302 its way to an
+/// internal address after passing this check. A source site whose media
+/// URLs actually require a redirect will fail the fetch; the zip-upload
+/// fallback (`ZipMediaIndex`) is the supported way to import media from a
+/// site like that anyway.
+async fn is_safe_import_url(url_str: &str) -> bool {
+    let Ok(parsed) = reqwest::Url::parse(url_str) else { return false };
+    if parsed.scheme() != "http" && parsed.scheme() != "https" {
+        return false;
+    }
+    let Some(host) = parsed.host_str().map(|h| h.to_string()) else { return false };
+
+    if let Ok(ip) = host.parse::<std::net::IpAddr>() {
+        return is_public_ip(&ip);
+    }
+
+    let port = parsed.port_or_known_default().unwrap_or(80);
+    let lookup = tokio::net::lookup_host((host.as_str(), port)).await;
+    let result = match lookup {
+        Ok(addrs) => {
+            let mut saw_any = false;
+            let mut all_public = true;
+            for addr in addrs {
+                saw_any = true;
+                if !is_public_ip(&addr.ip()) {
+                    all_public = false;
+                    break;
+                }
+            }
+            saw_any && all_public
+        }
+        Err(_) => false,
+    };
+    result
+}
+
 async fn import_attachment(
     state: &AppState,
     client: &reqwest::Client,
@@ -1018,6 +1145,9 @@ async fn import_attachment(
         let filename_guess = item.attachment_url.rsplit('/').next().unwrap_or("attachment");
         (local.to_vec(), guess_mime_from_extension(filename_guess), true)
     } else {
+        if !is_safe_import_url(&item.attachment_url).await {
+            return Err("refused: URL does not resolve to a public address".to_string());
+        }
         let resp = client.get(&item.attachment_url).send().await.map_err(|e| format!("fetch failed: {e}"))?;
         if !resp.status().is_success() {
             return Err(format!("fetch failed: HTTP {}", resp.status()));
@@ -1457,5 +1587,42 @@ mod tests {
         assert_eq!(guess_mime_from_extension("photo.png"), "image/png");
         assert_eq!(guess_mime_from_extension("clip.mp4"), "video/mp4");
         assert_eq!(guess_mime_from_extension("mystery.xyz"), "application/octet-stream");
+    }
+
+    #[test]
+    fn is_public_ip_rejects_internal_ranges() {
+        let internal = [
+            "127.0.0.1",      // loopback
+            "10.0.0.5",       // RFC1918
+            "172.16.0.1",     // RFC1918
+            "192.168.1.1",    // RFC1918
+            "169.254.169.254", // link-local — cloud metadata endpoint
+            "100.64.0.1",     // CGNAT
+            "0.0.0.0",        // unspecified
+            "::1",            // IPv6 loopback
+            "fc00::1",        // IPv6 unique local
+            "fe80::1",        // IPv6 link-local
+            "::ffff:127.0.0.1", // IPv4-mapped IPv6 loopback
+        ];
+        for ip in internal {
+            assert!(!is_public_ip(&ip.parse().unwrap()), "{ip} should be rejected");
+        }
+    }
+
+    #[test]
+    fn is_public_ip_accepts_public_ranges() {
+        let public = ["8.8.8.8", "1.1.1.1", "93.184.216.34", "2606:4700:4700::1111"];
+        for ip in public {
+            assert!(is_public_ip(&ip.parse().unwrap()), "{ip} should be accepted");
+        }
+    }
+
+    #[tokio::test]
+    async fn is_safe_import_url_rejects_non_http_schemes_and_literal_internal_ips() {
+        assert!(!is_safe_import_url("file:///etc/passwd").await);
+        assert!(!is_safe_import_url("ftp://example.com/f.jpg").await);
+        assert!(!is_safe_import_url("http://127.0.0.1/f.jpg").await);
+        assert!(!is_safe_import_url("http://169.254.169.254/latest/meta-data/").await);
+        assert!(!is_safe_import_url("not a url").await);
     }
 }
