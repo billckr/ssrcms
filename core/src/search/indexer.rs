@@ -30,8 +30,10 @@ pub fn delete_post(index: &SearchIndex, id: &str) {
 }
 
 /// Rebuild the entire index from scratch — indexes all published posts and pages.
-/// Runs as a background task on startup.
-pub async fn rebuild_index(index: SearchIndex, pool: PgPool) {
+/// Runs as a background task on startup, and can also be triggered on demand
+/// (admin dev-tools button, `synap search reindex` CLI command). Returns the
+/// number of documents indexed, or `None` if the rebuild failed.
+pub async fn rebuild_index(index: SearchIndex, pool: PgPool) -> Option<usize> {
     tracing::info!("rebuilding search index from database...");
 
     let posts = match sqlx::query_as::<_, Post>(
@@ -43,7 +45,7 @@ pub async fn rebuild_index(index: SearchIndex, pool: PgPool) {
         Ok(p) => p,
         Err(e) => {
             tracing::error!("search index rebuild failed — could not fetch posts: {}", e);
-            return;
+            return None;
         }
     };
 
@@ -67,8 +69,9 @@ pub async fn rebuild_index(index: SearchIndex, pool: PgPool) {
 
     if let Err(e) = index.rebuild_all(&docs) {
         tracing::error!("search index rebuild failed: {}", e);
-        return;
+        return None;
     }
 
     tracing::info!("search index built: {} documents indexed", count);
+    Some(count)
 }

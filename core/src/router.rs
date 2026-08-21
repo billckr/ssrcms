@@ -261,6 +261,8 @@ pub fn build(
         .route("/admin/settings/dev-tools/seed-users", post(dev_tools::seed_users))
         .route("/admin/settings/dev-tools/seed-posts", post(dev_tools::seed_posts))
         .route("/admin/settings/dev-tools/clear", post(dev_tools::clear_test_data))
+        .route("/admin/settings/dev-tools/nuke-all", post(dev_tools::nuke_all))
+        .route("/admin/settings/dev-tools/reindex-search", post(dev_tools::reindex_search))
         // ── Admin sites ────────────────────────────────────────────────────
         .route("/admin/pick-role", get(role_picker::show).post(role_picker::submit))
         .route("/admin/sites", get(admin_sites::list).post(admin_sites::create))

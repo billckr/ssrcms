@@ -8,6 +8,7 @@ name = "synap"
 path = "src/main.rs"
 
 [dependencies]
+synaptic-core = { path = "../core" }
 clap = { workspace = true, features = ["derive"] }
 anyhow.workspace = true
 tokio.workspace = true

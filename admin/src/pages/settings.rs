@@ -9,6 +9,7 @@ pub fn render(
     max_upload_mb: u64,
     default_theme: &str,
     sites: &[(Uuid, String)],
+    default_site_hostname: Option<&str>,
     ctx: &crate::PageContext,
 ) -> String {
     let app_name_escaped = crate::html_escape(app_name);
@@ -74,6 +75,75 @@ pub fn render(
     })
     .collect::<Vec<_>>()
     .join("\n        ");
+
+    let nuke_all_card = if ctx.is_global_admin {
+        let default_site_line = match default_site_hostname {
+            Some(hostname) => format!(
+                r#"Your default site (<strong>{}</strong>) and your super-admin account are kept &mdash; everything else goes."#,
+                crate::html_escape(hostname),
+            ),
+            None => "Your account has no default site set, so this is unavailable until you set one under Sites.".to_string(),
+        };
+        let disabled = if default_site_hostname.is_some() { "" } else { " disabled" };
+        format!(
+            r#"<div class="card-boxed" style="border-color:var(--danger)">
+    <h2 class="card-boxed-header" style="color:var(--danger)">Reset Entire App</h2>
+    <div class="card-boxed-body">
+  <div class="card-boxed-section section-danger">
+    <p style="font-size:.8rem;color:var(--muted);margin:0 0 .5rem">
+      Deletes every other site (posts, pages, media, taxonomies, comments, form submissions, nav
+      menus, Page Builder projects/pages, and users unique to it), clears posts, pages, media,
+      categories, tags, and Page Builder projects/pages from your default site, and deletes every
+      non-super-admin user in the app. {default_site_line} This cannot be undone &mdash; use it to
+      reset a dev/test instance between test-data runs.
+    </p>
+    <div class="form-group" style="max-width:280px">
+      <label for="dt-nuke-confirm">Type DELETE ALL to confirm</label>
+      <input type="text" id="dt-nuke-confirm" autocomplete="off" placeholder="DELETE ALL">
+    </div>
+    <div style="margin-top:1rem">
+      <div class="icon-pill">
+        <button type="button" class="icon-btn icon-danger" onclick="nukeAllTestData()" id="dtNukeBtn" title="Reset Entire App" aria-label="Reset Entire App"{disabled}>
+          <img src="/admin/static/icons/delete.svg" alt="">
+        </button>
+      </div>
+      <span class="dt-spinner" id="dtNukeSpinner" hidden></span>
+      <pre id="dtNukeResult" class="dt-result"></pre>
+    </div>
+  </div>
+    </div>
+  </div>"#,
+        )
+    } else {
+        String::new()
+    };
+
+    let reindex_search_card = if ctx.is_global_admin {
+        r#"<div class="card-boxed">
+    <h2 class="card-boxed-header">Search Index</h2>
+    <div class="card-boxed-body">
+  <div class="card-boxed-section">
+    <p style="font-size:.8rem;color:var(--muted);margin:0 0 .5rem">
+      Rebuilds the search index from the database (all published posts/pages, every site).
+      The index normally only rebuilds on app startup, so use this after content is added or
+      changed outside the admin UI &mdash; a WordPress import, a seed script, a direct DB write
+      &mdash; to make it searchable without restarting the app.
+    </p>
+    <div style="margin-top:1rem">
+      <div class="icon-pill">
+        <button type="button" class="icon-btn" onclick="reindexSearch()" id="dtReindexBtn" title="Rebuild Search Index" aria-label="Rebuild Search Index">
+          <img src="/admin/static/icons/refresh-cw.svg" alt="">
+        </button>
+      </div>
+      <span class="dt-spinner" id="dtReindexSpinner" hidden></span>
+      <pre id="dtReindexResult" class="dt-result"></pre>
+    </div>
+  </div>
+    </div>
+  </div>"#.to_string()
+    } else {
+        String::new()
+    };
 
     let site_options = sites
         .iter()
@@ -324,6 +394,8 @@ pub fn render(
     </div>
   </div>
 
+  {nuke_all_card}
+
   <div class="card-boxed">
     <h2 class="card-boxed-header">Seed Users</h2>
     <div class="card-boxed-body">
@@ -432,8 +504,9 @@ pub fn render(
         </select>
       </div>
       <p style="font-size:.8rem;color:var(--muted);margin:0">
-        Deletes all posts, pages, comments, taxonomies, form submissions, media rows, and nav
-        menus for the selected site. Site settings are not affected. This cannot be undone.
+        Deletes all posts, pages, comments, taxonomies, form submissions, media rows, nav menus,
+        and Page Builder projects/pages for the selected site. Site settings are not affected.
+        This cannot be undone.
       </p>
       <div class="form-group">
         <label style="display:inline;font-weight:400">
@@ -454,6 +527,8 @@ pub fn render(
   </div>
     </div>
   </div>
+
+  {reindex_search_card}
 </div>
 
 <!-- Widgets -->
@@ -546,6 +621,41 @@ window.seedPosts = function () {{
   }});
 }};
 
+(function () {{
+  var input = document.getElementById('dt-nuke-confirm');
+  var btn = document.getElementById('dtNukeBtn');
+  if (input && btn && !btn.disabled) {{
+    btn.disabled = true;
+    input.addEventListener('input', function () {{
+      btn.disabled = input.value !== 'DELETE ALL';
+    }});
+  }}
+}})();
+
+window.nukeAllTestData = function () {{
+  var input = document.getElementById('dt-nuke-confirm');
+  if (input.value !== 'DELETE ALL') return;
+  if (!confirm('This deletes every other site, clears your default site\'s posts/pages/media/categories/tags, and deletes every non-super-admin user in the app. This cannot be undone. Continue?')) {{
+    return;
+  }}
+  var btn = document.getElementById('dtNukeBtn');
+  var spinner = document.getElementById('dtNukeSpinner');
+  var resultEl = document.getElementById('dtNukeResult');
+  resultEl.textContent = '';
+  dtSetBusy(btn, spinner, true);
+  dtPost('/admin/settings/dev-tools/nuke-all', {{ confirm: input.value }}, resultEl).then(function (res) {{
+    dtSetBusy(btn, spinner, false);
+    if (!res) return;
+    if (!res.data.ok) {{
+      resultEl.textContent = 'Error: ' + (res.data.error || 'unknown error');
+      return;
+    }}
+    input.value = '';
+    resultEl.textContent = 'Deleted ' + res.data.deleted_sites + ' site(s) and ' + res.data.deleted_users + ' user(s).' +
+      (res.data.skipped_users ? ' (' + res.data.skipped_users + ' user(s) could not be deleted.)' : '');
+  }});
+}};
+
 window.clearTestData = function () {{
   var deleteUsers = document.getElementById('dt-clear-users').checked;
   var msg = 'Delete ALL posts, comments, taxonomies, form submissions, media, and nav menus for this site?' +
@@ -568,6 +678,23 @@ window.clearTestData = function () {{
       return;
     }}
     resultEl.textContent = 'Cleared.' + (deleteUsers ? ' Deleted ' + res.data.deleted_users + ' seeded user(s).' : '');
+  }});
+}};
+
+window.reindexSearch = function () {{
+  var btn = document.getElementById('dtReindexBtn');
+  var spinner = document.getElementById('dtReindexSpinner');
+  var resultEl = document.getElementById('dtReindexResult');
+  resultEl.textContent = '';
+  dtSetBusy(btn, spinner, true);
+  dtPost('/admin/settings/dev-tools/reindex-search', {{}}, resultEl).then(function (res) {{
+    dtSetBusy(btn, spinner, false);
+    if (!res) return;
+    if (!res.data.ok) {{
+      resultEl.textContent = 'Error: ' + (res.data.error || 'unknown error');
+      return;
+    }}
+    resultEl.textContent = 'Indexed ' + res.data.indexed + ' document(s).';
   }});
 }};
 
@@ -653,6 +780,8 @@ window.resetLogoConfirm = function() {{
         tz_options = tz_options,
         max_upload_mb = max_upload_mb,
         site_options = site_options,
+        nuke_all_card = nuke_all_card,
+        reindex_search_card = reindex_search_card,
     );
 
     crate::admin_page("System Settings", "/admin/settings", flash, &content, ctx)

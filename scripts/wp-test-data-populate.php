@@ -14,13 +14,17 @@
  *
  * Everything it creates is prefixed/tagged "synaptest" (usernames, the
  * `synaptest_source` postmeta) so a future cleanup pass has something to
- * search for, and re-running is safe — existing users/media/terms with a
- * matching name are reused rather than duplicated (posts/pages are not
- * de-duplicated; re-running adds more of them each time, which is usually
- * what you want for a bigger import test).
+ * search for, and re-running is safe — existing users/terms with a matching
+ * name are reused rather than duplicated (posts/pages are not de-duplicated;
+ * re-running adds more of them each time, which is usually what you want for
+ * a bigger import test). Media is additive too: each run downloads a fresh
+ * batch of new images on top of whatever "Synaptest Image N" attachments
+ * already exist, so the media library actually grows — useful for testing
+ * the media manager, not just the importer.
  */
 
 $total_posts = isset($args[0]) ? max(10, (int) $args[0]) : 200;
+$new_media   = isset($args[1]) ? max(0, (int) $args[1]) : 15;
 $num_pages   = min(20, max(5, intdiv($total_posts, 10)));
 $num_posts   = $total_posts - $num_pages;
 
@@ -84,13 +88,22 @@ require_once ABSPATH . 'wp-admin/includes/file.php';
 require_once ABSPATH . 'wp-admin/includes/image.php';
 
 $media_ids = [];
-$num_media = 15;
-for ($i = 1; $i <= $num_media; $i++) {
-    $existing = get_page_by_title("Synaptest Image {$i}", OBJECT, 'attachment');
-    if ($existing) {
-        $media_ids[] = $existing->ID;
-        continue;
+$max_existing = 0;
+$existing_attachments = get_posts([
+    'post_type'      => 'attachment',
+    'post_status'    => 'any',
+    'posts_per_page' => -1,
+    's'              => 'Synaptest Image ',
+    'fields'         => 'ids',
+]);
+foreach ($existing_attachments as $aid) {
+    $title = get_the_title($aid);
+    if (preg_match('/^Synaptest Image (\d+)$/', $title, $m)) {
+        $media_ids[] = $aid;
+        $max_existing = max($max_existing, (int) $m[1]);
     }
+}
+for ($i = $max_existing + 1; $i <= $max_existing + $new_media; $i++) {
     $url = "https://picsum.photos/seed/synaptest{$i}/800/600";
     $tmp = download_url($url);
     if (is_wp_error($tmp)) {
@@ -105,7 +118,7 @@ for ($i = 1; $i <= $num_media; $i++) {
     }
     $media_ids[] = $id;
 }
-WP_CLI::success(count($media_ids) . ' media items ready.');
+WP_CLI::success(count($media_ids) . ' media items ready (' . $new_media . ' new).');
 
 // ── Pages (some nested under an earlier top-level page) ──────────────────
 $page_titles = ['About Us', 'Contact', 'Services', 'Privacy Policy', 'Terms of Service', 'Team', 'Careers', 'FAQ', 'Support', 'Pricing',

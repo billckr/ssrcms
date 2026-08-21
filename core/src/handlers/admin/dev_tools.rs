@@ -404,6 +404,197 @@ pub struct ClearRequest {
     delete_users: bool,
 }
 
+// ── Nuke all app data (super_admin only, keeps default site + super_admins) ──
+
+#[derive(Debug, Deserialize)]
+pub struct NukeAllRequest {
+    /// Must equal "DELETE ALL" — a typed confirmation, not just a checkbox,
+    /// since this is far more destructive than the per-site Clear Test Data
+    /// above (it removes every other site outright and every non-super-admin
+    /// user in the app, not just one site's content).
+    #[serde(default)]
+    confirm: String,
+}
+
+/// Removes a deleted site's on-disk data (themes, uploads, plugin dir, and
+/// the hostname → uuid upload symlink). Mirrors the cleanup block in
+/// `handlers::admin::sites::delete` — kept here instead of shared because
+/// that handler is HTTP-response-shaped and this call site isn't.
+fn remove_site_disk_data(state: &AppState, site_id: Uuid, hostname: &str) {
+    let site_data_dir = std::path::Path::new(&state.config.sites_dir).join(site_id.to_string());
+    if site_data_dir.exists() {
+        if let Err(e) = std::fs::remove_dir_all(&site_data_dir) {
+            tracing::warn!("nuke_all: failed to remove site data dir for {}: {:?}", site_id, e);
+        }
+    }
+    let sym_path = std::path::Path::new(&state.config.uploads_dir).join(hostname);
+    if sym_path.is_symlink() {
+        if let Err(e) = std::fs::remove_file(&sym_path) {
+            tracing::warn!("nuke_all: failed to remove upload symlink for '{}': {:?}", hostname, e);
+        }
+    }
+    let site_upload_dir = std::path::Path::new(&state.config.uploads_dir).join(site_id.to_string());
+    if site_upload_dir.exists() {
+        if let Err(e) = std::fs::remove_dir_all(&site_upload_dir) {
+            tracing::warn!("nuke_all: failed to remove upload dir for site {}: {:?}", site_id, e);
+        }
+    }
+    let site_plugin_dir = std::path::Path::new(&state.config.plugins_dir).join("sites").join(site_id.to_string());
+    if site_plugin_dir.exists() {
+        if let Err(e) = std::fs::remove_dir_all(&site_plugin_dir) {
+            tracing::warn!("nuke_all: failed to remove plugin dir for site {}: {:?}", site_id, e);
+        }
+    }
+}
+
+/// POST /admin/settings/dev-tools/nuke-all — wipe every site but the caller's
+/// default site, clear that default site's own content (posts, taxonomies,
+/// media, nav menus, form submissions), and delete every non-super-admin
+/// user in the app. Exists for repeatedly resetting a dev/test instance
+/// between test-data runs (see scripts/populate-wp-test-data.sh's WordPress
+/// equivalent) without hand-picking sites in the per-site Clear Test Data
+/// tool above.
+///
+/// super_admin only, and only reachable while on the caller's own default
+/// site — same gate as the rest of /admin/settings (`can_manage_settings`).
+pub async fn nuke_all(
+    State(state): State<AppState>,
+    admin: AdminUser,
+    Json(body): Json<NukeAllRequest>,
+) -> impl IntoResponse {
+    if !admin.caps.can_manage_settings || !admin.caps.is_global_admin {
+        return forbidden();
+    }
+    if body.confirm != "DELETE ALL" {
+        return (StatusCode::BAD_REQUEST, Json(json!({"error": "Confirmation text did not match \"DELETE ALL\""}))).into_response();
+    }
+
+    let default_site_id = match admin.user.default_site_id {
+        Some(id) => id,
+        None => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({"error": "Your account has no default site set — set one under Sites before using this."})),
+            )
+                .into_response();
+        }
+    };
+
+    let sites = match crate::models::site::list(&state.db).await {
+        Ok(s) => s,
+        Err(e) => {
+            tracing::error!("nuke_all: failed to list sites: {e}");
+            return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "Database error"}))).into_response();
+        }
+    };
+
+    // Delete every other site outright — model-level delete cascades posts,
+    // media, taxonomies, comments, form_submissions, nav_menus, site_users,
+    // site_plugins, and removes now-fully-orphaned non-super-admin users.
+    let mut deleted_sites: u32 = 0;
+    for site in &sites {
+        if site.id == default_site_id {
+            continue;
+        }
+        if let Err(e) = crate::models::site::delete(&state.db, site.id).await {
+            tracing::error!("nuke_all: failed to delete site {}: {e}", site.id);
+            continue;
+        }
+        remove_site_disk_data(&state, site.id, &site.hostname);
+        deleted_sites += 1;
+    }
+
+    // Clear the default site's own content (same scope as clear_test_data
+    // above) — the site row itself, its settings, and its theme are kept.
+    let media_paths: Vec<String> = sqlx::query_scalar("SELECT path FROM media WHERE site_id = $1")
+        .bind(default_site_id)
+        .fetch_all(&state.db)
+        .await
+        .unwrap_or_default();
+
+    let mut tx = match state.db.begin().await {
+        Ok(tx) => tx,
+        Err(e) => {
+            tracing::error!("nuke_all: begin failed: {e}");
+            return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "Database error"}))).into_response();
+        }
+    };
+    let clear_result: Result<(), sqlx::Error> = async {
+        sqlx::query("DELETE FROM posts WHERE site_id = $1").bind(default_site_id).execute(&mut *tx).await?;
+        sqlx::query("DELETE FROM taxonomies WHERE site_id = $1").bind(default_site_id).execute(&mut *tx).await?;
+        sqlx::query("DELETE FROM form_submissions WHERE site_id = $1").bind(default_site_id).execute(&mut *tx).await?;
+        sqlx::query("DELETE FROM media WHERE site_id = $1").bind(default_site_id).execute(&mut *tx).await?;
+        sqlx::query("DELETE FROM media_folders WHERE site_id = $1").bind(default_site_id).execute(&mut *tx).await?;
+        sqlx::query("DELETE FROM nav_menus WHERE site_id = $1").bind(default_site_id).execute(&mut *tx).await?;
+        // builder_projects cascades to page_compositions.project_id.
+        sqlx::query("DELETE FROM builder_projects WHERE site_id = $1").bind(default_site_id).execute(&mut *tx).await?;
+        sqlx::query("DELETE FROM page_compositions WHERE site_id = $1").bind(default_site_id).execute(&mut *tx).await?;
+        Ok(())
+    }
+    .await;
+    if let Err(e) = clear_result {
+        tracing::error!("nuke_all: failed to clear default site content: {e}");
+        let _ = tx.rollback().await;
+        return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "Failed to clear default site content — no further changes were made"}))).into_response();
+    }
+    if let Err(e) = tx.commit().await {
+        tracing::error!("nuke_all: commit failed: {e}");
+        return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "Database error"}))).into_response();
+    }
+
+    // Remove the default site's uploaded files from disk now that the DB
+    // rows are gone (best-effort — a missing file is not an error).
+    for path in &media_paths {
+        let full_path = std::path::Path::new(&state.config.uploads_dir).join(path);
+        if let Err(e) = std::fs::remove_file(&full_path) {
+            tracing::warn!("nuke_all: failed to remove media file {:?}: {:?}", full_path, e);
+        }
+    }
+
+    // Delete every non-super-admin user left in the app (including any on
+    // the default site — its content is already gone, so posts/media
+    // ON DELETE RESTRICT won't block it). One at a time so a single
+    // unexpected FK reference doesn't abort the whole batch.
+    let victim_ids: Vec<Uuid> = sqlx::query_scalar("SELECT id FROM users WHERE role != 'super_admin'")
+        .fetch_all(&state.db)
+        .await
+        .unwrap_or_default();
+    let mut deleted_users: u32 = 0;
+    let mut skipped_users: u32 = 0;
+    for uid in victim_ids {
+        match sqlx::query("DELETE FROM users WHERE id = $1").bind(uid).execute(&state.db).await {
+            Ok(_) => deleted_users += 1,
+            Err(e) => {
+                tracing::warn!("nuke_all: failed to delete user {}: {:?}", uid, e);
+                skipped_users += 1;
+            }
+        }
+    }
+
+    if let Err(e) = state.reload_site_cache().await {
+        tracing::warn!("nuke_all: site cache reload failed: {:?}", e);
+    }
+
+    super::audit(
+        &state,
+        &admin,
+        "app.nuked_test_data",
+        "app",
+        None,
+        &format!("{deleted_sites} site(s), {deleted_users} user(s)"),
+        None,
+    )
+    .await;
+
+    Json(json!({
+        "ok": true,
+        "deleted_sites": deleted_sites,
+        "deleted_users": deleted_users,
+        "skipped_users": skipped_users,
+    }))
+    .into_response()
+}
+
 pub async fn clear_test_data(
     State(state): State<AppState>,
     admin: AdminUser,
@@ -426,10 +617,11 @@ pub async fn clear_test_data(
         }
     };
 
-    // Deletes posts/pages, taxonomies, form submissions, media rows, and nav menus for
-    // the site, all within this one transaction. Site settings are always untouched.
-    // Users are only removed when delete_users is set, and even then only rows tagged
-    // is_seeded — i.e. exactly the users this feature created, never a real account.
+    // Deletes posts/pages, taxonomies, form submissions, media rows, nav menus, and
+    // Page Builder projects/pages for the site, all within this one transaction. Site
+    // settings are always untouched. Users are only removed when delete_users is set,
+    // and even then only rows tagged is_seeded — i.e. exactly the users this feature
+    // created, never a real account.
     let result: Result<i64, sqlx::Error> = async {
         sqlx::query("DELETE FROM posts WHERE site_id = $1").bind(site.id).execute(&mut *tx).await?;
         sqlx::query("DELETE FROM taxonomies WHERE site_id = $1").bind(site.id).execute(&mut *tx).await?;
@@ -437,6 +629,9 @@ pub async fn clear_test_data(
         sqlx::query("DELETE FROM media WHERE site_id = $1").bind(site.id).execute(&mut *tx).await?;
         sqlx::query("DELETE FROM media_folders WHERE site_id = $1").bind(site.id).execute(&mut *tx).await?;
         sqlx::query("DELETE FROM nav_menus WHERE site_id = $1").bind(site.id).execute(&mut *tx).await?;
+        // builder_projects cascades to page_compositions.project_id.
+        sqlx::query("DELETE FROM builder_projects WHERE site_id = $1").bind(site.id).execute(&mut *tx).await?;
+        sqlx::query("DELETE FROM page_compositions WHERE site_id = $1").bind(site.id).execute(&mut *tx).await?;
 
         if body.delete_users {
             let deleted = sqlx::query(
@@ -466,5 +661,29 @@ pub async fn clear_test_data(
             let _ = tx.rollback().await;
             (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "Failed to clear data — no changes were made"}))).into_response()
         }
+    }
+}
+
+/// POST /admin/settings/dev-tools/reindex-search — rebuild the Tantivy search
+/// index from the database on demand, so posts added/edited outside the admin
+/// handlers (imports, seed scripts, direct DB writes) become searchable without
+/// a full app restart. Runs the same rebuild used at startup
+/// (`search::indexer::rebuild_index`), just triggered manually and awaited so
+/// the UI can report how many documents were indexed.
+///
+/// Index-wide (covers every site), so gated like Nuke All: super_admin only.
+pub async fn reindex_search(
+    State(state): State<AppState>,
+    admin: AdminUser,
+) -> impl IntoResponse {
+    if !admin.caps.can_manage_settings || !admin.caps.is_global_admin {
+        return forbidden();
+    }
+
+    let index = (*state.search_index).clone();
+    let db = state.db.clone();
+    match crate::search::indexer::rebuild_index(index, db).await {
+        Some(count) => Json(json!({"ok": true, "indexed": count})).into_response(),
+        None => (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "Reindex failed — check server logs"}))).into_response(),
     }
 }

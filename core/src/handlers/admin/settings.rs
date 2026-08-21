@@ -30,7 +30,12 @@ pub async fn settings(
         .into_iter()
         .map(|s| (s.id, s.hostname))
         .collect();
-    Html(admin::pages::settings::render(flash, &app_name, &timezone, max_upload_mb, &default_theme, &sites, &ctx)).into_response()
+    let default_site_hostname = admin
+        .user
+        .default_site_id
+        .and_then(|id| sites.iter().find(|(sid, _)| *sid == id))
+        .map(|(_, hostname)| hostname.clone());
+    Html(admin::pages::settings::render(flash, &app_name, &timezone, max_upload_mb, &default_theme, &sites, default_site_hostname.as_deref(), &ctx)).into_response()
 }
 
 pub async fn save_settings(
