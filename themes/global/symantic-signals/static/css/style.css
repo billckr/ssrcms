@@ -1098,7 +1098,7 @@ a:hover {
 .cookie-banner { display: none; position: fixed; bottom: 0; left: 0; right: 0; z-index: 9999; background: #1a1a1a; color: #fff; padding: 1rem 1.5rem; align-items: center; gap: 1rem; flex-wrap: wrap; }
 .cookie-banner p { margin: 0; flex: 1; min-width: 200px; }
 .cookie-banner-actions { display: flex; gap: 0.5rem; flex-shrink: 0; }
-.cookie-accept-btn { background: #cc785c; color: #fff; border: none; padding: 0.5rem 1.25rem; border-radius: 4px; cursor: pointer; font-size: 0.875rem; }
+.cookie-accept-btn { background: #8a3f28; color: #fff; border: none; padding: 0.5rem 1.25rem; border-radius: 4px; cursor: pointer; font-size: 0.875rem; }
 .cookie-dismiss-btn { background: transparent; color: #ccc; border: 1px solid #555; padding: 0.5rem 1.25rem; border-radius: 4px; cursor: pointer; font-size: 0.875rem; }
 
 /* ── Honeypot ── */

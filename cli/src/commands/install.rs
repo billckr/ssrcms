@@ -708,9 +708,13 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
             .default(args.site_url.clone().unwrap_or(derived_site_url))
             .interact_text()?
     };
+    // Generic placeholder so the homepage never ships an empty meta description
+    // (a Lighthouse SEO fail) — easy to overwrite from Settings once there's
+    // real copy to put there.
+    let default_description = format!("{domain} — homepage.");
     let settings_defaults: &[(&str, &str)] = &[
         ("site_name",        &domain),
-        ("site_description", ""),
+        ("site_description", &default_description),
         ("site_url",         &site_url),
         ("site_language",    "en-US"),
         ("active_theme",     "default"),

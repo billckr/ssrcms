@@ -299,7 +299,7 @@ fn welcome_panel_html(total_posts_ever: i64) -> String {
         <h3>Get your content in</h3>
         <p>Write your first post, or bring your existing content over with the built-in WordPress importer.</p>
         <a href="/admin/posts/new">Write a Post</a> &nbsp;&middot;&nbsp;
-        <a href="http://pong.com/admin/sites/bf9025dc-5196-4442-bb04-a1edf13fbc2e/settings?tab=import">Import from WordPress</a>
+        <a href="/admin/sites/bf9025dc-5196-4442-bb04-a1edf13fbc2e/settings?tab=import">Import from WordPress</a>
       </div>
     </div>"#.to_string()
     } else {

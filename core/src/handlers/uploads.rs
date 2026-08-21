@@ -78,7 +78,7 @@ pub async fn serve(
             (
                 [
                     (header::CONTENT_TYPE, ct),
-                    (header::CACHE_CONTROL, "public, max-age=31536000"),
+                    (header::CACHE_CONTROL, "public, max-age=31536000, immutable"),
                 ],
                 bytes,
             )

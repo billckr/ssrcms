@@ -70,9 +70,13 @@ pub async fn create_with_defaults(
     .await?;
 
     // Seed default site_settings rows.
+    // Generic placeholder so the homepage never ships an empty meta description
+    // (a Lighthouse SEO fail) — easy to overwrite from Settings once there's
+    // real copy to put there.
+    let default_description = format!("{hostname} — homepage.");
     let defaults: &[(&str, &str)] = &[
         ("site_name",        hostname),
-        ("site_description", ""),
+        ("site_description", &default_description),
         ("site_url",         &format!("http://{hostname}")),
         ("site_language",    "en-US"),
         ("active_theme",     "default"),

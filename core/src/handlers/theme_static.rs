@@ -66,7 +66,16 @@ pub async fn serve(
     match tokio::fs::read(&canonical_file).await {
         Ok(bytes) => {
             let content_type = content_type_for_path(&canonical_file);
-            ([(header::CONTENT_TYPE, content_type)], bytes).into_response()
+            // No cache-busting in these URLs (no ?v=, no content hash) — a theme edit
+            // or hot reload overwrites the same filename. Short max-age plus
+            // must-revalidate (matching /admin/static's policy, see router.rs) avoids
+            // re-fetching on every repeat visit while still picking up changes
+            // within minutes, rather than the "None" a bare Content-Type response
+            // leaves browsers with today.
+            ([
+                (header::CONTENT_TYPE, content_type),
+                (header::CACHE_CONTROL, "public, max-age=300, must-revalidate"),
+            ], bytes).into_response()
         }
         Err(_) => StatusCode::NOT_FOUND.into_response(),
     }

@@ -30,6 +30,8 @@ done.
 
 - [ ] form_submissions.data has no GIN or expression index, so filtering by a specific field's value (not listing/paginating, but "find every submission where email = x") would currently mean scanning within whatever the site+form index already narrowed down to. That's fine today because nothing does that yet — and if it's ever needed, it's a single CREATE INDEX on the specific field, not a redesign.
 
+- [ ] revisit whether Media Manager's alt-text field should be required (or at least nudge/warn) on upload — currently optional, editors can leave it blank. Don't force it outright without more thought (WP doesn't require it either); consider a softer nudge instead. Surfaced while auditing PageSpeed accessibility findings (2026-08-21).
+
 ## Done
 
 - [x] change the text field colors on post page — they were white/bright for a dark theme; rolled out site-wide via --field-bg/--field-text

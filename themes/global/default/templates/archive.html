@@ -38,7 +38,7 @@
         <article>
           <header>
             {% if post.featured_image %}
-              <a href="{{ post.url | safe }}">
+              <a href="{{ post.url | safe }}" aria-label="{{ post.title }}">
                 <img src="{{ post.featured_image.url | safe }}" alt="{{ post.featured_image.alt_text }}" class="featured-image" loading="lazy"{% if post.featured_image.width %} width="{{ post.featured_image.width }}" height="{{ post.featured_image.height }}"{% endif %}>
               </a>
             {% endif %}

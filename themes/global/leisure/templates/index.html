@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}{{ site.name }} — {{ site.description }}{% endblock title %}
+{% block title %}{{ site.name }}{% if site.description %} — {{ site.description }}{% endif %}{% endblock title %}
 
 {% block content %}
 {% set hero_class = "hero" %}
@@ -65,7 +65,7 @@
                 <a class="post-card-link" href="{{ post.url | safe }}" aria-label="{{ post.title }}"></a>
                 {% if post.featured_image %}
                   <div class="post-card-image">
-                    <a href="{{ post.url | safe }}">
+                    <a href="{{ post.url | safe }}" aria-label="{{ post.title }}">
                       <img src="{{ post.featured_image.url | safe }}" alt="{{ post.featured_image.alt_text }}" loading="lazy"{% if post.featured_image.width %} width="{{ post.featured_image.width }}" height="{{ post.featured_image.height }}"{% endif %}>
                     </a>
                   </div>
@@ -82,9 +82,6 @@
                     <a href="{{ post.url | safe }}">{{ post.title }}</a>
                   </h2>
                   <p class="post-card-excerpt">{{ post.excerpt }}</p>
-                  <div class="post-card-footer">
-                    <a href="{{ post.url | safe }}" class="read-more">Read more →</a>
-                  </div>
                 </div>
               </article>
             {% endfor %}
