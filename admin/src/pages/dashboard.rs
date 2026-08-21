@@ -50,6 +50,9 @@ pub struct DashboardData {
     /// Whether the dashboard Welcome panel should render — false once the
     /// current user has dismissed it (`users.welcome_panel_dismissed_at`).
     pub show_welcome_panel: bool,
+    /// Total posts across the install (super-admin only; 0 otherwise). Drives
+    /// the Welcome panel's dynamic "getting started" card.
+    pub total_posts_ever: i64,
 }
 
 pub struct RecentPostSummary {
@@ -288,8 +291,29 @@ fn quick_tools_widget(ctx: &crate::PageContext) -> String {
 /// Placeholder copy/links per the current plan — headline and the three
 /// feature cards will get real copy later; the "what makes us different"
 /// link target doesn't exist yet either.
-fn welcome_panel_html() -> String {
-    r##"<div class="welcome-panel" id="welcome-panel">
+fn welcome_panel_html(total_posts_ever: i64) -> String {
+    let third_card = if total_posts_ever == 0 {
+        r#"<div class="welcome-panel-card">
+      <div class="welcome-panel-icon"><img src="/admin/static/icons/edit.svg" alt=""></div>
+      <div>
+        <h3>Get your content in</h3>
+        <p>Write your first post, or bring your existing content over with the built-in WordPress importer.</p>
+        <a href="/admin/posts/new">Write a Post</a> &nbsp;&middot;&nbsp;
+        <a href="http://pong.com/admin/sites/bf9025dc-5196-4442-bb04-a1edf13fbc2e/settings?tab=import">Import from WordPress</a>
+      </div>
+    </div>"#.to_string()
+    } else {
+        r#"<div class="welcome-panel-card">
+      <div class="welcome-panel-icon"><img src="/admin/static/icons/layers.svg" alt=""></div>
+      <div>
+        <h3>Run every client site from one install</h3>
+        <p>Manage content, media, and users across every site without juggling separate installs or databases.</p>
+        <a href="/admin/sites">Go to Sites</a>
+      </div>
+    </div>"#.to_string()
+    };
+
+    let head = r##"<div class="welcome-panel" id="welcome-panel">
   <button type="button" class="welcome-panel-dismiss" title="Dismiss" aria-label="Dismiss" onclick="dismissWelcomePanel()">
     <img src="/admin/static/icons/x.svg" alt="">
   </button>
@@ -299,11 +323,11 @@ fn welcome_panel_html() -> String {
   </div>
   <div class="welcome-panel-cards">
     <div class="welcome-panel-card">
-      <div class="welcome-panel-icon"><img src="/admin/static/icons/layers.svg" alt=""></div>
+      <div class="welcome-panel-icon"><img src="/admin/static/icons/zap.svg" alt=""></div>
       <div>
-        <h3>Run every client site from one install</h3>
-        <p>Manage content, media, and users across every site without juggling separate installs or databases.</p>
-        <a href="/admin/sites">Go to Sites</a>
+        <h3>Fast and more secure by default</h3>
+        <p>A single compiled Rust binary behind the scenes — no PHP runtime, no plugin soup, no endless security patches to keep up with.</p>
+        <a href="/admin/whats-different" target="_blank" rel="noopener">Read more</a>
       </div>
     </div>
     <div class="welcome-panel-card">
@@ -314,14 +338,9 @@ fn welcome_panel_html() -> String {
         <a href="/admin/builder">Open the Builder</a>
       </div>
     </div>
-    <div class="welcome-panel-card">
-      <div class="welcome-panel-icon"><img src="/admin/static/icons/zap.svg" alt=""></div>
-      <div>
-        <h3>Fast by default</h3>
-        <p>A single compiled Rust binary behind the scenes — no PHP runtime, no plugin soup dragging pages down.</p>
-        <a href="/admin/whats-different" target="_blank" rel="noopener">Read more</a>
-      </div>
-    </div>
+"##;
+
+    let tail = r##"
   </div>
 </div>
 <style>
@@ -347,7 +366,9 @@ function dismissWelcomePanel() {
   if (panel) { panel.remove(); }
   fetch('/admin/dashboard/dismiss-welcome', { method: 'POST', credentials: 'same-origin' });
 }
-</script>"##.to_string()
+</script>"##;
+
+    format!("{head}{third_card}{tail}")
 }
 
 pub fn render(data: &DashboardData, flash: Option<&str>, ctx: &crate::PageContext) -> String {
@@ -568,7 +589,7 @@ pub fn render(data: &DashboardData, flash: Option<&str>, ctx: &crate::PageContex
         })
     };
 
-    let welcome_panel = if data.show_welcome_panel { welcome_panel_html() } else { String::new() };
+    let welcome_panel = if data.show_welcome_panel { welcome_panel_html(data.total_posts_ever) } else { String::new() };
     let content = format!("{welcome_panel}{}", widgets_section(&data.widget_layout, &default_layout, &widget_bodies));
 
     crate::admin_page("Dashboard", "/admin", flash, &content, ctx)

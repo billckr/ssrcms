@@ -339,6 +339,16 @@ pub async fn dashboard(
         (vec![], vec![], "month".to_string(), vec![], Local::now().year())
     };
 
+    // Total posts across the install (super-admin only) — drives the Welcome
+    // panel's dynamic "getting started" card.
+    let total_posts_ever: i64 = if admin.caps.is_global_admin && !admin.caps.is_impersonating {
+        sqlx::query_scalar("SELECT COUNT(*) FROM posts WHERE post_type = 'post'")
+            .fetch_one(&state.db).await
+            .unwrap_or_else(|e| { tracing::warn!("dashboard total posts count error: {:?}", e); 0 })
+    } else {
+        0
+    };
+
     let cs = state.site_hostname(site_id);
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
 
@@ -378,6 +388,7 @@ pub async fn dashboard(
         available_views_years,
         selected_views_year,
         author_total_views,
+        total_posts_ever,
         // Super-admin (agency/app owner) only, for now — see the Settings →
         // General "Welcome Panel" card's doc comment for the plan to
         // eventually let this be delegated to other roles.
