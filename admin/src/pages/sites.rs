@@ -949,6 +949,12 @@ function toggleProviderEdit(id) {{
         featured images, and inline images all carried over. Not imported: custom post types,
         passwords (users need a reset), or shortcodes.
       </p>
+      <p class="form-note" style="margin:0 0 .75rem">
+        Re-uploading the same export file updates the posts/pages it already created (e.g. to add a
+        media zip you didn't have the first time, so images that failed to download get filled in)
+        instead of creating duplicates &mdash; any changes made directly in the admin since the last
+        import will be overwritten by the export's version.
+      </p>
       <form method="post" action="/admin/sites/{id}/import-wp" enctype="multipart/form-data" class="edit-form" id="wpImportForm">
         <div class="form-group">
           <label for="wxr_file">WordPress export file (.xml)</label>

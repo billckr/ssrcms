@@ -828,6 +828,18 @@ async fn run_import(
         }
     }
 
+    // Imported posts are created directly via the DB (create_post_unique_slug),
+    // not the normal admin post handlers, so they never go through the
+    // per-post index_post() upsert those handlers call on publish. A single
+    // full rebuild here (same call the admin UI's "Rebuild Search Index"
+    // button and `synap search reindex` use) is cheap — one batch commit —
+    // and means imported content is searchable immediately instead of only
+    // after the next restart or a manual reindex.
+    match crate::search::indexer::rebuild_index((*state.search_index).clone(), state.db.clone()).await {
+        Some(indexed) => tracing::info!("WP import (site {}): search index rebuilt, {} document(s) indexed", site_id, indexed),
+        None => tracing::warn!("WP import (site {}): search index rebuild failed — imported content won't be searchable until the next restart or a manual reindex", site_id),
+    }
+
     // Full item-by-item breakdown goes to the server log only — the modal
     // shows just a short success/partial/failure line plus any new author
     // credentials (the one thing that can't be recovered from the log,
@@ -1348,7 +1360,7 @@ async fn import_post(
         content,
         content_format: None,
         excerpt: if item.excerpt.trim().is_empty() { None } else { Some(item.excerpt.clone()) },
-        status,
+        status: status.clone(),
         post_type,
         author_id,
         featured_image_id,
@@ -1361,11 +1373,57 @@ async fn import_post(
         sources_public: false,
     };
 
-    let post = create_post_unique_slug(state, create).await?;
+    // Re-running the same export (e.g. this time with a media zip attached,
+    // to backfill images that failed the first time) updates the post this
+    // WXR item became last time instead of creating a duplicate. The slug is
+    // deliberately left untouched on update — it's a public URL, not
+    // something a re-import should ever shift out from under existing links.
+    let existing_post_id = crate::models::wp_import::find_post(&state.db, site_id, &item.wp_post_id)
+        .await
+        .unwrap_or(None);
+
+    let post_id = match existing_post_id {
+        Some(post_id) => {
+            let update = UpdatePost {
+                title: Some(create.title),
+                slug: None,
+                content: Some(create.content),
+                content_format: None,
+                excerpt: create.excerpt,
+                status: Some(status),
+                // None here means "leave unchanged" — a featured image that
+                // resolved on a prior run is never regressed to unset just
+                // because this run's export doesn't (re-)resolve it; it's
+                // only ever filled in, never cleared, by a re-import.
+                featured_image_id,
+                clear_featured_image: false,
+                published_at,
+                template: None,
+                clear_post_password: false,
+                new_post_password_hash: None,
+                comments_enabled: Some(comments_enabled),
+                parent_id: None, // patched in pass 3, same as on first import
+                sources: None,
+                sources_public: None,
+            };
+            if let Err(e) = crate::models::post::update(&state.db, post_id, &update).await {
+                return Err(format!("update failed: {e}"));
+            }
+            post_id
+        }
+        None => {
+            let post = create_post_unique_slug(state, create).await?;
+            if let Err(e) = crate::models::wp_import::record_post(&state.db, site_id, &item.wp_post_id, post.id).await {
+                tracing::warn!("failed to record wp_import_post_map for wp_post_id={}: {:?}", item.wp_post_id, e);
+            }
+            post.id
+        }
+    };
 
     // Categories/tags — only WP's two built-in taxonomies map to anything
     // in Synap; any other <category domain="..."> (a custom taxonomy a
-    // plugin registered) is skipped.
+    // plugin registered) is skipped. `attach_to_post` is `ON CONFLICT DO
+    // NOTHING`, so re-attaching on a re-import is harmless.
     for cat in &item.categories {
         let taxonomy = match cat.domain.as_str() {
             "category" => TaxonomyType::Category,
@@ -1375,25 +1433,26 @@ async fn import_post(
         let slug = if cat.nicename.trim().is_empty() { crate::utils::slugify::slugify(&cat.name) } else { cat.nicename.clone() };
         match get_or_create_term(state, site_id, taxonomy, &slug, &cat.name).await {
             Ok(term) => {
-                if let Err(e) = crate::models::taxonomy::attach_to_post(&state.db, post.id, term.id).await {
-                    tracing::warn!("failed to attach taxonomy '{}' to imported post {}: {:?}", cat.name, post.id, e);
+                if let Err(e) = crate::models::taxonomy::attach_to_post(&state.db, post_id, term.id).await {
+                    tracing::warn!("failed to attach taxonomy '{}' to imported post {}: {:?}", cat.name, post_id, e);
                 }
             }
-            Err(e) => tracing::warn!("failed to resolve taxonomy '{}' for imported post {}: {}", cat.name, post.id, e),
+            Err(e) => tracing::warn!("failed to resolve taxonomy '{}' for imported post {}: {}", cat.name, post_id, e),
         }
     }
 
-    // Custom fields — copy every other postmeta key verbatim.
+    // Custom fields — copy every other postmeta key verbatim. `set_meta`
+    // upserts by (post_id, meta_key), so a re-import just refreshes values.
     for (key, value) in &item.postmeta {
         if SKIP_META_KEYS.contains(&key.as_str()) || value.trim().is_empty() {
             continue;
         }
-        if let Err(e) = crate::models::post::set_meta(&state.db, post.id, key, value).await {
-            tracing::warn!("failed to set postmeta '{}' on imported post {}: {:?}", key, post.id, e);
+        if let Err(e) = crate::models::post::set_meta(&state.db, post_id, key, value).await {
+            tracing::warn!("failed to set postmeta '{}' on imported post {}: {:?}", key, post_id, e);
         }
     }
 
-    Ok(ImportedPost { post_id: post.id, author_matched, skipped_status: false })
+    Ok(ImportedPost { post_id, author_matched, skipped_status: false })
 }
 
 #[cfg(test)]

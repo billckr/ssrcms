@@ -49,3 +49,33 @@ pub async fn map_for_site(pool: &PgPool, site_id: Uuid) -> Result<HashMap<String
     .await?;
     Ok(rows.into_iter().collect())
 }
+
+/// Records which Synap post a WXR item (by its `wp:post_id`) became, so a
+/// later re-run of the same export updates that post instead of creating a
+/// duplicate. See `find_post`.
+pub async fn record_post(pool: &PgPool, site_id: Uuid, wp_post_id: &str, post_id: Uuid) -> Result<()> {
+    sqlx::query(
+        "INSERT INTO wp_import_post_map (site_id, wp_post_id, post_id) VALUES ($1, $2, $3) \
+         ON CONFLICT (site_id, wp_post_id) DO UPDATE SET post_id = EXCLUDED.post_id",
+    )
+    .bind(site_id)
+    .bind(wp_post_id)
+    .bind(post_id)
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+/// Looks up the Synap post a WXR item was previously imported as, if any —
+/// `None` means this item hasn't been imported for this site before (or the
+/// post it became was since deleted, which cascades this row away too).
+pub async fn find_post(pool: &PgPool, site_id: Uuid, wp_post_id: &str) -> Result<Option<Uuid>> {
+    let row: Option<(Uuid,)> = sqlx::query_as(
+        "SELECT post_id FROM wp_import_post_map WHERE site_id = $1 AND wp_post_id = $2",
+    )
+    .bind(site_id)
+    .bind(wp_post_id)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row.map(|(id,)| id))
+}
