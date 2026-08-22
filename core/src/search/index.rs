@@ -16,7 +16,7 @@ use std::path::Path;
 use std::sync::{Arc, RwLock};
 
 use tantivy::collector::TopDocs;
-use tantivy::query::QueryParser;
+use tantivy::query::{BooleanQuery, Occur, PhrasePrefixQuery, Query, QueryParser};
 use tantivy::schema::*;
 use tantivy::tokenizer::{Language, LowerCaser, SimpleTokenizer, Stemmer, StopWordFilter, TextAnalyzer};
 use tantivy::{Index, IndexReader, IndexWriter, ReloadPolicy};
@@ -50,6 +50,22 @@ fn build_analyzer() -> TextAnalyzer {
 }
 
 use crate::errors::{AppError, Result};
+
+/// Extracts the last whitespace-separated word of a query, lowercased with
+/// punctuation stripped, for the as-you-type prefix match. `None` for an
+/// empty trailing word or one shorter than 2 characters — a 1-character
+/// prefix would expand against too much of the term dictionary to be a
+/// useful match while someone's still typing the first keystroke.
+fn last_token_prefix(query_str: &str) -> Option<String> {
+    let tok: String = query_str
+        .split_whitespace()
+        .next_back()?
+        .chars()
+        .filter(|c| c.is_alphanumeric())
+        .flat_map(|c| c.to_lowercase())
+        .collect();
+    if tok.chars().count() >= 2 { Some(tok) } else { None }
+}
 
 /// Fields available in the Tantivy schema.
 #[derive(Clone)]
@@ -166,7 +182,7 @@ impl SearchIndex {
         let query_parser =
             QueryParser::for_index(&self.index, vec![self.fields.title, self.fields.content]);
 
-        let query = query_parser
+        let base_query: Box<dyn Query> = query_parser
             .parse_query(query_str)
             .unwrap_or_else(|_| {
                 // Special characters in the query (e.g. +, -, :) can cause parse errors.
@@ -176,6 +192,29 @@ impl SearchIndex {
                     .parse_query_lenient(query_str)
                     .0
             });
+
+        // As-you-type support: OR in a prefix match on the in-progress last word
+        // (e.g. "advanc" matches "Advanced" before the whole word — or its
+        // stem — has been typed), on top of the normal stemmed match above.
+        // A single-term `PhrasePrefixQuery` degrades to a cheap term-dictionary
+        // range scan (bounded by its default 50-expansion cap) rather than a
+        // full-index scan, so this adds negligible cost per query and needs no
+        // schema change or reindex. It still matches correctly against the
+        // stemmed dictionary: English stemming only strips suffixes, so a
+        // lowercased raw prefix remains a valid prefix of the stemmed term it
+        // will eventually complete into.
+        let query: Box<dyn Query> = match last_token_prefix(query_str) {
+            Some(prefix) => Box::new(BooleanQuery::new(vec![
+                (Occur::Should, base_query),
+                (Occur::Should, Box::new(PhrasePrefixQuery::new(vec![
+                    Term::from_field_text(self.fields.title, &prefix),
+                ]))),
+                (Occur::Should, Box::new(PhrasePrefixQuery::new(vec![
+                    Term::from_field_text(self.fields.content, &prefix),
+                ]))),
+            ])),
+            None => base_query,
+        };
 
         // Fetch more than `limit` to allow for site_id post-filtering.
         let fetch_limit = if site_id.is_some() { limit * 4 + 20 } else { limit };
@@ -282,5 +321,46 @@ impl SearchIndex {
         writer.delete_term(id_term);
         writer.commit()?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn index_with_doc(title: &str) -> SearchIndex {
+        let path = std::env::temp_dir().join(format!("synaptic-search-test-{}", uuid::Uuid::new_v4()));
+        let index = SearchIndex::open_or_create(&path).unwrap();
+        index.upsert("1", "site-a", title, "", "test-post", "post").unwrap();
+        // ReloadPolicy::OnCommitWithDelay reloads the reader asynchronously
+        // shortly after a commit — force it synchronously here so the doc
+        // is visible to the very next search() call in the test.
+        index.reader.reload().unwrap();
+        index
+    }
+
+    #[test]
+    fn prefix_of_a_stemmed_word_matches_before_the_word_is_complete() {
+        let index = index_with_doc("Advanced Comparison");
+        for q in ["ad", "adv", "advan", "advanc", "advance", "advanced"] {
+            let results = index.search(q, None, 10).unwrap();
+            assert!(!results.is_empty(), "expected a match for query {q:?}");
+        }
+    }
+
+    #[test]
+    fn single_char_query_does_not_prefix_match() {
+        // last_token_prefix requires >= 2 chars — a 1-char query still runs
+        // (via the normal stemmed parse), it just gets no prefix-match boost.
+        let index = index_with_doc("Advanced Comparison");
+        let results = index.search("a", None, 10).unwrap();
+        assert!(results.is_empty());
+    }
+
+    #[test]
+    fn unrelated_prefix_does_not_match() {
+        let index = index_with_doc("Advanced Comparison");
+        let results = index.search("xyz", None, 10).unwrap();
+        assert!(results.is_empty());
     }
 }
