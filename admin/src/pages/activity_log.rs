@@ -49,6 +49,7 @@ pub fn humanize_action(action: &str) -> String {
         "media_folder.deleted" => "Media folder deleted".to_string(),
         "auth.login_succeeded" => "Login succeeded".to_string(),
         "auth.login_failed" => "Login failed".to_string(),
+        "activity_log.cleared" => "Activity log cleared".to_string(),
         other => {
             let s = other.replace(['.', '_'], " ");
             let mut c = s.chars();
@@ -219,10 +220,22 @@ pub fn render_list(
     let fetch_prefix = format!("/admin/activity-log?partial=1{site_qs}{sort_qs}");
     let live_search = crate::live_search_script("activity-log-search", "activity-log-list", &fetch_prefix);
 
+    // Export/clear act on the current site filter (so a super admin can
+    // scope either to one site), but never on the search box — they're
+    // "everything in scope", not "everything matching my current filter".
+    let export_url = format!("/admin/activity-log/export{}", if site_qs.is_empty() { String::new() } else { format!("?{}", &site_qs[1..]) });
+    let clear_url = format!("/admin/activity-log/clear{}", if site_qs.is_empty() { String::new() } else { format!("?{}", &site_qs[1..]) });
+
     let content = format!(
         r#"<div style="display:flex;align-items:center;justify-content:flex-end;gap:.75rem;margin-bottom:1rem;flex-wrap:wrap">
   {site_filter}
-  <div class="icon-pill" style="align-self:flex-end;margin-top:0">{search_toggle}</div>
+  <div class="icon-pill" style="align-self:flex-end;margin-top:0">
+    {search_toggle}
+    <a href="{export_url}" download class="icon-btn" title="Download CSV" aria-label="Download CSV"><img src="/admin/static/icons/download.svg" alt=""></a>
+    <form method="POST" action="{clear_url}" style="display:inline" onsubmit="return confirm('Clear ALL activity log entries? This cannot be undone.')">
+      <button class="icon-btn icon-danger" type="submit" title="Clear Log" aria-label="Clear Log"><img src="/admin/static/icons/trash-2.svg" alt=""></button>
+    </form>
+  </div>
 </div>
 <div id="activity-log-list">{fragment}</div>
 {live_search}

@@ -206,6 +206,8 @@ pub fn build(
         .route("/admin/users/{id}/site-access/add", post(users::add_site_access))
         .route("/admin/users/{id}/site-access/remove", post(users::remove_site_access))
         .route("/admin/activity-log", get(activity_log::list))
+        .route("/admin/activity-log/export", get(activity_log::export_csv))
+        .route("/admin/activity-log/clear", post(activity_log::clear))
         // ── Admin plugins — disabled pre-launch, re-enable post-launch ────
         // ── Admin documentation ────────────────────────────────────────────
         .route("/admin/documentation", get(admin_documentation::list))
