@@ -619,7 +619,7 @@ tr.muted td { opacity: .55; }
    .icon-btn's normal (unshrunk) size). Reuse this instead of a bare
    icon-btn wherever a set of icon actions needs a distinct, contained
    look rather than sitting flush against the page. */
-.icon-pill { display: inline-flex; align-self: flex-start; align-items: center; gap: 2px; background: var(--tint); border-radius: 999px; padding: .3rem; margin-top: .85rem; }
+.icon-pill { display: inline-flex; align-self: flex-start; align-items: center; gap: 2px; background: var(--tint); border: 1px solid var(--border); border-radius: 999px; padding: .3rem; margin-top: .85rem; }
 .icon-pill .icon-btn { border: none; }
 
 /* Compact variant for a table's Actions column (e.g. /admin/sites) — same
@@ -630,7 +630,7 @@ tr.muted td { opacity: .55; }
    (switch/edit/delete, etc.) — leave differently-styled elements like
    .ssl-badge outside it, since mixing an icon-btn's look with a colored
    status-badge's look inside the same pill would read as inconsistent. */
-.icon-pill-actionbuttons { display: inline-flex; align-items: center; gap: 2px; background: var(--tint); border-radius: 999px; padding: .2rem; }
+.icon-pill-actionbuttons { display: inline-flex; align-items: center; gap: 2px; background: var(--tint); border: 1px solid var(--border); border-radius: 999px; padding: .2rem; }
 .icon-pill-actionbuttons .icon-btn { border: none; }
 
 /* Header overflow menu — click the list icon to reveal theme toggle + logout,
