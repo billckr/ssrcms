@@ -411,6 +411,23 @@ Harmless — SQLx checks for this table on every startup and skips if present.
 
 If you see `search index schema mismatch — recreating index` in logs, the schema changed and the index was wiped and rebuilt. This is automatic and expected after schema changes.
 
+### Local Caddy: uploads 403 (or Caddy won't start) when the repo lives under `/home`
+
+Symptom: `caddy.service` fails to start with `permission denied` opening its log file, or starts fine but `/uploads/*` requests 403 even though the file exists and permissions look correct.
+
+Cause: the distro-packaged `caddy.service` ships with `ProtectHome=true` (standard systemd hardening, not Caddy- or Arch-specific). That walls off all of `/home` — including `/root` and `/run/user` — from the process's mount namespace entirely, regardless of Unix file permissions. If your dev checkout lives under `/home/<you>/...` (normal for a personal dev machine), Caddy simply cannot see into it:
+
+- A log file path like `/var/log/caddy/...` outside `/home` is fine.
+- The `Caddyfile`'s `handle_path /uploads/*` fast-path (`root * <repo>/uploads`) is **not** fine if `<repo>` is under `/home` — it will 403 every real file.
+
+This is why `DEPLOYMENT.md`'s production layout deliberately installs to `/var/www/<domain>` under a dedicated `www-data` user rather than a personal home directory — production never hits this.
+
+Fix for local dev: drop the `handle_path /uploads/*` block from the local `Caddyfile` and let `/uploads/*` fall through to `reverse_proxy localhost:3000` like everything else. `core/src/handlers/uploads.rs` already implements this shape specifically for the no-Caddy-bypass dev case. Trade-off: that handler has no HTTP Range support, so video/audio scrubbing on uploaded media won't work correctly under this local setup (playback from the start still works) — a real fix would be adding `Range`/`206 Partial Content` support to `uploads::serve`, which would make it work everywhere regardless of which path is active.
+
+If your dev checkout lives outside `/home` (e.g. WSL2 with the repo under `/opt`, `/srv`, or similar), none of this applies — the direct-serve bypass works as originally designed.
+
+Also note: the repo-root `Caddyfile` is gitignored (host-specific paths) and only takes effect once copied to `/etc/caddy/Caddyfile` + `systemctl reload caddy` — editing the repo copy alone changes nothing live.
+
 ---
 
 ## Project Structure (quick reference)
