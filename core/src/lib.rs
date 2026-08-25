@@ -2,6 +2,7 @@
 //! Integration tests import from this lib target.
 
 pub mod app_state;
+pub mod caddy;
 pub mod config;
 pub mod crypto;
 pub mod db;

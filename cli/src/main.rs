@@ -135,7 +135,7 @@ async fn main() -> anyhow::Result<()> {
         Commands::Site { action } => commands::site::run(action).await?,
         Commands::Search { action } => commands::search::run(action).await?,
         Commands::Security { action } => commands::security::run(action).await?,
-        Commands::Caddy { action } => commands::caddy::run(action)?,
+        Commands::Caddy { action } => commands::caddy::run(action).await?,
     }
 
     Ok(())

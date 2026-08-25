@@ -856,10 +856,11 @@ pub async fn provision_ssl(
         ).into_response();
     }
 
-    let block = build_caddy_block(
+    let block = crate::caddy::build_caddy_block(
         hostname,
         state.config.port,
         &state.config.uploads_dir,
+        false,
     );
     let new_content = format!("{}\n{}\n", existing.trim_end(), block);
 
@@ -929,73 +930,4 @@ fn outbound_local_ip() -> Option<std::net::IpAddr> {
     socket.local_addr().ok().map(|addr| addr.ip())
 }
 
-/// Returns true if the Caddyfile already contains a block for `hostname`.
-/// Matches lines where the hostname is the sole token before `{` (bare domain blocks).
-pub fn caddy_block_exists(caddyfile: &str, hostname: &str) -> bool {
-    caddyfile.lines().any(|line| {
-        let t = line.trim();
-        t == hostname
-            || t.starts_with(&format!("{} ", hostname))
-            || t.starts_with(&format!("{},", hostname))
-            || t.starts_with(&format!("{}{{", hostname))
-    })
-}
-
-/// Build the Caddyfile block to append for a new site.
-///
-/// `/theme/static/*` deliberately has no theme name in the URL — which
-/// theme's files get served is resolved per-request in
-/// `handlers/theme_static.rs` (Host header -> site -> active theme). A flat
-/// Caddy file_server can't do that resolution, so `/theme/*` must fall
-/// through to `reverse_proxy` -> Axum, not be handled here. See
-/// deployment/Caddyfile.template for the same rule.
-fn build_caddy_block(hostname: &str, port: u16, uploads_dir: &str) -> String {
-    format!(
-        r#"{hostname} {{
-    # Serve uploads directly — bypass Axum — but ONLY the bare-filename shape
-    # (/uploads/{{filename}}, what public pages use via Media::url()). Rooted
-    # at THIS site's own uploads/{hostname}/ -> uploads/{{site-uuid}}/ symlink
-    # (the app maintains one per site), so a bare filename resolves with no
-    # need to repeat the hostname in the path.
-    #
-    # The admin media UI instead builds UUID-prefixed URLs
-    # (/uploads/{{site-uuid}}/{{filename}}), since admin can be browsed via a
-    # host that isn't this site's own domain (e.g. a shared dev host).
-    # Matching bare filenames only (path_regexp, no further `/` after the
-    # filename) means anything with more path segments — including that
-    # UUID-prefixed shape — falls through to reverse_proxy -> Axum below,
-    # whose handlers/uploads.rs already resolves that shape correctly. A
-    # blanket /uploads/* match here would otherwise double up the site's own
-    # directory with the UUID segment and 404 every admin-uploaded image.
-    # See deployment/Caddyfile.template for the same rule.
-    @upload_file {{
-        path_regexp ^/uploads/[^/]+$
-    }}
-    handle @upload_file {{
-        uri strip_prefix /uploads
-        root * {uploads_dir}/{hostname}
-        file_server
-    }}
-
-    reverse_proxy localhost:{port}
-
-    encode zstd gzip
-
-    header {{
-        Strict-Transport-Security "max-age=31536000; includeSubDomains"
-        X-Content-Type-Options "nosniff"
-        X-Frame-Options "SAMEORIGIN"
-        Referrer-Policy "strict-origin-when-cross-origin"
-        -Server
-    }}
-
-    log {{
-        output file /var/log/caddy/{hostname}.log
-        format json
-    }}
-}}"#,
-        hostname    = hostname,
-        port        = port,
-        uploads_dir = uploads_dir,
-    )
-}
+pub use crate::caddy::caddy_block_exists;

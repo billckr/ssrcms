@@ -36,13 +36,123 @@ pub enum CaddyAction {
         #[arg(long, default_value = "/etc/caddy/Caddyfile")]
         caddyfile: String,
     },
+    /// Add a Caddy site block for a domain that does NOT resolve to this
+    /// server yet — e.g. still just an /etc/hosts loopback entry for local
+    /// dev, or public DNS that hasn't propagated. Issues a locally-trusted
+    /// self-signed certificate (`tls internal`) instead of attempting real
+    /// ACME, which would fail for an unreachable domain anyway.
+    ///
+    /// Gated behind the super-admin password: this deliberately bypasses the
+    /// DNS-ownership check the admin panel's "Enable SSL" button enforces
+    /// (see `provision_ssl`/`dns_points_here` in
+    /// core/src/handlers/admin/sites.rs), so DB/server access alone
+    /// shouldn't be enough to force a domain onto self-signed TLS.
+    ///
+    /// Idempotent — a no-op if a block for the hostname already exists.
+    /// Must be run as root (or a user in the `caddy` group — see `setup`).
+    ProvisionLocal {
+        /// Hostname to add (e.g. staging.example.com)
+        #[arg(long)]
+        hostname: String,
+        /// Port the app listens on (defaults to PORT/synaptic.toml, else 3000)
+        #[arg(long)]
+        port: Option<u16>,
+        /// Path to the Caddyfile
+        #[arg(long, default_value = "/etc/caddy/Caddyfile")]
+        caddyfile: String,
+        /// Super-admin password (skips interactive prompt — use only in scripts)
+        #[arg(long)]
+        password: Option<String>,
+        /// Database URL (overrides DATABASE_URL env var)
+        #[arg(long, env = "DATABASE_URL", hide = true)]
+        database_url: Option<String>,
+    },
 }
 
-pub fn run(action: CaddyAction) -> anyhow::Result<()> {
+pub async fn run(action: CaddyAction) -> anyhow::Result<()> {
     match action {
         CaddyAction::Setup { app_user, caddyfile } => setup(&app_user, &caddyfile),
         CaddyAction::Teardown { app_user, caddyfile } => teardown(&app_user, &caddyfile),
+        CaddyAction::ProvisionLocal { hostname, port, caddyfile, password, database_url } =>
+            provision_local(hostname, port, caddyfile, password, database_url).await,
     }
+}
+
+async fn provision_local(
+    hostname: String,
+    port: Option<u16>,
+    caddyfile: String,
+    password: Option<String>,
+    database_url: Option<String>,
+) -> anyhow::Result<()> {
+    if let Some(url) = database_url {
+        // SAFETY: CLI runs single-threaded during arg parsing; safe to mutate env here.
+        #[allow(unused_unsafe)]
+        unsafe { std::env::set_var("DATABASE_URL", url); }
+    }
+    let pool = super::connect_db().await?;
+
+    // Gate behind the super-admin password before touching Caddy config —
+    // see the doc comment on `ProvisionLocal` for why this can't be left to
+    // OS-level permissions alone.
+    super::verify_super_admin_password(&pool, password).await?;
+
+    let hostname = hostname.trim().to_lowercase();
+    if hostname.is_empty() {
+        anyhow::bail!("Hostname cannot be empty.");
+    }
+
+    let config = synaptic_core::config::AppConfig::load()
+        .map_err(|e| anyhow::anyhow!("Failed to load app config: {e}"))?;
+    let port = port.unwrap_or(config.port);
+
+    let existing = std::fs::read_to_string(&caddyfile)
+        .map_err(|e| anyhow::anyhow!("Cannot read {caddyfile}: {e}"))?;
+
+    if synaptic_core::caddy::caddy_block_exists(&existing, &hostname) {
+        println!("Caddy already has a block for '{hostname}' — nothing to do.");
+        return Ok(());
+    }
+
+    let block = synaptic_core::caddy::build_caddy_block(&hostname, port, &config.uploads_dir, true);
+    let new_content = format!("{}\n{}\n", existing.trim_end(), block);
+
+    std::fs::write(&caddyfile, &new_content).map_err(|e| {
+        anyhow::anyhow!(
+            "Cannot write {caddyfile}: {e}\n\
+             Run this as root, or run 'synap caddy setup --app-user <user>' first."
+        )
+    })?;
+
+    println!("Added Caddy block for '{hostname}' (proxying to localhost:{port}, self-signed TLS).");
+
+    // Deliberately no separate `caddy validate` call here: this whole
+    // command typically runs under `sudo` (root), and `validate` doesn't
+    // just check syntax — it transiently instantiates the full config,
+    // which opens/creates any referenced log files under the CALLER's uid.
+    // That leaves e.g. a fresh `{hostname}.log` owned by root, which the
+    // real daemon (running as the unprivileged `caddy` user) can then never
+    // write to. `caddy reload` already validates via its own client-side
+    // adapt step before it ever POSTs to the running instance, and the
+    // instance itself (already running as `caddy`) is what actually opens
+    // new log files — so nothing is lost by skipping the standalone check.
+    match std::process::Command::new("caddy")
+        .args(["reload", "--config", &caddyfile, "--adapter", "caddyfile"])
+        .status()
+    {
+        Ok(s) if s.success() => println!("Caddy reloaded."),
+        Ok(s) => anyhow::bail!("caddy reload failed (exit {s}). Check: journalctl -u caddy -n 50"),
+        Err(e) => anyhow::bail!("Failed to run 'caddy reload': {e}"),
+    }
+
+    println!();
+    println!("Done. Make sure '{hostname}' is in /etc/hosts pointing at 127.0.0.1");
+    println!("(or wherever this server is actually reachable), then visit https://{hostname}");
+    println!();
+    println!("First time only, so browsers trust Caddy's local certificate authority:");
+    println!("  sudo caddy trust --config {caddyfile}");
+
+    Ok(())
 }
 
 /// Set up Caddy write permissions for the given app user.
