@@ -1,0 +1,31 @@
+# Normalize line endings to LF on checkout everywhere, so the same repo behaves
+# identically across WSL2 (Windows), Omarchy, and CachyOS.
+* text=auto eol=lf
+
+*.rs text eol=lf
+*.toml text eol=lf
+*.md text eol=lf
+*.sh text eol=lf
+*.sql text eol=lf
+*.css text eol=lf
+*.scss text eol=lf
+*.html text eol=lf
+*.js text eol=lf
+*.jsx text eol=lf
+*.ts text eol=lf
+*.json text eol=lf
+*.yml text eol=lf
+*.svg text eol=lf
+*.xml text eol=lf
+Cargo.lock text eol=lf
+Caddyfile text eol=lf
+
+# Binary — never rewrite, no text diff
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.wasm binary

@@ -17,6 +17,7 @@
 #   clean-build    Delete the Cargo target/ directory to force a full rebuild
 #   test           Run unit tests (no database required)
 #   test-all       Run unit tests + integration tests (requires DATABASE_URL)
+#   setup-hooks    Point git at .githooks/ (run once per machine)
 
 set -euo pipefail
 
@@ -359,6 +360,12 @@ cmd_test_all() {
     log "Done."
 }
 
+cmd_setup_hooks() {
+    cd "$SCRIPT_DIR"
+    git config core.hooksPath .githooks
+    log "Git hooks path set to .githooks/ (run this once per machine)."
+}
+
 # ── Dispatch ──────────────────────────────────────────────────────────────────
 
 COMMAND="${1:-help}"
@@ -379,6 +386,7 @@ case "$COMMAND" in
     clean-build)   cmd_clean_build ;;
     test)          cmd_test ;;
     test-all)      cmd_test_all ;;
+    setup-hooks)   cmd_setup_hooks ;;
     help|--help|-h)
         echo ""
         echo "Usage: ./app.sh <command>"
@@ -410,6 +418,9 @@ case "$COMMAND" in
         echo "Testing:"
         echo "  test           Run unit tests (no database required)"
         echo "  test-all       Run unit + integration tests (requires DATABASE_URL env var)"
+        echo ""
+        echo "Setup:"
+        echo "  setup-hooks    Point git at .githooks/ (run once per machine)"
         echo ""
         ;;
     *)

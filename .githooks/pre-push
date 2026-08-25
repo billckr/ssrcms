@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# Pre-push safety net for developing this repo across multiple machines
+# (WSL2, Omarchy, CachyOS) on the same branch.
+#
+# Refuses a non-fast-forward (force) push unless FORCE_PUSH_OK=1 is set.
+# A force push is the one operation that can silently overwrite commits
+# you already pushed from a different machine, so it gets an explicit
+# opt-in instead of going through by habit.
+
+set -euo pipefail
+
+zero="0000000000000000000000000000000000000000"
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+    [[ "$local_sha" == "$zero" ]] && continue   # deleting a branch
+    [[ "$remote_sha" == "$zero" ]] && continue  # new branch, nothing to overwrite
+
+    if ! git merge-base --is-ancestor "$remote_sha" "$local_sha" 2>/dev/null; then
+        if [[ "${FORCE_PUSH_OK:-0}" != "1" ]]; then
+            echo ""
+            echo "REFUSING non-fast-forward push to $remote_ref."
+            echo "This would rewrite history that another machine may have already pushed."
+            echo "Pull/rebase first if that's not what you meant."
+            echo "If you're sure, re-run with: FORCE_PUSH_OK=1 git push ..."
+            echo ""
+            exit 1
+        fi
+    fi
+done
+
+exit 0
