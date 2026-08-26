@@ -10,3 +10,14 @@ linker = "musl-gcc"
 # standard, most-compatible static-linking mode, safe on any musl
 # toolchain (not a workaround specific to one distro's musl-gcc build).
 rustflags = ["-C", "relocation-model=static"]
+# Expected result of a correct musl-target build:
+#   file target/x86_64-unknown-linux-musl/release/<bin>
+#   -> "ELF 64-bit LSB executable, ..., statically linked" (not "shared object")
+#   ./target/x86_64-unknown-linux-musl/release/<bin> --version
+#   -> runs and prints normally, no segfault
+# If a musl-target binary segfaults immediately on startup, confirm it's
+# this issue before assuming something else broke:
+#   gdb -q --batch -ex run -ex bt --args ./<bin> --version
+#   -> crash frame #0 in _start_c confirms the PIE/ET_EXEC crt mismatch;
+#      re-check that this rustflags line is actually in effect (no other
+#      .cargo/config.toml further up the tree overriding it).
