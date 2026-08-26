@@ -1,2 +1,12 @@
 [env]
 SQLX_OFFLINE = "true"
+
+[target.x86_64-unknown-linux-musl]
+linker = "musl-gcc"
+# Forces the plain (non-PIE) crt1.o instead of rustc's default rcrt1.o.
+# Without this, a musl-gcc whose specs don't pass -static-pie/-pie links a
+# non-PIE ET_EXEC binary around a crt object that expects to self-relocate
+# as PIE, which segfaults in musl's _start_c on first run. This is the
+# standard, most-compatible static-linking mode, safe on any musl
+# toolchain (not a workaround specific to one distro's musl-gcc build).
+rustflags = ["-C", "relocation-model=static"]
