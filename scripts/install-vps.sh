@@ -16,6 +16,20 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
+# ── Logging — every step's full output is persisted here, not just shown
+#    then discarded on failure (run_step's old behavior), so a transient
+#    failure (e.g. an SSH reset mid-deploy) can be diagnosed after the fact
+#    instead of hoping it reproduces on a re-run. Password-shaped values are
+#    redacted before being written: the one-time admin/DB passwords must
+#    stay ephemeral, shown only on the terminal (see print_summary), never
+#    persisted to disk.
+LOG_DIR="$REPO_DIR/logs"
+mkdir -p "$LOG_DIR"
+LOG_FILE="$LOG_DIR/install-vps-$(date +%Y%m%d-%H%M%S).log"
+redact() {
+  sed -E 's/([Pp][Aa][Ss][Ss][Ww][Oo][Rr][Dd][=: ]+)[^ ]+/\1[REDACTED]/g; s#(DATABASE_URL[=: ]+)[^ ]+#\1[REDACTED]#g'
+}
+
 # ── Defaults (overridable via env, or via the interactive wizard) ──────────
 VPS_HOST="${VPS_HOST:-178.156.176.60}"
 VPS_USER="${VPS_USER:-root}"
@@ -197,28 +211,44 @@ spinner_stop() {
   fi
 }
 
-cleanup_spinner() { [[ -n "$SPINNER_PID" ]] && kill "$SPINNER_PID" 2>/dev/null; true; }
-trap cleanup_spinner EXIT
+CONTROL_PATH=""
+cleanup_on_exit() {
+  [[ -n "$SPINNER_PID" ]] && kill "$SPINNER_PID" 2>/dev/null
+  # Tear down the SSH multiplexed master (see define_ssh_helpers) so no
+  # background ssh process or control socket outlives this script.
+  if [[ -n "$CONTROL_PATH" ]]; then
+    ssh -o ControlPath="$CONTROL_PATH" -O exit "${VPS_USER}@${VPS_HOST}" >/dev/null 2>&1 || true
+    rm -rf "$(dirname "$CONTROL_PATH")" 2>/dev/null || true
+  fi
+  true
+}
+trap cleanup_on_exit EXIT
 
 # Runs a do_* function with output buffered to a temp file (not a subshell —
 # plain redirection — so variables the function sets, e.g. DATABASE_URL,
 # stay visible to the caller afterward). Dumps the buffer and exits on
-# failure; discards it on success, keeping the screen clean.
+# failure; discards it on success, keeping the screen clean. Either way,
+# the full (redacted) output is also appended to LOG_FILE so a failure can
+# be diagnosed after the terminal output has scrolled away or the run was
+# unattended.
 run_step() {
   local label="$1"; shift
   spinner_start "$label"
   local logfile rc
   logfile=$(mktemp)
+  echo "===== $(date '+%Y-%m-%d %H:%M:%S') START: $label =====" >> "$LOG_FILE"
   set +e
   "$@" > "$logfile" 2>&1
   rc=$?
   set -e
   spinner_stop "$rc"
+  redact < "$logfile" >> "$LOG_FILE"
+  echo "===== $(date '+%Y-%m-%d %H:%M:%S') END: $label (exit $rc) =====" >> "$LOG_FILE"
   if [[ "$rc" -ne 0 ]]; then
     echo "----- output -----" >&2
     cat "$logfile" >&2
     rm -f "$logfile"
-    die "Step failed: $label"
+    die "Step failed: $label — full log: $LOG_FILE"
   fi
   rm -f "$logfile"
 }
@@ -448,16 +478,33 @@ review_and_confirm() {
 }
 
 # ── SSH helpers (defined after mode/wizard resolve VPS_PASSWORD) ───────────
+# ControlMaster=auto + ControlPersist means the FIRST ssh_run call anywhere
+# (in practice, check_requirements' own connectivity probe) opportunistically
+# becomes a persistent master, and every later ssh_run/scp_run call reuses
+# that one connection instead of opening (and, with password auth,
+# re-authenticating) a brand-new SSH session each time. A full deploy makes
+# 25+ separate remote calls; that many rapid password-auth handshakes from
+# one IP is exactly what trips a VPS's sshd MaxStartups limit or fail2ban,
+# which can kill a run partway through with a bare "Connection reset by
+# peer" and no other explanation. This is purely additive — if a master
+# never gets established for any reason, ssh/scp fall back to authenticating
+# standalone per call exactly as before, so failure-path behavior (what
+# check_requirements reports when the VPS is genuinely unreachable) is
+# unchanged.
 define_ssh_helpers() {
-  SSH_OPTS=(-o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -p "$VPS_PORT")
+  local control_dir
+  control_dir=$(mktemp -d)
+  CONTROL_PATH="$control_dir/ssh-mux"
+  SSH_OPTS=(-o StrictHostKeyChecking=accept-new -o ConnectTimeout=10 -p "$VPS_PORT" \
+            -o ControlMaster=auto -o ControlPath="$CONTROL_PATH" -o ControlPersist=600)
   if [[ -n "${VPS_PASSWORD:-}" ]]; then
     command -v sshpass >/dev/null || die "sshpass required when using password auth. Install it and re-run."
-    ssh_run()  { sshpass -e ssh "${SSH_OPTS[@]}" "${VPS_USER}@${VPS_HOST}" "$@"; }
-    scp_run()  { sshpass -e scp -P "$VPS_PORT" -o StrictHostKeyChecking=accept-new "$@"; }
     export SSHPASS="$VPS_PASSWORD"
+    ssh_run()  { sshpass -e ssh "${SSH_OPTS[@]}" "${VPS_USER}@${VPS_HOST}" "$@"; }
+    scp_run()  { sshpass -e scp -P "$VPS_PORT" -o StrictHostKeyChecking=accept-new -o ControlPath="$CONTROL_PATH" "$@"; }
   else
     ssh_run()  { ssh "${SSH_OPTS[@]}" "${VPS_USER}@${VPS_HOST}" "$@"; }
-    scp_run()  { scp -P "$VPS_PORT" -o StrictHostKeyChecking=accept-new "$@"; }
+    scp_run()  { scp -P "$VPS_PORT" -o StrictHostKeyChecking=accept-new -o ControlPath="$CONTROL_PATH" "$@"; }
   fi
 }
 
@@ -922,6 +969,7 @@ main() {
   fi
 
   review_and_confirm
+  log "Logging full step output to: $LOG_FILE"
   define_ssh_helpers
 
   check_requirements
