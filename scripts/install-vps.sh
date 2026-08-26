@@ -480,6 +480,14 @@ check_requirements() {
   else
     req_check "Local: wasm32-unknown-unknown target" FAIL "run: rustup target add wasm32-unknown-unknown"
   fi
+  # Built with this target (not the host's native glibc target) so the
+  # shipped binary is fully static — no glibc-version dependency at all,
+  # so it runs on any Linux VPS regardless of local vs. remote glibc.
+  if rustup target list --installed 2>/dev/null | grep -q x86_64-unknown-linux-musl; then
+    req_check "Local: x86_64-unknown-linux-musl target" PASS ""
+  else
+    req_check "Local: x86_64-unknown-linux-musl target" FAIL "run: rustup target add x86_64-unknown-linux-musl (needs the 'musl' package too, e.g. pacman -S musl / apt install musl-tools)"
+  fi
   if command -v wasm-bindgen >/dev/null 2>&1; then
     req_check "Local: wasm-bindgen-cli" PASS "$(wasm-bindgen --version 2>/dev/null)"
   else
@@ -525,22 +533,12 @@ check_requirements() {
     ssh_run "sudo -n -u ${SYNAPTIC_USER} true" >/dev/null 2>&1 \
       && req_check "Remote: passwordless sudo (${SYNAPTIC_USER})" PASS "" \
       || req_check "Remote: passwordless sudo (${SYNAPTIC_USER})" FAIL "sudo -u ${SYNAPTIC_USER} requires a password"
-
-    local local_glibc remote_glibc
-    local_glibc=$(ldd --version | head -1 | grep -oE '[0-9]+\.[0-9]+$')
-    remote_glibc=$(ssh_run "ldd --version | head -1 | grep -oE '[0-9]+\.[0-9]+\$'" || true)
-    if [[ -n "$remote_glibc" ]] && [[ "$(printf '%s\n' "$local_glibc" "$remote_glibc" | sort -V | tail -1)" == "$remote_glibc" ]]; then
-      req_check "glibc compatibility" PASS "local $local_glibc <= VPS $remote_glibc"
-    else
-      req_check "glibc compatibility" FAIL "local $local_glibc > VPS ${remote_glibc:-unknown} — build on the VPS instead"
-    fi
   else
     req_check "Remote: systemd" SKIP "skipped — SSH connectivity failed above"
     req_check "Remote: Caddy" SKIP "skipped — SSH connectivity failed above"
     req_check "Remote: PostgreSQL >= 13" SKIP "skipped — SSH connectivity failed above"
     req_check "Remote: passwordless sudo (postgres)" SKIP "skipped — SSH connectivity failed above"
     req_check "Remote: passwordless sudo (${SYNAPTIC_USER})" SKIP "skipped — SSH connectivity failed above"
-    req_check "glibc compatibility" SKIP "skipped — SSH connectivity failed above"
   fi
 }
 
@@ -583,9 +581,15 @@ gate_on_requirements() {
 
 do_build() {
   cd "$REPO_DIR"
-  cargo build --release --bin synapcms --bin synap
-  BIN_SYNAPCMS="$REPO_DIR/target/release/synapcms"
-  BIN_CLI="$REPO_DIR/target/release/synap"
+  # Built against musl, not the host's native glibc target, so the shipped
+  # binary is fully static (see `file`/`ldd` on the output — no dynamic
+  # deps at all) and runs on any Linux VPS regardless of glibc version.
+  # Without this, a binary built on a newer-glibc dev machine (e.g. a
+  # rolling-release distro) can be flat-out unrunnable on an older-glibc
+  # VPS — glibc only guarantees forward compatibility, never backward.
+  cargo build --release --target x86_64-unknown-linux-musl --bin synapcms --bin synap
+  BIN_SYNAPCMS="$REPO_DIR/target/x86_64-unknown-linux-musl/release/synapcms"
+  BIN_CLI="$REPO_DIR/target/x86_64-unknown-linux-musl/release/synap"
   [[ -f "$BIN_SYNAPCMS" && -f "$BIN_CLI" ]] || { echo "Build did not produce expected binaries." >&2; return 1; }
 
   # media-app (media library WASM island) — built locally like everything
