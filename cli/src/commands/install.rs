@@ -1190,17 +1190,6 @@ fn write_via_sudo_tee(live_path: &str, content: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Remove the exact `[begin_line ..= end_line]` span (inclusive) from
-/// `content` if present, swallowing one trailing newline so repeated merges
-/// don't accumulate blank lines; otherwise returns `content` unchanged.
-fn strip_marked_block(content: &str, begin: &str, end: &str) -> String {
-    let Some(start_idx) = content.find(begin) else { return content.to_string(); };
-    let Some(end_rel) = content[start_idx..].find(end) else { return content.to_string(); };
-    let end_idx = start_idx + end_rel + end.len();
-    let after = content[end_idx..].strip_prefix('\n').unwrap_or(&content[end_idx..]);
-    format!("{}{}", &content[..start_idx], after)
-}
-
 /// Merge a freshly generated, marker-wrapped single-domain Caddy block into
 /// the live Caddyfile at `live_path`, leaving every other block — SynapCMS-
 /// managed or hand-written — completely untouched. If `live_path` doesn't
@@ -1215,11 +1204,8 @@ fn strip_marked_block(content: &str, begin: &str, end: &str) -> String {
 /// three-way choice must catch and route to Fresh or Bail before this is
 /// ever reached (see `caddy_foreign_block`).
 fn merge_caddyfile(live_path: &str, domain: &str, generated_block: &str) -> anyhow::Result<String> {
-    let begin = format!("# >>> SynapCMS managed block: {domain} >>>");
-    let end   = format!("# <<< SynapCMS managed block: {domain} <<<");
-
     let existing = std::fs::read_to_string(live_path).unwrap_or_default();
-    let stripped = strip_marked_block(&existing, &begin, &end);
+    let stripped = synaptic_core::caddy::strip_caddy_block(&existing, domain);
 
     let merged = if stripped.trim().is_empty() {
         generated_block.to_string()

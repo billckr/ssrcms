@@ -140,3 +140,41 @@ async fn main() -> anyhow::Result<()> {
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Catches structural mistakes in the whole `Cli`/`Commands` tree (duplicate
+    /// arg names, conflicting subcommands, etc.) — clap's own recommended smoke
+    /// test, run here since `Cli` is private to this file.
+    #[test]
+    fn cli_definition_is_valid() {
+        Cli::command().debug_assert();
+    }
+
+    /// Regression guard for removing `synap caddy provision-local`: the
+    /// surviving `setup`/`teardown` subcommands must still parse correctly.
+    #[test]
+    fn caddy_setup_and_teardown_still_parse() {
+        let cli = Cli::try_parse_from(["synap", "caddy", "setup", "--app-user", "www-data"]).unwrap();
+        assert!(matches!(
+            cli.command,
+            Commands::Caddy { action: commands::caddy::CaddyAction::Setup { .. } }
+        ));
+
+        let cli = Cli::try_parse_from(["synap", "caddy", "teardown", "--app-user", "www-data"]).unwrap();
+        assert!(matches!(
+            cli.command,
+            Commands::Caddy { action: commands::caddy::CaddyAction::Teardown { .. } }
+        ));
+    }
+
+    /// Pins the removal of `provision-local` (and its self-signed-TLS local-dev
+    /// path) — fails loudly if it's ever reintroduced without deliberate intent.
+    #[test]
+    fn caddy_provision_local_was_removed() {
+        let result = Cli::try_parse_from(["synap", "caddy", "provision-local", "--hostname", "test.test"]);
+        assert!(result.is_err(), "'provision-local' should no longer be a valid subcommand");
+    }
+}

@@ -707,6 +707,46 @@ pub async fn delete(
                 tracing::info!("removed plugin dir for deleted site {}", id);
             }
         }
+        // Remove this site's Caddy block (a no-op if SSL was never
+        // provisioned for it) and reload Caddy so the hostname stops being
+        // routed here — otherwise a deleted site's block, TLS cert, and log
+        // file stay live forever. Best-effort: the site row is already
+        // gone, so a Caddy failure here shouldn't block the redirect.
+        let caddyfile_path = &state.config.caddyfile_path;
+        match std::fs::read_to_string(caddyfile_path) {
+            Ok(existing) => {
+                let stripped = crate::caddy::strip_caddy_block(&existing, &site.hostname);
+                if stripped != existing {
+                    if let Err(e) = std::fs::write(caddyfile_path, &stripped) {
+                        tracing::warn!(
+                            "failed to write {} after removing Caddy block for '{}': {:?}",
+                            caddyfile_path, site.hostname, e
+                        );
+                    } else {
+                        match std::process::Command::new("/usr/bin/caddy")
+                            .args(["reload", "--config", caddyfile_path, "--adapter", "caddyfile"])
+                            .output()
+                        {
+                            Ok(out) if out.status.success() => {
+                                tracing::info!(hostname = %site.hostname, "removed Caddy block for deleted site");
+                            }
+                            Ok(out) => tracing::warn!(
+                                "caddy reload failed after removing block for '{}': {}",
+                                site.hostname, String::from_utf8_lossy(&out.stderr)
+                            ),
+                            Err(e) => tracing::warn!(
+                                "failed to run caddy reload after removing block for '{}': {:?}",
+                                site.hostname, e
+                            ),
+                        }
+                    }
+                }
+            }
+            Err(e) => tracing::warn!(
+                "failed to read {} while cleaning up Caddy block for '{}': {:?}",
+                caddyfile_path, site.hostname, e
+            ),
+        }
         if let Err(e) = state.reload_site_cache().await {
             tracing::warn!("site cache reload failed after delete: {:?}", e);
         }
@@ -862,7 +902,8 @@ pub async fn provision_ssl(
         &state.config.uploads_dir,
         false,
     );
-    let new_content = format!("{}\n{}\n", existing.trim_end(), block);
+    let wrapped = crate::caddy::wrap_managed_block(hostname, &block);
+    let new_content = format!("{}\n{}\n", existing.trim_end(), wrapped);
 
     if let Err(e) = std::fs::write(caddyfile_path, &new_content) {
         tracing::error!("provision_ssl: cannot write {}: {:?}", caddyfile_path, e);
