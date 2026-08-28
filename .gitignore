@@ -41,6 +41,7 @@ logs/
 # Local deployment and dev artifacts
 *.sql
 !migrations/*.sql
+!scripts/documentation_data.sql
 Caddyfile
 synapcms.service
 /synap
