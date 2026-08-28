@@ -43,7 +43,7 @@ pub fn render_with_flash(themes: &[ThemeInfo], flash: Option<&str>, ctx: &crate:
     let sel_global  = if filter == "global"  { " selected" } else { "" };
     let sel_private = if filter == "private" { " selected" } else { "" };
 
-    let toolbar = if ctx.can_manage_themes {
+    let action_pill = if ctx.can_manage_themes {
         // Super admins get a three-option dropdown (My Themes, Global, Private).
         // When impersonating, private themes are hidden — they belong to the super admin's
         // own space and would be confusing in another site's context.
@@ -66,42 +66,21 @@ pub fn render_with_flash(themes: &[ThemeInfo], flash: Option<&str>, ctx: &crate:
             )
         };
         format!(
-            r#"<div class="card-boxed">
-  <h2 class="card-boxed-header">Theme Options</h2>
-  <div class="card-boxed-body">
-  <form method="GET" action="/admin/themes">
-    <div class="form-group" style="max-width:280px">
-      <label for="appearance-filter" class="sr-only">Theme filter</label>
-      <select id="appearance-filter" name="filter" class="appearance-filter-select" onchange="this.form.submit()" aria-label="Theme filter" style="width:100%">
-        {filter_options}
-      </select>
-    </div>
+            r#"<div class="icon-pill" style="align-self:flex-end;margin-top:0">
+  <form method="GET" action="/admin/themes" style="display:contents">
+    <label for="appearance-filter" class="sr-only">Theme filter</label>
+    <select id="appearance-filter" name="filter" class="pill-select" onchange="this.form.submit()" aria-label="Theme filter">
+      {filter_options}
+    </select>
   </form>
-  <div class="card-boxed-section" style="margin-top:1rem">
-    <p class="muted" style="font-size:1.0625rem;margin-bottom:1.25rem;">Upload a <code>.zip</code> file containing a valid theme. The zip must include <code>theme.toml</code> and all required templates.</p>
-    <form method="post" action="/admin/themes/upload" enctype="multipart/form-data" class="upload-form" id="theme-upload-form">
-      <div class="form-group">
-        <input type="file" id="theme_zip" name="file" accept=".zip" required>
-      </div>
-    </form>
-  </div>
-  <div class="icon-pill" style="margin-top:1rem">
-    <a href="/admin/themes/create" class="icon-btn" title="Create Theme" aria-label="Create Theme"><img src="/admin/static/icons/file-plus.svg" alt=""></a>
-    <button type="submit" form="theme-upload-form" class="icon-btn" id="theme-upload-btn" title="Upload &amp; Install" aria-label="Upload &amp; Install" disabled>
-      <img src="/admin/static/icons/upload.svg" alt="">
-    </button>
-  </div>
-  </div>
-</div>
-<script>
-(function() {{
-  var input = document.getElementById('theme_zip');
-  var btn   = document.getElementById('theme-upload-btn');
-  input.addEventListener('change', function() {{
-    btn.disabled = !input.files.length;
-  }});
-}})();
-</script>"#,
+  <a href="/admin/themes/create" class="icon-btn" title="Create Theme" aria-label="Create Theme"><img src="/admin/static/icons/file-plus.svg" alt=""></a>
+  <form method="post" action="/admin/themes/upload" enctype="multipart/form-data" id="theme-upload-form" style="display:contents">
+    <input type="file" id="theme_zip" name="file" accept=".zip" required
+           style="position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;pointer-events:none"
+           onchange="this.form.submit()">
+    <button type="button" class="icon-btn" id="theme-upload-btn" title="Upload &amp; Install Theme (.zip)" aria-label="Upload &amp; Install Theme (.zip)" onclick="document.getElementById('theme_zip').click()"><img src="/admin/static/icons/upload.svg" alt=""></button>
+  </form>
+</div>"#,
             filter_options = filter_options,
         )
     } else {
@@ -109,14 +88,10 @@ pub fn render_with_flash(themes: &[ThemeInfo], flash: Option<&str>, ctx: &crate:
     };
 
     let content = format!(
-        r#"<div class="two-col two-col-reorder-mobile">
-  <div>
-    <div class="theme-list">{cards}</div>
-  </div>
-  <div>
-    {toolbar}
-  </div>
-</div>"#
+        r#"<div style="display:flex;align-items:center;justify-content:flex-end;gap:.75rem;margin-bottom:1rem;flex-wrap:wrap">
+  {action_pill}
+</div>
+<div class="theme-list">{cards}</div>"#
     );
 
     admin_page("Themes", "/admin/themes", flash, &content, ctx)
