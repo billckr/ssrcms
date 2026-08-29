@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+
+{% block title %}
+  {% if archive_term %}
+    {{ archive_term.name }} — {{ site.name }}
+  {% elif archive_author %}
+    Posts by {{ archive_author.display_name }} — {{ site.name }}
+  {% else %}
+    Archive — {{ site.name }}
+  {% endif %}
+{% endblock title %}
+
+{% block content %}
+<header class="archive-header">
+  {% if archive_type == "category" %}
+    <p class="archive-eyebrow" data-reveal style="--d:0">Category</p>
+    <h1 data-reveal style="--d:1">{{ archive_term.name }}</h1>
+  {% elif archive_type == "tag" %}
+    <p class="archive-eyebrow" data-reveal style="--d:0">Tag</p>
+    <h1 data-reveal style="--d:1">{{ archive_term.name }}</h1>
+  {% elif archive_type == "author" %}
+    <p class="archive-eyebrow" data-reveal style="--d:0">Author</p>
+    <h1 data-reveal style="--d:1">{{ archive_author.display_name }}</h1>
+    {% if archive_author.bio %}
+      <p class="author-bio" data-reveal style="--d:2">{{ archive_author.bio }}</p>
+    {% endif %}
+  {% else %}
+    <h1 data-reveal style="--d:0">Archive</h1>
+  {% endif %}
+</header>
+
+<div class="home-layout">
+  <div class="home-main">
+    {% if archive_type == "category" and archive_term.post_count %}
+      <p class="archive-post-count">{{ archive_term.post_count }} post{% if archive_term.post_count != 1 %}s{% endif %}</p>
+    {% endif %}
+    {% if posts | length == 0 %}
+      <p class="no-posts">No posts found.</p>
+    {% else %}
+      <ol class="post-grid">
+        {% for post in posts %}
+          <li class="post-card" data-reveal style="--d:{{ loop.index0 % 4 }}">
+            <article>
+              <a href="{{ post.url | safe }}" class="post-card-media" aria-label="{{ post.title }}">
+                {% if post.featured_image %}
+                  <img src="{{ post.featured_image.url | safe }}" alt="{{ post.featured_image.alt_text }}" loading="lazy"{% if post.featured_image.width %} width="{{ post.featured_image.width }}" height="{{ post.featured_image.height }}"{% endif %}>
+                {% else %}
+                  <span class="post-card-media-placeholder" aria-hidden="true">{{ loop.index }}</span>
+                {% endif %}
+              </a>
+              <div class="post-card-body">
+                <div class="post-meta">
+                  <time datetime="{{ post.published_at }}">
+                    {% if post.published_at %}{{ post.published_at | date_format }}{% endif %}
+                  </time>
+                  <span class="reading-time">{{ post.reading_time }} min read</span>
+                </div>
+                <h2 class="post-title">
+                  <a href="{{ post.url | safe }}">{{ post.title }}</a>
+                </h2>
+                <p class="post-excerpt">{{ post.excerpt }}</p>
+                <div class="post-card-footer">
+                  <span class="post-author">{{ post.author.display_name }}</span>
+                </div>
+              </div>
+            </article>
+          </li>
+        {% endfor %}
+      </ol>
+
+      {% if pagination %}
+        <nav class="pagination" aria-label="Page navigation">
+          {% if pagination.prev_url %}
+            <a href="{{ pagination.prev_url }}" class="pagination-prev">&larr; Newer</a>
+          {% endif %}
+          <span class="pagination-info">{{ pagination.current_page }} / {{ pagination.total_pages }}</span>
+          {% if pagination.next_url %}
+            <a href="{{ pagination.next_url }}" class="pagination-next">Older &rarr;</a>
+          {% endif %}
+        </nav>
+      {% endif %}
+    {% endif %}
+  </div>
+
+  {% if theme_options.show_sidebar %}
+  <aside class="home-sidebar" data-reveal style="--d:1">
+    {% for widget in theme_option_lists.sidebar_order | default(value=["search", "account", "categories", "tags"]) %}
+
+      {% if widget == "search" %}
+      <div class="sidebar-widget">
+        <h3 class="sidebar-widget-title">Search</h3>
+        <form method="get" action="/search" class="search-form sidebar-search-form">
+          <input type="text" name="q" placeholder="Search the signal..." class="search-input" maxlength="25">
+          <button type="submit" class="search-button" aria-label="Search">&rarr;</button>
+        </form>
+      </div>
+
+      {% elif widget == "account" %}
+      <div class="sidebar-widget">
+        <h3 class="sidebar-widget-title">Account</h3>
+        {% if session.is_logged_in %}
+        <div class="tag-cloud">
+          <a href="/account" class="tag">{{ session.user.display_name }}</a>
+          <a href="/account/logout" class="tag">Sign out</a>
+        </div>
+        {% else %}
+        <div class="tag-cloud">
+          <a href="/login" class="tag">Sign in</a>
+          <a href="/subscribe" class="tag tag-accent">Join</a>
+        </div>
+        {% endif %}
+      </div>
+
+      {% elif widget == "categories" %}
+      <div class="sidebar-widget">
+        <h3 class="sidebar-widget-title">Categories</h3>
+        {% if category_cloud | length > 0 %}
+        <div class="tag-cloud">
+          {% for cat in category_cloud %}
+            <a href="{{ cat.url }}" class="tag">{{ cat.name }}</a>
+          {% endfor %}
+        </div>
+        {% else %}
+        <p class="sidebar-empty">No categories yet.</p>
+        {% endif %}
+      </div>
+
+      {% elif widget == "tags" %}
+      <div class="sidebar-widget">
+        <h3 class="sidebar-widget-title">Tags</h3>
+        {% if tag_cloud | length > 0 %}
+        <div class="tag-cloud">
+          {% for tag in tag_cloud %}
+            <a href="{{ tag.url }}" class="tag">{{ tag.name }}</a>
+          {% endfor %}
+        </div>
+        {% else %}
+        <p class="sidebar-empty">No tags yet.</p>
+        {% endif %}
+      </div>
+      {% endif %}
+
+    {% endfor %}
+  </aside>
+  {% endif %}
+</div>
+{% endblock content %}

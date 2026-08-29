@@ -1,0 +1,77 @@
+[theme]
+name        = "Hyper"
+version     = "1.0.0"
+api_version = "1"
+description = "Kinetic dark theme — bold type, scroll reveals, glow. A test case for how far the theme system stretches."
+author      = "Synaptic Signals"
+
+[nav_locations]
+primary = "Primary Navigation"
+footer  = "Footer Links"
+
+[customizer]
+enabled = true
+
+[customizer.colors.color-page-background]
+label = "Page background"
+
+[customizer.colors.color-panel-background]
+label = "Panel background (cards, inputs)"
+
+[customizer.colors.color-header-background]
+label = "Header background"
+
+[customizer.colors.color-text]
+label = "Body text"
+
+[customizer.colors.color-text-muted]
+label = "Muted text"
+
+[customizer.colors.color-primary]
+label = "Primary accent"
+
+[customizer.colors.color-primary-hover]
+label = "Primary accent (hover)"
+
+[customizer.colors.color-border]
+label = "Border"
+
+[customizer.options.show_sidebar]
+type    = "bool"
+default = true
+label   = "Show right sidebar (search, account, categories, tags)"
+group   = "Sidebar"
+
+[customizer.options.sidebar_order]
+type    = "order"
+default = ["search", "account", "categories", "tags"]
+label   = "Sidebar widget order"
+group   = "Sidebar"
+
+[customizer.options.sidebar_order.items]
+search     = "Search"
+account    = "Account"
+categories = "Categories"
+tags       = "Tags"
+
+[customizer.options.hero_eyebrow]
+type    = "text"
+default = "SIGNAL // ONLINE"
+label   = "Hero eyebrow label (small tag above headline)"
+group   = "Header"
+
+[customizer.options.hero_tagline]
+type    = "text"
+default = ""
+label   = "Tagline (shown below site name in hero)"
+group   = "Header"
+
+[customizer.options.nav_dropdown_trigger]
+type    = "choice"
+default = "hover"
+label   = "Header submenu trigger (for menu items with sub-items)"
+group   = "Header"
+
+[customizer.options.nav_dropdown_trigger.choices]
+hover = "Hover to open"
+click = "Click to open"

@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+
+{% block title %}
+  {% if query %}
+    Search: {{ query }} — {{ site.name }}
+  {% else %}
+    Search — {{ site.name }}
+  {% endif %}
+{% endblock title %}
+
+{% block content %}
+<header class="search-header">
+  <h1 data-reveal style="--d:0">Search</h1>
+  <form method="get" action="/search" class="search-form search-form-hero" data-reveal style="--d:1">
+    <input type="text" name="q" placeholder="Search the signal..." value="{{ query }}" class="search-input" maxlength="25">
+    <button type="submit" class="search-button">Search</button>
+  </form>
+</header>
+
+{% if query %}
+  {% if results | length == 0 %}
+    <p class="no-results">No transmissions found matching "{{ query }}".</p>
+  {% else %}
+    <p class="result-count">{{ result_count }} result{% if result_count != 1 %}s{% endif %}</p>
+    <ol class="post-grid">
+      {% for post in results %}
+        <li class="post-card" data-reveal style="--d:{{ loop.index0 % 4 }}">
+          <article>
+            <div class="post-card-body post-card-body--search">
+              <h2 class="post-title">
+                <a href="{{ post.url | safe }}">{{ post.title }}</a>
+              </h2>
+              <div class="post-meta">
+                <time datetime="{{ post.published_at }}">
+                  {% if post.published_at %}{{ post.published_at | date_format }}{% endif %}
+                </time>
+              </div>
+              <p class="post-excerpt">{{ post.excerpt }}</p>
+            </div>
+          </article>
+        </li>
+      {% endfor %}
+    </ol>
+  {% endif %}
+{% else %}
+  <p class="search-prompt">Enter a search query above.</p>
+{% endif %}
+{% endblock content %}

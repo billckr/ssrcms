@@ -1,0 +1,185 @@
+{% extends "base.html" %}
+
+{% block title %}{{ site.name }}{% if site.description %} — {{ site.description }}{% endif %}{% endblock title %}
+
+{% block content %}
+<section class="hero">
+  <div class="hero-topline" data-reveal style="--d:0">
+    <p class="hero-eyebrow">{% if theme_option_texts.hero_eyebrow %}{{ theme_option_texts.hero_eyebrow }}{% elif site.description %}{{ site.description }}{% else %}A publication worth your attention.{% endif %}</p>
+  </div>
+  <h1 class="hero-title" data-reveal style="--d:1">
+    {% if theme_option_texts.hero_tagline %}{{ theme_option_texts.hero_tagline }}{% else %}Ideas, sourced carefully. Delivered without the noise.{% endif %}
+  </h1>
+
+  {% if posts | length > 0 %}
+  <div class="hero-rule" aria-hidden="true"></div>
+  <div class="hero-strip">
+    {% for post in posts %}
+      {% if loop.index <= 2 %}
+      <div class="hero-strip-col" data-reveal style="--d:{{ loop.index }}">
+        <h2><a href="{{ post.url | safe }}">{{ post.title }}</a></h2>
+        <p>{{ post.excerpt | truncate(length=110) }}</p>
+      </div>
+      {% endif %}
+    {% endfor %}
+  </div>
+  {% endif %}
+</section>
+
+{% if category_cloud | length > 0 %}
+<div class="ticker" aria-hidden="true">
+  <div class="ticker-track">
+    {% for i in range(end=3) %}
+      {% for cat in category_cloud %}<span class="ticker-item">{{ cat.name }}</span><span class="ticker-dot">&#9679;</span>{% endfor %}
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<div class="home-layout">
+  <div class="home-main">
+    {% if posts | length == 0 %}
+      <p class="no-posts">Nothing transmitted yet.</p>
+    {% else %}
+      <ol class="post-grid" reversed>
+        {% for post in posts %}
+          <li class="post-card" data-reveal style="--d:{{ loop.index0 % 4 }}">
+            <article>
+              <a href="{{ post.url | safe }}" class="post-card-media" aria-label="{{ post.title }}">
+                {% if post.featured_image %}
+                  <img src="{{ post.featured_image.url | safe }}" alt="{{ post.featured_image.alt_text }}" loading="lazy"{% if post.featured_image.width %} width="{{ post.featured_image.width }}" height="{{ post.featured_image.height }}"{% endif %}>
+                {% else %}
+                  <span class="post-card-media-placeholder" aria-hidden="true">{{ loop.index }}</span>
+                {% endif %}
+              </a>
+              <div class="post-card-body">
+                <div class="post-meta">
+                  <time datetime="{{ post.published_at }}">
+                    {% if post.published_at %}{{ post.published_at | date_format }}{% endif %}
+                  </time>
+                  <span class="reading-time">{{ post.reading_time }} min read</span>
+                </div>
+                <h2 class="post-title">
+                  <a href="{{ post.url | safe }}">{{ post.title }}</a>
+                </h2>
+                <p class="post-excerpt">{{ post.excerpt }}</p>
+                <div class="post-card-footer">
+                  <span class="post-author">{{ post.author.display_name }}</span>
+                  {% if post.categories | length > 0 %}
+                    <span class="post-categories">
+                      {% for cat in post.categories %}<a href="{{ cat.url }}">{{ cat.name }}</a>{% if not loop.last %}<span aria-hidden="true"> / </span>{% endif %}{% endfor %}
+                    </span>
+                  {% endif %}
+                </div>
+              </div>
+            </article>
+          </li>
+        {% endfor %}
+      </ol>
+
+      {% if pagination %}
+        <nav class="pagination" aria-label="Page navigation">
+          {% if pagination.prev_url %}
+            <a href="{{ pagination.prev_url }}" class="pagination-prev">&larr; Newer</a>
+          {% endif %}
+          <span class="pagination-info">{{ pagination.current_page }} / {{ pagination.total_pages }}</span>
+          {% if pagination.next_url %}
+            <a href="{{ pagination.next_url }}" class="pagination-next">Older &rarr;</a>
+          {% endif %}
+        </nav>
+      {% endif %}
+    {% endif %}
+  </div>
+
+  {% if theme_options.show_sidebar %}
+  <aside class="home-sidebar" data-reveal style="--d:1">
+    {% for widget in theme_option_lists.sidebar_order | default(value=["search", "account", "categories", "tags"]) %}
+
+      {% if widget == "search" %}
+      <div class="sidebar-widget">
+        <h3 class="sidebar-widget-title">Search</h3>
+        <form method="get" action="/search" class="search-form sidebar-search-form">
+          {# Search query is capped at 25 characters — enforced here and server-side. #}
+          <input type="text" name="q" placeholder="Search the signal..." class="search-input" maxlength="25">
+          <button type="submit" class="search-button" aria-label="Search">&rarr;</button>
+        </form>
+      </div>
+
+      {% elif widget == "account" %}
+      <div class="sidebar-widget">
+        <h3 class="sidebar-widget-title">Account</h3>
+        {% if session.is_logged_in %}
+        <div class="tag-cloud">
+          <a href="/account" class="tag">{{ session.user.display_name }}</a>
+          <a href="/account/logout" class="tag">Sign out</a>
+        </div>
+        {% else %}
+        <div class="tag-cloud">
+          <a href="/login" class="tag">Sign in</a>
+          <a href="/subscribe" class="tag tag-accent">Join</a>
+        </div>
+        {% endif %}
+      </div>
+
+      {% elif widget == "categories" %}
+      <div class="sidebar-widget">
+        <h3 class="sidebar-widget-title">Categories</h3>
+        {% if category_cloud | length > 0 %}
+        <div class="tag-cloud">
+          {% for cat in category_cloud %}
+            <a href="{{ cat.url }}" class="tag">{{ cat.name }}</a>
+          {% endfor %}
+        </div>
+        {% else %}
+        <p class="sidebar-empty">No categories yet.</p>
+        {% endif %}
+      </div>
+
+      {% elif widget == "tags" %}
+      <div class="sidebar-widget">
+        <h3 class="sidebar-widget-title">Tags</h3>
+        {% if tag_cloud | length > 0 %}
+        <div class="tag-cloud">
+          {% for tag in tag_cloud %}
+            <a href="{{ tag.url }}" class="tag">{{ tag.name }}</a>
+          {% endfor %}
+        </div>
+        {% else %}
+        <p class="sidebar-empty">No tags yet.</p>
+        {% endif %}
+      </div>
+      {% endif %}
+
+    {% endfor %}
+
+    {% set sidebar_items = get_menu(name="sidebar", path=request.path) %}
+    {% if sidebar_items | length > 0 %}
+    <div class="sidebar-widget">
+      <h3 class="sidebar-widget-title">Navigation</h3>
+      <nav class="sidebar-nav">
+        {% for item in sidebar_items %}
+          <a href="{{ item.url }}"
+             target="{{ item.target }}"
+             class="sidebar-nav-link{% if item.is_current %} sidebar-nav-link--active{% endif %}">
+            {{ item.label }}
+          </a>
+          {% if item.children | length > 0 %}
+          <div class="sidebar-nav-children">
+            {% for child in item.children %}
+            <a href="{{ child.url }}"
+               target="{{ child.target }}"
+               class="sidebar-nav-link sidebar-nav-link--child{% if child.is_current %} sidebar-nav-link--active{% endif %}">
+              {{ child.label }}
+            </a>
+            {% endfor %}
+          </div>
+          {% endif %}
+        {% endfor %}
+      </nav>
+    </div>
+    {% endif %}
+
+  </aside>
+  {% endif %}
+</div>
+{% endblock content %}
