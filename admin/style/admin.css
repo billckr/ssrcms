@@ -892,6 +892,11 @@ body.sidebar-open .sidebar-overlay {
 @media (max-width: 480px) {
   .plugin-details { grid-template-columns: 1fr; }
   .stat-panel-3, .stat-panel-4, .stat-panel-5, .stat-panel-6, .stat-panel-7 { grid-template-columns: repeat(2, 1fr); }
+
+  dialog.modal-card {
+    min-width: 0;
+    width: calc(100% - 2rem);
+  }
 }
 
 /* ── Profile page ────────────────────────────────────────────────────────── */

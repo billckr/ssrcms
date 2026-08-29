@@ -482,6 +482,10 @@ a:hover {
   margin: 2rem 0;
 }
 
+.post-content pre {
+  overflow-x: auto;
+}
+
 .post-content p {
   margin-bottom: 1.5rem;
 }

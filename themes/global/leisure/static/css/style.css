@@ -146,7 +146,7 @@ img { max-width: 100%; height: auto; display: block; }
 }
 
 /* Hamburger toggle — hidden until the mobile breakpoint gates the nav
-   behind it (see max-width: 640px below). */
+   behind it (see max-width: 768px below). */
 .nav-toggle {
   display: none;
   flex-direction: column;
@@ -1451,7 +1451,7 @@ img { max-width: 100%; height: auto; display: block; }
   .footer-brand { flex-basis: 100%; }
 }
 
-@media (max-width: 640px) {
+@media (max-width: 768px) {
   h1 { font-size: 1.875rem; }
   .hero { padding: 4rem 0; }
   .hero h1 { font-size: 2rem; }
