@@ -196,9 +196,14 @@
     var header = document.getElementById('siteHeader');
     var bar = document.getElementById('scrollProgress');
 
+    var scrolled = false;
     function onScroll() {
       var y = window.scrollY || document.documentElement.scrollTop;
-      if (header) header.classList.toggle('is-scrolled', y > 8);
+      // Hysteresis (enter above 24px, exit below 8px) keeps the toggle from
+      // flapping when scroll-anchoring corrections land right on the boundary.
+      if (!scrolled && y > 24) scrolled = true;
+      else if (scrolled && y < 8) scrolled = false;
+      if (header) header.classList.toggle('is-scrolled', scrolled);
       if (bar) {
         var h = document.documentElement;
         var max = h.scrollHeight - h.clientHeight;

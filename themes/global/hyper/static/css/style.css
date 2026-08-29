@@ -113,6 +113,10 @@ img { max-width: 100%; display: block; }
      a transform animation elsewhere on the page. */
   transform: translateZ(0);
   will-change: transform;
+  /* Its own padding transition resizes it in-flow; without this the browser's
+     scroll anchoring "corrects" scrollTop mid-transition, which re-crosses the
+     is-scrolled threshold and makes the header vibrate. */
+  overflow-anchor: none;
 }
 
 .site-header.is-scrolled {
