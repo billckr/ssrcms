@@ -54,6 +54,12 @@ account    = "Account"
 categories = "Categories"
 tags       = "Tags"
 
+[customizer.options.show_ticker]
+type    = "bool"
+default = true
+label   = "Show scrolling category ticker below hero"
+group   = "Header"
+
 [customizer.options.hero_eyebrow]
 type    = "text"
 default = "SIGNAL // ONLINE"

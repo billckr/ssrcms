@@ -26,7 +26,7 @@
   {% endif %}
 </section>
 
-{% if category_cloud | length > 0 %}
+{% if theme_options.show_ticker and category_cloud | length > 0 %}
 <div class="ticker" aria-hidden="true">
   <div class="ticker-track">
     {% for i in range(end=3) %}
