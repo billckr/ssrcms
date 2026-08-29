@@ -50,11 +50,13 @@
   <header class="site-header">
     <div class="container">
       <a class="site-title" href="/">{{ site.name }}</a>
+      {% if nav.primary.items | length > 0 %}
       <button type="button" class="nav-toggle" aria-label="Toggle menu" aria-expanded="false" aria-controls="site-nav">
         <span class="nav-toggle-bar"></span>
         <span class="nav-toggle-bar"></span>
         <span class="nav-toggle-bar"></span>
       </button>
+      {% endif %}
       <nav id="site-nav" class="site-nav{% if theme_option_choices.nav_dropdown_trigger == "click" %} nav-trigger-click{% endif %}">
         <ul class="nav-links">
           {% for item in nav.primary.items %}
