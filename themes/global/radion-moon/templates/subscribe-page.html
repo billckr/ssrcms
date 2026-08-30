@@ -1,0 +1,67 @@
+{# subscribe-page.html — Subscriber registration page. Rendered when a post or page
+   uses the "subscribe-page" template. Displays optional page content above the
+   sign-up form which POSTs to /subscribe. #}
+{% extends "base.html" %}
+
+{% block title %}{{ page.title }} — {{ site.name }}{% endblock title %}
+
+{% block content %}
+<article class="single-page subscribe-page">
+  <header class="page-header" data-reveal style="--d:0">
+    <p class="page-eyebrow">Join the signal</p>
+    <h1 class="page-title">{{ page.title }}</h1>
+  </header>
+
+  {% if page.content %}
+  <div class="page-content" data-reveal style="--d:1">
+    {{ page.content | safe }}
+  </div>
+  {% endif %}
+
+  <form class="subscribe-form" method="POST" action="/subscribe" data-reveal style="--d:2">
+
+    <!-- Honeypot: hidden from real users; bots fill it; handler rejects if non-empty -->
+    <div class="honeypot" aria-hidden="true" tabindex="-1">
+      <label for="sf-website">Website</label>
+      <input type="text" id="sf-website" name="website" tabindex="-1" autocomplete="off">
+    </div>
+
+    <div class="form-field">
+      <label for="sf-name">Display Name <span class="form-required" aria-hidden="true">*</span></label>
+      <input type="text" id="sf-name" name="display_name" required autocomplete="name" placeholder="Jane Smith">
+    </div>
+
+    <div class="form-field">
+      <label for="sf-email">Email address <span class="form-required" aria-hidden="true">*</span></label>
+      <input type="email" id="sf-email" name="email" required autocomplete="email" placeholder="jane@example.com">
+    </div>
+
+    <div class="form-field">
+      <label for="sf-password">Password <span class="form-required" aria-hidden="true">*</span></label>
+      <input type="password" id="sf-password" name="password" required autocomplete="new-password">
+      <span class="form-field-hint">8–12 characters &middot; uppercase &middot; number &middot; symbol (! @ # $ % &amp;)</span>
+    </div>
+
+    <div class="form-field">
+      <label for="sf-confirm">Confirm password <span class="form-required" aria-hidden="true">*</span></label>
+      <input type="password" id="sf-confirm" name="confirm_password" required autocomplete="new-password">
+    </div>
+
+    <div class="form-field form-field--check">
+      <label class="form-checkbox-label">
+        <input type="checkbox" name="human_check" value="on" required>
+        <span>I'm Human</span>
+      </label>
+    </div>
+
+    <div class="form-field form-field--check">
+      <label class="form-checkbox-label">
+        <input type="checkbox" name="terms" value="on" required>
+        <span>Agree to <a href="/terms" target="_blank" rel="noopener noreferrer">Terms of Service</a></span>
+      </label>
+    </div>
+
+    <button type="submit" class="form-submit">Create account</button>
+  </form>
+</article>
+{% endblock content %}
