@@ -1031,9 +1031,12 @@ body.flow-home a { text-decoration: none; }
   display: flex;
   align-items: center;
   justify-content: space-between;
+  /* Fixed height, never changed by .is-scrolled below — matches
+     .site-header exactly (same 1.75rem constant) so the header doesn't
+     visibly shift size crossing between this page and any other. */
   padding: 1.75rem clamp(1.5rem, 5vw, 4rem);
   transform: translateY(-100px);
-  transition: transform .4s linear, background-color .35s ease, padding .35s ease, border-color .35s ease, backdrop-filter .35s ease;
+  transition: transform .4s linear, background-color .35s ease, border-color .35s ease, backdrop-filter .35s ease;
   border-bottom: 1px solid transparent;
 }
 
@@ -1043,7 +1046,6 @@ body.flow-home a { text-decoration: none; }
   background: rgba(16, 17, 20, .88);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
-  padding: 1.1rem clamp(1.5rem, 5vw, 4rem);
   border-bottom-color: rgba(255,255,255,.08);
 }
 
@@ -1059,16 +1061,20 @@ body.flow-home a { text-decoration: none; }
 
 .flow-nav-mark { width: 10px; height: 10px; border-radius: 2px; background: var(--color-primary); transform: rotate(45deg); box-shadow: 0 0 10px rgba(59,130,246,.6); }
 
-.flow-nav-links { display: flex; gap: 2.25rem; list-style: none; }
+.flow-nav-links { display: flex; align-items: center; gap: .2rem; list-style: none; }
 
 .flow-nav-links a {
   position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: .3rem;
   font-family: var(--font-body);
   font-weight: 700;
   font-size: .72rem;
-  letter-spacing: .16em;
+  letter-spacing: .14em;
   text-transform: uppercase;
   color: var(--color-text-muted);
+  padding: 0 .85rem;
   transition: color .25s;
 }
 
@@ -1076,11 +1082,14 @@ body.flow-home a { text-decoration: none; }
 .flow-nav-dropdown-toggle:hover { color: var(--color-text); }
 
 /* Blue underline — same mechanic as .nav-links a span::after above: a 2px
-   bar that scales in from the left. */
-.flow-nav-links a::after {
+   bar that scales in from the left, positioned off the text-only span
+   rather than the padded <a> so it sits tight under the label. */
+.flow-nav-links a span { position: relative; }
+
+.flow-nav-links a span::after {
   content: '';
   position: absolute;
-  left: 0; right: 0; bottom: -6px;
+  left: 0; right: 0; bottom: -4px;
   height: 2px;
   background: var(--color-primary);
   transform: scaleX(0);
@@ -1088,8 +1097,8 @@ body.flow-home a { text-decoration: none; }
   transition: transform .35s cubic-bezier(.16, 1, .3, 1);
 }
 
-.flow-nav-links a:hover::after,
-.flow-nav-links a[aria-current="page"]::after { transform: scaleX(1); }
+.flow-nav-links a:hover span::after,
+.flow-nav-links a[aria-current="page"] span::after { transform: scaleX(1); }
 
 .flow-nav-links a[aria-current="page"] { color: var(--color-primary); }
 
@@ -1108,7 +1117,7 @@ body.flow-home a { text-decoration: none; }
   font-family: var(--font-body);
   font-weight: 700;
   font-size: .72rem;
-  letter-spacing: .16em;
+  letter-spacing: .14em;
   text-transform: uppercase;
   color: var(--color-text-muted);
   background: none;
@@ -1163,7 +1172,7 @@ body.flow-home a { text-decoration: none; }
 
 .flow-nav-dropdown a:hover { background: rgba(59,130,246,.14); color: var(--color-text); }
 
-.flow-nav-item-label-only { color: var(--color-text-muted); font-size: .72rem; letter-spacing: .16em; text-transform: uppercase; }
+.flow-nav-item-label-only { color: var(--color-text-muted); font-size: .72rem; letter-spacing: .14em; text-transform: uppercase; }
 
 .flow-user-bar { margin-left: .4rem; }
 
@@ -1236,7 +1245,7 @@ body.flow-home a { text-decoration: none; }
   .flow-nav.nav-open .flow-nav-links { transform: translateX(0); }
 
   .flow-nav-links a, .flow-nav-dropdown-toggle, .flow-nav-item-label-only { width: 100%; padding: .85rem .5rem; font-size: .8rem; }
-  .flow-nav-links a::after { display: none; }
+  .flow-nav-links a span::after { display: none; }
   .flow-nav-dropdown { position: static; opacity: 1; visibility: visible; transform: none; box-shadow: none; display: none; margin-left: .5rem; }
   .flow-nav-item.open .flow-nav-dropdown { display: block; }
   .flow-nav-dropdown-caret-only { display: inline-flex; margin-left: auto; }

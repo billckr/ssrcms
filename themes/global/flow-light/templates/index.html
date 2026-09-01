@@ -25,7 +25,7 @@
     {% for item in nav.primary.items %}
       <li class="flow-nav-item{% if item.children | length > 0 %} has-children{% endif %}" style="--i: {{ loop.index0 }}">
         {% if item.url %}
-          <a href="{{ item.url }}"{% if item.target == "_blank" %} target="_blank" rel="noopener"{% endif %}{% if item.is_current %} aria-current="page"{% endif %}>{{ item.label }}</a>
+          <a href="{{ item.url }}"{% if item.target == "_blank" %} target="_blank" rel="noopener"{% endif %}{% if item.is_current %} aria-current="page"{% endif %}><span>{{ item.label }}</span></a>
           {% if item.children | length > 0 %}
             <button type="button" class="flow-nav-dropdown-toggle flow-nav-dropdown-caret-only" aria-label="Toggle submenu" aria-expanded="false">&#9662;</button>
           {% endif %}
