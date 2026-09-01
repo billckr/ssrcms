@@ -45,3 +45,9 @@ group   = "Header"
 [customizer.options.nav_dropdown_trigger.choices]
 hover = "Hover to open"
 click = "Click to open"
+
+[customizer.options.show_search]
+type    = "bool"
+default = true
+label   = "Show search box above the project grid"
+group   = "Homepage"

@@ -68,6 +68,14 @@
 </section>
 
 <section class="flow-strip" id="work">
+  {% if theme_options.show_search %}
+  <div class="flow-search" id="flowSearch">
+    <form method="get" action="/search" class="search-form">
+      <input type="text" name="q" placeholder="Search the archive..." class="search-input" maxlength="25">
+      <button type="submit" class="search-button">Search</button>
+    </form>
+  </div>
+  {% endif %}
   <div class="flow-grid">
     {% for post in posts | slice(end=6) %}
     <div class="flow-box-wrap" style="--wait:{{ loop.index0 * 100 }}ms">
@@ -186,13 +194,14 @@
     }
   });
 
-  /* On-scroll reveals: project cards (staggered slide-up), quote slider
-     (slide-from-right), and footer columns (staggered slide-from-bottom) —
-     one-shot, fires when scrolled into view rather than on a page-load
-     timer, so it's still visible even if you sit on the page a few
-     seconds before scrolling down to it. */
+  /* On-scroll reveals: search box (fade/slide-up, matches the cards),
+     project cards (staggered slide-up), quote slider (slide-from-right),
+     and footer columns (staggered slide-from-bottom) — one-shot, fires
+     when scrolled into view rather than on a page-load timer, so it's
+     still visible even if you sit on the page a few seconds before
+     scrolling down to it. */
   var scrollReveal = [].slice.call(document.querySelectorAll('.flow-box-wrap'))
-    .concat([document.getElementById('flowSlider'), document.getElementById('flowFooterGrid')]);
+    .concat([document.getElementById('flowSearch'), document.getElementById('flowSlider'), document.getElementById('flowFooterGrid')]);
   if (reduceMotion || !('IntersectionObserver' in window)) {
     scrollReveal.forEach(function (el) { if (el) el.classList.add('is-visible'); });
   } else {

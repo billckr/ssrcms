@@ -491,7 +491,14 @@ img { max-width: 100%; display: block; }
 }
 
 .author-bio { color: var(--color-text-muted); font-family: var(--font-body); font-size: 1.05rem; margin-top: 1rem; max-width: 50ch; margin-inline: auto; }
-.archive-post-count, .result-count { grid-column: 1 / -1; font-family: var(--font-mono); color: var(--color-text-muted); font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: -0.5rem; }
+/* .archive-post-count sits inside .archive-header, which already has its
+   own 3rem margin-bottom absorbing this negative value — kept as-is there.
+   .result-count sits directly above .flow-grid with no such buffer, so it
+   gets its own rule with a real positive gap instead (the negative value
+   was left over from the old post-grid layout and overlapped the first
+   result card once search.html moved to .flow-grid). */
+.archive-post-count { font-family: var(--font-mono); color: var(--color-text-muted); font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: -0.5rem; }
+.result-count { font-family: var(--font-mono); color: var(--color-text-muted); font-size: 0.72rem; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 1.5rem; }
 
 /* ── Single post ───────────────────────────────────────────────────────── */
 
@@ -689,9 +696,15 @@ img { max-width: 100%; display: block; }
 .page-title { font-family: var(--font-display); font-weight: 700; font-size: clamp(2.1rem, 5vw, 3rem); }
 .contact-title { font-family: var(--font-display); font-weight: 700; font-size: clamp(2.1rem, 5vw, 3rem); }
 
-.honeypot { position: absolute; width: 1px; height: 1px; overflow: hidden; opacity: 0; pointer-events: none; }
+/* .honeypot-field is what the Form Designer (core/src/models/form_def.rs)
+   actually emits for its anti-spam field — aliased here to the same
+   hidden treatment the hand-written pages already use under .honeypot. */
+.honeypot, .honeypot-field { position: absolute; width: 1px; height: 1px; overflow: hidden; opacity: 0; pointer-events: none; }
 
-.contact-form, .subscribe-form, .newsletter-form { display: flex; flex-direction: column; gap: 1.4rem; margin-top: 2.25rem; }
+/* .themed-form is the Form Designer's own wrapper class (a form embedded
+   via the page/post editor's "Insert Form" button) — same treatment as
+   the hand-written contact/subscribe/newsletter forms. */
+.contact-form, .subscribe-form, .newsletter-form, .themed-form { display: flex; flex-direction: column; gap: 1.4rem; margin-top: 2.25rem; }
 
 .form-field { display: flex; flex-direction: column; gap: 0.45rem; }
 .form-field label { font-family: var(--font-mono); font-size: 0.7rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-text-muted); }
@@ -721,12 +734,15 @@ img { max-width: 100%; display: block; }
 .form-char-count { font-family: var(--font-mono); font-size: 0.68rem; color: var(--color-text-muted); text-align: right; }
 .form-char-warn { color: #E5675A; font-weight: 700; }
 
-.form-field--check { flex-direction: row; align-items: flex-start; }
+.form-field--check, .form-field-checkbox { flex-direction: row; align-items: flex-start; }
 .form-checkbox-label { display: flex; align-items: flex-start; gap: 0.6rem; font-size: 0.88rem; color: var(--color-text-muted); cursor: pointer; }
 .form-checkbox-label input { width: 1rem; height: 1rem; margin-top: 0.2rem; accent-color: var(--color-primary); flex-shrink: 0; }
 .form-checkbox-label a { color: var(--color-primary); }
 
-.form-submit {
+/* .btn is the Form Designer's generic submit-button class (its rendered
+   forms use <button class="btn"> rather than .form-submit) — same button
+   either way. */
+.form-submit, .btn {
   align-self: flex-start;
   padding: 0.85rem 2rem;
   background: none;
@@ -742,8 +758,8 @@ img { max-width: 100%; display: block; }
   transition: background 0.25s, color 0.25s;
 }
 
-.form-submit:hover:not(:disabled) { background: var(--color-primary); color: #fff; }
-.form-submit:disabled { opacity: 0.5; cursor: not-allowed; }
+.form-submit:hover:not(:disabled), .btn:hover:not(:disabled) { background: var(--color-primary); color: #fff; }
+.form-submit:disabled, .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .form-success {
   display: flex;
@@ -756,6 +772,103 @@ img { max-width: 100%; display: block; }
   color: var(--color-primary);
   font-family: var(--font-body);
   font-size: 1.05rem;
+}
+
+/* ── Form Designer field types not covered by the hand-written
+   contact/subscribe/newsletter forms above: select, radio, toggle,
+   separator, note. ───────────────────────────────────────────────────── */
+
+.form-field select {
+  padding: 0.75rem 0;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-text);
+  font-family: var(--font-body);
+  font-size: 1.05rem;
+  outline: none;
+  transition: border-color 0.2s;
+  width: 100%;
+}
+
+.form-field select:focus { border-color: var(--color-primary); }
+
+.form-field-legend {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+  margin-bottom: 0.5rem;
+}
+
+.form-radio-label { display: flex; align-items: center; gap: 0.6rem; font-size: 0.88rem; color: var(--color-text); cursor: pointer; margin-bottom: 0.5rem; }
+.form-radio-label input[type="radio"] { width: 1rem; height: 1rem; accent-color: var(--color-primary); cursor: pointer; }
+
+.form-field-toggle > label:first-child {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+  margin-bottom: 0.5rem;
+}
+
+.form-toggle-label { display: flex; align-items: center; gap: 0.6rem; font-size: 0.88rem; color: var(--color-text-muted); cursor: pointer; }
+.form-toggle-input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+
+.form-toggle-slider {
+  position: relative;
+  display: inline-block;
+  width: 36px;
+  height: 20px;
+  flex-shrink: 0;
+  background: var(--color-border);
+  border-radius: 999px;
+  transition: background 0.2s;
+}
+
+.form-toggle-slider::before {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  background: var(--color-text);
+  border-radius: 50%;
+  transition: transform 0.2s;
+}
+
+.form-toggle-input:checked + .form-toggle-slider { background: var(--color-primary); }
+.form-toggle-input:checked + .form-toggle-slider::before { transform: translateX(16px); }
+.form-toggle-input:focus-visible + .form-toggle-slider { box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 25%, transparent); }
+
+.form-field-separator { margin: 0.5rem 0; }
+.form-separator-title {
+  margin: 0 0 0.5rem;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-text-muted);
+}
+.form-separator { border: none; border-top: 1px solid var(--color-border); margin: 0; }
+
+.form-callout {
+  margin: 0;
+  padding: 0.85rem 1.1rem;
+  background: color-mix(in srgb, var(--color-primary) 8%, transparent);
+  border-left: 3px solid var(--color-primary);
+  border-radius: var(--radius-sm);
+  color: var(--color-text);
+  font-size: 0.88rem;
+  line-height: 1.5;
 }
 
 /* ── Error pages ───────────────────────────────────────────────────────── */
@@ -1234,6 +1347,21 @@ body.flow-home a { text-decoration: none; }
 }
 
 .flow-strip { position: relative; padding: 0 clamp(1.5rem, 5vw, 4rem) 2rem; }
+
+/* ── Search box — optional (customizer: show_search), sits above the
+   project grid. Hidden until scrolled to, same scroll-triggered reveal
+   as the cards just below it (IntersectionObserver adds .is-visible,
+   see index.html's script) rather than a page-load timer. ──────────── */
+
+.flow-search {
+  max-width: 420px;
+  margin: 0 auto 3rem;
+  opacity: 0;
+  transform: translateY(40px);
+  transition: opacity .4s linear, transform .4s linear;
+}
+
+.flow-search.is-visible { opacity: 1; transform: translateY(0); }
 
 /* ── Project grid — each box: image is pushed fully out of frame
    (translateY 100%) until hover, then slides UP into view over 200ms
