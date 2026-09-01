@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{ site.name }} — Studio Reel</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700;900&family=Lato:ital,wght@0,300;0,400;0,700;1,300&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --ground-deep:   #101114;
+  --ground:        #1A1A1A;
+  --ground-mid:    #202124;
+  --panel:         #242527;
+  --blue:          #3B82F6;
+  --blue-light:    #60A5FA;
+  --ivory:         #F1F1F1;
+  --grey:          #9A9A9A;
+  --display: 'Poppins', sans-serif;
+  --body: 'Lato', sans-serif;
+}
+
+html { scroll-behavior: auto; }
+
+/* Every on-load / on-scroll reveal in this file replicates a real Webflow
+   IX1 interaction pulled from elpis.webflow.io's compiled interactions
+   config (400ms linear transform+opacity, staggered by `wait` per element).
+   Reduced motion: skip straight to the resting state, no stagger. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .001ms !important; transition-duration: .001ms !important; transition-delay: 0ms !important; }
+}
+
+body {
+  background: var(--ground-deep);
+  color: var(--ivory);
+  font-family: var(--body);
+  font-weight: 300;
+  line-height: 1.6;
+  overflow-x: hidden;
+}
+
+a { color: inherit; text-decoration: none; }
+img { max-width: 100%; display: block; }
+
+/* ── Nav: slides down from off-screen on load (on-load-1: y:-100px → 0,
+   400ms linear), then solidifies with a blurred background once you've
+   scrolled a bit (a simplified stand-in for elpis's second fixed nav that
+   slides in separately after the hero). ─────────────────────────────── */
+
+.flow-nav {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  z-index: 500;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.75rem clamp(1.5rem, 5vw, 4rem);
+  transform: translateY(-100px);
+  transition: transform .4s linear, background-color .35s ease, padding .35s ease, border-color .35s ease, backdrop-filter .35s ease;
+  border-bottom: 1px solid transparent;
+}
+
+.loaded .flow-nav { transform: translateY(0); }
+
+.flow-nav.is-scrolled {
+  background: rgba(16, 17, 20, .88);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  padding: 1.1rem clamp(1.5rem, 5vw, 4rem);
+  border-bottom-color: rgba(255,255,255,.08);
+}
+
+.flow-nav-brand {
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: 1.05rem;
+  letter-spacing: .01em;
+}
+
+.flow-nav-mark { width: 10px; height: 10px; border-radius: 2px; background: var(--blue); transform: rotate(45deg); box-shadow: 0 0 10px rgba(59,130,246,.6); }
+
+.flow-nav-links { display: flex; gap: 2.25rem; list-style: none; }
+
+.flow-nav-links a {
+  font-family: var(--body);
+  font-weight: 700;
+  font-size: .72rem;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: var(--grey);
+  transition: color .25s;
+}
+
+.flow-nav-links a:hover { color: var(--ivory); }
+
+@media (max-width: 720px) {
+  .flow-nav-links { display: none; }
+}
+
+/* ── Hero: fades + rises in after a 300ms wait (on-load-2). ──────────── */
+
+.flow-hero {
+  min-height: 100svh;
+  display: flex;
+  align-items: center;
+  padding: 8rem clamp(1.5rem, 5vw, 4rem) 4rem;
+  position: relative;
+}
+
+.flow-hero::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 900px 500px at 15% 10%, rgba(59,130,246,.12), transparent 60%),
+    radial-gradient(ellipse 700px 500px at 90% 90%, rgba(232,176,75,.06), transparent 55%);
+  pointer-events: none;
+}
+
+.flow-hero-text {
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: clamp(2.4rem, 6vw, 4.8rem);
+  line-height: 1.08;
+  max-width: 20ch;
+  letter-spacing: -.01em;
+  opacity: 0;
+  transform: translateY(60px);
+  transition: opacity .4s linear .3s, transform .4s linear .3s;
+}
+
+.loaded .flow-hero-text { opacity: 1; transform: translateY(0); }
+
+.flow-hero-text em { font-style: normal; color: var(--blue); }
+
+.flow-scroll-cue {
+  position: absolute;
+  left: 50%;
+  bottom: 2.75rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: .65rem;
+  color: var(--grey);
+  opacity: 0;
+  transform: translate(-50%, 10px);
+  transition: opacity .4s linear .9s, transform .4s linear .9s, color .25s;
+  pointer-events: none;
+}
+
+.loaded .flow-scroll-cue { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
+
+/* After the initial reveal, scroll-driven show/hide should be snappy —
+   no on-load delay attached. */
+.flow-scroll-cue.is-fast { transition: opacity .3s ease, transform .3s ease, color .25s; }
+
+/* Hidden once the page has scrolled at all; only shown at the very top. */
+.flow-scroll-cue.is-hidden {
+  opacity: 0;
+  transform: translate(-50%, 10px);
+  pointer-events: none;
+}
+
+.flow-scroll-cue:hover { color: var(--blue-light); }
+
+.flow-scroll-cue-label {
+  font-family: var(--body);
+  font-weight: 700;
+  font-size: .68rem;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+}
+
+.flow-scroll-cue-icon { display: block; }
+
+.flow-scroll-cue-dot { animation: flow-scroll-dot 1.8s ease-in-out infinite; transform-origin: center; }
+
+@keyframes flow-scroll-dot {
+  0%   { transform: translateY(0); opacity: 0; }
+  30%  { opacity: 1; }
+  80%  { transform: translateY(8px); opacity: 0; }
+  100% { transform: translateY(8px); opacity: 0; }
+}
+
+.flow-strip { position: relative; padding: 0 clamp(1.5rem, 5vw, 4rem) 2rem; }
+
+/* ── Project grid — each box: image is pushed fully out of frame
+   (translateY 100%) until hover, then slides UP into view over 200ms
+   linear (elpis's "portfolio box hover" interaction). Title stays pinned
+   to the bottom at all times; a shared 3px bottom rule closes off the box.
+   Boxes cascade in on load, staggered 450/600/750/900/1050/1200ms
+   (on-load-3 .. on-load-8). ─────────────────────────────────────────── */
+
+.flow-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.25rem; }
+
+@media (max-width: 900px) { .flow-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 600px) { .flow-grid { grid-template-columns: 1fr; } }
+
+.flow-box-wrap {
+  opacity: 0;
+  transform: translateY(60px);
+  transition: opacity .4s linear var(--wait, 0s), transform .4s linear var(--wait, 0s);
+}
+
+.loaded .flow-box-wrap { opacity: 1; transform: translateY(0); }
+
+.flow-box {
+  display: block;
+  position: relative;
+  height: 280px;
+  overflow: hidden;
+  background: var(--ground-mid);
+  border-bottom: 3px solid var(--ivory);
+}
+
+.flow-box-image {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  transform: translateY(100%);
+  transition: transform 200ms linear;
+}
+
+.flow-box:hover .flow-box-image { transform: translateY(0); }
+
+.flow-box-image img {
+  width: 100%; height: 100%;
+  object-fit: cover;
+}
+
+.flow-box-tag {
+  position: absolute;
+  top: 1.1rem;
+  left: 1.25rem;
+  z-index: 2;
+  font-family: var(--body);
+  font-weight: 700;
+  font-size: .68rem;
+  letter-spacing: .2em;
+  text-transform: uppercase;
+  color: var(--blue-light);
+  opacity: 0;
+  transition: opacity 200ms linear;
+}
+
+.flow-box:hover .flow-box-tag { opacity: 1; }
+
+.flow-box-name {
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  z-index: 3;
+  padding: 1.1rem 1.25rem;
+  background: linear-gradient(180deg, transparent, rgba(16,17,20,.85) 70%);
+  font-family: var(--display);
+  font-weight: 600;
+  font-size: 1.05rem;
+}
+
+/* ── Quote slider — a real horizontal track, not a crossfade. Elpis's own
+   CSS sets `.slider-home-mask { overflow: visible; max-width: 800px }`
+   over Webflow's native "slide" transition (500ms ease, autoplay 5000ms,
+   infinite) — so the three quotes sit side by side and the *next* one
+   physically pokes out past the 800px column into the section, dimmed by
+   a right-edge gradient (`.slider-wripper-mask`) rather than fully
+   hidden. The whole track then shifts left by one slide-width on each
+   advance. That's rebuilt here as: an overflow:hidden viewport clipping
+   at the section edge, a fade gradient over its right edge, and a flex
+   track narrower than its own content so the next slide overflows
+   visibly until the gradient swallows it. ─────────────────────────── */
+
+.flow-slider {
+  max-width: 1200px;
+  margin: 7rem auto;
+  padding: 0 clamp(1.5rem, 5vw, 4rem);
+  opacity: 0;
+  transform: translateX(60px);
+  transition: opacity .4s linear .2s, transform .4s linear .2s;
+}
+
+.flow-slider.is-visible { opacity: 1; transform: translateX(0); }
+
+.flow-slider-viewport { position: relative; overflow: hidden; min-height: 9rem; }
+
+.flow-slider-fade {
+  position: absolute;
+  top: 0; right: 0; bottom: 0;
+  width: 28%;
+  background: linear-gradient(90deg, transparent, var(--ground-deep) 88%);
+  z-index: 2;
+  pointer-events: none;
+}
+
+.flow-slider-track {
+  display: flex;
+  max-width: 760px;
+  transition: transform .5s ease;
+}
+
+.flow-slide {
+  flex: 0 0 100%;
+  min-width: 0;
+  opacity: .35;
+  transform: scale(.94);
+  transition: opacity .5s ease, transform .5s ease;
+}
+
+.flow-slide.is-active { opacity: 1; transform: scale(1); }
+
+.flow-slide blockquote {
+  border-left: 3px solid var(--blue);
+  padding-left: 1.75rem;
+  font-family: var(--body);
+  font-style: italic;
+  font-size: clamp(1.1rem, 2.2vw, 1.4rem);
+  font-weight: 300;
+  color: var(--ivory);
+}
+
+.flow-slide cite {
+  display: block;
+  margin-top: 1rem;
+  padding-left: 1.75rem;
+  font-style: normal;
+  font-family: var(--body);
+  font-weight: 700;
+  font-size: .72rem;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--grey);
+}
+
+.flow-slider-dots { display: flex; gap: .5rem; justify-content: center; margin-top: 2.5rem; }
+
+.flow-slider-dots button {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: rgba(255,255,255,.2);
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  transition: background .25s;
+}
+
+.flow-slider-dots button.is-active { background: var(--blue); }
+
+/* ── Footer — columns cascade up on scroll, staggered 200/400/600/800ms
+   (on-scroll-from-bottom-1..4). ──────────────────────────────────────── */
+
+.flow-footer { border-top: 1px solid rgba(255,255,255,.08); padding: 4rem clamp(1.5rem, 5vw, 4rem) 3rem; }
+
+.flow-footer-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr) auto;
+  gap: 2.5rem;
+  align-items: start;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.flow-footer-grid > * {
+  opacity: 0;
+  transform: translateY(60px);
+  transition: opacity .4s linear var(--wait, 0s), transform .4s linear var(--wait, 0s);
+}
+
+.flow-footer-grid.is-visible > * { opacity: 1; transform: translateY(0); }
+
+@media (max-width: 800px) {
+  .flow-footer-grid { grid-template-columns: 1fr 1fr; }
+  .flow-footer-grid > :last-child { grid-column: 1 / -1; text-align: left; }
+}
+
+.flow-footer-heading {
+  font-family: var(--body);
+  font-weight: 700;
+  font-size: .72rem;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  color: var(--grey);
+  margin-bottom: .9rem;
+}
+
+.flow-footer p { font-size: .85rem; color: #C8C8C8; margin-bottom: .4rem; }
+
+.flow-social { display: flex; gap: .75rem; list-style: none; margin-top: .5rem; }
+
+.flow-social a {
+  width: 34px; height: 34px;
+  border-radius: 50%;
+  border: 1px solid rgba(255,255,255,.15);
+  display: flex; align-items: center; justify-content: center;
+  font-size: .7rem;
+  font-weight: 700;
+  color: var(--grey);
+  transition: border-color .25s, color .25s;
+}
+
+.flow-social a:hover { border-color: var(--blue); color: var(--blue-light); }
+
+.flow-to-top {
+  justify-self: end;
+  width: 42px; height: 42px;
+  border-radius: 50%;
+  border: 1px solid rgba(255,255,255,.15);
+  display: flex; align-items: center; justify-content: center;
+  transition: border-color .25s, transform .25s;
+}
+
+.flow-to-top:hover { border-color: var(--blue); transform: translateY(-3px); }
+</style>
+</head>
+<body>
+
+<nav class="flow-nav" id="flowNav">
+  <a href="/" class="flow-nav-brand">
+    <span class="flow-nav-mark" aria-hidden="true"></span>
+    <span>{{ site.name }}</span>
+  </a>
+  <ul class="flow-nav-links">
+    <li><a href="#work">Work</a></li>
+    <li><a href="/about">About</a></li>
+    <li><a href="/blog">Journal</a></li>
+    <li><a href="/contact">Contact</a></li>
+  </ul>
+</nav>
+
+<section class="flow-hero">
+  <h1 class="flow-hero-text">We build brands that hold up under <em>scrutiny</em>.</h1>
+  <a href="#work" class="flow-scroll-cue" aria-label="Scroll down to see our work">
+    <span class="flow-scroll-cue-label">Scroll</span>
+    <svg class="flow-scroll-cue-icon" width="14" height="22" viewBox="0 0 14 22" fill="none" aria-hidden="true">
+      <rect x="1" y="1" width="12" height="20" rx="6" stroke="currentColor" stroke-width="1.4"/>
+      <circle class="flow-scroll-cue-dot" cx="7" cy="6.5" r="1.6" fill="currentColor"/>
+    </svg>
+  </a>
+</section>
+
+<section class="flow-strip" id="work">
+  <div class="flow-grid">
+    <div class="flow-box-wrap" style="--wait:450ms">
+      <a href="/blog" class="flow-box">
+        <span class="flow-box-tag">Identity</span>
+        <span class="flow-box-image"><img src="/theme/static/img/project-signal.jpg?theme={{ site.theme }}" alt="Signal — brand identity project"></span>
+        <span class="flow-box-name">Signal — Brand Identity</span>
+      </a>
+    </div>
+    <div class="flow-box-wrap" style="--wait:600ms">
+      <a href="/blog" class="flow-box">
+        <span class="flow-box-tag">Motion</span>
+        <span class="flow-box-image"><img src="/theme/static/img/project-nova.jpg?theme={{ site.theme }}" alt="Nova — motion design project"></span>
+        <span class="flow-box-name">Nova — Motion Study</span>
+      </a>
+    </div>
+    <div class="flow-box-wrap" style="--wait:750ms">
+      <a href="/blog" class="flow-box">
+        <span class="flow-box-tag">Product</span>
+        <span class="flow-box-image"><img src="/theme/static/img/project-orbit.jpg?theme={{ site.theme }}" alt="Orbit — product design project"></span>
+        <span class="flow-box-name">Orbit — Product Design</span>
+      </a>
+    </div>
+    <div class="flow-box-wrap" style="--wait:900ms">
+      <a href="/blog" class="flow-box">
+        <span class="flow-box-tag">Editorial</span>
+        <span class="flow-box-image"><img src="/theme/static/img/project-grid.jpg?theme={{ site.theme }}" alt="Grid — editorial design project"></span>
+        <span class="flow-box-name">Grid — Editorial System</span>
+      </a>
+    </div>
+    <div class="flow-box-wrap" style="--wait:1050ms">
+      <a href="/blog" class="flow-box">
+        <span class="flow-box-tag">Direction</span>
+        <span class="flow-box-image"><img src="/theme/static/img/project-echo.jpg?theme={{ site.theme }}" alt="Echo — art direction project"></span>
+        <span class="flow-box-name">Echo — Art Direction</span>
+      </a>
+    </div>
+    <div class="flow-box-wrap" style="--wait:1200ms">
+      <a href="/blog" class="flow-box">
+        <span class="flow-box-tag">Identity</span>
+        <span class="flow-box-image"><img src="/theme/static/img/project-prism.jpg?theme={{ site.theme }}" alt="Prism — brand system project"></span>
+        <span class="flow-box-name">Prism — Brand System</span>
+      </a>
+    </div>
+  </div>
+</section>
+
+<section class="flow-slider" id="flowSlider">
+  <div class="flow-slider-viewport">
+    <div class="flow-slider-fade" aria-hidden="true"></div>
+    <div class="flow-slider-track" id="flowTrack">
+      <div class="flow-slide is-active">
+        <blockquote>"Good design is honest about what it is. It doesn't pretend to be simpler, older, or more important than it actually is."</blockquote>
+        <cite>— Studio Principle No. 1</cite>
+      </div>
+      <div class="flow-slide">
+        <blockquote>"Every constraint is a decision someone already made for you. The work is deciding which ones still deserve to stand."</blockquote>
+        <cite>— Studio Principle No. 2</cite>
+      </div>
+      <div class="flow-slide">
+        <blockquote>"Consistency isn't the goal. Recognition is. A system only earns its rules once someone notices when they're broken."</blockquote>
+        <cite>— Studio Principle No. 3</cite>
+      </div>
+    </div>
+  </div>
+  <div class="flow-slider-dots" id="flowDots"></div>
+</section>
+
+<footer class="flow-footer">
+  <div class="flow-footer-grid" id="flowFooterGrid">
+    <div style="--wait:200ms">
+      <h6 class="flow-footer-heading">Studio</h6>
+      <p>Remote-first, worldwide</p>
+      <p>hello@{{ site.name | lower | replace(from=" ", to="") }}.com</p>
+    </div>
+    <div style="--wait:400ms">
+      <h6 class="flow-footer-heading">Availability</h6>
+      <p>Booking new work</p>
+      <p>for Q1 next year</p>
+    </div>
+    <div style="--wait:600ms">
+      <h6 class="flow-footer-heading">Connect</h6>
+      <ul class="flow-social">
+        <li><a href="#" aria-label="Twitter">X</a></li>
+        <li><a href="#" aria-label="Instagram">IG</a></li>
+        <li><a href="#" aria-label="LinkedIn">IN</a></li>
+      </ul>
+    </div>
+    <a href="#" class="flow-to-top" aria-label="Back to top" style="--wait:800ms">&#8593;</a>
+  </div>
+</footer>
+
+<script>
+(function () {
+  var reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /* On-load cascade: nav slide-down, hero fade-up, grid boxes staggered.
+     Driven by a single `loaded` class on <html> so every element's own
+     transition-delay (baked into --wait / hard-coded) does the staggering. */
+  requestAnimationFrame(function () {
+    document.documentElement.classList.add('loaded');
+  });
+
+  /* Hero scroll cue: smooth-scrolls to the work section on click (html's
+     scroll-behavior is left as 'auto' globally, so this is opt-in here). */
+  var scrollCue = document.querySelector('.flow-scroll-cue');
+  if (scrollCue) {
+    scrollCue.addEventListener('click', function (e) {
+      var target = document.getElementById('work');
+      if (!target) return;
+      e.preventDefault();
+      target.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'start' });
+    });
+    // Switch to a fast, undelayed transition once the on-load reveal has
+    // finished (.9s delay + .4s duration), so later scroll-driven
+    // show/hide isn't stuck behind that entrance timing.
+    setTimeout(function () { scrollCue.classList.add('is-fast'); }, 1300);
+  }
+
+  /* Nav solidifies with a blurred background after a short scroll; the
+     hero scroll cue only shows while the page is at the very top. */
+  var nav = document.getElementById('flowNav');
+  function onScroll() {
+    var y = window.scrollY || document.documentElement.scrollTop;
+    nav.classList.toggle('is-scrolled', y > 24);
+    if (scrollCue) scrollCue.classList.toggle('is-hidden', y > 4);
+  }
+  onScroll();
+  window.addEventListener('scroll', onScroll, { passive: true });
+
+  /* On-scroll reveals: quote slider (slide-from-right) and footer
+     columns (staggered slide-from-bottom), one-shot. */
+  var scrollReveal = [document.getElementById('flowSlider'), document.getElementById('flowFooterGrid')];
+  if (reduceMotion || !('IntersectionObserver' in window)) {
+    scrollReveal.forEach(function (el) { if (el) el.classList.add('is-visible'); });
+  } else {
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('is-visible');
+          io.unobserve(entry.target);
+        }
+      });
+    }, { threshold: 0.2, rootMargin: '0px 0px -60px 0px' });
+    scrollReveal.forEach(function (el) { if (el) io.observe(el); });
+  }
+
+  /* Auto-rotating quote slider — track shifts left by one slide-width
+     per advance (Webflow's native "slide" transition), while the
+     entering slide also punches from opacity .35/scale .94 up to
+     opacity 1/scale 1 (slider-home-slide-effect). */
+  var track = document.getElementById('flowTrack');
+  var slides = document.querySelectorAll('.flow-slide');
+  var dotsWrap = document.getElementById('flowDots');
+  var current = 0;
+  var timer;
+
+  slides.forEach(function (_, i) {
+    var dot = document.createElement('button');
+    dot.type = 'button';
+    dot.setAttribute('aria-label', 'Show quote ' + (i + 1));
+    if (i === 0) dot.classList.add('is-active');
+    dot.addEventListener('click', function () { goTo(i); resetTimer(); });
+    dotsWrap.appendChild(dot);
+  });
+  var dots = dotsWrap.querySelectorAll('button');
+
+  function goTo(i) {
+    slides[current].classList.remove('is-active');
+    dots[current].classList.remove('is-active');
+    current = i;
+    slides[current].classList.add('is-active');
+    dots[current].classList.add('is-active');
+    track.style.transform = 'translateX(-' + (current * 100) + '%)';
+  }
+
+  function next() { goTo((current + 1) % slides.length); }
+
+  function resetTimer() {
+    clearInterval(timer);
+    if (!reduceMotion) timer = setInterval(next, 5000);
+  }
+  resetTimer();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+
+{% block title %}{{ page.title }} — {{ site.name }}{% endblock title %}
+
+{% block content %}
+<article class="single-page contact-page">
+  <header class="contact-header" data-reveal style="--d:0">
+    <p class="page-eyebrow">Get in touch</p>
+    <h1 class="contact-title">{{ page.title }}</h1>
+  </header>
+
+  {% if page.content %}
+  <div class="page-content" data-reveal style="--d:1">
+    {{ page.content | safe }}
+  </div>
+  {% endif %}
+
+  {% if request.query.submitted %}
+  <div class="form-success" role="alert" data-reveal style="--d:2">
+    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"
+         fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+         aria-hidden="true">
+      <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+      <polyline points="22 4 12 14.01 9 11.01"/>
+    </svg>
+    Message sent. We'll be in touch soon.
+  </div>
+  {% else %}
+  <form class="contact-form" method="POST" action="/form/contact" data-reveal style="--d:2">
+    <!-- Honeypot — hidden from real users, bots fill it in -->
+    <div class="honeypot" aria-hidden="true" tabindex="-1">
+      <label for="_hp">Leave this blank</label>
+      <input type="text" id="_hp" name="_honeypot" tabindex="-1" autocomplete="off">
+    </div>
+
+    <div class="form-field">
+      <label for="cf-name">Your name <span class="form-required" aria-hidden="true">*</span></label>
+      <input type="text" id="cf-name" name="name" required autocomplete="name"
+             placeholder="Jane Smith" maxlength="25">
+      <span class="form-field-hint">Max 25 characters</span>
+    </div>
+
+    <div class="form-field">
+      <label for="cf-email">Email address <span class="form-required" aria-hidden="true">*</span></label>
+      <input type="email" id="cf-email" name="email" required autocomplete="email"
+             placeholder="jane@example.com">
+    </div>
+
+    <div class="form-field">
+      <label for="cf-subject">Subject</label>
+      <input type="text" id="cf-subject" name="subject" placeholder="How can we help?" maxlength="50">
+      <span class="form-field-hint">Max 50 characters</span>
+    </div>
+
+    <div class="form-field">
+      <label for="cf-message">Message <span class="form-required" aria-hidden="true">*</span></label>
+      <textarea id="cf-message" name="message" rows="6" required maxlength="250"
+                placeholder="Write your message here…"></textarea>
+      <span class="form-char-count" id="cf-message-count" aria-live="polite">250 characters remaining</span>
+    </div>
+
+    <button type="submit" class="form-submit" id="contact-submit-btn">Send message</button>
+  </form>
+  <script>
+    (function () {
+      var textarea = document.getElementById('cf-message');
+      var counter  = document.getElementById('cf-message-count');
+      var max      = 250;
+
+      function updateCount() {
+        var remaining = max - textarea.value.length;
+        counter.textContent = remaining + ' character' + (remaining === 1 ? '' : 's') + ' remaining';
+        counter.classList.toggle('form-char-warn', remaining <= 30);
+      }
+
+      textarea.addEventListener('input', updateCount);
+
+      document.querySelector('.contact-form').addEventListener('submit', function() {
+        var btn = document.getElementById('contact-submit-btn');
+        btn.disabled = true;
+        btn.textContent = 'Sending…';
+      });
+    })();
+  </script>
+  {% endif %}
+</article>
+{% endblock content %}
