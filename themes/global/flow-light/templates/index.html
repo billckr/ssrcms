@@ -70,7 +70,7 @@
 <section class="flow-strip" id="work">
   <div class="flow-grid">
     {% for post in posts | slice(end=6) %}
-    <div class="flow-box-wrap" style="--wait:{{ 450 + loop.index0 * 150 }}ms">
+    <div class="flow-box-wrap" style="--wait:{{ loop.index0 * 100 }}ms">
       <a href="{{ post.url | safe }}" class="flow-box">
         {% for cat in post.categories %}{% if loop.first %}<span class="flow-box-tag">{{ cat.name }}</span>{% endif %}{% endfor %}
         {% if post.featured_image %}
@@ -186,9 +186,13 @@
     }
   });
 
-  /* On-scroll reveals: quote slider (slide-from-right) and footer
-     columns (staggered slide-from-bottom), one-shot. */
-  var scrollReveal = [document.getElementById('flowSlider'), document.getElementById('flowFooterGrid')];
+  /* On-scroll reveals: project cards (staggered slide-up), quote slider
+     (slide-from-right), and footer columns (staggered slide-from-bottom) —
+     one-shot, fires when scrolled into view rather than on a page-load
+     timer, so it's still visible even if you sit on the page a few
+     seconds before scrolling down to it. */
+  var scrollReveal = [].slice.call(document.querySelectorAll('.flow-box-wrap'))
+    .concat([document.getElementById('flowSlider'), document.getElementById('flowFooterGrid')]);
   if (reduceMotion || !('IntersectionObserver' in window)) {
     scrollReveal.forEach(function (el) { if (el) el.classList.add('is-visible'); });
   } else {

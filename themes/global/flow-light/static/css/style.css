@@ -63,10 +63,6 @@ body {
   line-height: 1.65;
   color: var(--color-text);
   background-color: var(--color-page-background);
-  background-image:
-    radial-gradient(ellipse 900px 600px at 12% -8%, color-mix(in srgb, var(--color-primary) 8%, transparent), transparent 60%),
-    radial-gradient(ellipse 700px 500px at 100% 0%, color-mix(in srgb, var(--accent-warm) 4%, transparent), transparent 55%);
-  background-repeat: no-repeat;
   overflow-x: clip;
   -webkit-font-smoothing: antialiased;
 }
@@ -99,10 +95,11 @@ img { max-width: 100%; display: block; }
   position: sticky;
   top: 0;
   z-index: 200;
-  /* Fixed height, never changed by .is-scrolled below — the home page's
-     nav can shrink its padding on scroll because it's position:fixed and
-     out of flow, but this header is position:sticky and still in flow.
-     Changing its padding there reflows <main> beneath it, and the
+  /* Fixed height, never changed by .is-scrolled below — this header is
+     position:sticky and still in document flow (unlike the home page's
+     position:fixed nav, which is why home's nav being fixed-height too
+     is a separate, purely cosmetic-parity choice, not a requirement).
+     Changing padding here on scroll reflows <main> beneath it, and the
      browser's scroll anchoring "corrects" scrollTop to compensate, which
      fights an in-flight smooth-scroll from a single wheel notch and makes
      the header visibly bounce. Keeping height constant removes the reflow
@@ -116,10 +113,15 @@ img { max-width: 100%; display: block; }
 }
 
 .site-header.is-scrolled {
-  background-color: color-mix(in srgb, var(--color-header-background) 92%, transparent);
+  /* Blends toward the page background rather than the (lighter)
+     --color-header-background, matching the home page's nav exactly. */
+  background-color: color-mix(in srgb, var(--color-page-background) 88%, transparent);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
-  border-bottom-color: var(--color-border);
+  /* Faint translucent white rather than the opaque --color-border — same
+     rgba(255,255,255,.08) the home page's nav/footer use. A solid border
+     at the same 1px width reads visibly bolder from contrast alone. */
+  border-bottom-color: rgba(255,255,255,.08);
 }
 
 .site-nav {
@@ -886,9 +888,12 @@ img { max-width: 100%; display: block; }
 /* ── Footer ────────────────────────────────────────────────────────────── */
 
 .site-footer {
-  border-top: 1px solid var(--color-border);
+  /* Transparent — blends into the page background, matching the home
+     page's footer (which has no background of its own either). Border
+     is the same faint rgba(255,255,255,.08) the home page's footer
+     uses, rather than the opaque --color-border. */
+  border-top: 1px solid rgba(255,255,255,.08);
   padding: 3rem 2rem;
-  background: var(--color-header-background);
 }
 
 .site-footer-inner {
@@ -1010,10 +1015,8 @@ img { max-width: 100%; display: block; }
    ════════════════════════════════════════════════════════════════════ */
 
 body.flow-home {
-  /* The original inline version had no page-wide ambient gradient (only
-     inside .flow-hero::before) and used overflow-x:hidden rather than
-     the shared body rule's overflow-x:clip — preserved exactly here. */
-  background-image: none;
+  /* overflow-x:hidden rather than the shared body rule's overflow-x:clip
+     — preserved exactly as the original inline version had it. */
   overflow-x: hidden;
 }
 
@@ -1263,16 +1266,6 @@ body.flow-home a { text-decoration: none; }
   position: relative;
 }
 
-.flow-hero::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background:
-    radial-gradient(ellipse 900px 500px at 15% 10%, rgba(59,130,246,.12), transparent 60%),
-    radial-gradient(ellipse 700px 500px at 90% 90%, rgba(232,176,75,.06), transparent 55%);
-  pointer-events: none;
-}
-
 .flow-hero-text {
   font-family: var(--font-display);
   font-weight: 700;
@@ -1350,7 +1343,11 @@ body.flow-home a { text-decoration: none; }
   transition: opacity .4s linear var(--wait, 0s), transform .4s linear var(--wait, 0s);
 }
 
-.loaded .flow-box-wrap { opacity: 1; transform: translateY(0); }
+/* Scroll-triggered (IntersectionObserver adds this on scroll-into-view,
+   see index.html's script) rather than gated behind the page's `loaded`
+   on-load class — otherwise the reveal plays out on a load-time timer
+   and has already finished by the time you scroll down to see it. */
+.flow-box-wrap.is-visible { opacity: 1; transform: translateY(0); }
 
 .flow-box {
   display: block;
