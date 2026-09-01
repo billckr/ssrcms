@@ -410,6 +410,10 @@ impl FormDef {
     /// `form::submit`'s redirect), matching what the hand-written pages
     /// do server-side via `{% if request.query.submitted %}` — this just
     /// makes it automatic instead of something every theme has to write.
+    /// Same idea for `?invalid={slug}`, set when `form::submit` rejects a
+    /// submission server-side (missing required field, malformed email) —
+    /// styled inline rather than via a themed class, since no theme has a
+    /// `.form-error` counterpart to `.form-success` to style it with.
     pub fn render_html(&self) -> String {
         let slug = html_escape(&self.slug);
         let mut html = format!(
@@ -435,7 +439,10 @@ impl FormDef {
   <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
   <span>{success}</span>
 </div>
-<script>(function(){{var f=document.getElementById('ss-form-{slug}'),s=document.getElementById('ss-form-success-{slug}');if(!f||!s)return;if(new URLSearchParams(location.search).get('submitted')==={slug_js}){{f.style.display='none';s.style.display='';s.scrollIntoView({{behavior:'smooth',block:'start'}});}}}})();</script>
+<div id="ss-form-error-{slug}" role="alert" style="display:none;margin-top:.75rem;color:#dc2626;font-size:.9em">
+  <span>Please fill in all required fields with valid values and try again.</span>
+</div>
+<script>(function(){{var f=document.getElementById('ss-form-{slug}'),s=document.getElementById('ss-form-success-{slug}'),e=document.getElementById('ss-form-error-{slug}');if(!f||!s||!e)return;var q=new URLSearchParams(location.search);if(q.get('submitted')==={slug_js}){{f.style.display='none';s.style.display='';s.scrollIntoView({{behavior:'smooth',block:'start'}});}}else if(q.get('invalid')==={slug_js}){{e.style.display='';e.scrollIntoView({{behavior:'smooth',block:'start'}});}}}})();</script>
 "#,
             button_label = html_escape(&self.settings.button_label),
             success = html_escape(&self.settings.success_message),

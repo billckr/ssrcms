@@ -17,8 +17,34 @@ use axum::{
 use crate::app_state::AppState;
 use crate::mail::{self, EmailMessage};
 use crate::middleware::site::CurrentSite;
-use crate::models::form_def;
+use crate::models::form_def::{self, FormField};
 use crate::models::form_submission::{self, create, CreateFormSubmission};
+
+/// `name@domain.tld` — mirrors the `pattern` attribute `form_def.rs` puts on
+/// rendered `type="email"` inputs, so server-side and client-side agree on
+/// what counts as a complete email address.
+fn email_pattern() -> &'static regex_lite::Regex {
+    static RE: std::sync::OnceLock<regex_lite::Regex> = std::sync::OnceLock::new();
+    RE.get_or_init(|| regex_lite::Regex::new(r"^[^\s@]+@[^\s@]+\.[^\s@]+$").unwrap())
+}
+
+/// Check submitted `data` against the form's own field definitions —
+/// `required` presence and, for `email`-type fields, address format. This is
+/// the only validation gate that isn't trivially bypassed by a non-browser
+/// client (curl, a bot) skipping the `required`/`type="email"`/`pattern`
+/// attributes rendered client-side in `form_def::render_field_html`.
+fn validate_submission(fields: &[FormField], data: &HashMap<String, String>) -> bool {
+    for field in fields {
+        let value = data.get(&field.name).map(|v| v.trim()).unwrap_or("");
+        if field.required && value.is_empty() {
+            return false;
+        }
+        if field.field_type == "email" && !value.is_empty() && !email_pattern().is_match(value) {
+            return false;
+        }
+    }
+    true
+}
 
 /// `POST /form/{name}` — store a form submission and redirect.
 pub async fn submit(
@@ -35,20 +61,41 @@ pub async fn submit(
         .filter(|(k, _)| !k.starts_with('_'))
         .collect();
 
+    let referer = headers
+        .get(axum::http::header::REFERER)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("/");
+    let base = referer.split('?').next().unwrap_or(referer).to_string();
+
     // If this form has been administratively blocked, redirect with ?blocked=1
     if form_submission::is_blocked(&state.db, current_site.site.id, &name).await {
-        let referer = headers
-            .get(axum::http::header::REFERER)
-            .and_then(|v| v.to_str().ok())
-            .unwrap_or("/");
-        let base = referer.split('?').next().unwrap_or(referer);
         return Redirect::to(&format!("{}?blocked=1", base));
     }
+
+    // Fetched once — needed for validation below and, further down, for
+    // both the admin-notify email and the submitter-confirmation email.
+    let form = form_def::get_by_slug(&state.db, current_site.site.id, &name).await.ok().flatten();
 
     // Skip storing empty submissions (all fields blank after stripping)
     let is_empty = data.values().all(|v| v.trim().is_empty());
 
     if !is_empty {
+        // Reject anything that fails the form's own required/type rules
+        // before it's ever persisted or emailed — see validate_submission's
+        // doc comment for why this can't be left to client-side markup
+        // alone. Forms with no matching FormDef (hand-written theme forms
+        // not built in Form Designer) have no rules to check against, so
+        // they're stored as before.
+        if let Some(f) = &form {
+            if !validate_submission(&f.fields, &data) {
+                return Redirect::to(&format!(
+                    "{}?invalid={}",
+                    base,
+                    crate::handlers::admin::themes::url_encode_param(&name)
+                ));
+            }
+        }
+
         // Best-effort IP extraction.
         // In production, Caddy sets X-Real-IP (or X-Forwarded-For).
         // In development (direct connection, no proxy), fall back to the TCP peer address.
@@ -65,10 +112,6 @@ pub async fn submit(
             .map(|(k, v)| format!("{k}: {v}"))
             .collect::<Vec<_>>()
             .join("\n");
-
-        // Fetched before `data` moves below — needed for both the
-        // admin-notify email and the submitter-confirmation email.
-        let form = form_def::get_by_slug(&state.db, current_site.site.id, &name).await.ok().flatten();
 
         // The submitter's own address, if this form collects one: the
         // submitted value of its first `email`-type field.
@@ -138,14 +181,6 @@ pub async fn submit(
     // script. Existing hand-written themes checking `{% if
     // request.query.submitted %}` still work unchanged since any non-empty
     // value is truthy.
-    // Fall back to "/" if the Referer header is missing or unparseable.
-    let referer = headers
-        .get(axum::http::header::REFERER)
-        .and_then(|v| v.to_str().ok())
-        .unwrap_or("/");
-
-    // Strip any existing query string from the referer before appending ours.
-    let base = referer.split('?').next().unwrap_or(referer);
     Redirect::to(&format!(
         "{}?submitted={}",
         base,
