@@ -326,9 +326,8 @@ img { max-width: 100%; display: block; }
   font-family: var(--font-mono);
   font-size: 0.68rem;
   font-weight: 700;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--color-primary);
+  letter-spacing: 0.02em;
+  color: var(--color-text);
 }
 
 .post-meta a { color: var(--color-primary); text-decoration: none; }
@@ -510,13 +509,13 @@ img { max-width: 100%; display: block; }
   font-family: var(--font-mono);
   font-size: 0.7rem;
   font-weight: 700;
-  letter-spacing: 0.25em;
-  text-transform: uppercase;
+  letter-spacing: 0.04em;
   color: var(--color-primary);
   margin-bottom: 1.25rem;
 }
 
 .post-header-eyebrow a { color: var(--color-primary); text-decoration: none; }
+.post-header-eyebrow-sep { color: var(--color-text); }
 
 .post-header .post-title {
   font-family: var(--font-display);

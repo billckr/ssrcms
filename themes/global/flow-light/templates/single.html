@@ -31,7 +31,7 @@
 <article class="single-post">
   <header class="post-header">
     <p class="post-header-eyebrow" data-reveal style="--d:0">
-      {% if post.categories | length > 0 %}{% for cat in post.categories %}<a href="{{ cat.url }}">{{ cat.name }}</a>{% if not loop.last %}<span aria-hidden="true"> / </span>{% endif %}{% endfor %}{% else %}ENTRY{% endif %}
+      {% if post.categories | length > 0 %}{% for cat in post.categories %}<a href="{{ cat.url }}">{{ cat.name }}</a>{% if not loop.last %}<span class="post-header-eyebrow-sep" aria-hidden="true"> / </span>{% endif %}{% endfor %}{% else %}ENTRY{% endif %}
     </p>
     <h1 class="post-title" data-reveal style="--d:1">{{ post.title }}</h1>
     {% if post.excerpt %}<p class="post-subtitle" data-reveal style="--d:2">{{ post.excerpt }}</p>{% endif %}
