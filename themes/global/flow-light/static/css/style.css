@@ -1199,10 +1199,9 @@ body.flow-home a { text-decoration: none; }
   flex-direction: column;
   align-items: center;
   gap: .65rem;
-  color: var(--color-text-muted);
   opacity: 0;
   transform: translate(-50%, 10px);
-  transition: opacity .4s linear .9s, transform .4s linear .9s, color .25s;
+  transition: opacity .4s linear .9s, transform .4s linear .9s;
   pointer-events: none;
 }
 
@@ -1210,7 +1209,7 @@ body.flow-home a { text-decoration: none; }
 
 /* After the initial reveal, scroll-driven show/hide should be snappy —
    no on-load delay attached. */
-.flow-scroll-cue.is-fast { transition: opacity .3s ease, transform .3s ease, color .25s; }
+.flow-scroll-cue.is-fast { transition: opacity .3s ease, transform .3s ease; }
 
 /* Hidden once the page has scrolled at all; only shown at the very top. */
 .flow-scroll-cue.is-hidden {
@@ -1219,11 +1218,13 @@ body.flow-home a { text-decoration: none; }
   pointer-events: none;
 }
 
-.flow-scroll-cue:hover { color: var(--color-primary-hover); }
-
 .flow-scroll-cue-icon { display: block; }
 
-.flow-scroll-cue-dot { animation: flow-scroll-dot 1.8s ease-in-out infinite; transform-origin: center; }
+.flow-scroll-cue-outline { stroke: var(--color-text); transition: stroke .25s; }
+
+.flow-scroll-cue:hover .flow-scroll-cue-outline { stroke: var(--color-primary); }
+
+.flow-scroll-cue-dot { fill: var(--color-primary); animation: flow-scroll-dot 1.8s ease-in-out infinite; transform-origin: center; }
 
 @keyframes flow-scroll-dot {
   0%   { transform: translateY(0); opacity: 0; }
