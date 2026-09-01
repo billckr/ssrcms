@@ -22,25 +22,22 @@
     <p class="no-results">Nothing found matching "{{ query }}".</p>
   {% else %}
     <p class="result-count">{{ result_count }} result{% if result_count != 1 %}s{% endif %}</p>
-    <ol class="post-grid">
+    {# Same .flow-grid / .flow-box cards as the homepage/archive pages —
+       search used to be the one page still on the old, unstyled generic
+       .post-card component. #}
+    <div class="flow-grid">
       {% for post in results %}
-        <li class="post-card" data-reveal style="--d:{{ loop.index0 % 4 }}">
-          <article>
-            <div class="post-card-body post-card-body--search">
-              <h2 class="post-title">
-                <a href="{{ post.url | safe }}">{{ post.title }}</a>
-              </h2>
-              <div class="post-meta">
-                <time datetime="{{ post.published_at }}">
-                  {% if post.published_at %}{{ post.published_at | date_format }}{% endif %}
-                </time>
-              </div>
-              <p class="post-excerpt">{{ post.excerpt }}</p>
-            </div>
-          </article>
-        </li>
+      <div class="flow-box-wrap" data-reveal style="--d:{{ loop.index0 }}">
+        <a href="{{ post.url | safe }}" class="flow-box">
+          {% for cat in post.categories %}{% if loop.first %}<span class="flow-box-tag">{{ cat.name }}</span>{% endif %}{% endfor %}
+          {% if post.featured_image %}
+            <span class="flow-box-image"><img src="{{ post.featured_image.url | safe }}" alt="{{ post.featured_image.alt_text }}"></span>
+          {% endif %}
+          <span class="flow-box-name">{{ post.title }}</span>
+        </a>
+      </div>
       {% endfor %}
-    </ol>
+    </div>
   {% endif %}
 {% else %}
   <p class="search-prompt">Enter a search query above.</p>
