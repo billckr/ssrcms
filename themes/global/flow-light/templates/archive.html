@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+
+{% block title %}
+  {% if archive_term %}
+    {{ archive_term.name }} — {{ site.name }}
+  {% elif archive_author %}
+    Posts by {{ archive_author.display_name }} — {{ site.name }}
+  {% else %}
+    Archive — {{ site.name }}
+  {% endif %}
+{% endblock title %}
+
+{% block content %}
+<header class="archive-header">
+  {% if archive_type == "category" %}
+    <span class="archive-eyebrow">Category</span>
+    <h1>{{ archive_term.name }}</h1>
+    {% if archive_term.post_count %}
+      <p class="archive-post-count">{{ archive_term.post_count }} post{% if archive_term.post_count != 1 %}s{% endif %}</p>
+    {% endif %}
+  {% elif archive_type == "tag" %}
+    <span class="archive-eyebrow">Tag</span>
+    <h1>{{ archive_term.name }}</h1>
+    {% if archive_term.post_count %}
+      <p class="archive-post-count">{{ archive_term.post_count }} post{% if archive_term.post_count != 1 %}s{% endif %}</p>
+    {% endif %}
+  {% elif archive_type == "author" %}
+    <span class="archive-eyebrow">Author</span>
+    <h1>{{ archive_author.display_name }}</h1>
+    {% if archive_author.bio %}
+      <p class="author-bio">{{ archive_author.bio }}</p>
+    {% endif %}
+  {% else %}
+    <h1>Archive</h1>
+  {% endif %}
+</header>
+
+{% if posts | length == 0 %}
+  <p class="no-posts">No posts found.</p>
+{% else %}
+  {# Same .flow-grid / .flow-box cards as the homepage's post cards — same
+     hover reveal, same bottom-bar fill, same tag/title treatment. The
+     homepage drives its reveal off a `loaded` class from its own on-load
+     script; every other page (this one included) uses base.html's shared
+     data-reveal + IntersectionObserver system instead, so `.flow-box-wrap`
+     picks up `data-reveal` here rather than the inline --wait timing. #}
+  <div class="flow-grid">
+    {% for post in posts %}
+    <div class="flow-box-wrap" data-reveal style="--d:{{ loop.index0 }}">
+      <a href="{{ post.url | safe }}" class="flow-box">
+        {% for cat in post.categories %}{% if loop.first %}<span class="flow-box-tag">{{ cat.name }}</span>{% endif %}{% endfor %}
+        {% if post.featured_image %}
+          <span class="flow-box-image"><img src="{{ post.featured_image.url | safe }}" alt="{{ post.featured_image.alt_text }}"></span>
+        {% endif %}
+        <span class="flow-box-name">{{ post.title }}</span>
+      </a>
+    </div>
+    {% endfor %}
+  </div>
+
+  {% if pagination %}
+    <nav class="pagination" aria-label="Page navigation">
+      {% if pagination.prev_url %}
+        <a href="{{ pagination.prev_url }}" class="pagination-prev">← Newer</a>
+      {% endif %}
+      <span class="pagination-info">Page {{ pagination.current_page }} of {{ pagination.total_pages }}</span>
+      {% if pagination.next_url %}
+        <a href="{{ pagination.next_url }}" class="pagination-next">Older →</a>
+      {% endif %}
+    </nav>
+  {% endif %}
+{% endif %}
+{% endblock content %}

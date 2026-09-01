@@ -36,36 +36,6 @@ label = "Primary accent (hover)"
 [customizer.colors.color-border]
 label = "Border / hairline"
 
-[customizer.options.show_sidebar]
-type    = "bool"
-default = true
-label   = "Show right sidebar (search, account, categories, tags)"
-group   = "Sidebar"
-
-[customizer.options.sidebar_order]
-type    = "order"
-default = ["search", "account", "categories", "tags"]
-label   = "Sidebar widget order"
-group   = "Sidebar"
-
-[customizer.options.sidebar_order.items]
-search     = "Search"
-account    = "Account"
-categories = "Categories"
-tags       = "Tags"
-
-[customizer.options.hero_eyebrow]
-type    = "text"
-default = "SELECTED WORK"
-label   = "Hero eyebrow label (small tag above headline)"
-group   = "Header"
-
-[customizer.options.hero_tagline]
-type    = "text"
-default = "A studio for ideas that hold up under scrutiny."
-label   = "Tagline (shown below the hero headline)"
-group   = "Header"
-
 [customizer.options.nav_dropdown_trigger]
 type    = "choice"
 default = "hover"
