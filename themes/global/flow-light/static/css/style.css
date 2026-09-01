@@ -8,7 +8,7 @@
   /* — customizer contract: the admin color picker rewrites these hex
      values in place, so every one of these eight vars must stay a bare
      6-digit hex on its own line. — */
-  --color-page-background:    #1A1A1A;
+  --color-page-background:    #101114;
   --color-panel-background:   #242424;
   --color-header-background:  #161616;
   --color-text:                #F1F1F1;
@@ -74,20 +74,6 @@ img { max-width: 100%; display: block; }
 
 ::selection { background: var(--color-primary); color: #fff; }
 
-/* ── Ambient chrome: scroll progress ──────────────────────────────────── */
-
-.scroll-progress {
-  position: fixed;
-  top: 0; left: 0; right: 0;
-  height: 2px;
-  background: var(--color-primary);
-  box-shadow: 0 0 6px color-mix(in srgb, var(--color-primary) 70%, transparent);
-  transform: scaleX(0);
-  transform-origin: 0 50%;
-  z-index: 300;
-  transition: transform 0.08s linear;
-}
-
 /* ── Scroll reveal ─────────────────────────────────────────────────────── */
 
 [data-reveal] {
@@ -108,8 +94,16 @@ img { max-width: 100%; display: block; }
   position: sticky;
   top: 0;
   z-index: 200;
+  /* Fixed height, never changed by .is-scrolled below — the home page's
+     nav can shrink its padding on scroll because it's position:fixed and
+     out of flow, but this header is position:sticky and still in flow.
+     Changing its padding there reflows <main> beneath it, and the
+     browser's scroll anchoring "corrects" scrollTop to compensate, which
+     fights an in-flight smooth-scroll from a single wheel notch and makes
+     the header visibly bounce. Keeping height constant removes the reflow
+     entirely, so there's nothing for anchoring to correct. */
   padding: 1.75rem 0;
-  transition: padding 0.35s var(--ease-out), background-color 0.35s var(--ease-out), backdrop-filter 0.35s var(--ease-out), border-color 0.35s var(--ease-out);
+  transition: background-color 0.35s var(--ease-out), backdrop-filter 0.35s var(--ease-out), border-color 0.35s var(--ease-out);
   border-bottom: 1px solid transparent;
   transform: translateZ(0);
   will-change: transform;
@@ -117,7 +111,6 @@ img { max-width: 100%; display: block; }
 }
 
 .site-header.is-scrolled {
-  padding: 1rem 0;
   background-color: color-mix(in srgb, var(--color-header-background) 92%, transparent);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
@@ -128,9 +121,7 @@ img { max-width: 100%; display: block; }
   display: flex;
   align-items: center;
   gap: 1.5rem;
-  max-width: var(--max-width);
-  margin: 0 auto;
-  padding: 0 2rem;
+  padding: 0 clamp(1.5rem, 5vw, 4rem);
 }
 
 .site-title {
@@ -139,8 +130,8 @@ img { max-width: 100%; display: block; }
   gap: 0.75rem;
   font-family: var(--font-display);
   font-weight: 700;
-  font-size: 1.2rem;
-  letter-spacing: 0.02em;
+  font-size: 1.05rem;
+  letter-spacing: 0.01em;
   color: var(--color-text);
   text-decoration: none;
 }
@@ -180,7 +171,7 @@ img { max-width: 100%; display: block; }
   font-size: 0.72rem;
   letter-spacing: 0.14em;
   text-transform: uppercase;
-  padding: 0.55rem 0.85rem;
+  padding: 0 0.85rem;
   background: none;
   border: none;
   cursor: pointer;
@@ -303,148 +294,6 @@ img { max-width: 100%; display: block; }
 .nav-open .nav-toggle span:nth-child(1) { transform: translateY(7px) rotate(45deg); }
 .nav-open .nav-toggle span:nth-child(2) { opacity: 0; }
 .nav-open .nav-toggle span:nth-child(3) { transform: translateY(-7px) rotate(-45deg); }
-
-/* ── Hero ──────────────────────────────────────────────────────────────── */
-
-.hero {
-  position: relative;
-  padding: clamp(4.5rem, 11vw, 10rem) 2rem clamp(3rem, 6vw, 5rem);
-  overflow: hidden;
-  isolation: isolate;
-}
-
-.hero-glow {
-  position: absolute;
-  border-radius: 50%;
-  filter: blur(110px);
-  z-index: -1;
-  opacity: 0.35;
-  will-change: transform;
-  transform: translateZ(0);
-}
-
-.hero-glow-a {
-  width: 520px; height: 520px;
-  top: -220px; left: -140px;
-  background: var(--color-primary);
-  animation: float-a 18s ease-in-out infinite;
-}
-
-.hero-glow-b {
-  width: 460px; height: 460px;
-  top: -100px; right: -180px;
-  background: var(--accent-warm);
-  animation: float-b 22s ease-in-out infinite;
-}
-
-@keyframes float-a {
-  0%, 100% { transform: translate(0, 0) scale(1); }
-  50% { transform: translate(30px, 50px) scale(1.1); }
-}
-@keyframes float-b {
-  0%, 100% { transform: translate(0, 0) scale(1); }
-  50% { transform: translate(-40px, 30px) scale(0.92); }
-}
-
-.hero-inner { max-width: var(--max-width); margin: 0 auto; text-align: center; }
-
-.hero-eyebrow {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.6rem;
-  font-family: var(--font-mono);
-  font-size: 0.7rem;
-  font-weight: 700;
-  letter-spacing: 0.3em;
-  text-transform: uppercase;
-  color: var(--color-primary);
-  margin-bottom: 2rem;
-}
-
-.hero-eyebrow::before, .hero-eyebrow::after {
-  content: '';
-  width: 2rem; height: 1px;
-  background: var(--color-primary);
-  opacity: 0.5;
-}
-
-.hero-title {
-  font-family: var(--font-display);
-  font-weight: 700;
-  line-height: 0.98;
-  letter-spacing: -0.01em;
-  font-size: clamp(2.8rem, 8vw, 6rem);
-  color: var(--color-text);
-  margin-bottom: 1.5rem;
-}
-
-.hero-tagline {
-  max-width: 48ch;
-  margin: 0 auto;
-  font-family: var(--font-body);
-  font-size: clamp(1.05rem, 2vw, 1.3rem);
-  color: var(--color-text-muted);
-  font-weight: 300;
-}
-
-.hero-scroll-cue {
-  margin: 4rem auto 0;
-  width: 1px;
-  height: 42px;
-  background: var(--color-border);
-  display: flex;
-  justify-content: center;
-  position: relative;
-}
-
-.hero-scroll-cue span {
-  position: absolute;
-  top: 0;
-  width: 3px; height: 3px;
-  border-radius: 999px;
-  background: var(--color-primary);
-  animation: cue-bounce 2s ease-in-out infinite;
-}
-
-@keyframes cue-bounce {
-  0% { transform: translateY(0); opacity: 1; }
-  100% { transform: translateY(38px); opacity: 0; }
-}
-
-/* ── Ticker ────────────────────────────────────────────────────────────── */
-
-.ticker {
-  border-top: 1px solid var(--color-border);
-  border-bottom: 1px solid var(--color-border);
-  overflow: hidden;
-  padding: 1.1rem 0;
-  margin-bottom: 3rem;
-}
-
-.ticker-track {
-  display: flex;
-  align-items: center;
-  gap: 1.25rem;
-  width: max-content;
-  animation: ticker-scroll 36s linear infinite;
-}
-
-@keyframes ticker-scroll {
-  from { transform: translateX(0); }
-  to { transform: translateX(-33.3333%); }
-}
-
-.ticker-item {
-  font-family: var(--font-mono);
-  font-size: 0.75rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.2em;
-  color: var(--color-text-muted);
-  white-space: nowrap;
-}
-
-.ticker-dot { color: var(--color-primary); font-size: 0.5rem; }
 
 /* ── Layout ────────────────────────────────────────────────────────────── */
 
@@ -1138,8 +987,6 @@ img { max-width: 100%; display: block; }
   .user-bar { margin: 1rem 0 0; }
 
   .site-main { padding: 2rem 1.25rem 4rem; }
-  .site-nav { padding: 0 1.25rem; }
-  .hero { padding: 3.5rem 1.25rem 2.5rem; }
 
   .post-grid { grid-template-columns: 1fr; }
 }

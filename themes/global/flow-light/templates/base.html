@@ -47,8 +47,6 @@
 <body>
   {{ hook(name="body_start") | safe }}
 
-  <div class="scroll-progress" id="scrollProgress" aria-hidden="true"></div>
-
   <header class="site-header" id="siteHeader">
     <nav class="site-nav{% if theme_option_choices.nav_dropdown_trigger == "click" %} nav-trigger-click{% endif %}">
       <a class="site-title" href="/">
@@ -193,7 +191,6 @@
   (function () {
     var reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     var header = document.getElementById('siteHeader');
-    var bar = document.getElementById('scrollProgress');
 
     var scrolled = false;
     function onScroll() {
@@ -203,12 +200,6 @@
       if (!scrolled && y > 24) scrolled = true;
       else if (scrolled && y < 8) scrolled = false;
       if (header) header.classList.toggle('is-scrolled', scrolled);
-      if (bar) {
-        var h = document.documentElement;
-        var max = h.scrollHeight - h.clientHeight;
-        var pct = max > 0 ? Math.min(1, y / max) : 0;
-        bar.style.transform = 'scaleX(' + pct + ')';
-      }
     }
     onScroll();
     window.addEventListener('scroll', onScroll, { passive: true });

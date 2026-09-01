@@ -42,6 +42,8 @@ body {
   overflow-x: hidden;
 }
 
+body.nav-lock { overflow: hidden; }
+
 a { color: inherit; text-decoration: none; }
 img { max-width: 100%; display: block; }
 
@@ -88,6 +90,7 @@ img { max-width: 100%; display: block; }
 .flow-nav-links { display: flex; gap: 2.25rem; list-style: none; }
 
 .flow-nav-links a {
+  position: relative;
   font-family: var(--body);
   font-weight: 700;
   font-size: .72rem;
@@ -97,10 +100,176 @@ img { max-width: 100%; display: block; }
   transition: color .25s;
 }
 
-.flow-nav-links a:hover { color: var(--ivory); }
+.flow-nav-links a:hover,
+.flow-nav-dropdown-toggle:hover { color: var(--ivory); }
+
+/* Blue underline, borrowed from the site-wide header's .nav-links a span::after
+   (static/css/style.css) — same 2px bar, same scaleX(0)->scaleX(1) sweep. */
+.flow-nav-links a::after {
+  content: '';
+  position: absolute;
+  left: 0; right: 0; bottom: -6px;
+  height: 2px;
+  background: var(--blue);
+  transform: scaleX(0);
+  transform-origin: 0 50%;
+  transition: transform .35s cubic-bezier(.16, 1, .3, 1);
+}
+
+.flow-nav-links a:hover::after,
+.flow-nav-links a[aria-current="page"]::after { transform: scaleX(1); }
+
+.flow-nav-links a[aria-current="page"] { color: var(--blue); }
+
+/* ── Admin-configured nav items: dropdown children, mobile toggle, user bar —
+   mirrors base.html's .nav-links/.nav-dropdown/.nav-toggle/.user-bar system
+   (static/css/style.css) so the homepage nav has the same admin-menu support
+   as every other page, just re-skinned to flow's dark/blue palette. ────── */
+
+.flow-nav-item { position: relative; display: flex; align-items: center; }
+
+.flow-nav-dropdown-toggle {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: .3rem;
+  font-family: var(--body);
+  font-weight: 700;
+  font-size: .72rem;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: var(--grey);
+  background: none;
+  border: none;
+  cursor: pointer;
+  transition: color .25s;
+}
+
+.flow-nav-dropdown-caret-only { display: none; font-size: .65rem; padding: .3rem; }
+
+.flow-nav-dropdown-caret { font-size: .55rem; transition: transform .2s; }
+.flow-nav-item.open .flow-nav-dropdown-caret { transform: rotate(180deg); }
+
+.flow-nav-dropdown {
+  list-style: none;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  min-width: 190px;
+  background: var(--panel);
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 2px;
+  padding: .4rem;
+  box-shadow: 0 24px 48px -16px rgba(0,0,0,.7);
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(6px);
+  transition: opacity .2s cubic-bezier(.16, 1, .3, 1), transform .2s cubic-bezier(.16, 1, .3, 1), visibility .2s;
+  z-index: 10;
+}
+
+.flow-nav:not(.nav-trigger-click) .flow-nav-item:hover .flow-nav-dropdown,
+.flow-nav-item.open .flow-nav-dropdown {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+
+.flow-nav-dropdown li { display: block; }
+
+.flow-nav-dropdown a,
+.flow-nav-dropdown-label-only {
+  display: block;
+  padding: .55rem .7rem;
+  border-radius: 2px;
+  color: var(--grey);
+  font-size: .68rem;
+  font-weight: 700;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+
+.flow-nav-dropdown a:hover { background: rgba(59,130,246,.14); color: var(--ivory); }
+
+.flow-nav-item-label-only { color: var(--grey); font-size: .72rem; letter-spacing: .16em; text-transform: uppercase; }
+
+.flow-user-bar { margin-left: .4rem; }
+
+.flow-user-bar-name {
+  display: inline-flex;
+  align-items: center;
+  padding: .5rem 1rem;
+  border-radius: 2px;
+  background: none;
+  border: 1px solid var(--blue);
+  color: var(--blue);
+  font-size: .68rem;
+  font-weight: 700;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  transition: background .2s, color .2s;
+}
+
+.flow-user-bar-name:hover { background: var(--blue); color: #fff; }
+
+.flow-nav-toggle {
+  display: none;
+  flex-direction: column;
+  justify-content: center;
+  gap: 5px;
+  width: 38px;
+  height: 38px;
+  background: none;
+  border: 1px solid rgba(255,255,255,.14);
+  border-radius: 2px;
+  cursor: pointer;
+  margin-left: auto;
+}
+
+.flow-nav-toggle span {
+  display: block;
+  width: 16px;
+  height: 2px;
+  background: var(--ivory);
+  margin: 0 auto;
+  transition: transform .3s cubic-bezier(.16, 1, .3, 1), opacity .3s cubic-bezier(.16, 1, .3, 1);
+}
+
+.flow-nav.nav-open .flow-nav-toggle span:nth-child(1) { transform: translateY(7px) rotate(45deg); }
+.flow-nav.nav-open .flow-nav-toggle span:nth-child(2) { opacity: 0; }
+.flow-nav.nav-open .flow-nav-toggle span:nth-child(3) { transform: translateY(-7px) rotate(-45deg); }
 
 @media (max-width: 720px) {
-  .flow-nav-links { display: none; }
+  .flow-nav-toggle { display: flex; }
+
+  .flow-nav-links {
+    position: fixed;
+    top: 0; right: 0;
+    height: 100dvh;
+    width: min(300px, 84vw);
+    background: var(--panel);
+    border-left: 1px solid rgba(255,255,255,.1);
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: flex-start;
+    padding: 6rem 1.5rem 2rem;
+    margin-left: 0;
+    gap: .25rem;
+    transform: translateX(100%);
+    transition: transform .35s cubic-bezier(.16, 1, .3, 1);
+    z-index: 190;
+    overflow-y: auto;
+  }
+
+  .flow-nav.nav-open .flow-nav-links { transform: translateX(0); }
+
+  .flow-nav-links a, .flow-nav-dropdown-toggle, .flow-nav-item-label-only { width: 100%; padding: .85rem .5rem; font-size: .8rem; }
+  .flow-nav-links a::after { display: none; }
+  .flow-nav-dropdown { position: static; opacity: 1; visibility: visible; transform: none; box-shadow: none; display: none; margin-left: .5rem; }
+  .flow-nav-item.open .flow-nav-dropdown { display: block; }
+  .flow-nav-dropdown-caret-only { display: inline-flex; margin-left: auto; }
+
+  .flow-user-bar { margin: 1rem 0 0; }
 }
 
 /* ── Hero: fades + rises in after a 300ms wait (on-load-2). ──────────── */
@@ -169,14 +338,6 @@ img { max-width: 100%; display: block; }
 
 .flow-scroll-cue:hover { color: var(--blue-light); }
 
-.flow-scroll-cue-label {
-  font-family: var(--body);
-  font-weight: 700;
-  font-size: .68rem;
-  letter-spacing: .18em;
-  text-transform: uppercase;
-}
-
 .flow-scroll-cue-icon { display: block; }
 
 .flow-scroll-cue-dot { animation: flow-scroll-dot 1.8s ease-in-out infinite; transform-origin: center; }
@@ -216,8 +377,33 @@ img { max-width: 100%; display: block; }
   height: 280px;
   overflow: hidden;
   background: var(--ground-mid);
-  border-bottom: 3px solid var(--ivory);
 }
+
+/* Bottom bar: white base (was a border-bottom), blue overlay fills it
+   left-to-right on hover — same mechanic as the header nav underline,
+   just thicker and pinned to the card edge instead of floating under text. */
+.flow-box::before {
+  content: '';
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  height: 3px;
+  background: var(--ivory);
+  z-index: 4;
+}
+
+.flow-box::after {
+  content: '';
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  height: 3px;
+  background: var(--blue);
+  transform: scaleX(0);
+  transform-origin: 0 50%;
+  transition: transform .35s cubic-bezier(.16, 1, .3, 1);
+  z-index: 5;
+}
+
+.flow-box:hover::after { transform: scaleX(1); }
 
 .flow-box-image {
   position: absolute;
@@ -417,23 +603,55 @@ img { max-width: 100%; display: block; }
 </head>
 <body>
 
-<nav class="flow-nav" id="flowNav">
+<nav class="flow-nav{% if theme_option_choices.nav_dropdown_trigger == "click" %} nav-trigger-click{% endif %}" id="flowNav">
   <a href="/" class="flow-nav-brand">
     <span class="flow-nav-mark" aria-hidden="true"></span>
     <span>{{ site.name }}</span>
   </a>
+  {% if nav.primary.items | length > 0 or session.is_logged_in %}
+  <button class="flow-nav-toggle" type="button" aria-label="Toggle navigation" aria-expanded="false" onclick="const n=this.closest('.flow-nav');n.classList.toggle('nav-open');this.setAttribute('aria-expanded', n.classList.contains('nav-open'));document.body.classList.toggle('nav-lock');">
+    <span></span><span></span><span></span>
+  </button>
+  {% endif %}
   <ul class="flow-nav-links">
-    <li><a href="#work">Work</a></li>
-    <li><a href="/about">About</a></li>
-    <li><a href="/blog">Journal</a></li>
-    <li><a href="/contact">Contact</a></li>
+    {% for item in nav.primary.items %}
+      <li class="flow-nav-item{% if item.children | length > 0 %} has-children{% endif %}" style="--i: {{ loop.index0 }}">
+        {% if item.url %}
+          <a href="{{ item.url }}"{% if item.target == "_blank" %} target="_blank" rel="noopener"{% endif %}{% if item.is_current %} aria-current="page"{% endif %}>{{ item.label }}</a>
+          {% if item.children | length > 0 %}
+            <button type="button" class="flow-nav-dropdown-toggle flow-nav-dropdown-caret-only" aria-label="Toggle submenu" aria-expanded="false">&#9662;</button>
+          {% endif %}
+        {% elif item.children | length > 0 %}
+          <button type="button" class="flow-nav-dropdown-toggle flow-nav-dropdown-label" aria-haspopup="true" aria-expanded="false">{{ item.label }} <span class="flow-nav-dropdown-caret">&#9662;</span></button>
+        {% else %}
+          <span class="flow-nav-item-label-only">{{ item.label }}</span>
+        {% endif %}
+        {% if item.children | length > 0 %}
+          <ul class="flow-nav-dropdown">
+            {% for child in item.children %}
+              <li>
+                {% if child.url %}
+                  <a href="{{ child.url }}"{% if child.target == "_blank" %} target="_blank" rel="noopener"{% endif %}{% if child.is_current %} aria-current="page"{% endif %}>{{ child.label }}</a>
+                {% else %}
+                  <span class="flow-nav-dropdown-label-only">{{ child.label }}</span>
+                {% endif %}
+              </li>
+            {% endfor %}
+          </ul>
+        {% endif %}
+      </li>
+    {% endfor %}
   </ul>
+  {% if session.is_logged_in %}
+    <div class="flow-user-bar">
+      <a href="/account" class="flow-user-bar-name">{{ session.user.display_name }}</a>
+    </div>
+  {% endif %}
 </nav>
 
 <section class="flow-hero">
   <h1 class="flow-hero-text">We build brands that hold up under <em>scrutiny</em>.</h1>
   <a href="#work" class="flow-scroll-cue" aria-label="Scroll down to see our work">
-    <span class="flow-scroll-cue-label">Scroll</span>
     <svg class="flow-scroll-cue-icon" width="14" height="22" viewBox="0 0 14 22" fill="none" aria-hidden="true">
       <rect x="1" y="1" width="12" height="20" rx="6" stroke="currentColor" stroke-width="1.4"/>
       <circle class="flow-scroll-cue-dot" cx="7" cy="6.5" r="1.6" fill="currentColor"/>
@@ -570,6 +788,26 @@ img { max-width: 100%; display: block; }
   }
   onScroll();
   window.addEventListener('scroll', onScroll, { passive: true });
+
+  /* Admin-configured nav dropdowns (children of a menu item) — same
+     open/close behavior as base.html's .nav-dropdown-toggle handling. */
+  document.querySelectorAll('.flow-nav-dropdown-toggle').forEach(function (btn) {
+    btn.addEventListener('click', function (e) {
+      e.preventDefault();
+      var li = btn.closest('.flow-nav-item');
+      var isOpen = li.classList.contains('open');
+      document.querySelectorAll('.flow-nav-item.open').forEach(function (open) {
+        if (open !== li) { open.classList.remove('open'); }
+      });
+      li.classList.toggle('open', !isOpen);
+      btn.setAttribute('aria-expanded', String(!isOpen));
+    });
+  });
+  document.addEventListener('click', function (e) {
+    if (!e.target.closest('.flow-nav-item')) {
+      document.querySelectorAll('.flow-nav-item.open').forEach(function (li) { li.classList.remove('open'); });
+    }
+  });
 
   /* On-scroll reveals: quote slider (slide-from-right) and footer
      columns (staggered slide-from-bottom), one-shot. */
