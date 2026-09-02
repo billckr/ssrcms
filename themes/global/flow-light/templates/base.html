@@ -53,7 +53,7 @@
         <span class="site-title-mark" aria-hidden="true"></span>
         <span class="site-title-text">{{ site.name }}</span>
       </a>
-      {% if nav.primary.items | length > 0 %}
+      {% if nav.primary.items | length > 0 or session.is_logged_in %}
       <button class="nav-toggle" type="button" aria-label="Toggle navigation" aria-expanded="false" onclick="const n=this.closest('.site-nav');n.classList.toggle('nav-open');this.setAttribute('aria-expanded', n.classList.contains('nav-open'));document.body.classList.toggle('nav-lock');">
         <span></span><span></span><span></span>
       </button>
@@ -86,10 +86,24 @@
             {% endif %}
           </li>
         {% endfor %}
+        {% if session.is_logged_in %}
+          <li class="nav-item nav-item-account">
+            <a href="/account/profile">Profile</a>
+          </li>
+          <li class="nav-item nav-item-account">
+            <a href="/account/logout">Log out</a>
+          </li>
+        {% endif %}
       </ul>
       {% if session.is_logged_in %}
         <div class="user-bar">
-          <a href="/account" class="user-bar-name">{{ session.user.display_name }}</a>
+          <button type="button" class="user-bar-name" id="userMenuBtn" aria-haspopup="true" aria-expanded="false" aria-label="Account menu, {{ session.user.display_name }}">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
+          </button>
+          <div class="user-menu-dropdown" id="userMenuDropdown">
+            <a href="/account/profile" class="user-menu-item">Profile</a>
+            <a href="/account/logout" class="user-menu-item">Log out</a>
+          </div>
         </div>
       {% endif %}
     </nav>
@@ -156,6 +170,33 @@
       closeNav();
       if (siteNav) siteNav.classList.remove('no-transition');
     });
+
+    // Account menu dropdown — separate from the nav above since it's not
+    // part of the mobile slide-out panel and shouldn't be reset by it.
+    var userMenuBtn = document.getElementById('userMenuBtn');
+    var userMenuDropdown = document.getElementById('userMenuDropdown');
+    function closeUserMenu() {
+      if (!userMenuDropdown) return;
+      userMenuDropdown.classList.remove('open');
+      userMenuBtn.setAttribute('aria-expanded', 'false');
+    }
+    if (userMenuBtn) {
+      userMenuBtn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        var isOpen = userMenuDropdown.classList.contains('open');
+        closeUserMenu();
+        if (!isOpen) {
+          userMenuDropdown.classList.add('open');
+          userMenuBtn.setAttribute('aria-expanded', 'true');
+        }
+      });
+      document.addEventListener('click', function(e) {
+        if (!e.target.closest('.user-bar')) closeUserMenu();
+      });
+      document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') closeUserMenu();
+      });
+    }
   })();
   </script>
 

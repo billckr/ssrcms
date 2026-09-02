@@ -16,7 +16,7 @@
     <span class="flow-nav-mark" aria-hidden="true"></span>
     <span>{{ site.name }}</span>
   </a>
-  {% if nav.primary.items | length > 0 %}
+  {% if nav.primary.items | length > 0 or session.is_logged_in %}
   <button class="flow-nav-toggle" type="button" aria-label="Toggle navigation" aria-expanded="false" onclick="const n=this.closest('.flow-nav');n.classList.toggle('nav-open');this.setAttribute('aria-expanded', n.classList.contains('nav-open'));document.body.classList.toggle('nav-lock');">
     <span></span><span></span><span></span>
   </button>
@@ -49,10 +49,24 @@
         {% endif %}
       </li>
     {% endfor %}
+    {% if session.is_logged_in %}
+      <li class="flow-nav-item flow-nav-item-account">
+        <a href="/account/profile">Profile</a>
+      </li>
+      <li class="flow-nav-item flow-nav-item-account">
+        <a href="/account/logout">Log out</a>
+      </li>
+    {% endif %}
   </ul>
   {% if session.is_logged_in %}
     <div class="flow-user-bar">
-      <a href="/account" class="flow-user-bar-name">{{ session.user.display_name }}</a>
+      <button type="button" class="flow-user-bar-name" id="flowUserMenuBtn" aria-haspopup="true" aria-expanded="false" aria-label="Account menu, {{ session.user.display_name }}">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
+      </button>
+      <div class="flow-user-menu-dropdown" id="flowUserMenuDropdown">
+        <a href="/account/profile" class="flow-user-menu-item">Profile</a>
+        <a href="/account/logout" class="flow-user-menu-item">Log out</a>
+      </div>
     </div>
   {% endif %}
 </nav>
@@ -238,6 +252,33 @@
     closeFlowNav();
     if (flowNavEl) flowNavEl.classList.remove('no-transition');
   });
+
+  // Account menu dropdown — separate from the nav above since it's not
+  // part of the mobile slide-out panel and shouldn't be reset by it.
+  var flowUserMenuBtn = document.getElementById('flowUserMenuBtn');
+  var flowUserMenuDropdown = document.getElementById('flowUserMenuDropdown');
+  function closeFlowUserMenu() {
+    if (!flowUserMenuDropdown) return;
+    flowUserMenuDropdown.classList.remove('open');
+    flowUserMenuBtn.setAttribute('aria-expanded', 'false');
+  }
+  if (flowUserMenuBtn) {
+    flowUserMenuBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      var isOpen = flowUserMenuDropdown.classList.contains('open');
+      closeFlowUserMenu();
+      if (!isOpen) {
+        flowUserMenuDropdown.classList.add('open');
+        flowUserMenuBtn.setAttribute('aria-expanded', 'true');
+      }
+    });
+    document.addEventListener('click', function (e) {
+      if (!e.target.closest('.flow-user-bar')) closeFlowUserMenu();
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') closeFlowUserMenu();
+    });
+  }
 
   /* On-scroll reveals: search box (fade/slide-up, matches the cards),
      project cards (staggered slide-up), quote slider (slide-from-right),

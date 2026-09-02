@@ -30,16 +30,14 @@
 {% block content %}
 <article class="single-post">
   <header class="post-header">
-    <p class="post-header-eyebrow" data-reveal style="--d:0">
-      {% if post.categories | length > 0 %}{% for cat in post.categories %}<a href="{{ cat.url }}">{{ cat.name }}</a>{% if not loop.last %}<span class="post-header-eyebrow-sep" aria-hidden="true"> / </span>{% endif %}{% endfor %}{% else %}ENTRY{% endif %}
-    </p>
-    <h1 class="post-title" data-reveal style="--d:1">{{ post.title }}</h1>
-    {% if post.excerpt %}<p class="post-subtitle" data-reveal style="--d:2">{{ post.excerpt }}</p>{% endif %}
-    <div class="post-meta" data-reveal style="--d:3">
+    <h1 class="post-title" data-reveal style="--d:0">{{ post.title }}</h1>
+    {% if post.excerpt %}<p class="post-subtitle" data-reveal style="--d:1">{{ post.excerpt }}</p>{% endif %}
+    <div class="post-meta" data-reveal style="--d:2">
       <time datetime="{{ post.published_at }}">
         {% if post.published_at %}{{ post.published_at | date_format }}{% endif %}
       </time>
       <span class="post-author">by&nbsp;<a href="{{ post.author.url | safe }}">{{ post.author.display_name }}</a></span>
+      <span class="post-meta-category">in&nbsp;{% if post.categories | length > 0 %}{% for cat in post.categories %}<a href="{{ cat.url }}">{{ cat.name }}</a>{% if not loop.last %}<span class="post-header-eyebrow-sep" aria-hidden="true"> / </span>{% endif %}{% endfor %}{% else %}Entry{% endif %}</span>
       <span class="reading-time">{{ post.reading_time }} min read</span>
       {% if session.is_logged_in %}
         {% if is_saved %}
@@ -56,7 +54,7 @@
   </header>
 
   {% if post.featured_image %}
-    <figure class="featured-image-wrap" data-reveal style="--d:4">
+    <figure class="featured-image-wrap" data-reveal style="--d:3">
       <img src="{{ post.featured_image.url | safe }}" alt="{{ post.featured_image.alt_text }}"{% if post.featured_image.title %} title="{{ post.featured_image.title }}"{% endif %} class="featured-image" fetchpriority="high"{% if post.featured_image.width %} width="{{ post.featured_image.width }}" height="{{ post.featured_image.height }}"{% endif %}>
       {% if post.featured_image.caption %}<figcaption class="featured-image-caption">{{ post.featured_image.caption }}</figcaption>{% endif %}
     </figure>
