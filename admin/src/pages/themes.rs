@@ -262,20 +262,36 @@ fn render_customizer_landing(theme_name: &str, source: &str, data: &CustomizerDa
     // same vendored icon set used app-wide e.g. for logout) in the card
     // header, top-right — rather than a stacked text button under Save
     // Changes, so it reads as a secondary/undo action, not a peer of Save.
-    let restore_colors_btn = if data.has_color_backup {
-        format!(
-            r#"<form method="POST" action="/admin/themes/editor/{theme}/restore" class="customizer-restore-form"
-     onsubmit="return confirm('Restore the original backup? Your current color edits will be overwritten.')">
+    //
+    // The button and its <form> are kept as two separate pieces (returned as
+    // a tuple) rather than one self-contained <form>...</form>, because the
+    // button has to sit inside the card's Save-changes <form> for icon-pill
+    // layout purposes. Nesting a second <form> in there is invalid HTML —
+    // browsers collapse it and submit the *outer* (Save) form for any click
+    // inside, silently re-saving whatever's currently in the color inputs
+    // instead of restoring. Keeping this form as a sibling (hidden, id'd)
+    // and pointing the button at it via `form="..."` avoids that: the
+    // button can live wherever it's visually needed while still submitting
+    // the right form.
+    let restore_colors_btn = |restore_form_id: &str| -> (String, String) {
+        if !data.has_color_backup {
+            return (String::new(), String::new());
+        }
+        let button = format!(
+            r#"<button type="submit" form="{form_id}" class="icon-btn" title="Restore original" aria-label="Restore original" onclick="return confirm('Restore the original backup? Your current color edits will be overwritten.')"><img src="/admin/static/icons/rotate-ccw.svg" alt=""></button>"#,
+            form_id = restore_form_id,
+        );
+        let form = format!(
+            r#"<form method="POST" action="/admin/themes/editor/{theme}/restore" id="{form_id}" class="customizer-restore-form" style="display:none">
   <input type="hidden" name="file" value="static/css/style.css">
   <input type="hidden" name="source" value="{source}">
   <input type="hidden" name="stay" value="1">
-  <button type="submit" class="icon-btn" title="Restore original" aria-label="Restore original"><img src="/admin/static/icons/rotate-ccw.svg" alt=""></button>
 </form>"#,
             theme = theme_esc,
             source = source_esc,
-        )
-    } else {
-        String::new()
+            form_id = restore_form_id,
+        );
+        (button, form)
     };
 
     // Restore original for a card's layout options (bool/order/choice) —
@@ -284,20 +300,25 @@ fn render_customizer_landing(theme_name: &str, source: &str, data: &CustomizerDa
     // no backup file to gate on; instead only render when at least one of
     // this card's keys actually has a stored override (i.e. has been changed
     // from its default), same "only after changes" behavior as colors.
-    let render_restore_options_btn = |keys: &[String]| -> String {
+    // Same split-button/form reasoning as restore_colors_btn above.
+    let render_restore_options_btn = |keys: &[String], restore_form_id: &str| -> (String, String) {
         let has_override = keys.iter().any(|k| data.overridden_option_keys.contains(k));
-        if keys.is_empty() || !has_override { return String::new(); }
-        format!(
-            r#"<form method="POST" action="/admin/themes/editor/{theme}/customizer-reset" class="customizer-restore-form"
-     onsubmit="return confirm('Restore original settings? Your current changes in this section will be overwritten.')">
+        if keys.is_empty() || !has_override { return (String::new(), String::new()); }
+        let button = format!(
+            r#"<button type="submit" form="{form_id}" class="icon-btn" title="Restore original" aria-label="Restore original" onclick="return confirm('Restore original settings? Your current changes in this section will be overwritten.')"><img src="/admin/static/icons/rotate-ccw.svg" alt=""></button>"#,
+            form_id = restore_form_id,
+        );
+        let form = format!(
+            r#"<form method="POST" action="/admin/themes/editor/{theme}/customizer-reset" id="{form_id}" class="customizer-restore-form" style="display:none">
   <input type="hidden" name="keys" value="{keys}">
   <input type="hidden" name="source" value="{source}">
-  <button type="submit" class="icon-btn" title="Restore original" aria-label="Restore original"><img src="/admin/static/icons/rotate-ccw.svg" alt=""></button>
 </form>"#,
             theme = theme_esc,
             source = source_esc,
+            form_id = restore_form_id,
             keys = crate::html_escape(&keys.join(",")),
-        )
+        );
+        (button, form)
     };
 
     // Each of the four render_* closures below returns *inner* markup only —
@@ -501,10 +522,11 @@ fn render_customizer_landing(theme_name: &str, source: &str, data: &CustomizerDa
         // out every bool option declared in *other* cards too.
         let bool_keys: String = group_options.iter().map(|(k, _, _, _, _)| k.as_str()).collect::<Vec<_>>().join(",");
 
-        let restore = if !group_colors.is_empty() {
-            restore_colors_btn.clone()
+        let restore_form_id = format!("customizer-restore-form-{gslug}");
+        let (restore_btn, restore_form) = if !group_colors.is_empty() {
+            restore_colors_btn(&restore_form_id)
         } else {
-            render_restore_options_btn(&option_keys)
+            render_restore_options_btn(&option_keys, &restore_form_id)
         };
 
         format!(
@@ -522,9 +544,10 @@ fn render_customizer_landing(theme_name: &str, source: &str, data: &CustomizerDa
       {order}
       <div class="icon-pill">
         <button type="submit" form="{form_id}" id="{btn_id}" class="icon-btn" disabled title="Save Changes" aria-label="Save Changes"><img src="/admin/static/icons/save.svg" alt=""></button>
-        {restore}
+        {restore_btn}
       </div>
     </form>
+    {restore_form}
   </div>
 </div>
 <script>
@@ -561,7 +584,8 @@ fn render_customizer_landing(theme_name: &str, source: &str, data: &CustomizerDa
             form_id = form_id,
             source = source_esc,
             bool_keys = crate::html_escape(&bool_keys),
-            restore = restore,
+            restore_btn = restore_btn,
+            restore_form = restore_form,
             colors = render_colors_section(group_colors),
             choices = render_choices_section(group_choices),
             texts = render_text_options_section(group_texts),
