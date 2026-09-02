@@ -707,7 +707,7 @@ img { max-width: 100%; display: block; }
 .contact-form, .subscribe-form, .newsletter-form, .themed-form { display: flex; flex-direction: column; gap: 1.4rem; margin-top: 2.25rem; }
 
 .form-field { display: flex; flex-direction: column; gap: 0.45rem; }
-.form-field label { font-family: var(--font-mono); font-size: 0.7rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--color-text-muted); }
+.form-field label { font-family: var(--font-mono); font-size: 0.9rem; font-weight: 700; letter-spacing: 0.02em; color: var(--color-text-muted); }
 .form-required { color: var(--color-primary); }
 
 .form-field input,
