@@ -113,9 +113,7 @@ img { max-width: 100%; display: block; }
 }
 
 .site-header.is-scrolled {
-  /* Blends toward the page background rather than the (lighter)
-     --color-header-background, matching the home page's nav exactly. */
-  background-color: color-mix(in srgb, var(--color-page-background) 88%, transparent);
+  background-color: color-mix(in srgb, var(--color-header-background) 88%, transparent);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
   /* Faint translucent white rather than the opaque --color-border — same
@@ -1107,7 +1105,7 @@ body.flow-home a { text-decoration: none; }
 .loaded .flow-nav { transform: translateY(0); }
 
 .flow-nav.is-scrolled {
-  background: rgba(16, 17, 20, .88);
+  background: color-mix(in srgb, var(--color-header-background) 88%, transparent);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
   border-bottom-color: rgba(255,255,255,.08);
