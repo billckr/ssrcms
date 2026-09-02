@@ -2,7 +2,7 @@
 <html lang="{{ site.language }}">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   {{ hook(name="head_start") | safe }}
   <title>{% block title %}{{ site.name }}{% endblock title %}</title>
   {# — SEO meta tags — #}
@@ -53,7 +53,7 @@
         <span class="site-title-mark" aria-hidden="true"></span>
         <span class="site-title-text">{{ site.name }}</span>
       </a>
-      {% if nav.primary.items | length > 0 or session.is_logged_in %}
+      {% if nav.primary.items | length > 0 %}
       <button class="nav-toggle" type="button" aria-label="Toggle navigation" aria-expanded="false" onclick="const n=this.closest('.site-nav');n.classList.toggle('nav-open');this.setAttribute('aria-expanded', n.classList.contains('nav-open'));document.body.classList.toggle('nav-lock');">
         <span></span><span></span><span></span>
       </button>
@@ -96,22 +96,65 @@
   </header>
   <script>
   (function() {
+    // Single source of truth for "menu is closed": the mobile slide-out
+    // panel AND every open dropdown, all reset together. Anything that
+    // should close the menu (tapping outside, navigating away, a
+    // bfcache restore) calls this instead of clearing one piece of state
+    // and forgetting another.
+    function closeNav() {
+      document.querySelectorAll('.nav-item.open').forEach(function(li) {
+        li.classList.remove('open');
+        var toggle = li.querySelector('.nav-dropdown-toggle');
+        if (toggle) toggle.setAttribute('aria-expanded', 'false');
+      });
+      var openNav = document.querySelector('.site-nav.nav-open');
+      if (openNav) {
+        openNav.classList.remove('nav-open');
+        var navToggle = openNav.querySelector('.nav-toggle');
+        if (navToggle) navToggle.setAttribute('aria-expanded', 'false');
+      }
+      document.body.classList.remove('nav-lock');
+    }
+
     document.querySelectorAll('.nav-dropdown-toggle').forEach(function(btn) {
       btn.addEventListener('click', function(e) {
         e.preventDefault();
         var li = btn.closest('.nav-item');
         var isOpen = li.classList.contains('open');
-        document.querySelectorAll('.nav-item.open').forEach(function(open) {
-          if (open !== li) { open.classList.remove('open'); }
-        });
-        li.classList.toggle('open', !isOpen);
-        btn.setAttribute('aria-expanded', String(!isOpen));
+        closeNav();
+        if (!isOpen) {
+          li.classList.add('open');
+          btn.setAttribute('aria-expanded', 'true');
+        }
       });
     });
+    // Tapping anywhere outside the nav (the page behind the open mobile
+    // panel, or away from an open dropdown) closes it, same as hitting
+    // the toggle's own X.
     document.addEventListener('click', function(e) {
-      if (!e.target.closest('.nav-item')) {
-        document.querySelectorAll('.nav-item.open').forEach(function(li) { li.classList.remove('open'); });
+      if (!e.target.closest('.nav-links') && !e.target.closest('.nav-toggle')) {
+        closeNav();
       }
+    });
+    // Back/forward navigation can restore this exact page from the
+    // browser's bfcache — DOM state and all — rather than reloading it.
+    // Closing on pagehide (right before the snapshot is taken, rather than
+    // after pageshow restores it) means the cached page is already closed
+    // and there's nothing left to correct on restore. But closeNav() alone
+    // still leaves the panel's own transform transition armed, so the
+    // instant class removal it does would itself animate — recorded
+    // mid-slide into the snapshot, then finishing that slide-closed
+    // animation the moment the page comes back. Drop the transition first
+    // so the close in the cached snapshot is already fully, silently shut.
+    var siteNav = document.querySelector('.site-nav');
+    window.addEventListener('pagehide', function() {
+      if (siteNav) siteNav.classList.add('no-transition');
+      closeNav();
+    });
+    window.addEventListener('pageshow', function(e) {
+      if (!e.persisted) return;
+      closeNav();
+      if (siteNav) siteNav.classList.remove('no-transition');
     });
   })();
   </script>

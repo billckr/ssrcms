@@ -208,7 +208,14 @@ img { max-width: 100%; display: block; }
 
 .nav-dropdown-caret-only { display: none; font-size: 0.65rem; padding: 0.3rem; }
 
-.nav-dropdown-caret { font-size: 0.55rem; transition: transform 0.2s; }
+/* Hidden by default: hovering a dropdown item already reveals its
+   submenu, so a caret advertising that is redundant. Only shown when the
+   customizer's dropdown trigger is set to "click" (no hover affordance
+   exists then, so the item needs a visible cue) or on mobile, where touch
+   has no hover at all and the mobile override below re-enables it
+   unconditionally. */
+.nav-dropdown-caret { display: none; font-size: 0.55rem; transition: transform 0.2s; }
+.site-nav.nav-trigger-click .nav-dropdown-caret { display: inline-block; }
 .nav-item.open .nav-dropdown-caret { transform: rotate(180deg); }
 
 .nav-dropdown {
@@ -944,10 +951,14 @@ img { max-width: 100%; display: block; }
 .cookie-banner {
   display: none;
   position: fixed;
-  bottom: 1.25rem;
+  /* env() keeps the banner clear of the iOS home-indicator / mobile browser
+     chrome instead of sitting half behind it; the fallback keeps desktop's
+     plain 1.25rem when env() isn't supported. */
+  bottom: calc(1.25rem + env(safe-area-inset-bottom, 0px));
   left: 1.25rem;
   right: 1.25rem;
   max-width: 480px;
+  max-height: calc(100dvh - 2.5rem - env(safe-area-inset-bottom, 0px));
   margin: 0 auto;
   background: var(--color-panel-background);
   border: 1px solid var(--color-border);
@@ -957,6 +968,7 @@ img { max-width: 100%; display: block; }
   z-index: 250;
   flex-direction: column;
   gap: 1.1rem;
+  overflow-y: auto;
 }
 
 .cookie-banner p { font-family: var(--font-body); font-size: 0.95rem; color: var(--color-text-muted); }
@@ -1009,19 +1021,38 @@ img { max-width: 100%; display: block; }
     overflow-y: auto;
   }
 
+  /* Set right before the page is torn down for navigation (see the
+     pagehide handler below) — closes the panel with no visible slide, so
+     a bfcache-restored "back" doesn't replay the close animation. */
+  .site-nav.no-transition .nav-links {
+    transition: none;
+  }
+
   .nav-open .nav-links { transform: translateX(0); }
 
   .nav-links a, .nav-dropdown-toggle, .nav-item-label-only { width: 100%; padding: 0.85rem 0.5rem; font-size: 0.8rem; }
   .nav-links a span::after { display: none; }
-  .nav-dropdown { position: static; opacity: 1; visibility: visible; transform: none; box-shadow: none; display: none; margin-left: 0.5rem; }
+  /* .nav-item is display:flex (a row, for the link+caret pairing above) —
+     without wrap, a position:static dropdown just becomes another item in
+     that row (sitting to the right of the link) instead of dropping to its
+     own line below it. */
+  .nav-item { flex-wrap: wrap; }
+  .nav-dropdown { position: static; opacity: 1; visibility: visible; transform: none; box-shadow: none; display: none; width: 100%; margin-left: 0.5rem; }
   .nav-item.open .nav-dropdown { display: block; }
   .nav-dropdown-caret-only { display: inline-flex; margin-left: auto; }
+  /* Touch has no hover, so the caret is always needed here regardless of
+     the desktop trigger setting. */
+  .nav-dropdown-caret { display: inline-block; }
 
   .user-bar { margin: 1rem 0 0; }
 
   .site-main { padding: 2rem 1.25rem 4rem; }
 
   .post-grid { grid-template-columns: 1fr; }
+
+  .cookie-banner { left: 0.75rem; right: 0.75rem; padding: 1.1rem 1.25rem; gap: 0.9rem; }
+  .cookie-banner p { font-size: 0.85rem; }
+  .cookie-banner-actions { flex-wrap: wrap; }
 }
 
 /* ══════════════════════════════════════════════════════════════════════
@@ -1064,6 +1095,13 @@ body.flow-home a { text-decoration: none; }
   transform: translateY(-100px);
   transition: transform .4s linear, background-color .35s ease, border-color .35s ease, backdrop-filter .35s ease;
   border-bottom: 1px solid transparent;
+  /* Without this, mobile Chromium/WebKit can defer promoting this fixed
+     nav to its own GPU layer until the transition actually starts, so the
+     on-load slide-down paints late — the nav-toggle button lays out
+     correctly but doesn't visibly render until a scroll forces a repaint.
+     .site-header (base.html's non-home nav) already carries this for the
+     same reason. */
+  will-change: transform;
 }
 
 .loaded .flow-nav { transform: translateY(0); }
@@ -1144,6 +1182,13 @@ body.flow-home a { text-decoration: none; }
   font-size: .8rem;
   letter-spacing: .03em;
   color: var(--color-text-muted);
+  /* Missing here meant a children-only item (no href, rendered as this
+     button instead of .flow-nav-links a) sat flush against its neighbors
+     with none of the .85rem breathing room every linked item gets —
+     .nav-dropdown-toggle on every other page's nav carries this via a
+     rule shared with its own `a`, so this is that same value, kept
+     separate since this rule isn't shared with .flow-nav-links a here. */
+  padding: 0 .85rem;
   background: none;
   border: none;
   cursor: pointer;
@@ -1152,7 +1197,14 @@ body.flow-home a { text-decoration: none; }
 
 .flow-nav-dropdown-caret-only { display: none; font-size: .65rem; padding: .3rem; }
 
-.flow-nav-dropdown-caret { font-size: .55rem; transition: transform .2s; }
+/* Hidden by default: hovering a dropdown item already reveals its
+   submenu, so a caret advertising that is redundant. Only shown when the
+   customizer's dropdown trigger is set to "click" (no hover affordance
+   exists then, so the item needs a visible cue) or on mobile, where touch
+   has no hover at all and the mobile override below re-enables it
+   unconditionally. */
+.flow-nav-dropdown-caret { display: none; font-size: .55rem; transition: transform .2s; }
+.flow-nav.nav-trigger-click .flow-nav-dropdown-caret { display: inline-block; }
 .flow-nav-item.open .flow-nav-dropdown-caret { transform: rotate(180deg); }
 
 .flow-nav-dropdown {
@@ -1267,13 +1319,28 @@ body.flow-home a { text-decoration: none; }
     overflow-y: auto;
   }
 
+  /* Set right before the page is torn down for navigation (see the
+     pagehide handler below) — closes the panel with no visible slide, so
+     a bfcache-restored "back" doesn't replay the close animation. */
+  .flow-nav.no-transition .flow-nav-links {
+    transition: none;
+  }
+
   .flow-nav.nav-open .flow-nav-links { transform: translateX(0); }
 
   .flow-nav-links a, .flow-nav-dropdown-toggle, .flow-nav-item-label-only { width: 100%; padding: .85rem .5rem; font-size: .8rem; }
   .flow-nav-links a span::after { display: none; }
-  .flow-nav-dropdown { position: static; opacity: 1; visibility: visible; transform: none; box-shadow: none; display: none; margin-left: .5rem; }
+  /* .flow-nav-item is display:flex (a row, for the link+caret pairing
+     above) — without wrap, a position:static dropdown just becomes another
+     item in that row (sitting to the right of the link) instead of
+     dropping to its own line below it. */
+  .flow-nav-item { flex-wrap: wrap; }
+  .flow-nav-dropdown { position: static; opacity: 1; visibility: visible; transform: none; box-shadow: none; display: none; width: 100%; margin-left: .5rem; }
   .flow-nav-item.open .flow-nav-dropdown { display: block; }
   .flow-nav-dropdown-caret-only { display: inline-flex; margin-left: auto; }
+  /* Touch has no hover, so the caret is always needed here regardless of
+     the desktop trigger setting. */
+  .flow-nav-dropdown-caret { display: inline-block; }
 
   .flow-user-bar { margin: 1rem 0 0; }
 }
@@ -1481,11 +1548,18 @@ body.flow-home a { text-decoration: none; }
   margin: 7rem auto;
   padding: 0 clamp(1.5rem, 5vw, 4rem);
   opacity: 0;
-  transform: translateX(60px);
+  /* translateY, not translateX (every other on-scroll reveal on this page —
+     .flow-search, .flow-box-wrap, .flow-footer-grid — uses translateY too).
+     A horizontal transform on a full-viewport-width block that's still in
+     normal flow inflates the mobile layout viewport by its own offset (this
+     was 60px) until the reveal fires, which is what caused .flow-nav's
+     margin-left:auto children (the hamburger toggle, nav links) to render
+     outside the visible screen on initial load. */
+  transform: translateY(40px);
   transition: opacity .4s linear .2s, transform .4s linear .2s;
 }
 
-.flow-slider.is-visible { opacity: 1; transform: translateX(0); }
+.flow-slider.is-visible { opacity: 1; transform: translateY(0); }
 
 .flow-slider-viewport { position: relative; overflow: hidden; min-height: 9rem; }
 

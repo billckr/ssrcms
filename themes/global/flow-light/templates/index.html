@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>{{ site.name }} — Studio Reel</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -16,7 +16,7 @@
     <span class="flow-nav-mark" aria-hidden="true"></span>
     <span>{{ site.name }}</span>
   </a>
-  {% if nav.primary.items | length > 0 or session.is_logged_in %}
+  {% if nav.primary.items | length > 0 %}
   <button class="flow-nav-toggle" type="button" aria-label="Toggle navigation" aria-expanded="false" onclick="const n=this.closest('.flow-nav');n.classList.toggle('nav-open');this.setAttribute('aria-expanded', n.classList.contains('nav-open'));document.body.classList.toggle('nav-lock');">
     <span></span><span></span><span></span>
   </button>
@@ -178,22 +178,65 @@
 
   /* Admin-configured nav dropdowns (children of a menu item) — same
      open/close behavior as base.html's .nav-dropdown-toggle handling. */
+  // Single source of truth for "menu is closed": the mobile slide-out
+  // panel AND every open dropdown, all reset together. Anything that
+  // should close the menu (tapping outside, navigating away, a bfcache
+  // restore) calls this instead of clearing one piece of state and
+  // forgetting another.
+  function closeFlowNav() {
+    document.querySelectorAll('.flow-nav-item.open').forEach(function (li) {
+      li.classList.remove('open');
+      var toggle = li.querySelector('.flow-nav-dropdown-toggle');
+      if (toggle) toggle.setAttribute('aria-expanded', 'false');
+    });
+    var openNav = document.querySelector('.flow-nav.nav-open');
+    if (openNav) {
+      openNav.classList.remove('nav-open');
+      var navToggle = openNav.querySelector('.flow-nav-toggle');
+      if (navToggle) navToggle.setAttribute('aria-expanded', 'false');
+    }
+    document.body.classList.remove('nav-lock');
+  }
+
   document.querySelectorAll('.flow-nav-dropdown-toggle').forEach(function (btn) {
     btn.addEventListener('click', function (e) {
       e.preventDefault();
       var li = btn.closest('.flow-nav-item');
       var isOpen = li.classList.contains('open');
-      document.querySelectorAll('.flow-nav-item.open').forEach(function (open) {
-        if (open !== li) { open.classList.remove('open'); }
-      });
-      li.classList.toggle('open', !isOpen);
-      btn.setAttribute('aria-expanded', String(!isOpen));
+      closeFlowNav();
+      if (!isOpen) {
+        li.classList.add('open');
+        btn.setAttribute('aria-expanded', 'true');
+      }
     });
   });
+  // Tapping anywhere outside the nav (the page behind the open mobile
+  // panel, or away from an open dropdown) closes it, same as hitting the
+  // toggle's own X.
   document.addEventListener('click', function (e) {
-    if (!e.target.closest('.flow-nav-item')) {
-      document.querySelectorAll('.flow-nav-item.open').forEach(function (li) { li.classList.remove('open'); });
+    if (!e.target.closest('.flow-nav-links') && !e.target.closest('.flow-nav-toggle')) {
+      closeFlowNav();
     }
+  });
+  // Back/forward navigation can restore this exact page from the browser's
+  // bfcache — DOM state and all — rather than reloading it. Closing on
+  // pagehide (right before the snapshot is taken, rather than after
+  // pageshow restores it) means the cached page is already closed and
+  // there's nothing left to correct on restore. But closeFlowNav() alone
+  // still leaves the panel's own transform transition armed, so the
+  // instant class removal it does would itself animate — recorded
+  // mid-slide into the snapshot, then finishing that slide-closed
+  // animation the moment the page comes back. Drop the transition first
+  // so the close in the cached snapshot is already fully, silently shut.
+  var flowNavEl = document.querySelector('.flow-nav');
+  window.addEventListener('pagehide', function () {
+    if (flowNavEl) flowNavEl.classList.add('no-transition');
+    closeFlowNav();
+  });
+  window.addEventListener('pageshow', function (e) {
+    if (!e.persisted) return;
+    closeFlowNav();
+    if (flowNavEl) flowNavEl.classList.remove('no-transition');
   });
 
   /* On-scroll reveals: search box (fade/slide-up, matches the cards),
