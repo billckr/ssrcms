@@ -1137,7 +1137,14 @@ body.sidebar-open .sidebar-overlay {
   padding: 0;
 }
 dialog.modal-card {
-  min-width: 400px;
+  width: 400px;
+  /* min-width alone let this overflow both edges of a phone viewport since
+     it can never shrink below 400px; cap it with max-width instead so it
+     scales down on narrow screens, and bound the height with its own
+     scrollbar so a tall form never gets pushed off top/bottom either. */
+  max-width: calc(100vw - 2rem);
+  max-height: calc(100dvh - 2rem);
+  overflow-y: auto;
   position: fixed;
   top: 50%;
   left: 50%;

@@ -35,7 +35,13 @@ pub fn render(error: Option<&str>, site_name: &str, default_theme: &str) -> Stri
       }} catch (e) {{}}
     }})();
   </script>
-  <style>{css}</style>
+  <style>{css}
+    .login-box .login-submit-row {{ display: flex; justify-content: center; margin-top: .5rem; }}
+    .login-box .login-submit-row .icon-btn {{ width: 40px; height: 40px; padding: 0; background: none; background-image: none; border: 1px solid transparent; box-shadow: none; }}
+    .login-box .login-submit-row .icon-btn:hover {{ box-shadow: none; transform: none; }}
+    .login-box .login-submit-row .icon-btn:focus {{ box-shadow: none; }}
+    .login-box .login-submit-row .icon-btn img {{ width: 22px; height: 22px; }}
+  </style>
 </head>
 <body class="login-body">
   <div class="login-box login-box--wide">
@@ -94,7 +100,13 @@ pub fn render(error: Option<&str>, site_name: &str, default_theme: &str) -> Stri
         <span>Agree to <a href="/terms" target="_blank" rel="noopener noreferrer">Terms of Service</a></span>
       </label>
 
-      <button type="submit" style="margin-top:1rem">Subscribe</button>
+      <div class="login-submit-row">
+        <div class="icon-pill">
+          <button type="submit" class="icon-btn" title="Subscribe" aria-label="Subscribe">
+            <img src="/admin/static/icons/fingerprint-light.svg" alt="">
+          </button>
+        </div>
+      </div>
     </form>
     <p style="color:var(--muted);margin-top:1rem;text-align:center">
       Already a member? <a href="/login">Sign in</a>
