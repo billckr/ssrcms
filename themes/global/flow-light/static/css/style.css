@@ -1492,11 +1492,25 @@ body.flow-home a { text-decoration: none; }
   position: absolute;
   inset: 0;
   z-index: 1;
-  transform: translateY(100%);
-  transition: transform 200ms linear;
+  /* The <img> itself is never filtered and never moves — it's always its
+     true colors underneath. "Muted" is an overlay (::after, below) sitting
+     on top of it via backdrop-filter, so revealing color is that overlay
+     sliding up and off rather than a second, separately-muted image. */
+  overflow: hidden;
 }
 
-.flow-box:hover .flow-box-image { transform: translateY(0); }
+.flow-box-image::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  backdrop-filter: grayscale(1) brightness(.55);
+  -webkit-backdrop-filter: grayscale(1) brightness(.55);
+  transform: translateY(0);
+  transition: transform .4s cubic-bezier(.16, 1, .3, 1);
+}
+
+.flow-box:hover .flow-box-image::after { transform: translateY(-100%); }
 
 .flow-box-image img {
   width: 100%; height: 100%;
