@@ -4,6 +4,7 @@
 //! time-sensitive CMS operations.
 
 use sqlx::PgPool;
+use std::sync::Arc;
 use tokio::sync::mpsc;
 use tokio::time::{interval, Duration};
 use uuid::Uuid;
@@ -14,12 +15,12 @@ use uuid::Uuid;
 /// Runs every 60 seconds. Updates `status = 'published'` for all posts where
 /// `status = 'scheduled' AND published_at <= NOW()`. Logs the count of posts
 /// promoted on each cycle that has work to do.
-pub fn spawn_scheduled_publisher(pool: PgPool) {
+pub fn spawn_scheduled_publisher(pool: PgPool, search_index: Arc<crate::search::SearchIndex>) {
     tokio::spawn(async move {
         let mut ticker = interval(Duration::from_secs(60));
         loop {
             ticker.tick().await;
-            match publish_due_posts(&pool).await {
+            match publish_due_posts(&pool, &search_index).await {
                 Ok(0) => {}
                 Ok(n) => tracing::info!("scheduler: published {} scheduled post(s)", n),
                 Err(e) => tracing::warn!("scheduler: failed to publish scheduled posts: {:?}", e),
@@ -84,17 +85,20 @@ pub fn spawn_view_flush(pool: PgPool, mut rx: mpsc::UnboundedReceiver<(Uuid, Str
     });
 }
 
-async fn publish_due_posts(pool: &PgPool) -> Result<u64, sqlx::Error> {
-    let result = sqlx::query(
+async fn publish_due_posts(pool: &PgPool, search_index: &crate::search::SearchIndex) -> Result<u64, sqlx::Error> {
+    let posts = sqlx::query_as::<_, crate::models::post::Post>(
         r#"
         UPDATE posts
         SET status = 'published'
         WHERE status = 'scheduled'
           AND published_at <= NOW()
+        RETURNING *
         "#,
     )
-    .execute(pool)
+    .fetch_all(pool)
     .await?;
-
-    Ok(result.rows_affected())
+    for post in &posts {
+        crate::search::indexer::index_post(search_index, post);
+    }
+    Ok(posts.len() as u64)
 }

@@ -262,7 +262,7 @@ async fn main() -> anyhow::Result<()> {
         config: Arc::new(cfg.clone()),
         cookie_key,
         plugin_routes: Arc::new(plugin_routes),
-        search_index,
+        search_index: search_index.clone(),
         loaded_plugins: Arc::new(loaded_plugins),
         active_theme,
         site_cache,
@@ -275,7 +275,7 @@ async fn main() -> anyhow::Result<()> {
     };
 
     // ── Scheduled post publisher ─────────────────────────────────────────────
-    synaptic_core::scheduler::spawn_scheduled_publisher(pool.clone());
+    synaptic_core::scheduler::spawn_scheduled_publisher(pool.clone(), search_index.clone());
     info!("scheduler: scheduled post publisher started (60 s interval)");
 
     // ── View flush task ───────────────────────────────────────────────────────

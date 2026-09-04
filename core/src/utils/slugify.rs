@@ -6,7 +6,7 @@
 ///
 /// # Examples
 /// ```
-/// # use core::utils::slugify::slugify;
+/// # use synaptic_core::utils::slugify::slugify;
 /// assert_eq!(slugify("Birthday Party"), "birthday-party");
 /// assert_eq!(slugify("Hello, World!"), "hello-world");
 /// assert_eq!(slugify("My  Post"), "my-post");

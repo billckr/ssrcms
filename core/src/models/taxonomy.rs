@@ -171,6 +171,34 @@ pub async fn detach_from_post(pool: &PgPool, post_id: Uuid, taxonomy_id: Uuid) -
     Ok(())
 }
 
+/// Replace a post's terms atomically, accepting only terms belonging to the
+/// post's site and having the expected taxonomy type. Editor UUIDs are
+/// client-supplied, so this validation must not be left to the browser.
+pub async fn replace_for_post(
+    pool: &PgPool,
+    post_id: Uuid,
+    site_id: Option<Uuid>,
+    category_ids: &[Uuid],
+    tag_ids: &[Uuid],
+) -> Result<()> {
+    let mut tx = pool.begin().await?;
+    sqlx::query("DELETE FROM post_taxonomies WHERE post_id = $1")
+        .bind(post_id).execute(&mut *tx).await?;
+    for (ids, kind) in [(category_ids, "category"), (tag_ids, "tag")] {
+        if ids.is_empty() { continue; }
+        sqlx::query(
+            "INSERT INTO post_taxonomies (post_id, taxonomy_id)
+             SELECT $1, t.id FROM taxonomies t
+             WHERE t.id = ANY($2) AND t.taxonomy = $3
+               AND t.site_id IS NOT DISTINCT FROM $4
+             ON CONFLICT DO NOTHING")
+            .bind(post_id).bind(ids).bind(kind).bind(site_id)
+            .execute(&mut *tx).await?;
+    }
+    tx.commit().await?;
+    Ok(())
+}
+
 /// Count published posts for a given taxonomy term.
 pub async fn post_count(pool: &PgPool, taxonomy_id: Uuid) -> Result<i64> {
     let count: i64 = sqlx::query_scalar(

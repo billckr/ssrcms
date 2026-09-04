@@ -316,6 +316,7 @@ async fn new_post_type(state: AppState, post_type: &str, site_id: Option<Uuid>, 
         form_analytics: vec![], // brand-new post has no content yet to embed a form in
         created_at: None,
         updated_at: None,
+        version: None,
     };
     Html(admin::pages::posts::render_editor(&edit, None, &ctx))
 }
@@ -510,6 +511,7 @@ async fn edit_post_type(state: AppState, id: Uuid, site_id: Option<Uuid>, is_aut
         form_analytics: fetch_form_analytics(&state, post.site_id, &post.content).await,
         created_at: Some(post.created_at.format("%Y-%m-%d %H:%M UTC").to_string()),
         updated_at: Some(post.updated_at.format("%Y-%m-%d %H:%M UTC").to_string()),
+        version: Some(post.updated_at.to_rfc3339()),
     };
 
     let flash = match success {
@@ -521,6 +523,8 @@ async fn edit_post_type(state: AppState, id: Uuid, site_id: Option<Uuid>, is_aut
 
 #[derive(Deserialize)]
 pub struct PostForm {
+    /// Timestamp from when the edit form was loaded; prevents stale saves.
+    pub expected_updated_at: Option<String>,
     pub title: String,
     pub slug: Option<String>,
     pub content: String,
@@ -586,11 +590,19 @@ pub async fn save_new(
     let post_type = if form.post_type == "page" { PostType::Page } else { PostType::Post };
     let published_at = parse_datetime(form.published_at.as_deref());
 
+    if matches!(status, PostStatus::Scheduled) && published_at.is_none() {
+        return (axum::http::StatusCode::BAD_REQUEST, "A scheduled post requires a valid publication date and time.").into_response();
+    }
+
     let form_comments_enabled = form.comments_enabled.as_deref() == Some("on");
 
     let form_parent_id: Option<Uuid> = form.parent_id.as_deref()
         .filter(|s| !s.is_empty())
         .and_then(|s| s.parse::<Uuid>().ok());
+
+    if let Err(message) = validate_editor_references(&state, admin.site_id, form.featured_image_id.as_deref(), form_parent_id, None, form.post_type == "page").await {
+        return (axum::http::StatusCode::BAD_REQUEST, message).into_response();
+    }
 
     // Require content when publishing.
     if matches!(status, PostStatus::Published) && content_is_empty(&form.content) {
@@ -634,6 +646,7 @@ pub async fn save_new(
             form_analytics: vec![],
             created_at: None,
             updated_at: None,
+            version: None,
         };
         return Html(admin::pages::posts::render_editor(&edit, Some("Content is required before publishing."), &ctx)).into_response();
     }
@@ -668,7 +681,7 @@ pub async fn save_new(
 
     match crate::models::post::create(&state.db, &create).await {
         Ok(post) => {
-            save_post_terms(&state, post.id, &form.categories, &form.tags).await;
+            save_post_terms(&state, post.id, post.site_id, &form.categories, &form.tags).await;
             if post.status == "published" {
                 crate::search::indexer::index_post(&state.search_index, &post);
             }
@@ -717,6 +730,7 @@ pub async fn save_new(
                 form_analytics: vec![],
                 created_at: None,
                 updated_at: None,
+                version: None,
             };
             let msg = friendly_save_error(&e);
             Html(admin::pages::posts::render_editor(&edit, Some(&msg), &ctx)).into_response()
@@ -733,6 +747,18 @@ pub async fn save_edit(
     let redirect = if form.post_type == "page" { "/admin/pages" } else { "/admin/posts" };
     if form.post_type == "page" && !admin.caps.can_manage_pages {
         return Redirect::to("/admin").into_response();
+    }
+    if let Some(expected) = form.expected_updated_at.as_deref().filter(|s| !s.is_empty()) {
+        let Ok(expected) = chrono::DateTime::parse_from_rfc3339(expected) else {
+            return (axum::http::StatusCode::BAD_REQUEST, "This edit form is invalid. Please reload the page.").into_response();
+        };
+        let Ok(current) = crate::models::post::get_by_id(&state.db, id).await else {
+            return Redirect::to(redirect).into_response();
+        };
+        if current.updated_at != expected.with_timezone(&chrono::Utc) {
+            return (axum::http::StatusCode::CONFLICT,
+                "This post was changed by another editor while you were editing. Reload the page before saving your changes.").into_response();
+        }
     }
     // Site isolation: verify the post belongs to the admin's site before updating.
     if !admin.caps.is_global_admin {
@@ -776,9 +802,17 @@ pub async fn save_edit(
     };
     let published_at = parse_datetime(form.published_at.as_deref());
     let form_comments_enabled = form.comments_enabled.as_deref() == Some("on");
+
+    if matches!(status, PostStatus::Scheduled) && published_at.is_none() {
+        return (axum::http::StatusCode::BAD_REQUEST, "A scheduled post requires a valid publication date and time.").into_response();
+    }
     let form_parent_id: Option<Uuid> = form.parent_id.as_deref()
         .filter(|s| !s.is_empty())
         .and_then(|s| s.parse::<Uuid>().ok());
+
+    if let Err(message) = validate_editor_references(&state, admin.site_id, form.featured_image_id.as_deref(), form_parent_id, Some(id), form.post_type == "page").await {
+        return (axum::http::StatusCode::BAD_REQUEST, message).into_response();
+    }
 
     // Require content when publishing.
     if matches!(status, PostStatus::Published) && content_is_empty(&form.content) {
@@ -823,6 +857,7 @@ pub async fn save_edit(
             form_analytics: vec![],
             created_at: None,
             updated_at: None,
+            version: None,
         };
         return Html(admin::pages::posts::render_editor(&edit, Some("Content is required before publishing."), &ctx)).into_response();
     }
@@ -862,7 +897,7 @@ pub async fn save_edit(
 
     match crate::models::post::update(&state.db, id, &update).await {
         Ok(post) => {
-            save_post_terms(&state, post.id, &form.categories, &form.tags).await;
+            save_post_terms(&state, post.id, post.site_id, &form.categories, &form.tags).await;
             if post.status == "published" {
                 crate::search::indexer::index_post(&state.search_index, &post);
             } else {
@@ -924,9 +959,10 @@ pub async fn save_edit(
                 preview_url: None,
                 saved_forms: fetch_saved_forms(&state, admin.site_id).await,
         saved_polls: fetch_saved_polls(&state, admin.site_id).await,
-            form_analytics: vec![],
+                form_analytics: vec![],
                 created_at: None,
                 updated_at: None,
+                version: None,
             };
             let msg = friendly_save_error(&e);
             Html(admin::pages::posts::render_editor(&edit, Some(&msg), &ctx)).into_response()
@@ -1319,29 +1355,11 @@ fn scan_templates(state: &AppState, site_id: Option<Uuid>) -> Vec<String> {
     results
 }
 
-async fn save_post_terms(state: &AppState, post_id: Uuid, category_ids: &[String], tag_ids: &[String]) {
-    let current = crate::models::taxonomy::for_post(&state.db, post_id).await.unwrap_or_else(|e| {
-        tracing::warn!("failed to fetch terms for post {}: {:?}", post_id, e);
-        vec![]
-    });
-    for term in &current {
-        if let Err(e) = crate::models::taxonomy::detach_from_post(&state.db, post_id, term.id).await {
-            tracing::warn!("failed to detach term {} from post {}: {:?}", term.id, post_id, e);
-        }
-    }
-    for id_str in category_ids {
-        if let Ok(id) = id_str.parse::<Uuid>() {
-            if let Err(e) = crate::models::taxonomy::attach_to_post(&state.db, post_id, id).await {
-                tracing::warn!("failed to attach category {} to post {}: {:?}", id, post_id, e);
-            }
-        }
-    }
-    for id_str in tag_ids {
-        if let Ok(id) = id_str.parse::<Uuid>() {
-            if let Err(e) = crate::models::taxonomy::attach_to_post(&state.db, post_id, id).await {
-                tracing::warn!("failed to attach tag {} to post {}: {:?}", id, post_id, e);
-            }
-        }
+async fn save_post_terms(state: &AppState, post_id: Uuid, site_id: Option<Uuid>, category_ids: &[String], tag_ids: &[String]) {
+    let categories: Vec<Uuid> = category_ids.iter().filter_map(|s| s.parse().ok()).collect();
+    let tags: Vec<Uuid> = tag_ids.iter().filter_map(|s| s.parse().ok()).collect();
+    if let Err(e) = crate::models::taxonomy::replace_for_post(&state.db, post_id, site_id, &categories, &tags).await {
+        tracing::error!("failed to replace terms for post {}: {:?}", post_id, e);
     }
 }
 
@@ -1352,6 +1370,29 @@ fn friendly_save_error(e: &crate::errors::AppError) -> String {
     } else {
         "Failed to save post. Please try again.".to_string()
     }
+}
+
+async fn validate_editor_references(
+    state: &AppState,
+    site_id: Option<Uuid>,
+    featured_image_id: Option<&str>,
+    parent_id: Option<Uuid>,
+    exclude_parent_id: Option<Uuid>,
+    is_page: bool,
+) -> Result<(), &'static str> {
+    if let Some(raw) = featured_image_id.filter(|s| !s.is_empty()) {
+        let Ok(id) = raw.parse::<Uuid>() else { return Err("The selected featured image is invalid."); };
+        let Ok(media) = crate::models::media::get_by_id(&state.db, id).await else { return Err("The selected featured image could not be found."); };
+        if media.site_id != site_id { return Err("The selected featured image does not belong to this site."); }
+    }
+    if let Some(parent_id) = parent_id {
+        if !is_page || Some(parent_id) == exclude_parent_id { return Err("The selected parent page is invalid."); }
+        let Ok(parent) = crate::models::post::get_by_id(&state.db, parent_id).await else { return Err("The selected parent page could not be found."); };
+        if parent.site_id != site_id || parent.post_type != "page" || parent.status != "published" {
+            return Err("The selected parent page does not belong to this site or is not published.");
+        }
+    }
+    Ok(())
 }
 
 /// Returns true when the content is empty or contains only whitespace / blank

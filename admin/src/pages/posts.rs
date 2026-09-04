@@ -86,6 +86,8 @@ pub struct PostEdit {
     pub created_at: Option<String>,
     /// When it was last saved. None for a new, unsaved post.
     pub updated_at: Option<String>,
+    /// Exact update timestamp used to reject stale concurrent saves.
+    pub version: Option<String>,
 }
 
 pub struct TermOption {
@@ -1109,6 +1111,7 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
               <label><span style="display:inline-block;background:var(--tint);color:var(--text);border-radius:999px;padding:.15rem .65rem;font-size:.78rem;font-weight:600">Content <span style="color:var(--danger)">*</span></span></label>
               <div id="quill-editor" style="height:620px;background:var(--field-bg);font-size:1rem"></div>
               <input type="hidden" id="content" name="content">
+              <input type="hidden" name="expected_updated_at" value="{version}">
             </div>
           </div>
         </div>
@@ -1327,10 +1330,14 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
   // deletePostConfirm below: save_edit/save_new are completely untouched
   // server-side, we just choose whether to act on the redirect they
   // already send back.
-  postForm.addEventListener('submit', function(e) {{
-    e.preventDefault();
-    fetch(postForm.action, {{ method: 'POST', body: new FormData(postForm) }}).then(function(r) {{
-      if (r.redirected) {{
+    postForm.addEventListener('submit', function(e) {{
+      e.preventDefault();
+      fetch(postForm.action, {{ method: 'POST', body: new FormData(postForm) }}).then(function(r) {{
+      if (r.status === 409) {{
+        r.text().then(function(message) {{ alert(message); }});
+        return;
+      }}
+        if (r.redirected) {{
         var landedPath = new URL(r.url).pathname;
         if (landedPath === location.pathname) {{
           // Common case: editing an existing post lands back on the same
@@ -1807,6 +1814,7 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
         saved_polls_js = serde_json::to_string(&post.saved_polls).unwrap_or_else(|_| "[]".into()),
         post_id_js = serde_json::to_string(&post.id).unwrap_or_else(|_| "null".into()),
         excerpt = crate::html_escape(&post.excerpt),
+        version = crate::html_escape(post.version.as_deref().unwrap_or("")),
         status_options = status_options,
         status_hint = status_hint,
         publish_options_label = publish_options_label,
