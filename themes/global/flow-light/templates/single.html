@@ -37,7 +37,7 @@
         {% if post.published_at %}{{ post.published_at | date_format }}{% endif %}
       </time>
       <span class="post-author">by&nbsp;<a href="{{ post.author.url | safe }}">{{ post.author.display_name }}</a></span>
-      <span class="post-meta-category">{% if post.categories | length > 0 %}[{% for cat in post.categories %}<a href="{{ cat.url }}">{{ cat.name }}</a>{% if not loop.last %}<span class="post-header-eyebrow-sep" aria-hidden="true">, </span>{% endif %}{% endfor %}]{% else %}Entry{% endif %}</span>
+      <span class="post-meta-category">{% if post.categories | length > 0 %}[ {% for cat in post.categories %}<a href="{{ cat.url }}">{{ cat.name }}</a>{% if not loop.last %}<span class="post-header-eyebrow-sep" aria-hidden="true">, </span>{% endif %}{% endfor %} ]{% else %}Entry{% endif %}</span>
       <span class="reading-time">{{ post.reading_time }} min read</span>
       {% if session.is_logged_in %}
         {% if is_saved %}
