@@ -799,6 +799,31 @@ body.sidebar-open .sidebar-overlay {
   display: block;
 }
 
+/* Two-col: stack well before the general 768px breakpoint below. The
+   sidebar stays a permanent 220px rail until 768px, so a two-column
+   .two-col only has real breathing room on wide windows; anywhere
+   narrower (including a "not full size" laptop browser window at
+   900-1300px) squeezes both columns into tracks too narrow for their
+   content, and the table (which can't shrink below its own content width)
+   overflows its track under the second, sticky column instead of being
+   clipped or wrapped. Stacking early avoids that regardless of exact
+   pixel math. */
+@media (max-width: 1200px) {
+  .two-col {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+  .two-col > div:last-child {
+    position: static;
+  }
+  /* Opt-in: second column leads when stacked, ahead of the first — e.g.
+     "Appearance options" above the theme list, "Add Category" above the
+     categories table. */
+  .two-col-reorder-mobile > div:last-child {
+    order: -1;
+  }
+}
+
 /* ── Responsive breakpoints ──────────────────────────────────────────────── */
 @media (max-width: 768px) {
   /* Hamburger visible */
@@ -856,20 +881,6 @@ body.sidebar-open .sidebar-overlay {
   .editor-color-sidebar { width: 100%; }
   .customizer-color-grid { grid-template-columns: repeat(2, 1fr); }
 
-  /* Two-col: stack */
-  .two-col {
-    grid-template-columns: 1fr;
-    gap: 1rem;
-  }
-  .two-col > div:last-child {
-    position: static;
-  }
-  /* On /admin/appearance, "Appearance options" (the second column) should
-     lead when stacked, ahead of the theme list. */
-  .two-col-reorder-mobile > div:last-child {
-    order: -1;
-  }
-
   /* Plugin list: single column */
   .plugin-list {
     grid-template-columns: 1fr;
@@ -885,6 +896,19 @@ body.sidebar-open .sidebar-overlay {
     display: block;
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
+  }
+  /* Inside .two-col (Categories, Tags, Menus, ...) the display:block hack
+     above backfires: with thead/tr/td still table-internal display types,
+     the browser generates an anonymous inner table box that sizes to its
+     own content instead of filling width:100%, leaving a gap between the
+     table and the stacked panel below/above it. Scroll the column itself
+     instead and leave the table as a normal table so it still fills it. */
+  .two-col > div:has(.data-table) {
+    overflow-x: auto;
+  }
+  .two-col .data-table {
+    display: table;
+    width: 100%;
   }
 
   /* Admin content padding */

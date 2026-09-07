@@ -18,7 +18,7 @@ pub fn render(terms: &[TermItem], taxonomy: &str, sort: &str, dir: &str, flash: 
     };
 
     let content = format!(
-        r#"<div class="two-col">
+        r#"<div class="two-col two-col-reorder-mobile">
   <div>
     {list_html}
   </div>
