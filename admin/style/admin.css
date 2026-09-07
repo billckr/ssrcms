@@ -255,7 +255,14 @@ a.stat-cell-link:hover { background: var(--tint); }
 .nav-loading-spinner { width: 44px; height: 44px; animation: nav-spin 1.1s linear infinite; }
 @keyframes nav-spin { to { transform: rotate(360deg); } }
 
-/* Tables */
+/* Tables. Never give .data-table (or any real <table>) `display: block` to
+   make it scroll on narrow screens — its thead/tr/td children keep their
+   table-internal display types regardless, so the browser generates an
+   anonymous inner table box that ignores this width:100% and shrinks to
+   its own content instead, leaving a gap wherever the table sits next to
+   or above/below anything else. Scroll the table's parent instead (see
+   `:has(> .data-table)` in the max-width:768px block below) and leave the
+   table itself as a real table. */
 .data-table { width: 100%; border-collapse: collapse; background: var(--surface); border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow); }
 .data-table th { background: var(--tint); text-align: left; padding: .48rem .8rem; font-size: 12px; color: var(--muted); border-bottom: 1px solid var(--border); }
 .data-table td { padding: .48rem .8rem; border-bottom: 1px solid var(--border); }
