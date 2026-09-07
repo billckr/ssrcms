@@ -891,24 +891,19 @@ body.sidebar-open .sidebar-overlay {
     grid-template-columns: 1fr 1fr;
   }
 
-  /* Tables: horizontal scroll */
-  .data-table {
-    display: block;
+  /* Tables: horizontal scroll. display:block on the table itself is
+     deliberately NOT used here — its thead/tr/td children keep their
+     table-internal display types regardless, so the browser generates an
+     anonymous inner table box to hold them, and that anonymous box sizes
+     to its own content instead of filling the table's width:100%. That
+     leaves a gap next to the table wherever it sits alongside something
+     else (Categories/Tags/Menus' two-col, Designer's Forms/Polls tabs,
+     Analytics' Delivery Results tab, ...). Scroll the table's own
+     direct-parent element instead and leave the table itself as a normal
+     table so width:100% actually applies. */
+  :has(> .data-table) {
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
-  }
-  /* Inside .two-col (Categories, Tags, Menus, ...) the display:block hack
-     above backfires: with thead/tr/td still table-internal display types,
-     the browser generates an anonymous inner table box that sizes to its
-     own content instead of filling width:100%, leaving a gap between the
-     table and the stacked panel below/above it. Scroll the column itself
-     instead and leave the table as a normal table so it still fills it. */
-  .two-col > div:has(.data-table) {
-    overflow-x: auto;
-  }
-  .two-col .data-table {
-    display: table;
-    width: 100%;
   }
 
   /* Admin content padding */
