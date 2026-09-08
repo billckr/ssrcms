@@ -160,6 +160,35 @@ pub async fn profile_change_password(
     redirect(flash)
 }
 
+/// POST /account/profile/sign-out-other-devices — invalidate every other
+/// session for this account. The current session is kept alive by
+/// re-inserting the fresh `credential_version()` right after the bump.
+pub async fn sign_out_other_devices(
+    State(state): State<AppState>,
+    account: AccountUser,
+    session: Session,
+) -> Redirect {
+    let flash = match crate::models::user::regenerate_session_nonce(&state.db, account.user.id)
+        .await
+    {
+        Ok(updated) => {
+            let _ = session
+                .insert(
+                    crate::middleware::account_auth::SESSION_ACCOUNT_CREDENTIAL_VERSION_KEY,
+                    updated.credential_version(),
+                )
+                .await;
+            "Signed out of every other session."
+        }
+        Err(_) => "Error signing out other sessions. Please try again.",
+    };
+
+    Redirect::to(&format!(
+        "/account/profile?flash={}",
+        flash.replace(' ', "+")
+    ))
+}
+
 // ── Saved Posts ───────────────────────────────────────────────────────────────
 
 #[derive(Deserialize, Default)]

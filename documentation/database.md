@@ -212,6 +212,20 @@ Also part of this change: `User::credential_version()` (`core/src/models/user.rs
 other active session for the account, the same way a password change already does — see the
 session-rotation note in the **Middleware & Auth** doc.
 
+### `users.session_nonce` (0002, post-baseline, 2026-09-08)
+
+All 72 migrations up to and including 0071 above were squashed into `0001_baseline.sql` on
+2026-09-08 (see `synapcms_migration_baseline` in the repo's session memory, if reading this from
+a later session) — new migrations resume numbering from `0002`. This is the first one:
+`ALTER TABLE users ADD COLUMN session_nonce UUID NOT NULL DEFAULT gen_random_uuid()`.
+
+The column has no meaning of its own — it exists purely as a third input to
+`User::credential_version()` (alongside `password_hash` and `email`) so that "Sign out other
+devices" (`POST /account/profile/sign-out-other-devices`, `POST
+/admin/profile/sign-out-other-devices`) has something to change that invalidates every other
+session without also touching a recovery-sensitive field. See the manual-invalidation note in
+the **Middleware & Auth** doc, and the **Account Area** doc for the user-facing flow.
+
 ## Known Limitations / TODOs
 
 Because `sqlx::migrate!()` embeds migrations at compile time, adding a new migration file

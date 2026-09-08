@@ -67,8 +67,13 @@ pub fn render_profile(
                 onclick="document.getElementById('change-password-dialog').showModal();document.querySelector('.admin-content').style.filter='blur(1.5px)'">
           <img src="/admin/static/icons/key.svg" alt="">
         </button>
+        <button type="button" class="icon-btn" title="Sign out other devices" aria-label="Sign out other devices"
+                onclick="if (confirm('Sign out of every other session? You will stay signed in here.')) document.getElementById('sign-out-other-devices-form').submit();">
+          <img src="/admin/static/icons/log-out.svg" alt="">
+        </button>
       </div>
       <p class="profile-avatar-hint">Custom avatars aren't supported yet — this is a placeholder.</p>
+      <form id="sign-out-other-devices-form" method="POST" action="/admin/profile/sign-out-other-devices" hidden></form>
     </div>
 
     <div class="profile-bio-card">

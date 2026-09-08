@@ -186,6 +186,11 @@ pub fn build(
                 .layer(DefaultBodyLimit::max(AUTH_FORM_BODY_LIMIT)),
         )
         .route(
+            "/account/profile/sign-out-other-devices",
+            post(account::sign_out_other_devices)
+                .layer(DefaultBodyLimit::max(AUTH_FORM_BODY_LIMIT)),
+        )
+        .route(
             "/account/email/change",
             post(account_email::request_change).layer(DefaultBodyLimit::max(AUTH_FORM_BODY_LIMIT)),
         )
@@ -254,6 +259,11 @@ pub fn build(
         .route(
             "/admin/profile/change-password",
             post(profile::change_password).layer(DefaultBodyLimit::max(AUTH_FORM_BODY_LIMIT)),
+        )
+        .route(
+            "/admin/profile/sign-out-other-devices",
+            post(profile::sign_out_other_devices)
+                .layer(DefaultBodyLimit::max(AUTH_FORM_BODY_LIMIT)),
         )
         // ── Admin dashboard ────────────────────────────────────────────────
         .route("/admin", get(dashboard::dashboard))

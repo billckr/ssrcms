@@ -2,11 +2,11 @@
 title: Admin Panel
 group: system
 updated_by: claude
-last_updated: 2026-08-06
+last_updated: 2026-09-08
 ---
 # Admin Panel
 
-> Last updated: 2026-08-06 | Updated by: claude
+> Last updated: 2026-09-08 | Updated by: claude
 
 ## Overview
 
@@ -235,6 +235,12 @@ in.
 `can_manage_settings`, which per `admin_auth.rs` is only true for a super_admin viewing their own
 default/home site. `profile.rs` lets any admin user edit their own email/display
 name/bio and change their own password (current-password re-verification + policy check).
+
+`POST /admin/profile/sign-out-other-devices` (added 2026-09-08) invalidates every other active
+session for the signed-in admin/staff account — same "Sign out other devices" mechanism as the
+subscriber-facing `/account/profile` (see the **Account Area** doc for the full explanation);
+`profile::sign_out_other_devices` mirrors `account::sign_out_other_devices` exactly, just against
+`SESSION_CREDENTIAL_VERSION_KEY` instead of the account-side session key.
 
 ## Routes / Endpoints
 

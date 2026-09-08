@@ -104,6 +104,18 @@ every other active session for the account to re-authenticate. The session that 
 confirmation has its own stored marker refreshed in the same request so it isn't logged out by
 the very change it just made — the identical pattern the password-change handlers already use.
 
+**Manual invalidation via `session_nonce` (2026-09-08):** the digest is now
+`SHA-256(password_hash || "|" || email || "|" || session_nonce)` — a third `users` column
+(migration 0002, post-baseline) with no meaning of its own beyond feeding this hash. Every prior
+trigger for invalidating other sessions was a side effect of changing something the user was
+already changing for another reason (a new password, a new email). "Sign out other devices"
+(`POST /account/profile/sign-out-other-devices`, `POST /admin/profile/sign-out-other-devices`)
+is the first *direct* trigger: `user::regenerate_session_nonce` assigns a fresh random UUID to
+this column and nothing else, so it can invalidate every other session on demand without also
+needing a reason tied to the password or email fields. Same re-verification posture as the rest
+of this list: the clicking session's own credential-version marker is refreshed in the same
+request so the click doesn't log out the device that made it.
+
 ### Account Auth (`account_auth.rs`)
 
 `AccountUser` extractor for any authenticated non-admin user (subscriber and above), keyed on

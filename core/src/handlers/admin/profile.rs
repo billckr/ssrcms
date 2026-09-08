@@ -24,9 +24,13 @@ fn flash_for(q: &ProfileQuery) -> Option<&'static str> {
         Some("weak_password") => Some("Password must be 12-128 characters."),
         Some("password_hash_failed") => Some("Password hashing error. Please try again."),
         Some("password_update_failed") => Some("Error changing password. Please try again."),
+        Some("sign_out_other_devices_failed") => {
+            Some("Error signing out other sessions. Please try again.")
+        }
         _ => match q.success.as_deref() {
             Some("profile_updated") => Some("Profile updated successfully!"),
             Some("password_changed") => Some("Password changed successfully!"),
+            Some("signed_out_other_devices") => Some("Signed out of every other session."),
             _ => None,
         },
     }
@@ -145,6 +149,31 @@ pub async fn change_password(
         Err(e) => {
             tracing::error!("password change failed: {e}");
             Redirect::to("/admin/profile?error=password_update_failed").into_response()
+        }
+    }
+}
+
+/// POST /admin/profile/sign-out-other-devices — invalidate every other
+/// session for this account. The current session is kept alive by
+/// re-inserting the fresh `credential_version()` right after the bump.
+pub async fn sign_out_other_devices(
+    State(state): State<AppState>,
+    admin: AdminUser,
+    session: Session,
+) -> impl IntoResponse {
+    match crate::models::user::regenerate_session_nonce(&state.db, admin.user.id).await {
+        Ok(updated) => {
+            let _ = session
+                .insert(
+                    crate::middleware::admin_auth::SESSION_CREDENTIAL_VERSION_KEY,
+                    updated.credential_version(),
+                )
+                .await;
+            Redirect::to("/admin/profile?success=signed_out_other_devices").into_response()
+        }
+        Err(e) => {
+            tracing::error!("sign-out-other-devices failed: {e}");
+            Redirect::to("/admin/profile?error=sign_out_other_devices_failed").into_response()
         }
     }
 }

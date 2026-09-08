@@ -22,6 +22,21 @@ use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use tower::ServiceExt;
 
+/// Pull the `name=value` pair out of a login response's `Set-Cookie` header
+/// for the given cookie name, dropping the `Path=`/`HttpOnly`/etc.
+/// attributes — that's all a subsequent request's `Cookie` header needs.
+fn extract_cookie(response: &axum::http::Response<Body>, cookie_name: &str) -> String {
+    response
+        .headers()
+        .get_all("set-cookie")
+        .iter()
+        .filter_map(|v| v.to_str().ok())
+        .find(|c| c.starts_with(&format!("{cookie_name}=")))
+        .and_then(|c| c.split(';').next())
+        .unwrap_or_else(|| panic!("no {cookie_name} cookie in response"))
+        .to_string()
+}
+
 #[tokio::test]
 #[ignore = "requires a live PostgreSQL instance — see module docs"]
 async fn test_home_route_200() {
@@ -146,4 +161,137 @@ async fn test_admin_login_post_bad_credentials() {
             .any(|c| c.starts_with("admin_session=") && !c.contains("admin_session=;")),
         "bad credentials must not set an admin_session cookie, got: {set_cookie_headers:?}"
     );
+}
+
+#[tokio::test]
+#[ignore = "requires a live PostgreSQL instance — see module docs"]
+async fn test_sign_out_other_devices_invalidates_other_admin_sessions() {
+    use synaptic_core::models::user::{self, CreateUser, UserRole};
+
+    let database_url = std::env::var("DATABASE_URL")
+        .expect("DATABASE_URL must be set to run integration tests (see tests/routes.rs)");
+    let pool = synaptic_core::db::connect(&database_url)
+        .await
+        .expect("failed to connect for test user setup");
+
+    // Throwaway super_admin — bypasses site_users entirely, so /admin/profile
+    // is reachable without also seeding a site membership row.
+    let unique = uuid::Uuid::new_v4().simple().to_string();
+    let email = format!("sign-out-test-{unique}@example.com");
+    let password = "Verify12345Pass!";
+    let created = user::create(
+        &pool,
+        &CreateUser {
+            username: format!("sotest{}", &unique[..12]),
+            email: email.clone(),
+            display_name: "Sign Out Test".to_string(),
+            password: password.to_string(),
+            role: UserRole::SuperAdmin,
+        },
+    )
+    .await
+    .expect("failed to create test user");
+
+    let app = common::test_router().await;
+    let login_body = format!("email={email}&password={password}");
+
+    let login = |app: axum::Router, body: String| async move {
+        app.oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/admin/login")
+                .header("content-type", "application/x-www-form-urlencoded")
+                .header("host", "localhost")
+                .header("origin", "http://localhost")
+                .extension(common::connect_info())
+                .body(Body::from(body))
+                .unwrap(),
+        )
+        .await
+        .unwrap()
+    };
+
+    // Two independent logins — two independent sessions, simulating two devices.
+    let response_a = login(app.clone(), login_body.clone()).await;
+    let cookie_a = extract_cookie(&response_a, "admin_session");
+    let response_b = login(app.clone(), login_body.clone()).await;
+    let cookie_b = extract_cookie(&response_b, "admin_session");
+    assert_ne!(cookie_a, cookie_b, "each login must mint its own session");
+
+    let get_profile = |app: axum::Router, cookie: String| async move {
+        app.oneshot(
+            Request::builder()
+                .uri("/admin/profile")
+                .header("cookie", cookie)
+                .extension(common::connect_info())
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap()
+    };
+
+    // Sanity: both sessions currently work.
+    assert_eq!(
+        get_profile(app.clone(), cookie_a.clone()).await.status(),
+        StatusCode::OK
+    );
+    assert_eq!(
+        get_profile(app.clone(), cookie_b.clone()).await.status(),
+        StatusCode::OK
+    );
+
+    // From device A, sign out every other session.
+    let sign_out_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/admin/profile/sign-out-other-devices")
+                .header("host", "localhost")
+                .header("origin", "http://localhost")
+                .header("cookie", cookie_a.clone())
+                .extension(common::connect_info())
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert!(
+        sign_out_response.status() == StatusCode::FOUND
+            || sign_out_response.status() == StatusCode::SEE_OTHER,
+        "expected a redirect, got {}",
+        sign_out_response.status()
+    );
+
+    // Device A's own session was kept alive by re-inserting the fresh
+    // credential_version into it — this must NOT be the boilerplate
+    // "no-op'd because credential_version already matched" case, since
+    // device A's request is what triggered the bump in the first place.
+    assert_eq!(
+        get_profile(app.clone(), cookie_a.clone()).await.status(),
+        StatusCode::OK,
+        "the session that requested the sign-out must stay logged in"
+    );
+
+    // Device B is booted — its stored credential_version no longer matches.
+    let device_b_response = get_profile(app.clone(), cookie_b.clone()).await;
+    assert!(
+        device_b_response.status() == StatusCode::FOUND
+            || device_b_response.status() == StatusCode::SEE_OTHER,
+        "expected device B to be redirected to login, got {}",
+        device_b_response.status()
+    );
+    let location = device_b_response
+        .headers()
+        .get("location")
+        .expect("redirect response must have a Location header")
+        .to_str()
+        .unwrap();
+    assert!(
+        location.starts_with("/admin/login"),
+        "expected device B's stale session to redirect to /admin/login, got {location}"
+    );
+
+    let _ = user::delete(&pool, created.id).await;
 }

@@ -27,6 +27,8 @@ Email has its own **verified self-service change flow** (added 2026-09-08, subsc
 
 `POST /account/profile/change-password` requires `current_password`, `new_password`, `confirm_password`. It verifies the new/confirm passwords match, verifies the current password via `account.user.verify_password`, validates the new password with `validate_password` (12–128 Unicode characters, no composition rules, updated 2026-09-07), and hashes it with `hash_password` before updating. A successful change also writes a fresh credential-version marker into the *current* session (so it keeps working) while every other active session for the account is invalidated on its next request — see the Middleware & Auth doc. Flash: "Password changed successfully!" or an error string.
 
+**Sign Out Other Devices (2026-09-08):** a "Sign out other devices" icon button (next to Change Email) posts to `POST /account/profile/sign-out-other-devices` with no form fields — just a JS `confirm()` before submitting. It calls `user::regenerate_session_nonce`, which assigns the account a fresh random `session_nonce` (new `users` column, migration 0002), then writes the resulting `credential_version()` into the *current* session the same way password/email changes do, so the click doesn't log the clicking device out too. Every other active session — anywhere else this account is signed in — fails its next credential-version check and is redirected to sign in again. Unlike a password or email change, this needs no re-authentication step first: it doesn't touch any recovery-sensitive field, so there's nothing to prove ownership of beyond the session cookie itself. Flash: "Signed out of every other session." See the Middleware & Auth doc for how `credential_version()` folds in `session_nonce`.
+
 ### Saved Posts
 
 `GET /account/saved-posts` — paginated (20/page) list of posts the subscriber has saved, with an optional `search` query param and a `partial=1` mode that returns only the inner list fragment (used by the live-search JS). Each row shows a view link to the post URL and an unsave form. `derive_unsave_url()` strips the scheme/host from the stored absolute post URL and appends `/unsave`, pointing at the public `POST /{slug}/unsave` route (`core/src/handlers/post.rs`), which removes the post from the subscriber's reading list.
@@ -45,6 +47,7 @@ Both Saved Posts and My Comments use small inline JS (`crate::live_search_script
 | GET | /account/profile | `account::profile_view` | View profile |
 | POST | /account/profile/update | `account::profile_update` | Update profile |
 | POST | /account/profile/change-password | `account::profile_change_password` | Change password |
+| POST | /account/profile/sign-out-other-devices | `account::sign_out_other_devices` | Invalidate every other session for this account (added 2026-09-08) |
 | POST | /account/email/change | `account_email::request_change` | Request a verified email change (added 2026-09-08) |
 | GET/POST | /account/email/confirm/{token} | `account_email::confirm_form` / `confirm_post` | Confirm an email change (added 2026-09-08, unauthenticated — see below) |
 | GET | /account/saved-posts | `account::saved_posts` | Saved posts list (supports `?search=`, `?page=`, `?partial=1`) |
@@ -57,6 +60,7 @@ Both Saved Posts and My Comments use small inline JS (`crate::live_search_script
 - All routes require an active account session via the `AccountUser` extractor.
 - Comment deletion is scoped to the authenticated user's own comments and time-limited to 15 minutes after posting.
 - Password changes require the current password to be re-verified server-side before a new hash is written.
+- Sign Out Other Devices (2026-09-08) requires no password re-entry — it's a same-origin POST from an already-authenticated session, not a change to any recovery-sensitive field.
 - All state-changing routes here require an exact `Origin`/`Host` match as of 2026-09-07 (`csrf::same_origin`) — see the Middleware & Auth doc.
 - Email changes (added 2026-09-08) also require the current password re-verified server-side, are rate-limited (`auth_security::allow("email-change", ...)`), and only take effect once the emailed confirmation link is clicked — the request step alone never touches `users.email`. `/account/email/confirm/{token}` is necessarily unauthenticated (the link may be opened on a different device), but that POST still passes through the same `csrf::same_origin` check as every other route under `/account*`.
 
