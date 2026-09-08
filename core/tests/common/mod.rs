@@ -100,12 +100,41 @@ pub fn connect_info() -> axum::extract::ConnectInfo<std::net::SocketAddr> {
     axum::extract::ConnectInfo(std::net::SocketAddr::from(([127, 0, 0, 1], 0)))
 }
 
+/// `middleware::site::CurrentSite` resolves every request's site from its
+/// `Host` header (defaulting to "localhost" when absent) and returns a hard
+/// 404 if no site matches — there's no empty-cache fallback despite that
+/// module's own doc comment claiming one (stale; not this crate's problem
+/// to fix). A real install always has at least one site via `synap
+/// install`; a freshly-migrated test database has none, so every
+/// site-dependent route (home, search, ...) would 404 in every test unless
+/// one is seeded first. Idempotent — safe to call before every
+/// `test_router()`, including from multiple `#[tokio::test]`s sharing one
+/// database.
+async fn ensure_test_site(database_url: &str) {
+    let pool = synaptic_core::db::connect(database_url)
+        .await
+        .expect("failed to connect for test site setup");
+    synaptic_core::db::migrate(&pool)
+        .await
+        .expect("failed to migrate for test site setup");
+
+    if synaptic_core::models::site::get_by_hostname(&pool, "localhost")
+        .await
+        .is_err()
+    {
+        synaptic_core::models::site::create_with_defaults(&pool, "localhost", None, None)
+            .await
+            .expect("failed to seed test site");
+    }
+}
+
 /// Build a full `Router` exactly as a live process would — same
 /// `bootstrap::build` + `router::build` sequence `main.rs` uses — so route
 /// tests exercise real routing, middleware, and session wiring, not a
 /// hand-rolled approximation of it.
 pub async fn test_router() -> axum::Router {
     let cfg = test_config();
+    ensure_test_site(&cfg.database_url).await;
     let bootstrapped = synaptic_core::bootstrap::build(&cfg)
         .await
         .expect("bootstrap failed — is a Postgres instance reachable at $DATABASE_URL?");
