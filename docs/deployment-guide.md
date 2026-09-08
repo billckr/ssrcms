@@ -407,9 +407,9 @@ tar xzf "synaptic-signals-${VERSION}-x86_64-linux.tar.gz"
 #    file too — it's what lets the running app report its own version and
 #    know when the *next* update is available.
 sudo systemctl stop synapcms
-sudo cp "synaptic-signals-${VERSION}/synaptic"     /opt/synaptic-signals/synapcms
-sudo cp "synaptic-signals-${VERSION}/synaptic-cli" /opt/synaptic-signals/synap
-sudo cp "synaptic-signals-${VERSION}/VERSION"      /opt/synaptic-signals/VERSION
+sudo cp "synaptic-signals-${VERSION}/synapcms" /opt/synaptic-signals/synapcms
+sudo cp "synaptic-signals-${VERSION}/synap"    /opt/synaptic-signals/synap
+sudo cp "synaptic-signals-${VERSION}/VERSION"  /opt/synaptic-signals/VERSION
 sudo systemctl start synapcms
 
 # 3. Apply any new migrations

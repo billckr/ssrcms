@@ -18,6 +18,17 @@ jobs:
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-musl
+
+      # Statically-linked musl binary instead of the runner's glibc, so the
+      # release doesn't inherit a minimum-glibc-version requirement from
+      # whatever Ubuntu image happens to build it — see the "Release
+      # Pipeline" section of the Deployment & Build Toolchain admin doc
+      # (and .cargo/config.toml's rustflags, needed to avoid a PIE/crt
+      # mismatch segfault on first run) for the full story.
+      - name: Install musl-tools
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
 
       - name: Cache Cargo
         uses: actions/cache@v4
@@ -26,11 +37,11 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: ${{ runner.os }}-cargo-x86_64-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-cargo-x86_64-
+          key: ${{ runner.os }}-cargo-x86_64-musl-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-x86_64-musl-
 
       - name: Build release binaries
-        run: cargo build --release --bin synaptic --bin synaptic-cli
+        run: cargo build --release --target x86_64-unknown-linux-musl --bin synapcms --bin synap
 
       - name: Assemble tarball
         run: |
@@ -38,8 +49,8 @@ jobs:
           STAGING="synaptic-signals-${VERSION}"
           mkdir -p "${STAGING}"
 
-          cp target/release/synaptic      "${STAGING}/"
-          cp target/release/synaptic-cli  "${STAGING}/"
+          cp target/x86_64-unknown-linux-musl/release/synapcms  "${STAGING}/"
+          cp target/x86_64-unknown-linux-musl/release/synap     "${STAGING}/"
           cp -r themes                    "${STAGING}/"
           cp -r plugins                   "${STAGING}/"
           mkdir -p "${STAGING}/admin"
@@ -74,7 +85,7 @@ jobs:
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: aarch64-unknown-linux-gnu
+          targets: aarch64-unknown-linux-musl
 
       - name: Install cross
         run: cargo install cross --git https://github.com/cross-rs/cross
@@ -86,11 +97,13 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: ${{ runner.os }}-cargo-aarch64-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: ${{ runner.os }}-cargo-aarch64-
+          key: ${{ runner.os }}-cargo-aarch64-musl-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-aarch64-musl-
 
+      # Statically-linked musl binary — see the matching comment in the
+      # x86_64 job above for why.
       - name: Build release binaries (cross)
-        run: cross build --release --target aarch64-unknown-linux-gnu --bin synaptic --bin synaptic-cli
+        run: cross build --release --target aarch64-unknown-linux-musl --bin synapcms --bin synap
 
       - name: Assemble tarball
         run: |
@@ -98,8 +111,8 @@ jobs:
           STAGING="synaptic-signals-${VERSION}"
           mkdir -p "${STAGING}"
 
-          cp target/aarch64-unknown-linux-gnu/release/synaptic      "${STAGING}/"
-          cp target/aarch64-unknown-linux-gnu/release/synaptic-cli  "${STAGING}/"
+          cp target/aarch64-unknown-linux-musl/release/synapcms  "${STAGING}/"
+          cp target/aarch64-unknown-linux-musl/release/synap     "${STAGING}/"
           cp -r themes                    "${STAGING}/"
           cp -r plugins                   "${STAGING}/"
           mkdir -p "${STAGING}/admin"
