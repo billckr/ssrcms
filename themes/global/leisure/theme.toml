@@ -98,16 +98,6 @@ default = false
 label   = "Show Sign in / Sign out in header"
 group   = "Header"
 
-[customizer.options.nav_dropdown_trigger]
-type    = "choice"
-default = "hover"
-label   = "Header submenu trigger (for menu items with sub-items)"
-group   = "Header"
-
-[customizer.options.nav_dropdown_trigger.choices]
-hover = "Hover to open"
-click = "Click to open"
-
 [customizer.options.footer_section_order]
 type    = "order"
 default = ["brand", "navigation", "updates"]

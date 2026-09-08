@@ -226,28 +226,20 @@ a:hover { color: var(--color-primary-hover); text-decoration: none; }
   background: rgba(37, 99, 235, 0.07);
 }
 
-/* Hover mode (default): whole item reveals its dropdown on hover — only on
-   devices that actually support hover. Touch devices always get the
-   click/tap accordion below regardless of width. */
+/* Submenus open on hover — only on devices that actually support hover.
+   Touch devices always get the click/tap accordion below regardless of
+   width. There's no click-to-open alternative on hover-capable devices;
+   that used to be a per-site customizer choice, removed since it had no
+   effect on touch (which already always used tap) and only ever offered a
+   niche desktop preference. */
 @media (hover: hover) and (pointer: fine) {
-  .site-nav:not(.nav-trigger-click) .nav-item.has-children:hover > .nav-dropdown {
+  .site-nav .nav-item.has-children:hover > .nav-dropdown {
     display: block;
   }
 }
 
-/* Click mode: caret/label toggles an .open class via the inline script
-   below the header markup. */
-.site-nav.nav-trigger-click .nav-dropdown-caret-only {
-  display: inline-flex;
-}
-
-.site-nav.nav-trigger-click .nav-item.open > .nav-dropdown {
-  display: block;
-}
-
 /* Devices without real hover (touch — phones, tablets, hybrids) always get
-   the tap-to-expand caret and .open-driven toggle, regardless of which
-   trigger mode the site owner picked for hover-capable devices above. */
+   the tap-to-expand caret and .open-driven toggle. */
 @media (hover: none), (pointer: coarse) {
   .nav-dropdown-caret-only {
     display: inline-flex !important;

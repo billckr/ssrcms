@@ -45,7 +45,7 @@
   {{ hook(name="body_start") | safe }}
 
   <header class="site-header">
-    <nav class="site-nav{% if theme_option_choices.nav_dropdown_trigger == "click" %} nav-trigger-click{% endif %}">
+    <nav class="site-nav">
       <a class="site-title" href="/">{{ site.name }}</a>
       <button type="button" class="nav-toggle" aria-label="Toggle menu" aria-expanded="false" aria-controls="site-nav-links">
         <span class="nav-toggle-bar"></span>

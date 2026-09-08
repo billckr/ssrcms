@@ -44,7 +44,7 @@
   {{ hook(name="body_start") | safe }}
 
   <header class="site-header">
-    <nav class="site-nav{% if theme_option_choices.nav_dropdown_trigger == "click" %} nav-trigger-click{% endif %}">
+    <nav class="site-nav">
       <a class="site-title" href="/">{{ site.name }}</a>
       {% if nav.primary.items | length > 0 or session.is_logged_in %}
       <button class="nav-toggle" type="button" aria-label="Toggle navigation" aria-expanded="false" onclick="const n=this.closest('.site-nav');n.classList.toggle('nav-open');this.setAttribute('aria-expanded', n.classList.contains('nav-open'));">

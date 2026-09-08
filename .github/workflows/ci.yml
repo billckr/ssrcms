@@ -62,13 +62,10 @@ jobs:
           DATABASE_URL: postgres://synaptic:password@localhost:5432/synaptic_test
         run: ./target/debug/synap migrate
 
-      # model_crud.rs and routes.rs are #[ignore]d by default (same
-      # convention as any test needing a live database) — --include-ignored
-      # runs them explicitly, now that this job actually provides one.
-      # theme_e2e.rs is deliberately NOT run here: its one test has a real,
-      # separate pre-existing failure (missing theme_option_choices in its
-      # hand-built Tera context, see the #[ignore] reason on that test) that
-      # predates this workflow and isn't what this job is checking for.
+      # model_crud.rs, routes.rs, and theme_e2e.rs are all #[ignore]d by
+      # default (same convention as any test needing a live database) —
+      # --include-ignored runs them explicitly, now that this job actually
+      # provides one.
       - name: Integration tests — model_crud
         env:
           DATABASE_URL: postgres://synaptic:password@localhost:5432/synaptic_test
@@ -78,3 +75,8 @@ jobs:
         env:
           DATABASE_URL: postgres://synaptic:password@localhost:5432/synaptic_test
         run: cargo test -p synaptic-core --test routes -- --include-ignored --nocapture
+
+      - name: Integration tests — theme_e2e
+        env:
+          DATABASE_URL: postgres://synaptic:password@localhost:5432/synaptic_test
+        run: cargo test -p synaptic-core --test theme_e2e -- --include-ignored --nocapture

@@ -57,7 +57,7 @@
         <span class="nav-toggle-bar"></span>
       </button>
       {% endif %}
-      <nav id="site-nav" class="site-nav{% if theme_option_choices.nav_dropdown_trigger == "click" %} nav-trigger-click{% endif %}">
+      <nav id="site-nav" class="site-nav">
         <ul class="nav-links">
           {% for item in nav.primary.items %}
             <li class="nav-item{% if item.children | length > 0 %} has-children{% endif %}">

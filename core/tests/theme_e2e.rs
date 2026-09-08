@@ -3,7 +3,7 @@
 //! Full pipeline: DB → create user/post → PostContext::build → TemplateEngine::new
 //! → render single.html → assert HTML contains expected content.
 //!
-//! Requires a live PostgreSQL instance and the themes/default/ directory at workspace root.
+//! Requires a live PostgreSQL instance.
 //!
 //! Run with:
 //!   DATABASE_URL=postgres://user:pass@localhost/synaptic_signals \
@@ -34,15 +34,7 @@ fn uid() -> String {
 }
 
 #[tokio::test]
-// Fails past the theme-loading step: this test's hand-built Tera context
-// (via ContextBuilder, above) is missing `theme_option_choices` and
-// presumably other variables the real request pipeline injects — single.html
-// then fails to render with "Variable `theme_option_choices.nav_dropdown_trigger`
-// not found". A materially different, deeper fix than the stale
-// themes/default/-at-workspace-root path issue this ignore reason used to
-// describe (that part is fixed — see the CARGO_MANIFEST_DIR resolution
-// below). Left ignored rather than chased further for now.
-#[ignore = "template context is missing theme_option_choices — see comment above"]
+#[ignore = "requires a live PostgreSQL instance — see module docs"]
 async fn test_single_post_renders_html() {
     let pool = test_pool().await;
     let id = uid();

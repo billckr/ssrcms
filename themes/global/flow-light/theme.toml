@@ -36,16 +36,6 @@ label = "Primary accent (hover)"
 [customizer.colors.color-border]
 label = "Border / hairline"
 
-[customizer.options.nav_dropdown_trigger]
-type    = "choice"
-default = "hover"
-label   = "Header submenu trigger (for menu items with sub-items)"
-group   = "Header"
-
-[customizer.options.nav_dropdown_trigger.choices]
-hover = "Hover to open"
-click = "Click to open"
-
 [customizer.options.show_search]
 type    = "bool"
 default = true

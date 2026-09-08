@@ -230,7 +230,7 @@ img { max-width: 100%; display: block; }
   z-index: 10;
 }
 
-.site-nav:not(.nav-trigger-click) .nav-item:hover .nav-dropdown,
+.site-nav .nav-item:hover .nav-dropdown,
 .nav-item.open .nav-dropdown {
   opacity: 1;
   visibility: visible;

@@ -212,13 +212,10 @@ img { max-width: 100%; display: block; }
 .nav-dropdown-caret-only { display: none; font-size: 0.65rem; padding: 0.3rem; }
 
 /* Hidden by default: hovering a dropdown item already reveals its
-   submenu, so a caret advertising that is redundant. Only shown when the
-   customizer's dropdown trigger is set to "click" (no hover affordance
-   exists then, so the item needs a visible cue) or on mobile, where touch
-   has no hover at all and the mobile override below re-enables it
-   unconditionally. */
+   submenu, so a caret advertising that is redundant. Only shown on mobile,
+   where touch has no hover at all and the mobile override below re-enables
+   it unconditionally. */
 .nav-dropdown-caret { display: none; font-size: 0.55rem; transition: transform 0.2s; }
-.site-nav.nav-trigger-click .nav-dropdown-caret { display: inline-block; }
 .nav-item.open .nav-dropdown-caret { transform: rotate(180deg); }
 
 .nav-dropdown {
@@ -239,7 +236,7 @@ img { max-width: 100%; display: block; }
   z-index: 10;
 }
 
-.site-nav:not(.nav-trigger-click) .nav-item:hover .nav-dropdown,
+.site-nav .nav-item:hover .nav-dropdown,
 .nav-item.open .nav-dropdown {
   opacity: 1;
   visibility: visible;
@@ -1246,13 +1243,10 @@ body.flow-home a { text-decoration: none; }
 .flow-nav-dropdown-caret-only { display: none; font-size: .65rem; padding: .3rem; }
 
 /* Hidden by default: hovering a dropdown item already reveals its
-   submenu, so a caret advertising that is redundant. Only shown when the
-   customizer's dropdown trigger is set to "click" (no hover affordance
-   exists then, so the item needs a visible cue) or on mobile, where touch
-   has no hover at all and the mobile override below re-enables it
-   unconditionally. */
+   submenu, so a caret advertising that is redundant. Only shown on mobile,
+   where touch has no hover at all and the mobile override below re-enables
+   it unconditionally. */
 .flow-nav-dropdown-caret { display: none; font-size: .55rem; transition: transform .2s; }
-.flow-nav.nav-trigger-click .flow-nav-dropdown-caret { display: inline-block; }
 .flow-nav-item.open .flow-nav-dropdown-caret { transform: rotate(180deg); }
 
 .flow-nav-dropdown {
@@ -1273,7 +1267,7 @@ body.flow-home a { text-decoration: none; }
   z-index: 10;
 }
 
-.flow-nav:not(.nav-trigger-click) .flow-nav-item:hover .flow-nav-dropdown,
+.flow-nav .flow-nav-item:hover .flow-nav-dropdown,
 .flow-nav-item.open .flow-nav-dropdown {
   opacity: 1;
   visibility: visible;
