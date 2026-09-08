@@ -14,21 +14,43 @@ use crate::app_state::AppState;
 use crate::middleware::account_auth::AccountUser;
 use admin::pages::account::{AccountContext, MyCommentRow, PendingEmailChangeView, ProfileData};
 
-fn build_ctx(state: &AppState, account: &AccountUser) -> AccountContext {
+async fn build_ctx(state: &AppState, account: &AccountUser) -> AccountContext {
     let default_theme = state.app_settings.read().unwrap().default_theme.clone();
+    let logo_url = site_logo_url(state, account.site_id).await;
     AccountContext {
         user_email: account.user.email.clone(),
         user_display_name: account.user.display_name.clone(),
         site_name: account.site_name.clone(),
+        logo_url,
         default_theme,
     }
+}
+
+/// Resolve the logo to show in the account-area sidebar brand slot — same
+/// policy as the public login page (see `handlers::auth::logo_url_for_login`):
+/// a top-level site's own uploaded logo, or the agency-wide one only when
+/// this is a super_admin's own default site. Never a parent's logo for a
+/// white-labeled sub-site — unlike the admin-chrome sidebar, this area is
+/// reachable by ordinary subscribers, not just staff.
+async fn site_logo_url(state: &AppState, site_id: Option<Uuid>) -> Option<String> {
+    let site_id = site_id?;
+    if let Some(logo) = crate::app_state::detect_site_admin_logo(site_id) {
+        return Some(logo);
+    }
+    let (site, _) = state.get_site_by_id(site_id)?;
+    if site.parent_site_id.is_none()
+        && crate::models::user::is_super_admin_default_site(&state.db, site_id).await
+    {
+        return state.logo_url.read().ok().and_then(|g| g.clone());
+    }
+    None
 }
 
 // ── Dashboard ────────────────────────────────────────────────────────
 
 /// GET /account — dashboard (default landing page).
 pub async fn dashboard(State(state): State<AppState>, account: AccountUser) -> Html<String> {
-    let ctx = build_ctx(&state, &account);
+    let ctx = build_ctx(&state, &account).await;
     Html(admin::pages::account::render_dashboard(&ctx))
 }
 
@@ -40,7 +62,7 @@ pub async fn profile_view(
     account: AccountUser,
     Query(params): Query<std::collections::HashMap<String, String>>,
 ) -> Html<String> {
-    let ctx = build_ctx(&state, &account);
+    let ctx = build_ctx(&state, &account).await;
     let pending_email_change =
         crate::models::email_change::find_pending_for_user(&state.db, account.user.id)
             .await
@@ -208,7 +230,7 @@ pub async fn saved_posts(
     account: AccountUser,
     Query(query): Query<SavedPostsQuery>,
 ) -> Html<String> {
-    let ctx = build_ctx(&state, &account);
+    let ctx = build_ctx(&state, &account).await;
     let per_page = 20i64;
     let page = query.page.unwrap_or(1).max(1);
     let offset = (page - 1) * per_page;
@@ -295,7 +317,7 @@ pub async fn my_comments(
     account: AccountUser,
     Query(query): Query<CommentsQuery>,
 ) -> Html<String> {
-    let ctx = build_ctx(&state, &account);
+    let ctx = build_ctx(&state, &account).await;
     let per_page = 20i64;
     let page = query.page.unwrap_or(1).max(1);
     let offset = (page - 1) * per_page;

@@ -10,6 +10,12 @@ pub struct AccountContext {
     pub user_email: String,
     pub user_display_name: String,
     pub site_name: String,
+    /// Public URL of this site's own uploaded logo, if any — same
+    /// resolution policy as the login page (see
+    /// `handlers::auth::logo_url_for_login`): a top-level site's own logo,
+    /// or the agency-wide one only when this is a super_admin's own default
+    /// site. `None` falls back to rendering `site_name` as text.
+    pub logo_url: Option<String>,
     /// Site-wide fallback appearance ("light" | "dark" | "system") from
     /// Settings → General → Appearance — same convention as admin_page.
     pub default_theme: String,
@@ -60,6 +66,14 @@ pub fn account_page(
 
     let site_name = crate::html_escape(&ctx.site_name);
     let user_display_name = crate::html_escape(&ctx.user_display_name);
+    let brand_html = match &ctx.logo_url {
+        Some(url) => format!(
+            r#"<img class="brand-logo" src="{}" alt="{}">"#,
+            crate::html_escape(url),
+            site_name
+        ),
+        None => site_name.clone(),
+    };
 
     // Account doesn't support a per-user theme setting yet, but it shares the
     // same 'admin-theme' localStorage key, site-wide default, and
@@ -94,7 +108,7 @@ pub fn account_page(
   <div class="sidebar-overlay" onclick="closeSidebar()"></div>
   <div class="admin-wrap">
     <nav class="admin-sidebar">
-      <a class="brand" href="/account">{site_name}</a>
+      <a class="brand" href="/account">{brand_html}</a>
       <ul>
         {dashboard_link}
         {saved_link}
@@ -216,6 +230,7 @@ pub fn account_page(
 </html>"#,
         title = crate::html_escape(title),
         site_name = site_name,
+        brand_html = brand_html,
         css = crate::ADMIN_CSS,
         dashboard_link = dashboard_link,
         saved_link = saved_link,

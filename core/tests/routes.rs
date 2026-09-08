@@ -295,3 +295,118 @@ async fn test_sign_out_other_devices_invalidates_other_admin_sessions() {
 
     let _ = user::delete(&pool, created.id).await;
 }
+
+#[tokio::test]
+#[ignore = "requires a live PostgreSQL instance — see module docs"]
+async fn test_account_dashboard_shows_site_logo() {
+    use synaptic_core::models::user::{self, CreateUser, UserRole};
+
+    let database_url = std::env::var("DATABASE_URL")
+        .expect("DATABASE_URL must be set to run integration tests (see tests/routes.rs)");
+    let pool = synaptic_core::db::connect(&database_url)
+        .await
+        .expect("failed to connect for test user setup");
+
+    let app = common::test_router().await; // ensures the "localhost" test site exists
+    let site = synaptic_core::models::site::get_by_hostname(&pool, "localhost")
+        .await
+        .expect("test site must exist");
+    let unique = uuid::Uuid::new_v4().simple().to_string();
+
+    // Give this site its own uploaded logo — `detect_site_admin_logo`
+    // (core/src/app_state.rs) looks for
+    // admin/static/branding/{site_id}/logo.{svg,png,webp} relative to the
+    // process's current working directory, which for `cargo test` is this
+    // crate's manifest dir (`core/`), not the workspace root — see
+    // `tests/common::workspace_themes_dir`'s doc comment for the identical
+    // gotcha. Writing directly to that relative path (rather than relying on
+    // the global agency-wide logo, which lives outside `core/` and so is
+    // invisible to this process's CWD-relative lookup) sidesteps that and
+    // also exercises the actual scenario a site owner hits: their own
+    // uploaded logo, not the installation-wide one.
+    let logo_dir = std::path::Path::new("admin/static/branding").join(site.id.to_string());
+    std::fs::create_dir_all(&logo_dir).expect("failed to create test logo dir");
+    let logo_path = logo_dir.join("logo.svg");
+    std::fs::write(&logo_path, b"<svg xmlns=\"http://www.w3.org/2000/svg\"></svg>")
+        .expect("failed to write test logo file");
+
+    // Throwaway subscriber — the one actually visiting /account.
+    let email = format!("logo-test-sub-{unique}@example.com");
+    let password = "Verify12345Pass!";
+    let subscriber = user::create(
+        &pool,
+        &CreateUser {
+            username: format!("logosub{}", &unique[8..16]),
+            email: email.clone(),
+            display_name: "Logo Test Subscriber".to_string(),
+            password: password.to_string(),
+            role: UserRole::Subscriber,
+        },
+    )
+    .await
+    .expect("failed to create test subscriber");
+    // /login rejects a subscriber with no site_users row for the resolved
+    // site ("Your account does not have access to this site.") — grant one.
+    synaptic_core::models::site_user::add(
+        &pool,
+        site.id,
+        subscriber.id,
+        synaptic_core::models::site_user::SiteRole::Subscriber,
+        None,
+        false,
+    )
+    .await
+    .expect("failed to grant site membership");
+
+    let login_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/login")
+                .header("content-type", "application/x-www-form-urlencoded")
+                .header("host", "localhost")
+                .header("origin", "http://localhost")
+                .extension(common::connect_info())
+                .body(Body::from(format!("email={email}&password={password}")))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    // Unlike the admin session (cookie name "admin_session"), the account
+    // session cookie is just "session" — see bootstrap::build's
+    // account_session_layer.
+    let cookie = extract_cookie(&login_response, "session");
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/account")
+                .header("host", "localhost")
+                .header("cookie", cookie)
+                .extension(common::connect_info())
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let body = String::from_utf8(body.to_vec()).unwrap();
+    let expected_src = format!("/admin/static/branding/{}/logo.svg", site.id);
+    let brand_snippet = body
+        .find("class=\"brand\"")
+        .map(|i| body[i..(i + 200).min(body.len())].to_string())
+        .unwrap_or_else(|| "<no class=\"brand\" found at all>".to_string());
+
+    let _ = user::delete(&pool, subscriber.id).await;
+    let _ = std::fs::remove_dir_all(&logo_dir);
+
+    assert!(
+        body.contains(r#"class="brand-logo""#) && body.contains(&expected_src),
+        "expected /account sidebar to render this site's logo <img src=\"{expected_src}\">, got: {brand_snippet}"
+    );
+}

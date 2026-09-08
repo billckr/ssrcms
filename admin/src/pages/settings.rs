@@ -778,7 +778,7 @@ dtEnableOnChange('.uploads-settings-form', 'uploads-save-btn');
   }}
 }})();
 window.resetLogoConfirm = function() {{
-  if (!confirm('Remove the custom logo and go back to showing the app name as text?')) return;
+  if (!confirm('Remove the custom logo and go back to showing the app name as text?\n\nThis deletes the uploaded logo file — there is no undo. You will need to re-upload it to bring it back.')) return;
   fetch('/admin/settings/logo/reset', {{ method: 'POST' }}).then(function(r) {{
     window.location.href = r.url || '/admin/settings';
   }});
