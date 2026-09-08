@@ -1,1 +1,0 @@
-ALTER TABLE comments ADD COLUMN IF NOT EXISTS ip_address TEXT;

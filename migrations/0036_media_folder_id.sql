@@ -1,1 +1,0 @@
-ALTER TABLE media ADD COLUMN folder_id UUID REFERENCES media_folders(id) ON DELETE SET NULL;
