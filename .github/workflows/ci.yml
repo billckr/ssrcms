@@ -69,9 +69,12 @@ jobs:
       # separate pre-existing failure (missing theme_option_choices in its
       # hand-built Tera context, see the #[ignore] reason on that test) that
       # predates this workflow and isn't what this job is checking for.
-      - name: Integration tests (model_crud, routes)
+      - name: Integration tests — model_crud
         env:
           DATABASE_URL: postgres://synaptic:password@localhost:5432/synaptic_test
-        run: |
-          cargo test -p synaptic-core --test model_crud -- --include-ignored
-          cargo test -p synaptic-core --test routes -- --include-ignored
+        run: cargo test -p synaptic-core --test model_crud -- --include-ignored --nocapture
+
+      - name: Integration tests — routes
+        env:
+          DATABASE_URL: postgres://synaptic:password@localhost:5432/synaptic_test
+        run: cargo test -p synaptic-core --test routes -- --include-ignored --nocapture
