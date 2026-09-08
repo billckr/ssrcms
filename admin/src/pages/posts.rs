@@ -1523,7 +1523,7 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
     }}
   }}
   window.markDirty = markDirty;
-  var postForm = document.querySelector('form');
+  var postForm = document.getElementById('post-editor-form');
   ['input', 'change'].forEach(function(evt) {{
     postForm.addEventListener(evt, function(e) {{
       // The sources-public checkbox and source URL rows are covered by the
@@ -1760,7 +1760,7 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
   }};
 
   // On submit, copy Quill HTML into the hidden input and validate excerpt
-  document.querySelector('form').addEventListener('submit', function(e) {{
+  postForm.addEventListener('submit', function(e) {{
     document.getElementById('content').value = quill.root.innerHTML;
     var sourceUrls = Array.prototype.slice.call(document.querySelectorAll('.source-url-input'))
       .map(function(el) {{ return el.value.trim(); }})
