@@ -18,6 +18,7 @@
 //! checksum for a malicious build). Documented as a known limitation
 //! rather than silently assumed away.
 
+use anyhow::Context;
 use axum::{
     extract::State,
     response::{Html, IntoResponse, Redirect},
@@ -167,15 +168,18 @@ async fn run_update(tag: &str) -> anyhow::Result<()> {
 
     let staging = install_dir.join(".self-update-staging");
     let _ = std::fs::remove_dir_all(&staging);
-    std::fs::create_dir_all(&staging)?;
+    std::fs::create_dir_all(&staging)
+        .with_context(|| format!("creating staging dir {:?}", staging))?;
 
     let tarball_path = staging.join(&tarball_name);
-    std::fs::write(&tarball_path, &tarball_bytes)?;
+    std::fs::write(&tarball_path, &tarball_bytes)
+        .with_context(|| format!("writing downloaded tarball to {:?}", tarball_path))?;
 
     let tar_status = std::process::Command::new("tar")
         .args(["xzf", tarball_name.as_str()])
         .current_dir(&staging)
-        .status()?;
+        .status()
+        .context("spawning tar to extract the release")?;
     if !tar_status.success() {
         anyhow::bail!("tar extraction failed with status {tar_status}");
     }
@@ -192,19 +196,40 @@ async fn run_update(tag: &str) -> anyhow::Result<()> {
 
     // Backup the currently-running binaries before touching anything live —
     // cheap safety net for a manual SSH rollback if the new build is broken.
-    copy_with_exec_bit(&install_dir.join("synapcms"), &install_dir.join("synapcms.bak")).ok();
-    copy_with_exec_bit(&install_dir.join("synap"), &install_dir.join("synap.bak")).ok();
+    // Non-fatal: a failed backup shouldn't block an otherwise-good update.
+    if let Err(e) = copy_with_exec_bit(&install_dir.join("synapcms"), &install_dir.join("synapcms.bak")) {
+        tracing::warn!("self-update: could not back up synapcms: {:?}", e);
+    }
+    if let Err(e) = copy_with_exec_bit(&install_dir.join("synap"), &install_dir.join("synap.bak")) {
+        tracing::warn!("self-update: could not back up synap: {:?}", e);
+    }
 
     // Stage the new files on the same filesystem as the live path, then
     // rename() into place — atomic, no window where the binary is a
     // partially-written file.
     let staged_server = install_dir.join("synapcms.new");
     let staged_cli = install_dir.join("synap.new");
-    copy_with_exec_bit(&new_server_bin, &staged_server)?;
-    copy_with_exec_bit(&new_cli_bin, &staged_cli)?;
-    std::fs::rename(&staged_server, install_dir.join("synapcms"))?;
-    std::fs::rename(&staged_cli, install_dir.join("synap"))?;
-    std::fs::copy(&new_version_file, install_dir.join("VERSION"))?;
+    copy_with_exec_bit(&new_server_bin, &staged_server)
+        .with_context(|| format!("staging new synapcms binary at {:?}", staged_server))?;
+    copy_with_exec_bit(&new_cli_bin, &staged_cli)
+        .with_context(|| format!("staging new synap binary at {:?}", staged_cli))?;
+    std::fs::rename(&staged_server, install_dir.join("synapcms"))
+        .context("renaming synapcms.new over the live synapcms binary")?;
+    std::fs::rename(&staged_cli, install_dir.join("synap"))
+        .context("renaming synap.new over the live synap binary")?;
+
+    // Same stage-then-rename as the binaries above, not a direct copy over
+    // the live path — rename() only needs write permission on the
+    // directory, not on the target file itself. A direct fs::copy() over an
+    // existing file needs write permission on that specific file, which
+    // broke here the first time this ran: VERSION had been left root-owned
+    // by an earlier manual deploy, while the service (and this code) runs
+    // as a non-root user that owns the directory but not that file.
+    let staged_version = install_dir.join("VERSION.new");
+    std::fs::copy(&new_version_file, &staged_version)
+        .with_context(|| format!("staging new VERSION file at {:?}", staged_version))?;
+    std::fs::rename(&staged_version, install_dir.join("VERSION"))
+        .context("renaming VERSION.new over the live VERSION file")?;
 
     let _ = std::fs::remove_dir_all(&staging);
 
