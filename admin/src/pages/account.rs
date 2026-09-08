@@ -246,6 +246,12 @@ pub struct ProfileData {
     pub email: String,
     pub display_name: String,
     pub bio: String,
+    pub pending_email_change: Option<PendingEmailChangeView>,
+}
+
+pub struct PendingEmailChangeView {
+    pub new_email: String,
+    pub expires_at_human: String,
 }
 
 /// Up to two uppercase initials, preferring the display name over the username.
@@ -282,9 +288,21 @@ fn display_or_placeholder(value: &str) -> String {
 /// shared function since this one posts to /account/* routes and wraps in
 /// account_page instead of admin_page.
 pub fn render_profile(data: &ProfileData, flash: Option<&str>, ctx: &AccountContext) -> String {
+    let pending_banner = match &data.pending_email_change {
+        Some(pending) => format!(
+            r#"<div class="flash" style="margin-bottom:1rem">
+  A change to <strong>{new_email}</strong> is pending confirmation (expires {expires_at}). Check that inbox for the confirmation link.
+</div>"#,
+            new_email = crate::html_escape(&pending.new_email),
+            expires_at = crate::html_escape(&pending.expires_at_human),
+        ),
+        None => String::new(),
+    };
+
     let content = format!(
         r#"<div class="profile-layout">
   <div class="profile-main">
+    {pending_banner}
   </div>
 
   <div class="profile-side">
@@ -303,6 +321,10 @@ pub fn render_profile(data: &ProfileData, flash: Option<&str>, ctx: &AccountCont
         <button type="button" class="icon-btn" title="Change password" aria-label="Change password"
                 onclick="document.getElementById('change-password-dialog').showModal();document.querySelector('.admin-content').style.filter='blur(1.5px)'">
           <img src="/admin/static/icons/key.svg" alt="">
+        </button>
+        <button type="button" class="icon-btn" title="Change email" aria-label="Change email"
+                onclick="document.getElementById('change-email-dialog').showModal();document.querySelector('.admin-content').style.filter='blur(1.5px)'">
+          <img src="/admin/static/icons/mail.svg" alt="">
         </button>
       </div>
       <p class="profile-avatar-hint">Custom avatars aren't supported yet — this is a placeholder.</p>
@@ -325,9 +347,9 @@ pub fn render_profile(data: &ProfileData, flash: Option<&str>, ctx: &AccountCont
       </div>
 
       <div class="form-group">
-        <label for="email">Email</label>
-        <input type="email" id="email" name="email" value="{email}" readonly>
-        <small>Sign-in email changes require verified support assistance.</small>
+        <label>Email</label>
+        <p class="form-static-value">{email}</p>
+        <small>To change your sign-in email, use Change Email below.</small>
       </div>
 
       <div class="form-group">
@@ -397,6 +419,41 @@ pub fn render_profile(data: &ProfileData, flash: Option<&str>, ctx: &AccountCont
   </form>
 </dialog>
 
+<dialog id="change-email-dialog" class="modal-card">
+  <form method="POST" action="/account/email/change" id="change-email-form">
+    <h3 class="modal-card-header">Change Email</h3>
+    <div class="modal-card-body">
+      <div class="form-group">
+        <label>Current email</label>
+        <p class="form-static-value">{email}</p>
+      </div>
+
+      <div class="form-group">
+        <label for="new_email">New email</label>
+        <input type="email" id="new_email" name="new_email" required autocomplete="email">
+      </div>
+
+      <div class="form-group">
+        <label for="current_password_for_email">Current password</label>
+        <input type="password" id="current_password_for_email" name="current_password" required autocomplete="current-password">
+      </div>
+
+      <small>We&rsquo;ll email a confirmation link to the new address. It won&rsquo;t take effect until you click it.</small>
+
+      <div style="display:flex;justify-content:flex-end;margin-top:1rem">
+      <div class="icon-pill">
+        <button type="button" class="icon-btn" title="Cancel" aria-label="Cancel" onclick="document.getElementById('change-email-dialog').close()">
+          <img src="/admin/static/icons/x.svg" alt="">
+        </button>
+        <button type="submit" class="icon-btn" title="Send Confirmation" aria-label="Send Confirmation" id="change-email-save-btn" disabled>
+          <img src="/admin/static/icons/save.svg" alt="">
+        </button>
+      </div>
+      </div>
+    </div>
+  </form>
+</dialog>
+
 <script>
 document.getElementById('edit-profile-dialog').addEventListener('close', function() {{
   document.querySelector('.admin-content').style.filter = '';
@@ -404,29 +461,47 @@ document.getElementById('edit-profile-dialog').addEventListener('close', functio
 document.getElementById('change-password-dialog').addEventListener('close', function() {{
   document.querySelector('.admin-content').style.filter = '';
 }});
+document.getElementById('change-email-dialog').addEventListener('close', function() {{
+  document.querySelector('.admin-content').style.filter = '';
+}});
 
 (function() {{
-  var emailInput = document.getElementById('email');
   var displayNameInput = document.getElementById('display_name');
   var bioInput = document.getElementById('bio');
   var saveBtn = document.getElementById('edit-profile-save-btn');
 
   var original = {{
-    email: emailInput.value,
     display_name: displayNameInput.value,
     bio: bioInput.value,
   }};
 
   var syncSaveBtn = function() {{
-    var changed = emailInput.value !== original.email
-      || displayNameInput.value !== original.display_name
+    var changed = displayNameInput.value !== original.display_name
       || bioInput.value !== original.bio;
-    var active = changed && emailInput.checkValidity();
+    saveBtn.disabled = !changed;
+    saveBtn.classList.toggle('icon-btn-active-blue', changed);
+  }};
+
+  [displayNameInput, bioInput].forEach(function(el) {{
+    el.addEventListener('input', syncSaveBtn);
+  }});
+}})();
+
+(function() {{
+  var newEmailInput = document.getElementById('new_email');
+  var currentPwInput = document.getElementById('current_password_for_email');
+  var saveBtn = document.getElementById('change-email-save-btn');
+  var currentEmail = {email_json};
+
+  var syncSaveBtn = function() {{
+    var newEmail = newEmailInput.value.trim();
+    var active = !!(newEmail && newEmail.toLowerCase() !== currentEmail.toLowerCase()
+      && newEmailInput.checkValidity() && currentPwInput.value);
     saveBtn.disabled = !active;
     saveBtn.classList.toggle('icon-btn-active-blue', active);
   }};
 
-  [emailInput, displayNameInput, bioInput].forEach(function(el) {{
+  [newEmailInput, currentPwInput].forEach(function(el) {{
     el.addEventListener('input', syncSaveBtn);
   }});
 }})();
@@ -511,6 +586,7 @@ document.getElementById('change-password-dialog').addEventListener('close', func
 </script>"#,
         username = crate::html_escape(&data.username),
         email = crate::html_escape(&data.email),
+        email_json = serde_json::to_string(&data.email).unwrap_or_else(|_| "\"\"".to_string()),
         display_name = crate::html_escape(&data.display_name),
         bio = crate::html_escape(&data.bio),
         bio_shown = display_or_placeholder(&data.bio),
@@ -520,6 +596,7 @@ document.getElementById('change-password-dialog').addEventListener('close', func
         } else {
             &data.display_name
         }),
+        pending_banner = pending_banner,
     );
 
     account_page("Profile", "/account/profile", flash, &content, ctx)

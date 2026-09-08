@@ -22,7 +22,7 @@ use crate::handlers::admin::{
     themes_editor, themes_publish, themes_upload, upload, users, wp_import,
 };
 use crate::handlers::{
-    account, archive, auth, comment as comment_handler, form as form_handler, home,
+    account, account_email, archive, auth, comment as comment_handler, form as form_handler, home,
     metrics as metrics_handler, page, plugin_route, poll as poll_handler, post as post_handler,
     post_unlock, recover, search, subscribe, theme_static, uploads,
 };
@@ -176,6 +176,16 @@ pub fn build(
         .route(
             "/account/profile/change-password",
             post(account::profile_change_password)
+                .layer(DefaultBodyLimit::max(AUTH_FORM_BODY_LIMIT)),
+        )
+        .route(
+            "/account/email/change",
+            post(account_email::request_change).layer(DefaultBodyLimit::max(AUTH_FORM_BODY_LIMIT)),
+        )
+        .route(
+            "/account/email/confirm/{token}",
+            get(account_email::confirm_form)
+                .post(account_email::confirm_post)
                 .layer(DefaultBodyLimit::max(AUTH_FORM_BODY_LIMIT)),
         )
         .route("/account/saved-posts", get(account::saved_posts))

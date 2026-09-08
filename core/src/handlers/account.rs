@@ -12,7 +12,7 @@ use uuid::Uuid;
 
 use crate::app_state::AppState;
 use crate::middleware::account_auth::AccountUser;
-use admin::pages::account::{AccountContext, MyCommentRow, ProfileData};
+use admin::pages::account::{AccountContext, MyCommentRow, PendingEmailChangeView, ProfileData};
 
 fn build_ctx(state: &AppState, account: &AccountUser) -> AccountContext {
     let default_theme = state.app_settings.read().unwrap().default_theme.clone();
@@ -41,11 +41,19 @@ pub async fn profile_view(
     Query(params): Query<std::collections::HashMap<String, String>>,
 ) -> Html<String> {
     let ctx = build_ctx(&state, &account);
+    let pending_email_change =
+        crate::models::email_change::find_pending_for_user(&state.db, account.user.id)
+            .await
+            .map(|p| PendingEmailChangeView {
+                new_email: p.new_email,
+                expires_at_human: p.expires_at.format("%B %-d, %Y at %-I:%M %p").to_string(),
+            });
     let data = ProfileData {
         username: account.user.username.clone(),
         email: account.user.email.clone(),
         display_name: account.user.display_name.clone(),
         bio: account.user.bio.clone(),
+        pending_email_change,
     };
     let flash = params.get("flash").map(|s| s.as_str());
     Html(admin::pages::account::render_profile(&data, flash, &ctx))

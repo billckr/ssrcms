@@ -1,4 +1,5 @@
 pub mod account;
+pub mod account_email;
 pub mod activity_log;
 pub mod analytics;
 pub mod builder;

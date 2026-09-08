@@ -187,12 +187,17 @@ impl User {
             .is_ok()
     }
 
-    /// Opaque marker copied into a session at login. A password change alters
-    /// this value, invalidating every older session without storing the password
-    /// hash itself in session data or scanning the session table.
+    /// Opaque marker copied into a session at login. A password change or a
+    /// verified email change alters this value, invalidating every older
+    /// session without storing the password hash itself in session data or
+    /// scanning the session table.
     pub fn credential_version(&self) -> String {
         use sha2::{Digest, Sha256};
-        format!("{:x}", Sha256::digest(self.password_hash.as_bytes()))
+        let mut hasher = Sha256::new();
+        hasher.update(self.password_hash.as_bytes());
+        hasher.update(b"|");
+        hasher.update(self.email.as_bytes());
+        format!("{:x}", hasher.finalize())
     }
 }
 
@@ -919,6 +924,48 @@ mod tests {
         let hash1 = hash_password("samepassword").unwrap();
         let hash2 = hash_password("samepassword").unwrap();
         assert_ne!(hash1, hash2, "each hash should use a unique salt");
+    }
+
+    fn make_user(email: &str, password_hash: &str) -> User {
+        User {
+            id: Uuid::new_v4(),
+            username: "janedoe".to_string(),
+            email: email.to_string(),
+            display_name: "Jane Doe".to_string(),
+            password_hash: password_hash.to_string(),
+            bio: "".to_string(),
+            avatar_media_id: None,
+            role: "subscriber".to_string(),
+            is_active: true,
+            is_protected: false,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+            deleted_at: None,
+            default_site_id: None,
+            personal_data_erased_at: None,
+            welcome_panel_dismissed_at: None,
+        }
+    }
+
+    #[test]
+    fn credential_version_changes_when_email_changes() {
+        let a = make_user("a@example.com", "same-hash");
+        let b = make_user("b@example.com", "same-hash");
+        assert_ne!(a.credential_version(), b.credential_version());
+    }
+
+    #[test]
+    fn credential_version_changes_when_password_hash_changes() {
+        let a = make_user("same@example.com", "hash-one");
+        let b = make_user("same@example.com", "hash-two");
+        assert_ne!(a.credential_version(), b.credential_version());
+    }
+
+    #[test]
+    fn credential_version_stable_for_identical_user() {
+        let a = make_user("same@example.com", "same-hash");
+        let b = make_user("same@example.com", "same-hash");
+        assert_eq!(a.credential_version(), b.credential_version());
     }
 
     #[test]

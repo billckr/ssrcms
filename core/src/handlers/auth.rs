@@ -144,6 +144,7 @@ pub struct RedirectQuery {
 fn public_login_notice(notice: Option<&str>) -> Option<&'static str> {
     match notice {
         Some("password-reset") => Some("Password reset. You can now sign in."),
+        Some("email-changed") => Some("Email changed. Please sign in again."),
         _ => None,
     }
 }
@@ -628,6 +629,10 @@ mod tests {
         assert_eq!(
             public_login_notice(Some("password-reset")),
             Some("Password reset. You can now sign in.")
+        );
+        assert_eq!(
+            public_login_notice(Some("email-changed")),
+            Some("Email changed. Please sign in again.")
         );
         assert_eq!(
             public_login_notice(Some("Enter your credentials here")),

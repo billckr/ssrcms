@@ -1,4 +1,5 @@
 pub mod account;
+pub mod account_email;
 pub mod admin;
 pub mod archive;
 pub mod auth;

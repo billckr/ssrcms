@@ -7,6 +7,7 @@
 //!     cargo test -p synaptic-core --test model_crud -- --include-ignored
 
 use synaptic_core::db;
+use synaptic_core::models::email_change;
 use synaptic_core::models::post::{CreatePost, ListFilter, PostStatus, PostType, UpdatePost};
 use synaptic_core::models::site;
 use synaptic_core::models::site_user;
@@ -684,4 +685,151 @@ async fn test_soft_delete_idempotent_on_already_deleted_user() {
         .execute(&pool)
         .await
         .ok();
+}
+
+// ── Email change ───────────────────────────────────────────────────────────────
+
+#[tokio::test]
+#[ignore = "requires live PostgreSQL: set DATABASE_URL and run cargo test -- --include-ignored"]
+async fn test_email_change_create_and_consume() {
+    let pool = test_pool().await;
+    let u = make_test_user(&pool).await;
+    let original_email = u.email.clone();
+    let new_email = format!("new_{}@example.com", uid());
+
+    let token = email_change::create(&pool, u.id, &new_email)
+        .await
+        .expect("create should succeed");
+
+    let applied = email_change::consume_and_apply(&pool, &token)
+        .await
+        .expect("consume_and_apply should succeed")
+        .expect("token should be valid");
+    assert_eq!(applied.old_email, original_email);
+    assert_eq!(applied.user.email, new_email);
+
+    let fetched = user::get_by_id(&pool, u.id).await.expect("get_by_id");
+    assert_eq!(fetched.email, new_email);
+
+    // Replay must fail — token is single-use.
+    let replay = email_change::consume_and_apply(&pool, &token)
+        .await
+        .expect("replay call should not error");
+    assert!(
+        replay.is_none(),
+        "a used token must not be consumable again"
+    );
+
+    user::delete(&pool, u.id).await.ok();
+}
+
+#[tokio::test]
+#[ignore = "requires live PostgreSQL: set DATABASE_URL and run cargo test -- --include-ignored"]
+async fn test_email_change_expired_token_rejected() {
+    let pool = test_pool().await;
+    let u = make_test_user(&pool).await;
+    let new_email = format!("new_{}@example.com", uid());
+
+    let token = email_change::create(&pool, u.id, &new_email)
+        .await
+        .expect("create should succeed");
+    sqlx::query(
+        "UPDATE email_changes SET expires_at = NOW() - INTERVAL '1 hour' WHERE user_id = $1",
+    )
+    .bind(u.id)
+    .execute(&pool)
+    .await
+    .expect("expire the token");
+
+    let result = email_change::consume_and_apply(&pool, &token)
+        .await
+        .expect("consume_and_apply should not error");
+    assert!(result.is_none(), "an expired token must be rejected");
+
+    let fetched = user::get_by_id(&pool, u.id).await.expect("get_by_id");
+    assert_eq!(fetched.email, u.email, "email must be unchanged");
+
+    user::delete(&pool, u.id).await.ok();
+}
+
+#[tokio::test]
+#[ignore = "requires live PostgreSQL: set DATABASE_URL and run cargo test -- --include-ignored"]
+async fn test_email_change_duplicate_email_conflict() {
+    let pool = test_pool().await;
+    let a = make_test_user(&pool).await;
+    let b = make_test_user(&pool).await;
+
+    let token = email_change::create(&pool, b.id, &a.email)
+        .await
+        .expect("create should succeed");
+
+    let result = email_change::consume_and_apply(&pool, &token).await;
+    assert!(
+        result.is_err(),
+        "consuming into an address already taken by another user must fail"
+    );
+
+    let fetched = user::get_by_id(&pool, b.id).await.expect("get_by_id");
+    assert_eq!(
+        fetched.email, b.email,
+        "user b's email must be unchanged after a rolled-back conflict"
+    );
+
+    user::delete(&pool, a.id).await.ok();
+    user::delete(&pool, b.id).await.ok();
+}
+
+#[tokio::test]
+#[ignore = "requires live PostgreSQL: set DATABASE_URL and run cargo test -- --include-ignored"]
+async fn test_email_change_new_request_supersedes_old() {
+    let pool = test_pool().await;
+    let u = make_test_user(&pool).await;
+
+    let first_token = email_change::create(&pool, u.id, &format!("first_{}@example.com", uid()))
+        .await
+        .expect("first create should succeed");
+    let second_token = email_change::create(&pool, u.id, &format!("second_{}@example.com", uid()))
+        .await
+        .expect("second create should succeed");
+
+    assert!(
+        email_change::find_valid_by_token(&pool, &first_token)
+            .await
+            .is_none(),
+        "the first token should have been superseded"
+    );
+    assert!(
+        email_change::find_valid_by_token(&pool, &second_token)
+            .await
+            .is_some(),
+        "the second token should still be valid"
+    );
+
+    user::delete(&pool, u.id).await.ok();
+}
+
+#[tokio::test]
+#[ignore = "requires live PostgreSQL: set DATABASE_URL and run cargo test -- --include-ignored"]
+async fn test_email_change_delete_all_for_user() {
+    let pool = test_pool().await;
+    let u = make_test_user(&pool).await;
+
+    email_change::create(&pool, u.id, &format!("pending_{}@example.com", uid()))
+        .await
+        .expect("create should succeed");
+    assert!(email_change::find_pending_for_user(&pool, u.id)
+        .await
+        .is_some());
+
+    email_change::delete_all_for_user(&pool, u.id)
+        .await
+        .expect("delete_all_for_user should succeed");
+    assert!(
+        email_change::find_pending_for_user(&pool, u.id)
+            .await
+            .is_none(),
+        "pending request should be gone after delete_all_for_user"
+    );
+
+    user::delete(&pool, u.id).await.ok();
 }
