@@ -120,11 +120,23 @@ async fn ensure_test_site(database_url: &str) {
 
     if synaptic_core::models::site::get_by_hostname(&pool, "localhost")
         .await
-        .is_err()
+        .is_ok()
     {
-        synaptic_core::models::site::create_with_defaults(&pool, "localhost", None, None)
-            .await
-            .expect("failed to seed test site");
+        return;
+    }
+
+    // routes.rs's tests run concurrently (no --test-threads=1), so several
+    // can reach this point before any of them has inserted — the
+    // check-then-create above isn't atomic. Rather than serialize the whole
+    // suite over it, treat "someone else's concurrent call just created it"
+    // as success: only a real failure (not a duplicate-hostname conflict)
+    // should panic.
+    match synaptic_core::models::site::create_with_defaults(&pool, "localhost", None, None).await
+    {
+        Ok(_) => {}
+        Err(synaptic_core::errors::AppError::Database(sqlx::Error::Database(db_err)))
+            if db_err.is_unique_violation() => {}
+        Err(e) => panic!("failed to seed test site: {e}"),
     }
 }
 
