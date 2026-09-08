@@ -34,7 +34,15 @@ fn uid() -> String {
 }
 
 #[tokio::test]
-#[ignore = "requires live PostgreSQL and themes/default/ at workspace root"]
+// Fails past the theme-loading step: this test's hand-built Tera context
+// (via ContextBuilder, above) is missing `theme_option_choices` and
+// presumably other variables the real request pipeline injects — single.html
+// then fails to render with "Variable `theme_option_choices.nav_dropdown_trigger`
+// not found". A materially different, deeper fix than the stale
+// themes/default/-at-workspace-root path issue this ignore reason used to
+// describe (that part is fixed — see the CARGO_MANIFEST_DIR resolution
+// below). Left ignored rather than chased further for now.
+#[ignore = "template context is missing theme_option_choices — see comment above"]
 async fn test_single_post_renders_html() {
     let pool = test_pool().await;
     let id = uid();
@@ -95,17 +103,28 @@ async fn test_single_post_renders_html() {
     );
 
     // ── Initialise TemplateEngine ─────────────────────────────────────────────
-    // cargo test sets cwd to workspace root, so "themes" resolves correctly.
+    // Integration tests run with cwd at the crate's manifest directory
+    // (core/), not the workspace root, so a bare relative "themes" doesn't
+    // resolve — go via CARGO_MANIFEST_DIR instead. Themes also live under
+    // themes/global/<name>/ now (see bootstrap.rs's first-run migration
+    // logic), not a flat themes/<name>/, hence "default" here resolving to
+    // themes/global/default/.
+    let themes_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../themes")
+        .canonicalize()
+        .expect("workspace themes/ directory not found")
+        .to_string_lossy()
+        .to_string();
     let hook_registry = Arc::new(HookRegistry::new());
     let engine = TemplateEngine::new(
-        "themes",
+        &themes_dir,
         "sites",
         "default",
         base_url,
         hook_registry,
         pool.clone(),
     )
-    .expect("TemplateEngine::new should succeed with themes/default/");
+    .expect("TemplateEngine::new should succeed with themes/global/default/");
 
     // ── Build Tera context ────────────────────────────────────────────────────
     let mut ctx = ContextBuilder {

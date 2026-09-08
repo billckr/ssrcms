@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+  SQLX_OFFLINE: "true"
+
+jobs:
+  test:
+    name: Build & Test
+    runs-on: ubuntu-22.04
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: synaptic
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: synaptic_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-ci-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ${{ runner.os }}-cargo-ci-
+
+      - name: Build workspace
+        run: cargo build --workspace
+
+      - name: Unit + doc tests (no database needed)
+        run: cargo test --workspace
+
+      # model_crud.rs and routes.rs are #[ignore]d by default (same
+      # convention as any test needing a live database) — --include-ignored
+      # runs them explicitly, now that this job actually provides one.
+      # theme_e2e.rs is deliberately NOT run here: its one test has a real,
+      # separate pre-existing failure (missing theme_option_choices in its
+      # hand-built Tera context, see the #[ignore] reason on that test) that
+      # predates this workflow and isn't what this job is checking for.
+      - name: Integration tests (model_crud, routes)
+        env:
+          DATABASE_URL: postgres://synaptic:password@localhost:5432/synaptic_test
+        run: |
+          cargo test -p synaptic-core --test model_crud -- --include-ignored
+          cargo test -p synaptic-core --test routes -- --include-ignored
