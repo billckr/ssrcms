@@ -150,7 +150,10 @@ pub async fn count_filtered(pool: &PgPool, site_ids: Option<&[Uuid]>, search: &s
 /// the CSV export button — unpaginated and ignoring the search box (a
 /// download is a full backup of what's in scope, not "export my current
 /// filter"). Same scoping rule as `list_filtered`/`count_filtered`.
-pub async fn list_for_export(pool: &PgPool, site_ids: Option<&[Uuid]>) -> Result<Vec<AuditLogEntry>> {
+pub async fn list_for_export(
+    pool: &PgPool,
+    site_ids: Option<&[Uuid]>,
+) -> Result<Vec<AuditLogEntry>> {
     let rows = sqlx::query_as::<_, AuditLogEntry>(
         "SELECT audit_log.* FROM audit_log \
          WHERE ($1::uuid[] IS NULL OR audit_log.site_id = ANY($1)) \
@@ -168,11 +171,10 @@ pub async fn list_for_export(pool: &PgPool, site_ids: Option<&[Uuid]>) -> Result
 /// entries (or the global, no-site-id events) even if they somehow forged
 /// the request.
 pub async fn delete_scoped(pool: &PgPool, site_ids: Option<&[Uuid]>) -> Result<u64> {
-    let result = sqlx::query(
-        "DELETE FROM audit_log WHERE ($1::uuid[] IS NULL OR site_id = ANY($1))",
-    )
-    .bind(site_ids)
-    .execute(pool)
-    .await?;
+    let result =
+        sqlx::query("DELETE FROM audit_log WHERE ($1::uuid[] IS NULL OR site_id = ANY($1))")
+            .bind(site_ids)
+            .execute(pool)
+            .await?;
     Ok(result.rows_affected())
 }

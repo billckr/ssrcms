@@ -16,10 +16,26 @@ use crate::errors::Result;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "provider_type", rename_all = "snake_case")]
 pub enum ProviderConfig {
-    Mailgun { domain: String, api_key: String },
-    Smtp { host: String, port: u16, username: String, password: String, tls_mode: String },
-    SendGrid { api_key: String, from_email: String },
-    Postmark { server_token: String, message_stream: String, from_email: String },
+    Mailgun {
+        domain: String,
+        api_key: String,
+    },
+    Smtp {
+        host: String,
+        port: u16,
+        username: String,
+        password: String,
+        tls_mode: String,
+    },
+    SendGrid {
+        api_key: String,
+        from_email: String,
+    },
+    Postmark {
+        server_token: String,
+        message_stream: String,
+        from_email: String,
+    },
 }
 
 impl ProviderConfig {
@@ -44,17 +60,30 @@ impl ProviderConfig {
                 ("mailgun_domain", domain.clone()),
                 ("mailgun_api_key", mask_secret(api_key)),
             ],
-            ProviderConfig::Smtp { host, port, username, password, .. } => vec![
+            ProviderConfig::Smtp {
+                host,
+                port,
+                username,
+                password,
+                ..
+            } => vec![
                 ("smtp_host", host.clone()),
                 ("smtp_port", port.to_string()),
                 ("smtp_username", username.clone()),
                 ("smtp_password", mask_secret(password)),
             ],
-            ProviderConfig::SendGrid { api_key, from_email } => vec![
+            ProviderConfig::SendGrid {
+                api_key,
+                from_email,
+            } => vec![
                 ("sendgrid_from_email", from_email.clone()),
                 ("sendgrid_api_key", mask_secret(api_key)),
             ],
-            ProviderConfig::Postmark { server_token, message_stream, from_email } => vec![
+            ProviderConfig::Postmark {
+                server_token,
+                message_stream,
+                from_email,
+            } => vec![
                 ("postmark_from_email", from_email.clone()),
                 ("postmark_message_stream", message_stream.clone()),
                 ("postmark_server_token", mask_secret(server_token)),
@@ -70,13 +99,25 @@ impl ProviderConfig {
             ProviderConfig::Mailgun { domain, api_key } => {
                 format!("{} · {}", domain, mask_secret(api_key))
             }
-            ProviderConfig::Smtp { host, port, username, .. } => {
+            ProviderConfig::Smtp {
+                host,
+                port,
+                username,
+                ..
+            } => {
                 format!("{}@{}:{}", username, host, port)
             }
-            ProviderConfig::SendGrid { api_key, from_email } => {
+            ProviderConfig::SendGrid {
+                api_key,
+                from_email,
+            } => {
                 format!("{} · {}", from_email, mask_secret(api_key))
             }
-            ProviderConfig::Postmark { server_token, from_email, .. } => {
+            ProviderConfig::Postmark {
+                server_token,
+                from_email,
+                ..
+            } => {
                 format!("{} · {}", from_email, mask_secret(server_token))
             }
         }
@@ -92,7 +133,14 @@ fn mask_secret(s: &str) -> String {
     if parts.len() >= 3 {
         format!("{}-{}", parts[parts.len() - 2], parts[parts.len() - 1])
     } else if s.chars().count() > 8 {
-        let tail: String = s.chars().rev().take(8).collect::<Vec<_>>().into_iter().rev().collect();
+        let tail: String = s
+            .chars()
+            .rev()
+            .take(8)
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev()
+            .collect();
         format!("...{}", tail)
     } else {
         s.to_string()
@@ -150,7 +198,12 @@ pub async fn list_verified_for_site(pool: &PgPool, site_id: Uuid) -> Result<Vec<
 /// Whether another provider on this site already uses `label` (case-
 /// insensitive). Pass `exclude_id` when checking during an update so the
 /// row being edited doesn't collide with itself.
-pub async fn label_exists_for_site(pool: &PgPool, site_id: Uuid, label: &str, exclude_id: Option<Uuid>) -> Result<bool> {
+pub async fn label_exists_for_site(
+    pool: &PgPool,
+    site_id: Uuid,
+    label: &str,
+    exclude_id: Option<Uuid>,
+) -> Result<bool> {
     let row: Option<(i64,)> = sqlx::query_as(
         "SELECT COUNT(*) FROM email_providers WHERE site_id = $1 AND LOWER(label) = LOWER($2) AND ($3::uuid IS NULL OR id != $3)",
     )
@@ -170,7 +223,13 @@ pub async fn get_by_id(pool: &PgPool, id: Uuid) -> Result<Option<EmailProviderRo
     Ok(row)
 }
 
-pub async fn create(pool: &PgPool, site_id: Uuid, label: &str, config: &ProviderConfig, secret_key: &str) -> Result<EmailProviderRow> {
+pub async fn create(
+    pool: &PgPool,
+    site_id: Uuid,
+    label: &str,
+    config: &ProviderConfig,
+    secret_key: &str,
+) -> Result<EmailProviderRow> {
     let encrypted = encrypt_config(secret_key, config);
     let row = sqlx::query_as::<_, EmailProviderRow>(
         "INSERT INTO email_providers (site_id, provider_type, label, config_encrypted)
@@ -188,7 +247,14 @@ pub async fn create(pool: &PgPool, site_id: Uuid, label: &str, config: &Provider
 
 /// Updates label and/or credentials. Resets `verified` to false on a
 /// credential change — a new key/host pair hasn't been proven to work yet.
-pub async fn update(pool: &PgPool, id: Uuid, site_id: Uuid, label: &str, config: &ProviderConfig, secret_key: &str) -> Result<Option<EmailProviderRow>> {
+pub async fn update(
+    pool: &PgPool,
+    id: Uuid,
+    site_id: Uuid,
+    label: &str,
+    config: &ProviderConfig,
+    secret_key: &str,
+) -> Result<Option<EmailProviderRow>> {
     let encrypted = encrypt_config(secret_key, config);
     let row = sqlx::query_as::<_, EmailProviderRow>(
         "UPDATE email_providers SET label = $1, config_encrypted = $2, verified = FALSE, updated_at = NOW()

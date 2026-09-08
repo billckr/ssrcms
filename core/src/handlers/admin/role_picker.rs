@@ -25,9 +25,10 @@ pub async fn show(
         return Redirect::to("/admin").into_response();
     };
 
-    let roles = crate::models::site_user::list_roles_for_user_and_site(&state.db, site_id, picker.user.id)
-        .await
-        .unwrap_or_default();
+    let roles =
+        crate::models::site_user::list_roles_for_user_and_site(&state.db, site_id, picker.user.id)
+            .await
+            .unwrap_or_default();
 
     // Nothing to pick (0 or 1 role) — nothing for this page to do, send them on.
     if roles.len() < 2 {
@@ -50,7 +51,12 @@ pub async fn show(
     let hostname = state.site_hostname(Some(site_id));
     let role_strs: Vec<&str> = roles.iter().map(|r| r.as_str()).collect();
     let default_theme = state.app_settings.read().unwrap().default_theme.clone();
-    Html(admin::pages::role_picker::render(&role_strs, &hostname, &default_theme)).into_response()
+    Html(admin::pages::role_picker::render(
+        &role_strs,
+        &hostname,
+        &default_theme,
+    ))
+    .into_response()
 }
 
 #[derive(Deserialize)]
@@ -71,17 +77,22 @@ pub async fn submit(
 
     // Never trust the posted value blindly — re-validate against the roles
     // the user actually holds on this site before pinning it.
-    let roles = crate::models::site_user::list_roles_for_user_and_site(&state.db, site_id, picker.user.id)
-        .await
-        .unwrap_or_default();
+    let roles =
+        crate::models::site_user::list_roles_for_user_and_site(&state.db, site_id, picker.user.id)
+            .await
+            .unwrap_or_default();
 
     if let Some(role) = SiteRole::from_str(&form.role) {
         if roles.contains(&role) {
-            let _ = session.insert(SESSION_CURRENT_ROLE_KEY, role.as_str()).await;
+            let _ = session
+                .insert(SESSION_CURRENT_ROLE_KEY, role.as_str())
+                .await;
         } else {
             tracing::warn!(
                 "pick-role: user {} attempted to pin role {:?} they do not hold on site {}",
-                picker.user.id, form.role, site_id
+                picker.user.id,
+                form.role,
+                site_id
             );
         }
     }

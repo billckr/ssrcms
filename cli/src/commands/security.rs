@@ -161,18 +161,54 @@ pub enum BlockIpState {
 pub async fn run(action: SecurityAction) -> anyhow::Result<()> {
     match action {
         SecurityAction::AllowIp { state } => match state {
-            AllowIpState::On     { hostname, ips, database_url } => allow_ip_on(hostname, ips, database_url).await,
-            AllowIpState::Off    { hostname, database_url } => allow_ip_off(hostname, database_url).await,
-            AllowIpState::Add    { hostname, ip, database_url } => allow_ip_add(hostname, ip, database_url).await,
-            AllowIpState::Remove { hostname, ip, database_url } => allow_ip_remove(hostname, ip, database_url).await,
-            AllowIpState::Status { hostname, database_url } => allow_ip_status(hostname, database_url).await,
+            AllowIpState::On {
+                hostname,
+                ips,
+                database_url,
+            } => allow_ip_on(hostname, ips, database_url).await,
+            AllowIpState::Off {
+                hostname,
+                database_url,
+            } => allow_ip_off(hostname, database_url).await,
+            AllowIpState::Add {
+                hostname,
+                ip,
+                database_url,
+            } => allow_ip_add(hostname, ip, database_url).await,
+            AllowIpState::Remove {
+                hostname,
+                ip,
+                database_url,
+            } => allow_ip_remove(hostname, ip, database_url).await,
+            AllowIpState::Status {
+                hostname,
+                database_url,
+            } => allow_ip_status(hostname, database_url).await,
         },
         SecurityAction::BlockIp { state } => match state {
-            BlockIpState::On     { hostname, ips, database_url } => block_ip_on(hostname, ips, database_url).await,
-            BlockIpState::Off    { hostname, database_url } => block_ip_off(hostname, database_url).await,
-            BlockIpState::Add    { hostname, ip, database_url } => block_ip_add(hostname, ip, database_url).await,
-            BlockIpState::Remove { hostname, ip, database_url } => block_ip_remove(hostname, ip, database_url).await,
-            BlockIpState::Status { hostname, database_url } => block_ip_status(hostname, database_url).await,
+            BlockIpState::On {
+                hostname,
+                ips,
+                database_url,
+            } => block_ip_on(hostname, ips, database_url).await,
+            BlockIpState::Off {
+                hostname,
+                database_url,
+            } => block_ip_off(hostname, database_url).await,
+            BlockIpState::Add {
+                hostname,
+                ip,
+                database_url,
+            } => block_ip_add(hostname, ip, database_url).await,
+            BlockIpState::Remove {
+                hostname,
+                ip,
+                database_url,
+            } => block_ip_remove(hostname, ip, database_url).await,
+            BlockIpState::Status {
+                hostname,
+                database_url,
+            } => block_ip_status(hostname, database_url).await,
         },
     }
 }
@@ -188,24 +224,34 @@ async fn resolve_site(pool: &PgPool, hostname: Option<String>) -> anyhow::Result
             .ok_or_else(|| anyhow::anyhow!("No site found with hostname '{h}'"))?;
         Ok((id, h))
     } else {
-        let rows: Vec<(Uuid, String)> = sqlx::query_as("SELECT id, hostname FROM sites ORDER BY created_at")
-            .fetch_all(pool)
-            .await?;
+        let rows: Vec<(Uuid, String)> =
+            sqlx::query_as("SELECT id, hostname FROM sites ORDER BY created_at")
+                .fetch_all(pool)
+                .await?;
         match rows.len() {
             0 => anyhow::bail!("No sites found."),
             1 => Ok(rows.into_iter().next().unwrap()),
             _ => {
-                let list = rows.into_iter().map(|(_, h)| h).collect::<Vec<_>>().join(", ");
+                let list = rows
+                    .into_iter()
+                    .map(|(_, h)| h)
+                    .collect::<Vec<_>>()
+                    .join(", ");
                 anyhow::bail!("Multiple sites found — specify --hostname. Available: {list}")
             }
         }
     }
 }
 
-async fn set_site_setting(pool: &PgPool, site_id: Uuid, key: &str, value: &str) -> anyhow::Result<()> {
+async fn set_site_setting(
+    pool: &PgPool,
+    site_id: Uuid,
+    key: &str,
+    value: &str,
+) -> anyhow::Result<()> {
     sqlx::query(
         "INSERT INTO site_settings (site_id, key, value) VALUES ($1, $2, $3)
-         ON CONFLICT (site_id, key) WHERE site_id IS NOT NULL DO UPDATE SET value = EXCLUDED.value"
+         ON CONFLICT (site_id, key) WHERE site_id IS NOT NULL DO UPDATE SET value = EXCLUDED.value",
     )
     .bind(site_id)
     .bind(key)
@@ -226,10 +272,16 @@ async fn get_site_setting(pool: &PgPool, site_id: Uuid, key: &str) -> Option<Str
         .flatten()
 }
 
-async fn allow_ip_add(hostname: Option<String>, ip: String, database_url: Option<String>) -> anyhow::Result<()> {
+async fn allow_ip_add(
+    hostname: Option<String>,
+    ip: String,
+    database_url: Option<String>,
+) -> anyhow::Result<()> {
     if let Some(url) = database_url {
         #[allow(unused_unsafe)]
-        unsafe { std::env::set_var("DATABASE_URL", url); }
+        unsafe {
+            std::env::set_var("DATABASE_URL", url);
+        }
     }
     let ip = ip.trim().to_string();
     validate_ip_entry(&ip)?;
@@ -237,7 +289,9 @@ async fn allow_ip_add(hostname: Option<String>, ip: String, database_url: Option
     let pool = super::connect_db().await?;
     let (site_id, hostname) = resolve_site(&pool, hostname).await?;
 
-    let existing = get_site_setting(&pool, site_id, "ip_allowlist").await.unwrap_or_default();
+    let existing = get_site_setting(&pool, site_id, "ip_allowlist")
+        .await
+        .unwrap_or_default();
     let mut entries = split_list(&existing);
 
     if entries.iter().any(|e| e == &ip) {
@@ -251,21 +305,31 @@ async fn allow_ip_add(hostname: Option<String>, ip: String, database_url: Option
     set_site_setting(&pool, site_id, "ip_allowlist_enabled", "true").await?;
     println!("Allowed: {}", entries.join(", "));
     println!("Takes effect immediately — no restart needed.");
-    println!("WARNING: unlike maintenance mode, /admin is blocked too for anyone not on this list.");
+    println!(
+        "WARNING: unlike maintenance mode, /admin is blocked too for anyone not on this list."
+    );
     Ok(())
 }
 
-async fn allow_ip_remove(hostname: Option<String>, ip: String, database_url: Option<String>) -> anyhow::Result<()> {
+async fn allow_ip_remove(
+    hostname: Option<String>,
+    ip: String,
+    database_url: Option<String>,
+) -> anyhow::Result<()> {
     if let Some(url) = database_url {
         #[allow(unused_unsafe)]
-        unsafe { std::env::set_var("DATABASE_URL", url); }
+        unsafe {
+            std::env::set_var("DATABASE_URL", url);
+        }
     }
     let ip = ip.trim().to_string();
 
     let pool = super::connect_db().await?;
     let (site_id, hostname) = resolve_site(&pool, hostname).await?;
 
-    let existing = get_site_setting(&pool, site_id, "ip_allowlist").await.unwrap_or_default();
+    let existing = get_site_setting(&pool, site_id, "ip_allowlist")
+        .await
+        .unwrap_or_default();
     let mut entries = split_list(&existing);
 
     let before = entries.len();
@@ -290,29 +354,41 @@ async fn allow_ip_remove(hostname: Option<String>, ip: String, database_url: Opt
     Ok(())
 }
 
-async fn allow_ip_on(hostname: Option<String>, ips: Vec<String>, database_url: Option<String>) -> anyhow::Result<()> {
+async fn allow_ip_on(
+    hostname: Option<String>,
+    ips: Vec<String>,
+    database_url: Option<String>,
+) -> anyhow::Result<()> {
     if let Some(url) = database_url {
         #[allow(unused_unsafe)]
-        unsafe { std::env::set_var("DATABASE_URL", url); }
+        unsafe {
+            std::env::set_var("DATABASE_URL", url);
+        }
     }
     let pool = super::connect_db().await?;
     let (site_id, hostname) = resolve_site(&pool, hostname).await?;
 
     let list = if ips.is_empty() {
-        get_site_setting(&pool, site_id, "ip_allowlist").await.unwrap_or_default()
+        get_site_setting(&pool, site_id, "ip_allowlist")
+            .await
+            .unwrap_or_default()
     } else {
         for ip in &ips {
             let entry = ip.trim();
             let (addr_part, _) = entry.split_once('/').unwrap_or((entry, ""));
             if addr_part.parse::<std::net::IpAddr>().is_err() {
-                anyhow::bail!("'{entry}' is not a valid IP or CIDR (e.g. 203.0.113.9 or 203.0.113.0/24).");
+                anyhow::bail!(
+                    "'{entry}' is not a valid IP or CIDR (e.g. 203.0.113.9 or 203.0.113.0/24)."
+                );
             }
         }
         ips.join(",")
     };
 
     if list.is_empty() {
-        anyhow::bail!("No IPs on file yet — pass at least one --ip <cidr> the first time you turn this on.");
+        anyhow::bail!(
+            "No IPs on file yet — pass at least one --ip <cidr> the first time you turn this on."
+        );
     }
 
     set_site_setting(&pool, site_id, "ip_allowlist", &list).await?;
@@ -326,10 +402,15 @@ async fn allow_ip_on(hostname: Option<String>, ips: Vec<String>, database_url: O
     Ok(())
 }
 
-async fn allow_ip_off(hostname: Option<String>, database_url: Option<String>) -> anyhow::Result<()> {
+async fn allow_ip_off(
+    hostname: Option<String>,
+    database_url: Option<String>,
+) -> anyhow::Result<()> {
     if let Some(url) = database_url {
         #[allow(unused_unsafe)]
-        unsafe { std::env::set_var("DATABASE_URL", url); }
+        unsafe {
+            std::env::set_var("DATABASE_URL", url);
+        }
     }
     let pool = super::connect_db().await?;
     let (site_id, hostname) = resolve_site(&pool, hostname).await?;
@@ -340,19 +421,29 @@ async fn allow_ip_off(hostname: Option<String>, database_url: Option<String>) ->
     Ok(())
 }
 
-async fn allow_ip_status(hostname: Option<String>, database_url: Option<String>) -> anyhow::Result<()> {
+async fn allow_ip_status(
+    hostname: Option<String>,
+    database_url: Option<String>,
+) -> anyhow::Result<()> {
     if let Some(url) = database_url {
         #[allow(unused_unsafe)]
-        unsafe { std::env::set_var("DATABASE_URL", url); }
+        unsafe {
+            std::env::set_var("DATABASE_URL", url);
+        }
     }
     let pool = super::connect_db().await?;
     let (site_id, hostname) = resolve_site(&pool, hostname).await?;
 
-    let enabled = get_site_setting(&pool, site_id, "ip_allowlist_enabled").await.unwrap_or_else(|| "false".to_string());
+    let enabled = get_site_setting(&pool, site_id, "ip_allowlist_enabled")
+        .await
+        .unwrap_or_else(|| "false".to_string());
     let list = get_site_setting(&pool, site_id, "ip_allowlist").await;
 
     println!("Site: {hostname}");
-    println!("IP allowlist: {}", if enabled == "true" { "ON" } else { "OFF" });
+    println!(
+        "IP allowlist: {}",
+        if enabled == "true" { "ON" } else { "OFF" }
+    );
     if let Some(l) = list {
         println!("Allowed: {l}");
     }
@@ -371,13 +462,22 @@ fn validate_ip_entry(entry: &str) -> anyhow::Result<()> {
 /// Parse a comma-separated site_settings list into entries, trimmed and
 /// with blanks dropped.
 fn split_list(list: &str) -> Vec<String> {
-    list.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect()
+    list.split(',')
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect()
 }
 
-async fn block_ip_add(hostname: Option<String>, ip: String, database_url: Option<String>) -> anyhow::Result<()> {
+async fn block_ip_add(
+    hostname: Option<String>,
+    ip: String,
+    database_url: Option<String>,
+) -> anyhow::Result<()> {
     if let Some(url) = database_url {
         #[allow(unused_unsafe)]
-        unsafe { std::env::set_var("DATABASE_URL", url); }
+        unsafe {
+            std::env::set_var("DATABASE_URL", url);
+        }
     }
     let ip = ip.trim().to_string();
     validate_ip_entry(&ip)?;
@@ -385,7 +485,9 @@ async fn block_ip_add(hostname: Option<String>, ip: String, database_url: Option
     let pool = super::connect_db().await?;
     let (site_id, hostname) = resolve_site(&pool, hostname).await?;
 
-    let existing = get_site_setting(&pool, site_id, "ip_denylist").await.unwrap_or_default();
+    let existing = get_site_setting(&pool, site_id, "ip_denylist")
+        .await
+        .unwrap_or_default();
     let mut entries = split_list(&existing);
 
     if entries.iter().any(|e| e == &ip) {
@@ -402,17 +504,25 @@ async fn block_ip_add(hostname: Option<String>, ip: String, database_url: Option
     Ok(())
 }
 
-async fn block_ip_remove(hostname: Option<String>, ip: String, database_url: Option<String>) -> anyhow::Result<()> {
+async fn block_ip_remove(
+    hostname: Option<String>,
+    ip: String,
+    database_url: Option<String>,
+) -> anyhow::Result<()> {
     if let Some(url) = database_url {
         #[allow(unused_unsafe)]
-        unsafe { std::env::set_var("DATABASE_URL", url); }
+        unsafe {
+            std::env::set_var("DATABASE_URL", url);
+        }
     }
     let ip = ip.trim().to_string();
 
     let pool = super::connect_db().await?;
     let (site_id, hostname) = resolve_site(&pool, hostname).await?;
 
-    let existing = get_site_setting(&pool, site_id, "ip_denylist").await.unwrap_or_default();
+    let existing = get_site_setting(&pool, site_id, "ip_denylist")
+        .await
+        .unwrap_or_default();
     let mut entries = split_list(&existing);
 
     let before = entries.len();
@@ -435,29 +545,41 @@ async fn block_ip_remove(hostname: Option<String>, ip: String, database_url: Opt
     Ok(())
 }
 
-async fn block_ip_on(hostname: Option<String>, ips: Vec<String>, database_url: Option<String>) -> anyhow::Result<()> {
+async fn block_ip_on(
+    hostname: Option<String>,
+    ips: Vec<String>,
+    database_url: Option<String>,
+) -> anyhow::Result<()> {
     if let Some(url) = database_url {
         #[allow(unused_unsafe)]
-        unsafe { std::env::set_var("DATABASE_URL", url); }
+        unsafe {
+            std::env::set_var("DATABASE_URL", url);
+        }
     }
     let pool = super::connect_db().await?;
     let (site_id, hostname) = resolve_site(&pool, hostname).await?;
 
     let list = if ips.is_empty() {
-        get_site_setting(&pool, site_id, "ip_denylist").await.unwrap_or_default()
+        get_site_setting(&pool, site_id, "ip_denylist")
+            .await
+            .unwrap_or_default()
     } else {
         for ip in &ips {
             let entry = ip.trim();
             let (addr_part, _) = entry.split_once('/').unwrap_or((entry, ""));
             if addr_part.parse::<std::net::IpAddr>().is_err() {
-                anyhow::bail!("'{entry}' is not a valid IP or CIDR (e.g. 203.0.113.9 or 203.0.113.0/24).");
+                anyhow::bail!(
+                    "'{entry}' is not a valid IP or CIDR (e.g. 203.0.113.9 or 203.0.113.0/24)."
+                );
             }
         }
         ips.join(",")
     };
 
     if list.is_empty() {
-        anyhow::bail!("No IPs on file yet — pass at least one --ip <cidr> the first time you turn this on.");
+        anyhow::bail!(
+            "No IPs on file yet — pass at least one --ip <cidr> the first time you turn this on."
+        );
     }
 
     set_site_setting(&pool, site_id, "ip_denylist", &list).await?;
@@ -465,14 +587,21 @@ async fn block_ip_on(hostname: Option<String>, ips: Vec<String>, database_url: O
 
     println!("IP denylist is now ON for '{hostname}'.");
     println!("Blocked: {list}");
-    println!("Everyone else can still reach the site. Takes effect immediately — no restart needed.");
+    println!(
+        "Everyone else can still reach the site. Takes effect immediately — no restart needed."
+    );
     Ok(())
 }
 
-async fn block_ip_off(hostname: Option<String>, database_url: Option<String>) -> anyhow::Result<()> {
+async fn block_ip_off(
+    hostname: Option<String>,
+    database_url: Option<String>,
+) -> anyhow::Result<()> {
     if let Some(url) = database_url {
         #[allow(unused_unsafe)]
-        unsafe { std::env::set_var("DATABASE_URL", url); }
+        unsafe {
+            std::env::set_var("DATABASE_URL", url);
+        }
     }
     let pool = super::connect_db().await?;
     let (site_id, hostname) = resolve_site(&pool, hostname).await?;
@@ -483,19 +612,29 @@ async fn block_ip_off(hostname: Option<String>, database_url: Option<String>) ->
     Ok(())
 }
 
-async fn block_ip_status(hostname: Option<String>, database_url: Option<String>) -> anyhow::Result<()> {
+async fn block_ip_status(
+    hostname: Option<String>,
+    database_url: Option<String>,
+) -> anyhow::Result<()> {
     if let Some(url) = database_url {
         #[allow(unused_unsafe)]
-        unsafe { std::env::set_var("DATABASE_URL", url); }
+        unsafe {
+            std::env::set_var("DATABASE_URL", url);
+        }
     }
     let pool = super::connect_db().await?;
     let (site_id, hostname) = resolve_site(&pool, hostname).await?;
 
-    let enabled = get_site_setting(&pool, site_id, "ip_denylist_enabled").await.unwrap_or_else(|| "false".to_string());
+    let enabled = get_site_setting(&pool, site_id, "ip_denylist_enabled")
+        .await
+        .unwrap_or_else(|| "false".to_string());
     let list = get_site_setting(&pool, site_id, "ip_denylist").await;
 
     println!("Site: {hostname}");
-    println!("IP denylist: {}", if enabled == "true" { "ON" } else { "OFF" });
+    println!(
+        "IP denylist: {}",
+        if enabled == "true" { "ON" } else { "OFF" }
+    );
     if let Some(l) = list {
         println!("Blocked: {l}");
     }

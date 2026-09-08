@@ -2,10 +2,10 @@
 //! owns the poll's shape (question/options); this one owns what visitors
 //! actually submitted.
 
+use chrono::{DateTime, Utc};
 use serde::Serialize;
 use sqlx::PgPool;
 use uuid::Uuid;
-use chrono::{DateTime, Utc};
 
 use crate::errors::Result;
 use crate::models::poll_def::VoteProtection;
@@ -112,17 +112,22 @@ pub async fn tally(pool: &PgPool, poll_id: Uuid) -> Result<Vec<(String, i64)>> {
 }
 
 pub async fn count_for_poll(pool: &PgPool, site_id: Uuid, poll_id: Uuid) -> Result<i64> {
-    let row: (i64,) = sqlx::query_as(
-        "SELECT COUNT(*) FROM poll_votes WHERE site_id = $1 AND poll_id = $2",
-    )
-    .bind(site_id)
-    .bind(poll_id)
-    .fetch_one(pool)
-    .await?;
+    let row: (i64,) =
+        sqlx::query_as("SELECT COUNT(*) FROM poll_votes WHERE site_id = $1 AND poll_id = $2")
+            .bind(site_id)
+            .bind(poll_id)
+            .fetch_one(pool)
+            .await?;
     Ok(row.0)
 }
 
-pub async fn list_votes(pool: &PgPool, site_id: Uuid, poll_id: Uuid, limit: i64, offset: i64) -> Result<Vec<PollVote>> {
+pub async fn list_votes(
+    pool: &PgPool,
+    site_id: Uuid,
+    poll_id: Uuid,
+    limit: i64,
+    offset: i64,
+) -> Result<Vec<PollVote>> {
     let rows = sqlx::query_as::<_, PollVote>(
         "SELECT * FROM poll_votes WHERE site_id = $1 AND poll_id = $2
          ORDER BY voted_at DESC

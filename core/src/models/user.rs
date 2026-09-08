@@ -48,7 +48,10 @@ impl UserRole {
     }
 
     pub fn can_publish(&self) -> bool {
-        matches!(self, UserRole::Author | UserRole::Editor | UserRole::SiteAdmin | UserRole::SuperAdmin)
+        matches!(
+            self,
+            UserRole::Author | UserRole::Editor | UserRole::SiteAdmin | UserRole::SuperAdmin
+        )
     }
 
     pub fn can_manage_users(&self) -> bool {
@@ -111,7 +114,10 @@ pub fn validate_username(username: &str) -> std::result::Result<(), &'static str
     if len > 15 {
         return Err("Username must be no more than 15 characters");
     }
-    if !username.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-') {
+    if !username
+        .chars()
+        .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+    {
         return Err("Username may only contain lowercase letters, numbers and hyphens");
     }
     if username.starts_with('-') || username.ends_with('-') {
@@ -176,7 +182,9 @@ impl User {
             Ok(h) => h,
             Err(_) => return false,
         };
-        Argon2::default().verify_password(password.as_bytes(), &hash).is_ok()
+        Argon2::default()
+            .verify_password(password.as_bytes(), &hash)
+            .is_ok()
     }
 
     /// Opaque marker copied into a session at login. A password change alters
@@ -286,11 +294,13 @@ pub async fn reset_welcome_panel(pool: &PgPool, id: Uuid) -> Result<()> {
 }
 
 pub async fn get_by_id(pool: &PgPool, id: Uuid) -> Result<User> {
-    sqlx::query_as::<_, User>("SELECT * FROM users WHERE id = $1 AND is_active = TRUE AND deleted_at IS NULL")
-        .bind(id)
-        .fetch_optional(pool)
-        .await?
-        .ok_or_else(|| AppError::NotFound(format!("user {id}")))
+    sqlx::query_as::<_, User>(
+        "SELECT * FROM users WHERE id = $1 AND is_active = TRUE AND deleted_at IS NULL",
+    )
+    .bind(id)
+    .fetch_optional(pool)
+    .await?
+    .ok_or_else(|| AppError::NotFound(format!("user {id}")))
 }
 
 /// Like `get_by_id`, but also finds suspended (`is_active = FALSE`) accounts —
@@ -396,14 +406,12 @@ pub async fn get_by_email(pool: &PgPool, email: &str) -> Result<User> {
 
 #[allow(dead_code)]
 pub async fn update_role(pool: &PgPool, id: Uuid, role: &UserRole) -> Result<()> {
-    let affected = sqlx::query(
-        "UPDATE users SET role = $1, updated_at = NOW() WHERE id = $2",
-    )
-    .bind(role.as_str())
-    .bind(id)
-    .execute(pool)
-    .await?
-    .rows_affected();
+    let affected = sqlx::query("UPDATE users SET role = $1, updated_at = NOW() WHERE id = $2")
+        .bind(role.as_str())
+        .bind(id)
+        .execute(pool)
+        .await?
+        .rows_affected();
 
     if affected == 0 {
         return Err(AppError::NotFound(format!("user {id}")));
@@ -414,12 +422,10 @@ pub async fn update_role(pool: &PgPool, id: Uuid, role: &UserRole) -> Result<()>
 /// Suspend a user — blocks login (every login lookup filters `is_active = TRUE`)
 /// without touching their content, unlike `soft_delete`.
 pub async fn deactivate(pool: &PgPool, id: Uuid) -> Result<()> {
-    sqlx::query(
-        "UPDATE users SET is_active = FALSE, updated_at = NOW() WHERE id = $1",
-    )
-    .bind(id)
-    .execute(pool)
-    .await?;
+    sqlx::query("UPDATE users SET is_active = FALSE, updated_at = NOW() WHERE id = $1")
+        .bind(id)
+        .execute(pool)
+        .await?;
     Ok(())
 }
 
@@ -444,10 +450,14 @@ pub async fn deactivate(pool: &PgPool, id: Uuid) -> Result<()> {
 pub async fn erase_personal_data(pool: &PgPool, id: Uuid) -> Result<String> {
     let target = get_by_id_include_inactive(pool, id).await?;
     if target.role != "subscriber" {
-        return Err(AppError::BadRequest("Personal data erasure is only available for subscriber accounts".to_string()));
+        return Err(AppError::BadRequest(
+            "Personal data erasure is only available for subscriber accounts".to_string(),
+        ));
     }
     if target.personal_data_erased_at.is_some() {
-        return Err(AppError::BadRequest("This account's personal data has already been erased".to_string()));
+        return Err(AppError::BadRequest(
+            "This account's personal data has already been erased".to_string(),
+        ));
     }
 
     let suffix = id.simple().to_string();
@@ -480,12 +490,10 @@ pub async fn erase_personal_data(pool: &PgPool, id: Uuid) -> Result<String> {
 
 /// Reverse `deactivate` — restores login access.
 pub async fn reactivate(pool: &PgPool, id: Uuid) -> Result<()> {
-    sqlx::query(
-        "UPDATE users SET is_active = TRUE, updated_at = NOW() WHERE id = $1",
-    )
-    .bind(id)
-    .execute(pool)
-    .await?;
+    sqlx::query("UPDATE users SET is_active = TRUE, updated_at = NOW() WHERE id = $1")
+        .bind(id)
+        .execute(pool)
+        .await?;
     Ok(())
 }
 
@@ -556,12 +564,10 @@ pub async fn list(pool: &PgPool) -> Result<Vec<User>> {
 /// for contexts like assignable-user dropdowns, where a suspended account
 /// shouldn't be selectable.
 pub async fn list_all(pool: &PgPool) -> Result<Vec<User>> {
-    sqlx::query_as::<_, User>(
-        "SELECT * FROM users WHERE deleted_at IS NULL ORDER BY username",
-    )
-    .fetch_all(pool)
-    .await
-    .map_err(Into::into)
+    sqlx::query_as::<_, User>("SELECT * FROM users WHERE deleted_at IS NULL ORDER BY username")
+        .fetch_all(pool)
+        .await
+        .map_err(Into::into)
 }
 
 pub async fn count(pool: &PgPool) -> Result<i64> {
@@ -629,7 +635,11 @@ pub async fn count_subscribers(pool: &PgPool) -> Result<i64> {
 /// assigned to a specific site, excluding super_admins (they aren't really
 /// "on the team") and the viewing user themselves — a site admin's own
 /// account shouldn't count toward the total they see on their own dashboard.
-pub async fn count_staff_for_site(pool: &PgPool, site_id: Uuid, exclude_user_id: Uuid) -> Result<i64> {
+pub async fn count_staff_for_site(
+    pool: &PgPool,
+    site_id: Uuid,
+    exclude_user_id: Uuid,
+) -> Result<i64> {
     let count: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM site_users su
          JOIN users u ON u.id = su.user_id
@@ -667,10 +677,18 @@ pub async fn update(pool: &PgPool, id: Uuid, data: &UpdateUser) -> Result<User> 
     let current = get_by_id(pool, id).await?;
 
     let new_username = data.username.clone().unwrap_or(current.username);
-    let new_email = data.email.as_deref().map(normalize_email).unwrap_or(current.email);
+    let new_email = data
+        .email
+        .as_deref()
+        .map(normalize_email)
+        .unwrap_or(current.email);
     let new_display_name = data.display_name.clone().unwrap_or(current.display_name);
     let new_password_hash = data.password_hash.clone().unwrap_or(current.password_hash);
-    let new_role = data.role.as_ref().map(|r| r.as_str().to_string()).unwrap_or(current.role);
+    let new_role = data
+        .role
+        .as_ref()
+        .map(|r| r.as_str().to_string())
+        .unwrap_or(current.role);
     let new_bio = data.bio.clone().unwrap_or(current.bio);
 
     let user = sqlx::query_as::<_, User>(
@@ -746,14 +764,23 @@ pub async fn set_default_site(pool: &PgPool, user_id: Uuid, site_id: Option<Uuid
     Ok(())
 }
 
-pub async fn get_dashboard_widget_layout(pool: &PgPool, user_id: Uuid) -> Result<Option<serde_json::Value>> {
-    let layout: Option<serde_json::Value> = sqlx::query_scalar(
-        "SELECT dashboard_widget_layout FROM users WHERE id = $1"
-    ).bind(user_id).fetch_one(pool).await?;
+pub async fn get_dashboard_widget_layout(
+    pool: &PgPool,
+    user_id: Uuid,
+) -> Result<Option<serde_json::Value>> {
+    let layout: Option<serde_json::Value> =
+        sqlx::query_scalar("SELECT dashboard_widget_layout FROM users WHERE id = $1")
+            .bind(user_id)
+            .fetch_one(pool)
+            .await?;
     Ok(layout)
 }
 
-pub async fn set_dashboard_widget_layout(pool: &PgPool, user_id: Uuid, layout: &serde_json::Value) -> Result<()> {
+pub async fn set_dashboard_widget_layout(
+    pool: &PgPool,
+    user_id: Uuid,
+    layout: &serde_json::Value,
+) -> Result<()> {
     sqlx::query("UPDATE users SET dashboard_widget_layout = $1, updated_at = NOW() WHERE id = $2")
         .bind(layout)
         .bind(user_id)
@@ -770,7 +797,9 @@ pub fn verify_password(password: &str, hash: &str) -> bool {
         Ok(h) => h,
         Err(_) => return false,
     };
-    Argon2::default().verify_password(password.as_bytes(), &parsed).is_ok()
+    Argon2::default()
+        .verify_password(password.as_bytes(), &parsed)
+        .is_ok()
 }
 
 #[cfg(test)]
@@ -794,7 +823,10 @@ mod tests {
         assert_eq!(UserRole::from_str("author"), Some(UserRole::Author));
         assert_eq!(UserRole::from_str("editor"), Some(UserRole::Editor));
         assert_eq!(UserRole::from_str("site_admin"), Some(UserRole::SiteAdmin));
-        assert_eq!(UserRole::from_str("super_admin"), Some(UserRole::SuperAdmin));
+        assert_eq!(
+            UserRole::from_str("super_admin"),
+            Some(UserRole::SuperAdmin)
+        );
     }
 
     #[test]

@@ -38,9 +38,9 @@ async fn reindex() -> anyhow::Result<()> {
         .await
         .map_err(|e| anyhow::anyhow!("Database connection failed: {e}\nCheck DATABASE_URL is correct and PostgreSQL is running."))?;
 
-    let index = synaptic_core::search::SearchIndex::open_or_create(
-        std::path::Path::new(&cfg.search_index_path),
-    )
+    let index = synaptic_core::search::SearchIndex::open_or_create(std::path::Path::new(
+        &cfg.search_index_path,
+    ))
     .map_err(|e| {
         anyhow::anyhow!(
             "Failed to open search index at '{}': {e}\n\n\

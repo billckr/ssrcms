@@ -10,14 +10,17 @@ use uuid::Uuid;
 
 use crate::app_state::AppState;
 use crate::middleware::site::CurrentSite;
-use crate::models::{page_composition, post, taxonomy};
 use crate::models::post::{ListFilter, PostStatus, PostType};
 use crate::models::taxonomy::{TaxonomyType, TermContext};
-use crate::templates::{composer, context::{
-    ArchiveContext, ContextBuilder, PaginationContext, RequestContext, SessionContext,
-}};
+use crate::models::{page_composition, post, taxonomy};
+use crate::templates::{
+    composer,
+    context::{ArchiveContext, ContextBuilder, PaginationContext, RequestContext, SessionContext},
+};
 
-use super::home::{build_post_context, build_site_context, build_taxonomy_clouds, render_error_page};
+use super::home::{
+    build_post_context, build_site_context, build_taxonomy_clouds, render_error_page,
+};
 
 #[derive(Deserialize)]
 pub struct PageQuery {
@@ -42,7 +45,18 @@ pub async fn category_archive(
     let site_id = current_site.site.id;
     let base_url = current_site.base_url.clone();
     let session_ctx = super::resolve_session(&state, &session).await;
-    match render_taxonomy_archive(state.clone(), slug, TaxonomyType::Category, query.page, uri, site_id, &base_url, session_ctx).await {
+    match render_taxonomy_archive(
+        state.clone(),
+        slug,
+        TaxonomyType::Category,
+        query.page,
+        uri,
+        site_id,
+        &base_url,
+        session_ctx,
+    )
+    .await
+    {
         Ok(html) => Html(html).into_response(),
         Err(e) => render_error_page(e, &state, &path, Some(current_site.site.id)).await,
     }
@@ -61,7 +75,18 @@ pub async fn tag_archive(
     let site_id = current_site.site.id;
     let base_url = current_site.base_url.clone();
     let session_ctx = super::resolve_session(&state, &session).await;
-    match render_taxonomy_archive(state.clone(), slug, TaxonomyType::Tag, query.page, uri, site_id, &base_url, session_ctx).await {
+    match render_taxonomy_archive(
+        state.clone(),
+        slug,
+        TaxonomyType::Tag,
+        query.page,
+        uri,
+        site_id,
+        &base_url,
+        session_ctx,
+    )
+    .await
+    {
         Ok(html) => Html(html).into_response(),
         Err(e) => render_error_page(e, &state, &path, Some(current_site.site.id)).await,
     }
@@ -80,7 +105,17 @@ pub async fn author_archive(
     let site_id = current_site.site.id;
     let base_url = current_site.base_url.clone();
     let session_ctx = super::resolve_session(&state, &session).await;
-    match render_author_archive(state.clone(), username, query.page, uri, site_id, &base_url, session_ctx).await {
+    match render_author_archive(
+        state.clone(),
+        username,
+        query.page,
+        uri,
+        site_id,
+        &base_url,
+        session_ctx,
+    )
+    .await
+    {
         Ok(html) => Html(html).into_response(),
         Err(e) => render_error_page(e, &state, &path, Some(current_site.site.id)).await,
     }
@@ -130,8 +165,13 @@ async fn render_taxonomy_archive(
         posts.push(build_post_context(&state, p, base_url).await?);
     }
 
-    let pagination =
-        PaginationContext::new(page, per_page, count, &format!("{}{}", base_url, uri.path()), "");
+    let pagination = PaginationContext::new(
+        page,
+        per_page,
+        count,
+        &format!("{}{}", base_url, uri.path()),
+        "",
+    );
 
     let archive = ArchiveContext {
         archive_type: term.taxonomy.clone(),
@@ -180,12 +220,23 @@ async fn render_taxonomy_archive(
     let hook_outputs = state.templates.render_hooks_for_theme(
         &theme,
         Some(site_id),
-        &["head_start", "head_end", "body_start", "body_end", "before_content", "after_content", "footer"],
+        &[
+            "head_start",
+            "head_end",
+            "body_start",
+            "body_end",
+            "before_content",
+            "after_content",
+            "footer",
+        ],
         &ctx,
-    Some(&active_plugins));
+        Some(&active_plugins),
+    );
     ContextBuilder::add_hook_outputs(&mut ctx, &hook_outputs);
 
-    state.templates.render_for_theme(&theme, Some(site_id), "archive.html", &ctx)
+    state
+        .templates
+        .render_for_theme(&theme, Some(site_id), "archive.html", &ctx)
 }
 
 async fn render_author_archive(
@@ -218,15 +269,26 @@ async fn render_author_archive(
     )
     .await?;
 
-    let total_posts = post::count(&state.db, Some(site_id), Some(PostStatus::Published), Some(PostType::Post)).await?;
+    let total_posts = post::count(
+        &state.db,
+        Some(site_id),
+        Some(PostStatus::Published),
+        Some(PostType::Post),
+    )
+    .await?;
 
     let mut posts = Vec::with_capacity(posts_raw.len());
     for p in &posts_raw {
         posts.push(build_post_context(&state, p, base_url).await?);
     }
 
-    let pagination =
-        PaginationContext::new(page, per_page, total_posts, &format!("{}{}", base_url, uri.path()), "");
+    let pagination = PaginationContext::new(
+        page,
+        per_page,
+        total_posts,
+        &format!("{}{}", base_url, uri.path()),
+        "",
+    );
 
     let author_ctx = crate::models::user::UserContext::from_user(&author, base_url);
     let site_ctx = build_site_context(&state, Some(site_id), base_url).await?;
@@ -262,10 +324,21 @@ async fn render_author_archive(
     let hook_outputs = state.templates.render_hooks_for_theme(
         &theme,
         Some(site_id),
-        &["head_start", "head_end", "body_start", "body_end", "before_content", "after_content", "footer"],
+        &[
+            "head_start",
+            "head_end",
+            "body_start",
+            "body_end",
+            "before_content",
+            "after_content",
+            "footer",
+        ],
         &ctx,
-    Some(&active_plugins));
+        Some(&active_plugins),
+    );
     ContextBuilder::add_hook_outputs(&mut ctx, &hook_outputs);
 
-    state.templates.render_for_theme(&theme, Some(site_id), "archive.html", &ctx)
+    state
+        .templates
+        .render_for_theme(&theme, Some(site_id), "archive.html", &ctx)
 }

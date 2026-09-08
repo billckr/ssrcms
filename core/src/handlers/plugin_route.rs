@@ -40,7 +40,16 @@ pub async fn sitemap(
     let site_id = current_site.site.id;
     let base_url = current_site.base_url.clone();
 
-    match render_plugin_route(state, &path, "sitemap.xml", "application/xml", site_id, &base_url).await {
+    match render_plugin_route(
+        state,
+        &path,
+        "sitemap.xml",
+        "application/xml",
+        site_id,
+        &base_url,
+    )
+    .await
+    {
         Ok(body) => Response::builder()
             .status(StatusCode::OK)
             .header(header::CONTENT_TYPE, "application/xml; charset=utf-8")
@@ -71,7 +80,15 @@ pub async fn dispatch(
         }
     };
 
-    match render_plugin_route(state, &path, &registration.template, &registration.content_type, site_id, &base_url).await
+    match render_plugin_route(
+        state,
+        &path,
+        &registration.template,
+        &registration.content_type,
+        site_id,
+        &base_url,
+    )
+    .await
     {
         Ok(body) => {
             let content_type = HeaderValue::from_str(&registration.content_type)
@@ -158,5 +175,7 @@ async fn render_plugin_route(
     ctx.insert("all_pages", &all_pages);
 
     let theme = state.active_theme_for_site(Some(site_id));
-    state.templates.render_for_theme(&theme, Some(site_id), template_name, &ctx)
+    state
+        .templates
+        .render_for_theme(&theme, Some(site_id), template_name, &ctx)
 }

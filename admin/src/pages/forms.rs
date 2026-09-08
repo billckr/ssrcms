@@ -1,6 +1,6 @@
 //! Admin forms pages — form list and submission detail views.
 
-use crate::{html_escape, admin_page, PageContext};
+use crate::{admin_page, html_escape, PageContext};
 
 pub struct FormSummaryRow {
     /// The form's slug — what submissions are actually keyed by, and what
@@ -38,16 +38,12 @@ pub struct SubmissionRow {
 
 /// Content for the "Forms" tab on /admin/analytics — table + search, no page
 /// chrome (admin_page wrapper). Used by pages::analytics inside its tab shell.
-pub fn forms_tab_content(
-    forms: &[FormSummaryRow],
-    sort: &str,
-    dir: &str,
-) -> String {
+pub fn forms_tab_content(forms: &[FormSummaryRow], sort: &str, dir: &str) -> String {
     let mut sorted: Vec<&FormSummaryRow> = forms.iter().collect();
     match sort {
         "submissions" => sorted.sort_by_key(|f| f.submission_count),
-        "last"        => sorted.sort_by(|a, b| a.last_submitted_at.cmp(&b.last_submitted_at)),
-        "name"        => sorted.sort_by_key(|f| f.display_name.to_lowercase()),
+        "last" => sorted.sort_by(|a, b| a.last_submitted_at.cmp(&b.last_submitted_at)),
+        "name" => sorted.sort_by_key(|f| f.display_name.to_lowercase()),
         _ => {}
     }
     let asc = dir != "desc";
@@ -59,7 +55,15 @@ pub fn forms_tab_content(
     let sort_th = |label: &str, key: &str| -> String {
         let is_active = sort == key;
         let next_dir = if is_active && asc { "desc" } else { "asc" };
-        let arrow = if is_active { if asc { " \u{25B2}" } else { " \u{25BC}" } } else { "" };
+        let arrow = if is_active {
+            if asc {
+                " \u{25B2}"
+            } else {
+                " \u{25BC}"
+            }
+        } else {
+            ""
+        };
         format!(
             r#"<th><a href="/admin/analytics?tab=forms&sort={key}&dir={next_dir}" style="color:inherit;text-decoration:none;white-space:nowrap">{label}{arrow}</a></th>"#
         )
@@ -251,12 +255,18 @@ fn submissions_pagination(base_path: &str, sep: &str, page: i64, total_pages: i6
         return String::new();
     }
     let prev = if page > 1 {
-        format!(r#"<a href="{base_path}{sep}page={}" class="page-btn">&laquo; Prev</a>"#, page - 1)
+        format!(
+            r#"<a href="{base_path}{sep}page={}" class="page-btn">&laquo; Prev</a>"#,
+            page - 1
+        )
     } else {
         r#"<span class="page-btn page-btn-disabled">&laquo; Prev</span>"#.to_string()
     };
     let next = if page < total_pages {
-        format!(r#"<a href="{base_path}{sep}page={}" class="page-btn">Next &raquo;</a>"#, page + 1)
+        format!(
+            r#"<a href="{base_path}{sep}page={}" class="page-btn">Next &raquo;</a>"#,
+            page + 1
+        )
     } else {
         r#"<span class="page-btn page-btn-disabled">Next &raquo;</span>"#.to_string()
     };
@@ -265,9 +275,13 @@ fn submissions_pagination(base_path: &str, sep: &str, page: i64, total_pages: i6
     let mut nums = String::new();
     for p in start..=end {
         if p == page {
-            nums.push_str(&format!(r#"<span class="page-btn page-btn-active">{p}</span>"#));
+            nums.push_str(&format!(
+                r#"<span class="page-btn page-btn-active">{p}</span>"#
+            ));
         } else {
-            nums.push_str(&format!(r#"<a href="{base_path}{sep}page={p}" class="page-btn">{p}</a>"#));
+            nums.push_str(&format!(
+                r#"<a href="{base_path}{sep}page={p}" class="page-btn">{p}</a>"#
+            ));
         }
     }
     format!(r#"<div class="pagination">{prev}{nums}{next}</div>"#)
@@ -424,12 +438,21 @@ pub fn render_form_detail(
     ctx: &PageContext,
 ) -> String {
     let base_path = format!("/admin/form-data-analytics/{}", html_escape(form_slug));
-    let body = render_submissions_body(form_slug, submissions, columns, page, total_pages, &base_path, "?");
+    let body = render_submissions_body(
+        form_slug,
+        submissions,
+        columns,
+        page,
+        total_pages,
+        &base_path,
+        "?",
+    );
     let controls = render_submissions_controls(form_slug, !submissions.is_empty());
     let content = format!(
         r#"<div style="display:flex;align-items:center;justify-content:flex-end;gap:.75rem;margin-bottom:1rem;flex-wrap:wrap">{controls}</div>
 {body}"#,
-        controls = controls, body = body,
+        controls = controls,
+        body = body,
     );
     let title = format!("Form: {}", form_slug);
     admin_page(&title, "/admin/form-data-analytics", flash, &content, ctx)

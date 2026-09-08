@@ -32,7 +32,11 @@ pub(crate) fn real_ip(req: &Request, addr: SocketAddr) -> IpAddr {
             return ip;
         }
     }
-    if let Some(v) = req.headers().get("x-forwarded-for").and_then(|v| v.to_str().ok()) {
+    if let Some(v) = req
+        .headers()
+        .get("x-forwarded-for")
+        .and_then(|v| v.to_str().ok())
+    {
         if let Some(first) = v.split(',').next() {
             if let Ok(ip) = first.trim().parse::<IpAddr>() {
                 return ip;
@@ -61,12 +65,20 @@ pub(crate) fn matches_entry(ip: IpAddr, entry: &str) -> bool {
     match (ip, net_ip) {
         (IpAddr::V4(ip4), IpAddr::V4(net4)) => {
             let prefix = bits.unwrap_or(32).min(32);
-            let mask: u32 = if prefix == 0 { 0 } else { u32::MAX << (32 - prefix) };
+            let mask: u32 = if prefix == 0 {
+                0
+            } else {
+                u32::MAX << (32 - prefix)
+            };
             (u32::from(ip4) & mask) == (u32::from(net4) & mask)
         }
         (IpAddr::V6(ip6), IpAddr::V6(net6)) => {
             let prefix = bits.unwrap_or(128).min(128);
-            let mask: u128 = if prefix == 0 { 0 } else { u128::MAX << (128 - prefix) };
+            let mask: u128 = if prefix == 0 {
+                0
+            } else {
+                u128::MAX << (128 - prefix)
+            };
             (u128::from(ip6) & mask) == (u128::from(net6) & mask)
         }
         _ => false,

@@ -6,7 +6,7 @@ use uuid::Uuid;
 
 use crate::errors::{AppError, Result};
 use crate::models::media::{Media, MediaContext};
-use crate::models::taxonomy::{TermContext, TaxonomyType};
+use crate::models::taxonomy::{TaxonomyType, TermContext};
 use crate::models::user::{User, UserContext};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -156,7 +156,9 @@ pub fn build_permalink(structure: &str, post: &Post, category_slug: Option<&str>
     let mut last_was_slash = false;
     for c in path.chars() {
         if c == '/' {
-            if last_was_slash { continue; }
+            if last_was_slash {
+                continue;
+            }
             last_was_slash = true;
         } else {
             last_was_slash = false;
@@ -196,7 +198,11 @@ impl PostContext {
                 "page" => format!("{}/{}", base_url, post.slug),
                 _ => {
                     let category_slug = categories.first().map(|c| c.slug.as_str());
-                    format!("{}{}", base_url, build_permalink(permalink_structure, post, category_slug))
+                    format!(
+                        "{}{}",
+                        base_url,
+                        build_permalink(permalink_structure, post, category_slug)
+                    )
                 }
             }
         };
@@ -339,7 +345,10 @@ pub fn sanitize_content(html: &str) -> String {
     // idea for Poll Designer embeds (PollEmbedBlot / poll_def::expand_embeds).
     ammonia::Builder::default()
         .add_tags(&["audio", "source", "ss-form", "ss-poll"])
-        .add_tag_attributes("audio", &["src", "controls", "preload", "loop", "autoplay", "muted"])
+        .add_tag_attributes(
+            "audio",
+            &["src", "controls", "preload", "loop", "autoplay", "muted"],
+        )
         .add_tag_attributes("source", &["src", "type"])
         .add_tag_attributes("ss-form", &["data-slug", "data-label"])
         .add_tag_attributes("ss-poll", &["data-slug", "data-label"])
@@ -350,9 +359,9 @@ pub fn sanitize_content(html: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::models::user::User;
     use chrono::Utc;
     use uuid::Uuid;
-    use crate::models::user::User;
 
     fn make_user() -> User {
         User {
@@ -473,7 +482,17 @@ mod tests {
         let user = make_user();
         let post = make_post("post", "my-post", "content", None);
         let ctx = PostContext::build(
-            &post, &user, vec![], vec![], None, HashMap::new(), 0, "https://example.com", None, vec![], "/%postname%",
+            &post,
+            &user,
+            vec![],
+            vec![],
+            None,
+            HashMap::new(),
+            0,
+            "https://example.com",
+            None,
+            vec![],
+            "/%postname%",
         );
         assert_eq!(ctx.url, "https://example.com/my-post");
     }
@@ -483,7 +502,17 @@ mod tests {
         let user = make_user();
         let post = make_post("page", "about", "content", None);
         let ctx = PostContext::build(
-            &post, &user, vec![], vec![], None, HashMap::new(), 0, "https://example.com", None, vec![], "/%postname%",
+            &post,
+            &user,
+            vec![],
+            vec![],
+            None,
+            HashMap::new(),
+            0,
+            "https://example.com",
+            None,
+            vec![],
+            "/%postname%",
         );
         assert_eq!(ctx.url, "https://example.com/about");
     }
@@ -491,9 +520,24 @@ mod tests {
     #[test]
     fn post_context_excerpt_passthrough_when_provided() {
         let user = make_user();
-        let post = make_post("post", "slug", "Some content.", Some("Custom excerpt.".to_string()));
+        let post = make_post(
+            "post",
+            "slug",
+            "Some content.",
+            Some("Custom excerpt.".to_string()),
+        );
         let ctx = PostContext::build(
-            &post, &user, vec![], vec![], None, HashMap::new(), 0, "https://example.com", None, vec![], "/%postname%",
+            &post,
+            &user,
+            vec![],
+            vec![],
+            None,
+            HashMap::new(),
+            0,
+            "https://example.com",
+            None,
+            vec![],
+            "/%postname%",
         );
         assert_eq!(ctx.excerpt, "Custom excerpt.");
     }
@@ -504,10 +548,27 @@ mod tests {
         let content = "word ".repeat(100);
         let post = make_post("post", "slug", &content, None);
         let ctx = PostContext::build(
-            &post, &user, vec![], vec![], None, HashMap::new(), 0, "https://example.com", None, vec![], "/%postname%",
+            &post,
+            &user,
+            vec![],
+            vec![],
+            None,
+            HashMap::new(),
+            0,
+            "https://example.com",
+            None,
+            vec![],
+            "/%postname%",
         );
-        assert!(ctx.excerpt.ends_with(" ..."), "excerpt should end with ' ...'");
-        let word_count = ctx.excerpt.trim_end_matches(" ...").split_whitespace().count();
+        assert!(
+            ctx.excerpt.ends_with(" ..."),
+            "excerpt should end with ' ...'"
+        );
+        let word_count = ctx
+            .excerpt
+            .trim_end_matches(" ...")
+            .split_whitespace()
+            .count();
         assert_eq!(word_count, 55);
     }
 
@@ -516,7 +577,17 @@ mod tests {
         let user = make_user();
         let post = make_post("post", "slug", "short content here", None);
         let ctx = PostContext::build(
-            &post, &user, vec![], vec![], None, HashMap::new(), 0, "https://example.com", None, vec![], "/%postname%",
+            &post,
+            &user,
+            vec![],
+            vec![],
+            None,
+            HashMap::new(),
+            0,
+            "https://example.com",
+            None,
+            vec![],
+            "/%postname%",
         );
         assert!(!ctx.excerpt.ends_with(" ..."));
     }
@@ -527,7 +598,17 @@ mod tests {
         let content = "word ".repeat(200);
         let post = make_post("post", "slug", &content, None);
         let ctx = PostContext::build(
-            &post, &user, vec![], vec![], None, HashMap::new(), 0, "https://example.com", None, vec![], "/%postname%",
+            &post,
+            &user,
+            vec![],
+            vec![],
+            None,
+            HashMap::new(),
+            0,
+            "https://example.com",
+            None,
+            vec![],
+            "/%postname%",
         );
         assert_eq!(ctx.reading_time, 1);
     }
@@ -538,7 +619,17 @@ mod tests {
         let content = "word ".repeat(400);
         let post = make_post("post", "slug", &content, None);
         let ctx = PostContext::build(
-            &post, &user, vec![], vec![], None, HashMap::new(), 0, "https://example.com", None, vec![], "/%postname%",
+            &post,
+            &user,
+            vec![],
+            vec![],
+            None,
+            HashMap::new(),
+            0,
+            "https://example.com",
+            None,
+            vec![],
+            "/%postname%",
         );
         assert_eq!(ctx.reading_time, 2);
     }
@@ -548,7 +639,17 @@ mod tests {
         let user = make_user();
         let post = make_post("post", "slug", "", None);
         let ctx = PostContext::build(
-            &post, &user, vec![], vec![], None, HashMap::new(), 0, "https://example.com", None, vec![], "/%postname%",
+            &post,
+            &user,
+            vec![],
+            vec![],
+            None,
+            HashMap::new(),
+            0,
+            "https://example.com",
+            None,
+            vec![],
+            "/%postname%",
         );
         assert_eq!(ctx.reading_time, 1);
     }
@@ -579,13 +680,19 @@ mod tests {
     #[test]
     fn build_permalink_category_falls_back_when_none() {
         let post = dated_post("my-post");
-        assert_eq!(build_permalink("/%category%/%postname%/", &post, None), "/uncategorized/my-post/");
+        assert_eq!(
+            build_permalink("/%category%/%postname%/", &post, None),
+            "/uncategorized/my-post/"
+        );
     }
 
     #[test]
     fn build_permalink_category_uses_given_slug() {
         let post = dated_post("my-post");
-        assert_eq!(build_permalink("/%category%/%postname%/", &post, Some("news")), "/news/my-post/");
+        assert_eq!(
+            build_permalink("/%category%/%postname%/", &post, Some("news")),
+            "/news/my-post/"
+        );
     }
 
     #[test]
@@ -602,12 +709,17 @@ mod tests {
 }
 
 pub async fn create(pool: &PgPool, data: &CreatePost) -> Result<Post> {
-    let slug = data.slug.clone().unwrap_or_else(|| crate::utils::slugify::slugify(&data.title));
+    let slug = data
+        .slug
+        .clone()
+        .unwrap_or_else(|| crate::utils::slugify::slugify(&data.title));
     let slug = slug.chars().take(200).collect::<String>();
     let format = data.content_format.as_deref().unwrap_or("html");
     let sanitized_content = sanitize_content(&data.content);
-    let clean_title   = data.title.chars().take(255).collect::<String>();
-    let clean_excerpt = data.excerpt.as_deref()
+    let clean_title = data.title.chars().take(255).collect::<String>();
+    let clean_excerpt = data
+        .excerpt
+        .as_deref()
         .map(|e| e.chars().take(500).collect::<String>());
 
     let post = sqlx::query_as::<_, Post>(
@@ -663,7 +775,11 @@ pub async fn get_by_slug(pool: &PgPool, site_id: Option<Uuid>, slug: &str) -> Re
     .ok_or_else(|| AppError::NotFound(format!("post '{slug}'")))
 }
 
-pub async fn get_published_by_slug(pool: &PgPool, site_id: Option<Uuid>, slug: &str) -> Result<Post> {
+pub async fn get_published_by_slug(
+    pool: &PgPool,
+    site_id: Option<Uuid>,
+    slug: &str,
+) -> Result<Post> {
     sqlx::query_as::<_, Post>(
         "SELECT * FROM posts WHERE slug = $1 AND status = 'published' \
          AND ($2::uuid IS NULL OR site_id = $2)",
@@ -721,21 +837,20 @@ impl Default for ListFilter {
 /// Common English stop words — mirrors the list in `search/index.rs` and `models/comment.rs`.
 /// Stripped from admin search input before building ILIKE clauses.
 static POST_STOP_WORDS: &[&str] = &[
-    "a", "an", "the", "and", "or", "but", "in", "on", "at", "to", "for",
-    "of", "with", "by", "from", "up", "about", "into", "through", "is",
-    "was", "are", "were", "be", "been", "being", "have", "has", "had",
-    "do", "does", "did", "will", "would", "could", "should", "may", "might",
-    "shall", "can", "i", "me", "my", "we", "our", "you", "your", "he",
-    "him", "his", "she", "her", "it", "its", "they", "them", "their",
-    "this", "that", "these", "those", "what", "which", "who", "whom",
-    "not", "no", "so", "if", "as", "than", "too", "very", "just", "also",
-    "more", "most", "other", "some", "such", "only", "own", "same",
+    "a", "an", "the", "and", "or", "but", "in", "on", "at", "to", "for", "of", "with", "by",
+    "from", "up", "about", "into", "through", "is", "was", "are", "were", "be", "been", "being",
+    "have", "has", "had", "do", "does", "did", "will", "would", "could", "should", "may", "might",
+    "shall", "can", "i", "me", "my", "we", "our", "you", "your", "he", "him", "his", "she", "her",
+    "it", "its", "they", "them", "their", "this", "that", "these", "those", "what", "which", "who",
+    "whom", "not", "no", "so", "if", "as", "than", "too", "very", "just", "also", "more", "most",
+    "other", "some", "such", "only", "own", "same",
 ];
 
 /// Split a search string into lowercase terms, stripping stop words.
 /// Returns an empty Vec if all terms are stop words (→ no filter applied).
 pub fn search_terms(input: &str) -> Vec<String> {
-    input.split_whitespace()
+    input
+        .split_whitespace()
         .map(|w| w.to_lowercase())
         .filter(|w| !POST_STOP_WORDS.contains(&w.as_str()))
         .collect()
@@ -794,7 +909,11 @@ pub async fn list(pool: &PgPool, filter: &ListFilter) -> Result<Vec<Post>> {
         // Build dynamic SQL so optional search terms can be appended as
         // AND (title or author display_name LIKE $n) clauses. Fixed params
         // are $1–$4; search terms start at $5; LIMIT/OFFSET come last.
-        let terms = filter.search.as_deref().map(search_terms).unwrap_or_default();
+        let terms = filter
+            .search
+            .as_deref()
+            .map(search_terms)
+            .unwrap_or_default();
 
         // $6 = NULL means "no template filter"; $6 = '__default__' means "filter to
         // pages using the default template" (stored as template IS NULL); anything
@@ -814,21 +933,53 @@ pub async fn list(pool: &PgPool, filter: &ListFilter) -> Result<Vec<Post>> {
 
         for i in 0..terms.len() {
             let n = i + 7;
-            sql.push_str(&format!(" AND (LOWER(p.title) LIKE ${n} OR LOWER(u.display_name) LIKE ${n})"));
+            sql.push_str(&format!(
+                " AND (LOWER(p.title) LIKE ${n} OR LOWER(u.display_name) LIKE ${n})"
+            ));
         }
 
         // Whitelisted sort column/direction — never interpolate the raw query string.
         let dir_asc = filter.sort_dir.as_deref() == Some("asc");
         let order_expr = match filter.sort.as_deref() {
-            Some("title")  => if dir_asc { "p.title ASC" } else { "p.title DESC" },
-            Some("status") => if dir_asc { "p.status ASC" } else { "p.status DESC" },
-            Some("author") => if dir_asc { "u.display_name ASC NULLS LAST" } else { "u.display_name DESC NULLS LAST" },
-            Some("domain") => if dir_asc { "s.hostname ASC NULLS LAST" } else { "s.hostname DESC NULLS LAST" },
-            Some("date")   => if dir_asc { "p.published_at ASC NULLS LAST" } else { "p.published_at DESC NULLS LAST" },
-            _              => "p.published_at DESC NULLS LAST",
+            Some("title") => {
+                if dir_asc {
+                    "p.title ASC"
+                } else {
+                    "p.title DESC"
+                }
+            }
+            Some("status") => {
+                if dir_asc {
+                    "p.status ASC"
+                } else {
+                    "p.status DESC"
+                }
+            }
+            Some("author") => {
+                if dir_asc {
+                    "u.display_name ASC NULLS LAST"
+                } else {
+                    "u.display_name DESC NULLS LAST"
+                }
+            }
+            Some("domain") => {
+                if dir_asc {
+                    "s.hostname ASC NULLS LAST"
+                } else {
+                    "s.hostname DESC NULLS LAST"
+                }
+            }
+            Some("date") => {
+                if dir_asc {
+                    "p.published_at ASC NULLS LAST"
+                } else {
+                    "p.published_at DESC NULLS LAST"
+                }
+            }
+            _ => "p.published_at DESC NULLS LAST",
         };
 
-        let limit_n  = terms.len() + 7;
+        let limit_n = terms.len() + 7;
         let offset_n = terms.len() + 8;
         sql.push_str(&format!(
             " ORDER BY {order_expr} LIMIT ${limit_n} OFFSET ${offset_n}"
@@ -844,7 +995,10 @@ pub async fn list(pool: &PgPool, filter: &ListFilter) -> Result<Vec<Post>> {
         for term in &terms {
             q = q.bind(format!("%{term}%"));
         }
-        q.bind(filter.limit).bind(filter.offset).fetch_all(pool).await?
+        q.bind(filter.limit)
+            .bind(filter.offset)
+            .fetch_all(pool)
+            .await?
     };
 
     Ok(posts)
@@ -925,18 +1079,29 @@ pub async fn update(pool: &PgPool, id: Uuid, data: &UpdatePost) -> Result<Post> 
 
     let new_slug = data.slug.clone().unwrap_or(current.slug.clone());
     let new_slug = new_slug.chars().take(200).collect::<String>();
-    let new_title = data.title.as_deref()
+    let new_title = data
+        .title
+        .as_deref()
         .map(|t| t.chars().take(255).collect::<String>())
         .unwrap_or(current.title.clone());
     let new_content = match &data.content {
         Some(html) => sanitize_content(html),
         None => current.content.clone(),
     };
-    let new_format = data.content_format.clone().unwrap_or(current.content_format.clone());
-    let new_excerpt = data.excerpt.as_deref()
+    let new_format = data
+        .content_format
+        .clone()
+        .unwrap_or(current.content_format.clone());
+    let new_excerpt = data
+        .excerpt
+        .as_deref()
         .map(|e| e.chars().take(500).collect::<String>())
         .or(current.excerpt.clone());
-    let new_status = data.status.as_ref().map(|s| s.as_str().to_string()).unwrap_or(current.status.clone());
+    let new_status = data
+        .status
+        .as_ref()
+        .map(|s| s.as_str().to_string())
+        .unwrap_or(current.status.clone());
     let new_image = if data.clear_featured_image {
         None
     } else if data.featured_image_id.is_some() {
@@ -966,9 +1131,10 @@ pub async fn update(pool: &PgPool, id: Uuid, data: &UpdatePost) -> Result<Post> 
         None => current.parent_id,
     };
 
-    let new_sources = data.sources.clone().unwrap_or_else(|| {
-        serde_json::from_value(current.sources.clone()).unwrap_or_default()
-    });
+    let new_sources = data
+        .sources
+        .clone()
+        .unwrap_or_else(|| serde_json::from_value(current.sources.clone()).unwrap_or_default());
     let new_sources_public = data.sources_public.unwrap_or(current.sources_public);
 
     let post = sqlx::query_as::<_, Post>(
@@ -1023,12 +1189,11 @@ pub async fn delete(pool: &PgPool, id: Uuid) -> Result<()> {
 
 /// Fetch all custom fields (post_meta) for a post.
 pub async fn get_meta(pool: &PgPool, post_id: Uuid) -> Result<HashMap<String, String>> {
-    let rows: Vec<(String, String)> = sqlx::query_as(
-        "SELECT meta_key, meta_value FROM post_meta WHERE post_id = $1",
-    )
-    .bind(post_id)
-    .fetch_all(pool)
-    .await?;
+    let rows: Vec<(String, String)> =
+        sqlx::query_as("SELECT meta_key, meta_value FROM post_meta WHERE post_id = $1")
+            .bind(post_id)
+            .fetch_all(pool)
+            .await?;
 
     Ok(rows.into_iter().map(|(k, v)| (k, v)).collect())
 }

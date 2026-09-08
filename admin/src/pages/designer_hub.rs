@@ -9,11 +9,26 @@
 
 use crate::PageContext;
 
-pub fn render(forms_fragment: &str, polls_fragment: &str, ctx: &PageContext, flash: Option<&str>) -> String {
-    let forms_search = crate::pill_search_toggle("designer-forms-search", "Search forms\u{2026}", "");
-    let polls_search = crate::pill_search_toggle("designer-polls-search", "Search polls\u{2026}", "");
-    let forms_live_search = crate::live_search_script("designer-forms-search", "designer-forms-list", "/admin/form-designer?partial=1");
-    let polls_live_search = crate::live_search_script("designer-polls-search", "designer-polls-list", "/admin/designer/polls?partial=1");
+pub fn render(
+    forms_fragment: &str,
+    polls_fragment: &str,
+    ctx: &PageContext,
+    flash: Option<&str>,
+) -> String {
+    let forms_search =
+        crate::pill_search_toggle("designer-forms-search", "Search forms\u{2026}", "");
+    let polls_search =
+        crate::pill_search_toggle("designer-polls-search", "Search polls\u{2026}", "");
+    let forms_live_search = crate::live_search_script(
+        "designer-forms-search",
+        "designer-forms-list",
+        "/admin/form-designer?partial=1",
+    );
+    let polls_live_search = crate::live_search_script(
+        "designer-polls-search",
+        "designer-polls-list",
+        "/admin/designer/polls?partial=1",
+    );
 
     let content = format!(
         r#"<style>

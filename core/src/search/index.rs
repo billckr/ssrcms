@@ -18,7 +18,9 @@ use std::sync::{Arc, RwLock};
 use tantivy::collector::TopDocs;
 use tantivy::query::{BooleanQuery, Occur, PhrasePrefixQuery, Query, QueryParser};
 use tantivy::schema::*;
-use tantivy::tokenizer::{Language, LowerCaser, SimpleTokenizer, Stemmer, StopWordFilter, TextAnalyzer};
+use tantivy::tokenizer::{
+    Language, LowerCaser, SimpleTokenizer, Stemmer, StopWordFilter, TextAnalyzer,
+};
 use tantivy::{Index, IndexReader, IndexWriter, ReloadPolicy};
 
 /// Name used to register the custom analyzer with the index.
@@ -27,15 +29,13 @@ const TOKENIZER_NAME: &str = "en_stop";
 /// Common English stop words stripped before indexing and querying.
 /// Searching any of these terms alone returns zero results.
 static EN_STOP_WORDS: &[&str] = &[
-    "a", "an", "the", "and", "or", "but", "in", "on", "at", "to", "for",
-    "of", "with", "by", "from", "up", "about", "into", "through", "is",
-    "was", "are", "were", "be", "been", "being", "have", "has", "had",
-    "do", "does", "did", "will", "would", "could", "should", "may", "might",
-    "shall", "can", "i", "me", "my", "we", "our", "you", "your", "he",
-    "him", "his", "she", "her", "it", "its", "they", "them", "their",
-    "this", "that", "these", "those", "what", "which", "who", "whom",
-    "not", "no", "so", "if", "as", "than", "too", "very", "just", "also",
-    "more", "most", "other", "some", "such", "only", "own", "same",
+    "a", "an", "the", "and", "or", "but", "in", "on", "at", "to", "for", "of", "with", "by",
+    "from", "up", "about", "into", "through", "is", "was", "are", "were", "be", "been", "being",
+    "have", "has", "had", "do", "does", "did", "will", "would", "could", "should", "may", "might",
+    "shall", "can", "i", "me", "my", "we", "our", "you", "your", "he", "him", "his", "she", "her",
+    "it", "its", "they", "them", "their", "this", "that", "these", "those", "what", "which", "who",
+    "whom", "not", "no", "so", "if", "as", "than", "too", "very", "just", "also", "more", "most",
+    "other", "some", "such", "only", "own", "same",
 ];
 
 /// Build the custom English text analyzer:
@@ -64,7 +64,11 @@ fn last_token_prefix(query_str: &str) -> Option<String> {
         .filter(|c| c.is_alphanumeric())
         .flat_map(|c| c.to_lowercase())
         .collect();
-    if tok.chars().count() >= 2 { Some(tok) } else { None }
+    if tok.chars().count() >= 2 {
+        Some(tok)
+    } else {
+        None
+    }
 }
 
 /// Fields available in the Tantivy schema.
@@ -85,12 +89,11 @@ impl SearchSchema {
 
         // Indexing options for searchable fields — uses the "en_stop" custom tokenizer
         // (stop words + stemming) registered on the index at startup.
-        let indexed = TextOptions::default()
-            .set_indexing_options(
-                TextFieldIndexing::default()
-                    .set_tokenizer(TOKENIZER_NAME)
-                    .set_index_option(IndexRecordOption::WithFreqsAndPositions),
-            );
+        let indexed = TextOptions::default().set_indexing_options(
+            TextFieldIndexing::default()
+                .set_tokenizer(TOKENIZER_NAME)
+                .set_index_option(IndexRecordOption::WithFreqsAndPositions),
+        );
 
         let id = builder.add_text_field("id", STRING | STORED);
         let site_id = builder.add_text_field("site_id", STORED);
@@ -153,7 +156,9 @@ impl SearchIndex {
         };
 
         // Register the custom analyzer so both indexing and querying use it.
-        index.tokenizers().register(TOKENIZER_NAME, build_analyzer());
+        index
+            .tokenizers()
+            .register(TOKENIZER_NAME, build_analyzer());
 
         let reader = index
             .reader_builder()
@@ -173,7 +178,12 @@ impl SearchIndex {
 
     /// Execute a full-text search and return up to `limit` results.
     /// If `site_id` is Some, only results belonging to that site are returned.
-    pub fn search(&self, query_str: &str, site_id: Option<&str>, limit: usize) -> Result<Vec<SearchResult>> {
+    pub fn search(
+        &self,
+        query_str: &str,
+        site_id: Option<&str>,
+        limit: usize,
+    ) -> Result<Vec<SearchResult>> {
         if query_str.trim().is_empty() {
             return Ok(Vec::new());
         }
@@ -182,16 +192,12 @@ impl SearchIndex {
         let query_parser =
             QueryParser::for_index(&self.index, vec![self.fields.title, self.fields.content]);
 
-        let base_query: Box<dyn Query> = query_parser
-            .parse_query(query_str)
-            .unwrap_or_else(|_| {
-                // Special characters in the query (e.g. +, -, :) can cause parse errors.
-                // Fall back to a literal search on the escaped string so we return empty
-                // results rather than a 500.
-                query_parser
-                    .parse_query_lenient(query_str)
-                    .0
-            });
+        let base_query: Box<dyn Query> = query_parser.parse_query(query_str).unwrap_or_else(|_| {
+            // Special characters in the query (e.g. +, -, :) can cause parse errors.
+            // Fall back to a literal search on the escaped string so we return empty
+            // results rather than a 500.
+            query_parser.parse_query_lenient(query_str).0
+        });
 
         // As-you-type support: OR in a prefix match on the in-progress last word
         // (e.g. "advanc" matches "Advanced" before the whole word — or its
@@ -206,18 +212,30 @@ impl SearchIndex {
         let query: Box<dyn Query> = match last_token_prefix(query_str) {
             Some(prefix) => Box::new(BooleanQuery::new(vec![
                 (Occur::Should, base_query),
-                (Occur::Should, Box::new(PhrasePrefixQuery::new(vec![
-                    Term::from_field_text(self.fields.title, &prefix),
-                ]))),
-                (Occur::Should, Box::new(PhrasePrefixQuery::new(vec![
-                    Term::from_field_text(self.fields.content, &prefix),
-                ]))),
+                (
+                    Occur::Should,
+                    Box::new(PhrasePrefixQuery::new(vec![Term::from_field_text(
+                        self.fields.title,
+                        &prefix,
+                    )])),
+                ),
+                (
+                    Occur::Should,
+                    Box::new(PhrasePrefixQuery::new(vec![Term::from_field_text(
+                        self.fields.content,
+                        &prefix,
+                    )])),
+                ),
             ])),
             None => base_query,
         };
 
         // Fetch more than `limit` to allow for site_id post-filtering.
-        let fetch_limit = if site_id.is_some() { limit * 4 + 20 } else { limit };
+        let fetch_limit = if site_id.is_some() {
+            limit * 4 + 20
+        } else {
+            limit
+        };
 
         let top_docs = searcher
             .search(&query, &TopDocs::with_limit(fetch_limit))
@@ -262,7 +280,13 @@ impl SearchIndex {
                 }
             }
 
-            results.push(SearchResult { id, title, slug, post_type, score });
+            results.push(SearchResult {
+                id,
+                title,
+                slug,
+                post_type,
+                score,
+            });
             if results.len() >= limit {
                 break;
             }
@@ -274,7 +298,10 @@ impl SearchIndex {
     /// Replace the entire index with a new set of documents in a single commit.
     /// Use this for bulk startup rebuilds — vastly faster than calling upsert()
     /// per document (which commits after every write, causing N disk flushes).
-    pub fn rebuild_all(&self, docs: &[(String, String, String, String, String, String)]) -> anyhow::Result<()> {
+    pub fn rebuild_all(
+        &self,
+        docs: &[(String, String, String, String, String, String)],
+    ) -> anyhow::Result<()> {
         let mut writer = self.writer.write().unwrap();
         writer.delete_all_documents()?;
         for (id, site_id, title, content, slug, post_type) in docs {
@@ -293,7 +320,15 @@ impl SearchIndex {
 
     /// Add or update a document. Tantivy doesn't have native upsert — we delete
     /// by id term then add the new document, then commit.
-    pub fn upsert(&self, id: &str, site_id: &str, title: &str, content: &str, slug: &str, post_type: &str) -> anyhow::Result<()> {
+    pub fn upsert(
+        &self,
+        id: &str,
+        site_id: &str,
+        title: &str,
+        content: &str,
+        slug: &str,
+        post_type: &str,
+    ) -> anyhow::Result<()> {
         let mut writer = self.writer.write().unwrap();
 
         // Delete any existing document with this id.
@@ -329,9 +364,12 @@ mod tests {
     use super::*;
 
     fn index_with_doc(title: &str) -> SearchIndex {
-        let path = std::env::temp_dir().join(format!("synaptic-search-test-{}", uuid::Uuid::new_v4()));
+        let path =
+            std::env::temp_dir().join(format!("synaptic-search-test-{}", uuid::Uuid::new_v4()));
         let index = SearchIndex::open_or_create(&path).unwrap();
-        index.upsert("1", "site-a", title, "", "test-post", "post").unwrap();
+        index
+            .upsert("1", "site-a", title, "", "test-post", "post")
+            .unwrap();
         // ReloadPolicy::OnCommitWithDelay reloads the reader asynchronously
         // shortly after a commit — force it synchronously here so the doc
         // is visible to the very next search() call in the test.

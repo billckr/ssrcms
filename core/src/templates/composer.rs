@@ -98,9 +98,7 @@ fn render_block(
     let template_name = format!("{}.html", block.block_type);
 
     // Get block ID from props (Puck stores it as props.id)
-    let block_id = block.props.get("id")
-        .and_then(|v| v.as_str())
-        .unwrap_or("");
+    let block_id = block.props.get("id").and_then(|v| v.as_str()).unwrap_or("");
 
     // Pre-render any zones belonging to this block.
     // Zone keys are "{block_id}:{zone_name}" — we strip the prefix to get zone_name.
@@ -121,12 +119,19 @@ fn render_block(
     ctx.insert("block_id", &block_id);
     ctx.insert("zone_html", &zone_html);
 
-    tracing::debug!("composer: rendering block '{}' via '{}'", block.block_type, template_name);
+    tracing::debug!(
+        "composer: rendering block '{}' via '{}'",
+        block.block_type,
+        template_name
+    );
     match templates.render_builder_block(&template_name, &ctx) {
         Ok(html) => html,
         Err(e) => {
             tracing::warn!("composer: block '{}' failed: {}", block.block_type, e);
-            format!("<!-- block '{}' could not be rendered -->", block.block_type)
+            format!(
+                "<!-- block '{}' could not be rendered -->",
+                block.block_type
+            )
         }
     }
 }
@@ -134,22 +139,27 @@ fn render_block(
 fn empty_page_html() -> String {
     r#"<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"></head>
-<body></body></html>"#.to_string()
+<body></body></html>"#
+        .to_string()
 }
 
 fn block_css(block_type: &str) -> Option<&'static str> {
     match block_type {
-        "Hero" => Some(r#"
+        "Hero" => Some(
+            r#"
 @media (max-width: 768px) {
   .builder-hero { padding: 40px 20px !important; }
   .builder-hero h1 { font-size: 2rem !important; }
 }
-"#),
-        "Posts" => Some(r#"
+"#,
+        ),
+        "Posts" => Some(
+            r#"
 .builder-posts-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; max-width: 1200px; margin: 0 auto; }
 @media (max-width: 768px) { .builder-posts-grid { grid-template-columns: 1fr; } }
 @media (min-width: 769px) and (max-width: 1024px) { .builder-posts-grid { grid-template-columns: repeat(2, 1fr); } }
-"#),
+"#,
+        ),
         _ => None,
     }
 }

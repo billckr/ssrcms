@@ -41,10 +41,7 @@ pub fn excerpt(value: &Value, args: &HashMap<String, Value>) -> Result<Value> {
         .as_str()
         .ok_or_else(|| tera::Error::msg("excerpt requires a string value"))?;
 
-    let words_n = args
-        .get("words")
-        .and_then(|v| v.as_u64())
-        .unwrap_or(55) as usize;
+    let words_n = args.get("words").and_then(|v| v.as_u64()).unwrap_or(55) as usize;
 
     let text = strip_tags(html);
     let words: Vec<&str> = text.split_whitespace().collect();
@@ -72,10 +69,7 @@ pub fn reading_time(value: &Value, args: &HashMap<String, Value>) -> Result<Valu
         .as_str()
         .ok_or_else(|| tera::Error::msg("reading_time requires a string value"))?;
 
-    let wpm = args
-        .get("wpm")
-        .and_then(|v| v.as_u64())
-        .unwrap_or(200) as usize;
+    let wpm = args.get("wpm").and_then(|v| v.as_u64()).unwrap_or(200) as usize;
 
     let plain = strip_tags(text);
     let word_count = plain.split_whitespace().count();
@@ -100,10 +94,7 @@ pub fn truncate_words(value: &Value, args: &HashMap<String, Value>) -> Result<Va
         .as_str()
         .ok_or_else(|| tera::Error::msg("truncate_words requires a string value"))?;
 
-    let count = args
-        .get("count")
-        .and_then(|v| v.as_u64())
-        .unwrap_or(20) as usize;
+    let count = args.get("count").and_then(|v| v.as_u64()).unwrap_or(20) as usize;
 
     let words: Vec<&str> = s.split_whitespace().take(count).collect();
     Ok(Value::String(words.join(" ")))
@@ -116,13 +107,14 @@ pub fn absolute_url(value: &Value, args: &HashMap<String, Value>) -> Result<Valu
         .as_str()
         .ok_or_else(|| tera::Error::msg("absolute_url requires a string value"))?;
 
-    let base = args
-        .get("site_url")
-        .and_then(|v| v.as_str())
-        .unwrap_or("");
+    let base = args.get("site_url").and_then(|v| v.as_str()).unwrap_or("");
 
     let path = path.trim_start_matches('/');
-    Ok(Value::String(format!("{}/{}", base.trim_end_matches('/'), path)))
+    Ok(Value::String(format!(
+        "{}/{}",
+        base.trim_end_matches('/'),
+        path
+    )))
 }
 
 #[cfg(test)]

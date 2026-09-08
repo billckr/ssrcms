@@ -45,19 +45,31 @@ impl IntoResponse for AppError {
             AppError::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg.clone()),
             AppError::Database(e) => {
                 tracing::error!("Database error: {:?}", e);
-                (StatusCode::INTERNAL_SERVER_ERROR, "Database error".to_string())
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Database error".to_string(),
+                )
             }
             AppError::Template(e) => {
                 tracing::error!("Template error: {:?}", e);
-                (StatusCode::INTERNAL_SERVER_ERROR, "Template rendering error".to_string())
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Template rendering error".to_string(),
+                )
             }
             AppError::Config(msg) => {
                 tracing::error!("Config error: {}", msg);
-                (StatusCode::INTERNAL_SERVER_ERROR, "Configuration error".to_string())
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Configuration error".to_string(),
+                )
             }
             AppError::Internal(msg) => {
                 tracing::error!("Internal error: {}", msg);
-                (StatusCode::INTERNAL_SERVER_ERROR, "Internal server error".to_string())
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Internal server error".to_string(),
+                )
             }
         };
 

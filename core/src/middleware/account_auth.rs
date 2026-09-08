@@ -54,7 +54,10 @@ impl IntoResponse for AccountAuthError {
 impl FromRequestParts<AppState> for AccountUser {
     type Rejection = AccountAuthError;
 
-    async fn from_request_parts(parts: &mut Parts, state: &AppState) -> Result<Self, Self::Rejection> {
+    async fn from_request_parts(
+        parts: &mut Parts,
+        state: &AppState,
+    ) -> Result<Self, Self::Rejection> {
         let session = parts
             .extensions
             .get::<Session>()
@@ -72,13 +75,17 @@ impl FromRequestParts<AppState> for AccountUser {
             .await
             .map_err(|e| AccountAuthError::Internal(format!("session login-time error: {e}")))?;
         if login_at
-            .map(|at| chrono::Utc::now().timestamp().saturating_sub(at) > ACCOUNT_ABSOLUTE_SESSION_SECONDS)
+            .map(|at| {
+                chrono::Utc::now().timestamp().saturating_sub(at) > ACCOUNT_ABSOLUTE_SESSION_SECONDS
+            })
             .unwrap_or(true)
         {
             let _ = session.flush().await;
             return Err(AccountAuthError::NotAuthenticated);
         }
-        let user_id: Uuid = user_id_str.parse().map_err(|_| AccountAuthError::NotAuthenticated)?;
+        let user_id: Uuid = user_id_str
+            .parse()
+            .map_err(|_| AccountAuthError::NotAuthenticated)?;
 
         let user = crate::models::user::get_by_id(&state.db, user_id)
             .await
@@ -87,7 +94,9 @@ impl FromRequestParts<AppState> for AccountUser {
         let session_credential_version: Option<String> = session
             .get(SESSION_ACCOUNT_CREDENTIAL_VERSION_KEY)
             .await
-            .map_err(|e| AccountAuthError::Internal(format!("session credential check error: {e}")))?;
+            .map_err(|e| {
+                AccountAuthError::Internal(format!("session credential check error: {e}"))
+            })?;
         if session_credential_version.as_deref() != Some(user.credential_version().as_str()) {
             let _ = session.flush().await;
             return Err(AccountAuthError::NotAuthenticated);
@@ -125,6 +134,11 @@ impl FromRequestParts<AppState> for AccountUser {
                 (None, state.settings.site_name.clone(), base_url)
             };
 
-        Ok(AccountUser { user, site_id, site_name, site_base_url })
+        Ok(AccountUser {
+            user,
+            site_id,
+            site_name,
+            site_base_url,
+        })
     }
 }

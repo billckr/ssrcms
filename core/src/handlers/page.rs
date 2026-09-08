@@ -1,7 +1,7 @@
 use axum::{
     extract::{ConnectInfo, Query, State},
-    response::{Html, IntoResponse, Response, Redirect},
     http::{header, HeaderMap},
+    response::{Html, IntoResponse, Redirect, Response},
 };
 use axum_extra::extract::cookie::SignedCookieJar;
 use std::net::SocketAddr;
@@ -35,7 +35,10 @@ pub async fn single_page(
     let request_path = uri.path().to_string();
     let site_id = current_site.site.id;
     let base_url = current_site.base_url.clone();
-    let cpage: usize = params.get("cpage").and_then(|v| v.parse().ok()).unwrap_or(1);
+    let cpage: usize = params
+        .get("cpage")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(1);
 
     // Split URI path into segments, filtering empty parts from leading/trailing slashes
     let path = uri.path().trim_start_matches('/').to_string();
@@ -76,23 +79,50 @@ pub async fn single_page(
 
     let session_ctx = super::resolve_session(&state, &session).await;
     let preview_allowed = super::can_preview_site(&state, &headers, site_id).await;
-    let page_result = render_page(state.clone(), segments.clone(), uri.clone(), site_id, &base_url, session_ctx, preview_allowed).await;
+    let page_result = render_page(
+        state.clone(),
+        segments.clone(),
+        uri.clone(),
+        site_id,
+        &base_url,
+        session_ctx,
+        preview_allowed,
+    )
+    .await;
 
     match page_result {
         Ok(xml) if is_feed => (
             [(header::CONTENT_TYPE, "application/rss+xml; charset=utf-8")],
             xml,
-        ).into_response(),
+        )
+            .into_response(),
         Ok(html) => Html(html).into_response(),
         Err(crate::errors::AppError::NotFound(_)) if segments.len() > 1 => {
-            match try_post_permalink(&state, site_id, &base_url, &segments, &request_path, &uri, &jar, &session, addr, &headers, cpage).await {
+            match try_post_permalink(
+                &state,
+                site_id,
+                &base_url,
+                &segments,
+                &request_path,
+                &uri,
+                &jar,
+                &session,
+                addr,
+                &headers,
+                cpage,
+            )
+            .await
+            {
                 Some(resp) => resp,
-                None => render_error_page(
-                    crate::errors::AppError::NotFound(request_path.clone()),
-                    &state,
-                    &request_path,
-                    Some(site_id),
-                ).await,
+                None => {
+                    render_error_page(
+                        crate::errors::AppError::NotFound(request_path.clone()),
+                        &state,
+                        &request_path,
+                        Some(site_id),
+                    )
+                    .await
+                }
             }
         }
         Err(e) => render_error_page(e, &state, &request_path, Some(current_site.site.id)).await,
@@ -125,7 +155,9 @@ async fn try_post_permalink(
     cpage: usize,
 ) -> Option<Response> {
     let slug = segments.last().copied()?;
-    let post_record = post::get_published_by_slug(&state.db, Some(site_id), slug).await.ok()?;
+    let post_record = post::get_published_by_slug(&state.db, Some(site_id), slug)
+        .await
+        .ok()?;
     if post_record.post_type != PostType::Post.as_str() {
         return None;
     }
@@ -146,9 +178,21 @@ async fn try_post_permalink(
     let normalize = |p: &str| p.trim_end_matches('/').to_string();
     if normalize(request_path) == normalize(&canonical_path) {
         let slug = post_record.slug.clone();
-        return Some(super::post::render_single_post_response(
-            state, site_id, base_url, slug, uri.clone(), jar, session, addr, headers, cpage,
-        ).await);
+        return Some(
+            super::post::render_single_post_response(
+                state,
+                site_id,
+                base_url,
+                slug,
+                uri.clone(),
+                jar,
+                session,
+                addr,
+                headers,
+                cpage,
+            )
+            .await,
+        );
     }
 
     let query = uri.query().map(|q| format!("?{q}")).unwrap_or_default();
@@ -208,9 +252,7 @@ pub(super) async fn render_page(
         request: RequestContext {
             url: format!("{}{}", base_url, uri.path()),
             path: uri.path().to_string(),
-            query: uri.query()
-                .map(parse_query_string)
-                .unwrap_or_default(),
+            query: uri.query().map(parse_query_string).unwrap_or_default(),
         },
         session: session_ctx,
         nav,
@@ -227,13 +269,16 @@ pub(super) async fn render_page(
         .filter(|t| !t.is_empty())
         .unwrap_or("page");
     if template_name_raw == "feed" {
-        let feed_posts = post::list(&state.db, &ListFilter {
-            site_id: Some(site_id),
-            status: Some(PostStatus::Published),
-            post_type: Some(PostType::Post),
-            limit: 20,
-            ..Default::default()
-        })
+        let feed_posts = post::list(
+            &state.db,
+            &ListFilter {
+                site_id: Some(site_id),
+                status: Some(PostStatus::Published),
+                post_type: Some(PostType::Post),
+                limit: 20,
+                ..Default::default()
+            },
+        )
         .await
         .unwrap_or_default();
         let mut feed_post_ctxs = Vec::with_capacity(feed_posts.len());
@@ -252,9 +297,18 @@ pub(super) async fn render_page(
     let hook_outputs = state.templates.render_hooks_for_theme(
         &theme,
         Some(site_id),
-        &["head_start", "head_end", "body_start", "body_end", "before_content", "after_content", "footer"],
+        &[
+            "head_start",
+            "head_end",
+            "body_start",
+            "body_end",
+            "before_content",
+            "after_content",
+            "footer",
+        ],
         &ctx,
-    Some(&active_plugins));
+        Some(&active_plugins),
+    );
     crate::templates::context::ContextBuilder::add_hook_outputs(&mut ctx, &hook_outputs);
 
     // Use the page-specific template if set, otherwise fall back to page.html
@@ -265,7 +319,9 @@ pub(super) async fn render_page(
         .map(|t| format!("{}.html", t))
         .unwrap_or_else(|| "page.html".to_string());
 
-    state.templates.render_for_theme(&theme, Some(site_id), &template_name, &ctx)
+    state
+        .templates
+        .render_for_theme(&theme, Some(site_id), &template_name, &ctx)
 }
 /// Parse `key=value&key2=value2` query strings into a HashMap.
 /// Percent-decoding is intentionally minimal (+ → space, %XX → char).

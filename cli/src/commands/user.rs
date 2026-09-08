@@ -51,9 +51,7 @@ async fn create(admin_password: Option<String>) -> anyhow::Result<()> {
         }
     };
 
-    let email: String = Input::new()
-        .with_prompt("Email")
-        .interact_text()?;
+    let email: String = Input::new().with_prompt("Email").interact_text()?;
 
     let display_name: String = loop {
         let candidate: String = Input::new()
@@ -90,12 +88,11 @@ async fn create(admin_password: Option<String>) -> anyhow::Result<()> {
     let assigned_site: Option<(Uuid, String)> = if role == "super_admin" {
         None
     } else {
-        let sites: Vec<(Uuid, String)> = sqlx::query_as(
-            "SELECT id, hostname FROM sites ORDER BY created_at"
-        )
-        .fetch_all(&pool)
-        .await
-        .map_err(|e| anyhow::anyhow!("Failed to list sites: {e}"))?;
+        let sites: Vec<(Uuid, String)> =
+            sqlx::query_as("SELECT id, hostname FROM sites ORDER BY created_at")
+                .fetch_all(&pool)
+                .await
+                .map_err(|e| anyhow::anyhow!("Failed to list sites: {e}"))?;
 
         if sites.is_empty() {
             None
@@ -124,7 +121,7 @@ async fn create(admin_password: Option<String>) -> anyhow::Result<()> {
     if let Some((site_id, hostname)) = &assigned_site {
         let taken: bool = sqlx::query_scalar(
             "SELECT EXISTS (SELECT 1 FROM users u JOIN site_users su ON su.user_id = u.id \
-             WHERE u.username = $1 AND su.site_id = $2)"
+             WHERE u.username = $1 AND su.site_id = $2)",
         )
         .bind(&username)
         .bind(site_id)
@@ -132,7 +129,11 @@ async fn create(admin_password: Option<String>) -> anyhow::Result<()> {
         .await
         .map_err(|e| anyhow::anyhow!("Failed to check username availability: {e}"))?;
         if taken {
-            anyhow::bail!("Username '{}' is already taken on site '{}'.", username, hostname);
+            anyhow::bail!(
+                "Username '{}' is already taken on site '{}'.",
+                username,
+                hostname
+            );
         }
     }
 
@@ -162,7 +163,7 @@ async fn create(admin_password: Option<String>) -> anyhow::Result<()> {
         sqlx::query(
             "INSERT INTO site_users (site_id, user_id, role, invited_by)
              VALUES ($1, $2, $3, NULL)
-             ON CONFLICT (site_id, user_id, role) DO NOTHING"
+             ON CONFLICT (site_id, user_id, role) DO NOTHING",
         )
         .bind(site_id)
         .bind(id)
@@ -190,7 +191,12 @@ async fn create(admin_password: Option<String>) -> anyhow::Result<()> {
     println!("  Username: {}", username);
     println!("  Email:    {}", email);
     println!("  Role:     {}", role);
-    println!("  Site:     {}", assigned_site.map(|(_, h)| h).unwrap_or_else(|| "Unassigned".to_string()));
+    println!(
+        "  Site:     {}",
+        assigned_site
+            .map(|(_, h)| h)
+            .unwrap_or_else(|| "Unassigned".to_string())
+    );
 
     Ok(())
 }
@@ -198,9 +204,16 @@ async fn create(admin_password: Option<String>) -> anyhow::Result<()> {
 async fn list() -> anyhow::Result<()> {
     let pool = super::connect_db().await?;
 
-    let rows = sqlx::query_as::<_, (Uuid, String, String, String, Option<chrono::DateTime<chrono::Utc>>)>(
-        "SELECT id, username, email, role, created_at FROM users ORDER BY created_at"
-    )
+    let rows = sqlx::query_as::<
+        _,
+        (
+            Uuid,
+            String,
+            String,
+            String,
+            Option<chrono::DateTime<chrono::Utc>>,
+        ),
+    >("SELECT id, username, email, role, created_at FROM users ORDER BY created_at")
     .fetch_all(&pool)
     .await
     .map_err(|e| anyhow::anyhow!("Failed to list users: {e}"))?;
@@ -210,13 +223,19 @@ async fn list() -> anyhow::Result<()> {
         return Ok(());
     }
 
-    println!("\n{:<38} {:<20} {:<30} {:<12} {}", "ID", "Username", "Email", "Role", "Created");
+    println!(
+        "\n{:<38} {:<20} {:<30} {:<12} {}",
+        "ID", "Username", "Email", "Role", "Created"
+    );
     println!("{}", "-".repeat(115));
     for (id, username, email, role, created_at) in rows {
         let created = created_at
             .map(|d| d.format("%Y-%m-%d %H:%M").to_string())
             .unwrap_or_default();
-        println!("{:<38} {:<20} {:<30} {:<12} {}", id, username, email, role, created);
+        println!(
+            "{:<38} {:<20} {:<30} {:<12} {}",
+            id, username, email, role, created
+        );
     }
 
     Ok(())
@@ -225,17 +244,14 @@ async fn list() -> anyhow::Result<()> {
 async fn reset_password() -> anyhow::Result<()> {
     let pool = super::connect_db().await?;
 
-    let email: String = Input::new()
-        .with_prompt("User email")
-        .interact_text()?;
+    let email: String = Input::new().with_prompt("User email").interact_text()?;
 
-    let row = sqlx::query_as::<_, (Uuid, String)>(
-        "SELECT id, username FROM users WHERE email = $1"
-    )
-    .bind(&email)
-    .fetch_optional(&pool)
-    .await
-    .map_err(|e| anyhow::anyhow!("DB error: {e}"))?;
+    let row =
+        sqlx::query_as::<_, (Uuid, String)>("SELECT id, username FROM users WHERE email = $1")
+            .bind(&email)
+            .fetch_optional(&pool)
+            .await
+            .map_err(|e| anyhow::anyhow!("DB error: {e}"))?;
 
     let (id, username) = match row {
         Some(r) => r,
@@ -293,7 +309,10 @@ fn validate_username(username: &str) -> Result<(), &'static str> {
     if len > 15 {
         return Err("Username must be no more than 15 characters");
     }
-    if !username.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-') {
+    if !username
+        .chars()
+        .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+    {
         return Err("Username may only contain lowercase letters, numbers and hyphens");
     }
     if username.starts_with('-') || username.ends_with('-') {
@@ -311,7 +330,10 @@ fn validate_display_name(display_name: &str) -> Result<(), &'static str> {
 }
 
 fn hash_password(password: &str) -> anyhow::Result<String> {
-    use argon2::{password_hash::{rand_core::OsRng, PasswordHasher, SaltString}, Argon2};
+    use argon2::{
+        password_hash::{rand_core::OsRng, PasswordHasher, SaltString},
+        Argon2,
+    };
     let salt = SaltString::generate(&mut OsRng);
     let argon2 = Argon2::default();
     argon2

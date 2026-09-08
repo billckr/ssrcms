@@ -9,14 +9,22 @@ pub struct ProfileForm {
 
 /// Up to two uppercase initials, preferring the display name over the username.
 fn initials(display_name: &str, username: &str) -> String {
-    let source = if display_name.trim().is_empty() { username } else { display_name };
+    let source = if display_name.trim().is_empty() {
+        username
+    } else {
+        display_name
+    };
     let letters: String = source
         .split_whitespace()
         .filter_map(|word| word.chars().next())
         .take(2)
         .flat_map(|c| c.to_uppercase())
         .collect();
-    if letters.is_empty() { "?".to_string() } else { letters }
+    if letters.is_empty() {
+        "?".to_string()
+    } else {
+        letters
+    }
 }
 
 /// Escaped bio, or a muted placeholder line when the user hasn't written one.
@@ -32,7 +40,11 @@ fn display_or_placeholder(value: &str) -> String {
     }
 }
 
-pub fn render_profile(profile: &ProfileForm, flash: Option<&str>, ctx: &crate::PageContext) -> String {
+pub fn render_profile(
+    profile: &ProfileForm,
+    flash: Option<&str>,
+    ctx: &crate::PageContext,
+) -> String {
     let content = format!(
         r#"<div class="profile-layout">
   <div class="profile-main">
@@ -266,9 +278,11 @@ document.getElementById('change-password-dialog').addEventListener('close', func
         bio = crate::html_escape(&profile.bio),
         bio_shown = display_or_placeholder(&profile.bio),
         initials = crate::html_escape(&initials(&profile.display_name, &profile.username)),
-        display_name_or_username = crate::html_escape(
-            if profile.display_name.trim().is_empty() { &profile.username } else { &profile.display_name }
-        ),
+        display_name_or_username = crate::html_escape(if profile.display_name.trim().is_empty() {
+            &profile.username
+        } else {
+            &profile.display_name
+        }),
     );
 
     crate::admin_page("Profile Management", "/admin/profile", flash, &content, ctx)

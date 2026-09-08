@@ -6,7 +6,11 @@ use leptos::prelude::*;
 use wasm_bindgen::{closure::Closure, JsCast, JsValue};
 use web_sys::{FormData, ProgressEvent, XmlHttpRequest};
 
-pub fn upload_file(file: web_sys::File, folder_id: Option<String>, progress: RwSignal<Option<i32>>) {
+pub fn upload_file(
+    file: web_sys::File,
+    folder_id: Option<String>,
+    progress: RwSignal<Option<i32>>,
+) {
     let form = FormData::new().unwrap();
     let _ = form.append_with_str("redirect", "");
     if let Some(fid) = &folder_id {

@@ -52,22 +52,36 @@ async fn fetch_recent_posts(
            ORDER BY {order_sql}
            LIMIT 5"#
     );
-    sqlx::query_as::<_, (uuid::Uuid, String, Option<String>, Option<chrono::DateTime<chrono::Utc>>, Option<String>)>(&sql)
-        .bind(status)
-        .bind(site_id)
-        .bind(author_id)
-        .fetch_all(&state.db)
-        .await
-        .unwrap_or_else(|e| { tracing::warn!("dashboard recent {} posts error: {:?}", status, e); vec![] })
-        .into_iter()
-        .map(|(id, title, hostname, published_at, author_name)| admin::pages::dashboard::RecentPostSummary {
+    sqlx::query_as::<
+        _,
+        (
+            uuid::Uuid,
+            String,
+            Option<String>,
+            Option<chrono::DateTime<chrono::Utc>>,
+            Option<String>,
+        ),
+    >(&sql)
+    .bind(status)
+    .bind(site_id)
+    .bind(author_id)
+    .fetch_all(&state.db)
+    .await
+    .unwrap_or_else(|e| {
+        tracing::warn!("dashboard recent {} posts error: {:?}", status, e);
+        vec![]
+    })
+    .into_iter()
+    .map(|(id, title, hostname, published_at, author_name)| {
+        admin::pages::dashboard::RecentPostSummary {
             id: id.to_string(),
             title,
             site_hostname: hostname.unwrap_or_default(),
             scheduled_at: published_at.map(|d| format!("{} UTC", d.format("%Y-%m-%d %H:%M"))),
             author_name: author_name.unwrap_or_else(|| "Unknown".to_string()),
-        })
-        .collect()
+        }
+    })
+    .collect()
 }
 
 /// Layout spike for /admin2 — sidebar + a truly `position: fixed` header,
@@ -87,21 +101,37 @@ pub async fn dashboard(
     let is_author = admin.site_role == Some(crate::models::site_user::SiteRole::Author);
 
     let total_users = if admin.caps.is_global_admin && !admin.caps.is_impersonating {
-        crate::models::user::count_staff(&state.db, admin.user.id).await
-            .unwrap_or_else(|e| { tracing::warn!("dashboard users count error: {:?}", e); 0 })
+        crate::models::user::count_staff(&state.db, admin.user.id)
+            .await
+            .unwrap_or_else(|e| {
+                tracing::warn!("dashboard users count error: {:?}", e);
+                0
+            })
     } else if let Some(sid) = admin.site_id {
-        crate::models::user::count_staff_for_site(&state.db, sid, admin.user.id).await
-            .unwrap_or_else(|e| { tracing::warn!("dashboard site users count error: {:?}", e); 0 })
+        crate::models::user::count_staff_for_site(&state.db, sid, admin.user.id)
+            .await
+            .unwrap_or_else(|e| {
+                tracing::warn!("dashboard site users count error: {:?}", e);
+                0
+            })
     } else {
         0
     };
 
     let total_subscribers = if admin.caps.is_global_admin && !admin.caps.is_impersonating {
-        crate::models::user::count_subscribers(&state.db).await
-            .unwrap_or_else(|e| { tracing::warn!("dashboard subscribers count error: {:?}", e); 0 })
+        crate::models::user::count_subscribers(&state.db)
+            .await
+            .unwrap_or_else(|e| {
+                tracing::warn!("dashboard subscribers count error: {:?}", e);
+                0
+            })
     } else if let Some(sid) = admin.site_id {
-        crate::models::user::count_subscribers_for_site(&state.db, sid).await
-            .unwrap_or_else(|e| { tracing::warn!("dashboard site subscribers count error: {:?}", e); 0 })
+        crate::models::user::count_subscribers_for_site(&state.db, sid)
+            .await
+            .unwrap_or_else(|e| {
+                tracing::warn!("dashboard site subscribers count error: {:?}", e);
+                0
+            })
     } else {
         0
     };
@@ -111,25 +141,39 @@ pub async fn dashboard(
     // plus any other sites where the user holds the 'admin' role — same
     // scoping as /admin/sites.
     let total_sites = if admin.caps.is_global_admin && !admin.caps.is_impersonating {
-        crate::models::site::count(&state.db).await
-            .unwrap_or_else(|e| { tracing::warn!("dashboard sites count error: {:?}", e); 0 })
+        crate::models::site::count(&state.db)
+            .await
+            .unwrap_or_else(|e| {
+                tracing::warn!("dashboard sites count error: {:?}", e);
+                0
+            })
     } else if admin.caps.is_global_admin && admin.caps.is_impersonating {
         match admin.site_id {
             Some(sid) => {
-                let owner: Option<uuid::Uuid> = sqlx::query_scalar(
-                    "SELECT owner_user_id FROM sites WHERE id = $1"
-                ).bind(sid).fetch_optional(&state.db).await.ok().flatten();
+                let owner: Option<uuid::Uuid> =
+                    sqlx::query_scalar("SELECT owner_user_id FROM sites WHERE id = $1")
+                        .bind(sid)
+                        .fetch_optional(&state.db)
+                        .await
+                        .ok()
+                        .flatten();
                 match owner {
-                    Some(o) => crate::models::site::count_by_owner(&state.db, o).await.unwrap_or(0),
+                    Some(o) => crate::models::site::count_by_owner(&state.db, o)
+                        .await
+                        .unwrap_or(0),
                     None => 1,
                 }
             }
             None => 0,
         }
     } else {
-        crate::models::site_user::list_for_user_scoped(&state.db, admin.user.id, admin.site_id).await
+        crate::models::site_user::list_for_user_scoped(&state.db, admin.user.id, admin.site_id)
+            .await
             .map(|rows| rows.len() as i64)
-            .unwrap_or_else(|e| { tracing::warn!("dashboard user sites count error: {:?}", e); 0 })
+            .unwrap_or_else(|e| {
+                tracing::warn!("dashboard user sites count error: {:?}", e);
+                0
+            })
     };
 
     // Author-scoped stats: only their own posts.
@@ -150,29 +194,46 @@ pub async fn dashboard(
     };
 
     // Author view totals and chart data (only for author role).
-    let (author_total_views, author_views_labels, author_views_values, views_range,
-         available_views_years, selected_views_year) = if is_author {
+    let (
+        author_total_views,
+        author_views_labels,
+        author_views_values,
+        views_range,
+        available_views_years,
+        selected_views_year,
+    ) = if is_author {
         let aid = admin.user.id;
         let current_year = Local::now().year();
 
         let total: i64 = sqlx::query_scalar(
             "SELECT COUNT(*)::bigint FROM post_views pv
              JOIN posts p ON p.id = pv.post_id
-             WHERE p.author_id = $1 AND ($2::uuid IS NULL OR p.site_id = $2)"
-        ).bind(aid).bind(site_id).fetch_one(&state.db).await.unwrap_or(0);
+             WHERE p.author_id = $1 AND ($2::uuid IS NULL OR p.site_id = $2)",
+        )
+        .bind(aid)
+        .bind(site_id)
+        .fetch_one(&state.db)
+        .await
+        .unwrap_or(0);
 
         let avail_years: Vec<i32> = sqlx::query_scalar::<_, i32>(
             "SELECT DISTINCT EXTRACT(YEAR FROM pv.viewed_date)::int \
              FROM post_views pv \
              JOIN posts p ON p.id = pv.post_id \
              WHERE p.author_id = $1 AND ($2::uuid IS NULL OR p.site_id = $2) \
-             ORDER BY 1 DESC"
-        ).bind(aid).bind(site_id).fetch_all(&state.db).await.unwrap_or_default();
+             ORDER BY 1 DESC",
+        )
+        .bind(aid)
+        .bind(site_id)
+        .fetch_all(&state.db)
+        .await
+        .unwrap_or_default();
 
         let default_year = avail_years.first().copied().unwrap_or(current_year);
         let sel_year = query.views_year.unwrap_or(default_year);
 
-        let range_str = query.views_range
+        let range_str = query
+            .views_range
             .as_deref()
             .map(|r| r.to_ascii_lowercase())
             .filter(|r| r == "week" || r == "month" || r == "year")
@@ -189,13 +250,23 @@ pub async fn dashboard(
                        AND ($2::uuid IS NULL OR p.site_id = $2)
                        AND EXTRACT(YEAR FROM pv.viewed_date)::int = $3
                      GROUP BY month_num
-                     ORDER BY month_num"
-                ).bind(aid).bind(site_id).bind(sel_year).fetch_all(&state.db).await
-                 .unwrap_or_else(|e| { tracing::warn!("views month chart error: {:?}", e); vec![] });
+                     ORDER BY month_num",
+                )
+                .bind(aid)
+                .bind(site_id)
+                .bind(sel_year)
+                .fetch_all(&state.db)
+                .await
+                .unwrap_or_else(|e| {
+                    tracing::warn!("views month chart error: {:?}", e);
+                    vec![]
+                });
                 let month_map: std::collections::HashMap<i32, f32> =
                     rows.into_iter().map(|(m, c)| (m, c as f32)).collect();
-                let month_names = ["Jan","Feb","Mar","Apr","May","Jun",
-                                   "Jul","Aug","Sep","Oct","Nov","Dec"];
+                let month_names = [
+                    "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov",
+                    "Dec",
+                ];
                 let labels: Vec<String> = month_names.iter().map(|s| s.to_string()).collect();
                 let values: Vec<f32> = (1..=12i32)
                     .map(|m| *month_map.get(&m).unwrap_or(&0.0))
@@ -211,9 +282,16 @@ pub async fn dashboard(
                      WHERE p.author_id = $1
                        AND ($2::uuid IS NULL OR p.site_id = $2)
                      GROUP BY yr
-                     ORDER BY yr"
-                ).bind(aid).bind(site_id).fetch_all(&state.db).await
-                 .unwrap_or_else(|e| { tracing::warn!("views year chart error: {:?}", e); vec![] });
+                     ORDER BY yr",
+                )
+                .bind(aid)
+                .bind(site_id)
+                .fetch_all(&state.db)
+                .await
+                .unwrap_or_else(|e| {
+                    tracing::warn!("views year chart error: {:?}", e);
+                    vec![]
+                });
                 let labels: Vec<String> = rows.iter().map(|(y, _)| y.to_string()).collect();
                 let values: Vec<f32> = rows.iter().map(|(_, c)| *c as f32).collect();
                 (labels, values)
@@ -230,9 +308,17 @@ pub async fn dashboard(
                       AND ($2::uuid IS NULL OR p.site_id = $2)
                       AND EXTRACT(YEAR FROM pv.viewed_date)::int = $3
                     GROUP BY DATE_TRUNC('week', pv.viewed_date), label
-                    ORDER BY DATE_TRUNC('week', pv.viewed_date)"#
-                ).bind(aid).bind(site_id).bind(sel_year).fetch_all(&state.db).await
-                 .unwrap_or_else(|e| { tracing::warn!("views week chart error: {:?}", e); vec![] });
+                    ORDER BY DATE_TRUNC('week', pv.viewed_date)"#,
+                )
+                .bind(aid)
+                .bind(site_id)
+                .bind(sel_year)
+                .fetch_all(&state.db)
+                .await
+                .unwrap_or_else(|e| {
+                    tracing::warn!("views week chart error: {:?}", e);
+                    vec![]
+                });
                 let labels: Vec<String> = rows.iter().map(|(l, _)| l.clone()).collect();
                 let values: Vec<f32> = rows.iter().map(|(_, c)| *c as f32).collect();
                 (labels, values)
@@ -241,36 +327,49 @@ pub async fn dashboard(
 
         (total, labels, values, range_str, avail_years, sel_year)
     } else {
-        (0, vec![], vec![], "month".to_string(), vec![], Local::now().year())
+        (
+            0,
+            vec![],
+            vec![],
+            "month".to_string(),
+            vec![],
+            Local::now().year(),
+        )
     };
 
     // Author chart: published posts per time bucket (year-scoped).
-    let (author_chart_labels, author_chart_values, chart_range,
-         available_years, selected_year) = if is_author {
-        let aid = admin.user.id;
-        let current_year = Local::now().year();
+    let (author_chart_labels, author_chart_values, chart_range, available_years, selected_year) =
+        if is_author {
+            let aid = admin.user.id;
+            let current_year = Local::now().year();
 
-        let avail_years: Vec<i32> = sqlx::query_scalar::<_, i32>(
-            "SELECT DISTINCT EXTRACT(YEAR FROM published_at AT TIME ZONE 'UTC')::int \
+            let avail_years: Vec<i32> = sqlx::query_scalar::<_, i32>(
+                "SELECT DISTINCT EXTRACT(YEAR FROM published_at AT TIME ZONE 'UTC')::int \
              FROM posts \
              WHERE author_id = $1 AND ($2::uuid IS NULL OR site_id = $2) \
                AND status = 'published' AND post_type = 'post' \
-             ORDER BY 1 DESC"
-        ).bind(aid).bind(site_id).fetch_all(&state.db).await.unwrap_or_default();
+             ORDER BY 1 DESC",
+            )
+            .bind(aid)
+            .bind(site_id)
+            .fetch_all(&state.db)
+            .await
+            .unwrap_or_default();
 
-        let default_year = avail_years.first().copied().unwrap_or(current_year);
-        let sel_year = query.year.unwrap_or(default_year);
+            let default_year = avail_years.first().copied().unwrap_or(current_year);
+            let sel_year = query.year.unwrap_or(default_year);
 
-        let range_str = query.range
-            .as_deref()
-            .map(|r| r.to_ascii_lowercase())
-            .filter(|r| r == "week" || r == "month" || r == "year")
-            .unwrap_or_else(|| "month".to_string());
+            let range_str = query
+                .range
+                .as_deref()
+                .map(|r| r.to_ascii_lowercase())
+                .filter(|r| r == "week" || r == "month" || r == "year")
+                .unwrap_or_else(|| "month".to_string());
 
-        match range_str.as_str() {
-            "month" => {
-                // All 12 months of selected year, zero-filled.
-                let rows: Vec<(i32, i32)> = sqlx::query_as(
+            match range_str.as_str() {
+                "month" => {
+                    // All 12 months of selected year, zero-filled.
+                    let rows: Vec<(i32, i32)> = sqlx::query_as(
                     "SELECT EXTRACT(MONTH FROM published_at AT TIME ZONE 'UTC')::int AS month_num,
                             COUNT(*)::int AS count
                      FROM posts
@@ -284,20 +383,22 @@ pub async fn dashboard(
                 ).bind(aid).bind(site_id).bind(sel_year).fetch_all(&state.db).await
                 .unwrap_or_else(|e| { tracing::warn!("dashboard month chart error: {:?}", e); vec![] });
 
-                let month_map: std::collections::HashMap<i32, f32> =
-                    rows.into_iter().map(|(m, c)| (m, c as f32)).collect();
-                let month_names = ["Jan","Feb","Mar","Apr","May","Jun",
-                                   "Jul","Aug","Sep","Oct","Nov","Dec"];
-                let labels: Vec<String> = month_names.iter().map(|s| s.to_string()).collect();
-                let values: Vec<f32> = (1..=12i32)
-                    .map(|m| *month_map.get(&m).unwrap_or(&0.0))
-                    .collect();
-                (labels, values, range_str, avail_years, sel_year)
-            }
-            "year" => {
-                // All years with posts, total per year.
-                let rows: Vec<(i32, i32)> = sqlx::query_as(
-                    "SELECT EXTRACT(YEAR FROM published_at AT TIME ZONE 'UTC')::int AS yr,
+                    let month_map: std::collections::HashMap<i32, f32> =
+                        rows.into_iter().map(|(m, c)| (m, c as f32)).collect();
+                    let month_names = [
+                        "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct",
+                        "Nov", "Dec",
+                    ];
+                    let labels: Vec<String> = month_names.iter().map(|s| s.to_string()).collect();
+                    let values: Vec<f32> = (1..=12i32)
+                        .map(|m| *month_map.get(&m).unwrap_or(&0.0))
+                        .collect();
+                    (labels, values, range_str, avail_years, sel_year)
+                }
+                "year" => {
+                    // All years with posts, total per year.
+                    let rows: Vec<(i32, i32)> = sqlx::query_as(
+                        "SELECT EXTRACT(YEAR FROM published_at AT TIME ZONE 'UTC')::int AS yr,
                             COUNT(*)::int AS count
                      FROM posts
                      WHERE author_id = $1
@@ -305,17 +406,24 @@ pub async fn dashboard(
                        AND status = 'published'
                        AND post_type = 'post'
                      GROUP BY yr
-                     ORDER BY yr"
-                ).bind(aid).bind(site_id).fetch_all(&state.db).await
-                .unwrap_or_else(|e| { tracing::warn!("dashboard year chart error: {:?}", e); vec![] });
+                     ORDER BY yr",
+                    )
+                    .bind(aid)
+                    .bind(site_id)
+                    .fetch_all(&state.db)
+                    .await
+                    .unwrap_or_else(|e| {
+                        tracing::warn!("dashboard year chart error: {:?}", e);
+                        vec![]
+                    });
 
-                let labels: Vec<String> = rows.iter().map(|(y, _)| y.to_string()).collect();
-                let values: Vec<f32> = rows.iter().map(|(_, c)| *c as f32).collect();
-                (labels, values, range_str, avail_years, sel_year)
-            }
-            _ => {
-                // Week: sparse — only weeks in selected year that have posts.
-                let rows: Vec<(String, i32)> = sqlx::query_as(
+                    let labels: Vec<String> = rows.iter().map(|(y, _)| y.to_string()).collect();
+                    let values: Vec<f32> = rows.iter().map(|(_, c)| *c as f32).collect();
+                    (labels, values, range_str, avail_years, sel_year)
+                }
+                _ => {
+                    // Week: sparse — only weeks in selected year that have posts.
+                    let rows: Vec<(String, i32)> = sqlx::query_as(
                     r#"SELECT
                         'Wk ' || TO_CHAR(DATE_TRUNC('week', published_at AT TIME ZONE 'UTC'), 'IW') AS label,
                         COUNT(*)::int AS count
@@ -330,21 +438,31 @@ pub async fn dashboard(
                 ).bind(aid).bind(site_id).bind(sel_year).fetch_all(&state.db).await
                 .unwrap_or_else(|e| { tracing::warn!("dashboard week chart error: {:?}", e); vec![] });
 
-                let labels: Vec<String> = rows.iter().map(|(l, _)| l.clone()).collect();
-                let values: Vec<f32> = rows.iter().map(|(_, c)| *c as f32).collect();
-                (labels, values, range_str, avail_years, sel_year)
+                    let labels: Vec<String> = rows.iter().map(|(l, _)| l.clone()).collect();
+                    let values: Vec<f32> = rows.iter().map(|(_, c)| *c as f32).collect();
+                    (labels, values, range_str, avail_years, sel_year)
+                }
             }
-        }
-    } else {
-        (vec![], vec![], "month".to_string(), vec![], Local::now().year())
-    };
+        } else {
+            (
+                vec![],
+                vec![],
+                "month".to_string(),
+                vec![],
+                Local::now().year(),
+            )
+        };
 
     // Total posts across the install (super-admin only) — drives the Welcome
     // panel's dynamic "getting started" card.
     let total_posts_ever: i64 = if admin.caps.is_global_admin && !admin.caps.is_impersonating {
         sqlx::query_scalar("SELECT COUNT(*) FROM posts WHERE post_type = 'post'")
-            .fetch_one(&state.db).await
-            .unwrap_or_else(|e| { tracing::warn!("dashboard total posts count error: {:?}", e); 0 })
+            .fetch_one(&state.db)
+            .await
+            .unwrap_or_else(|e| {
+                tracing::warn!("dashboard total posts count error: {:?}", e);
+                0
+            })
     } else {
         0
     };
@@ -354,16 +472,41 @@ pub async fn dashboard(
 
     let widget_layout = user::get_dashboard_widget_layout(&state.db, admin.user.id)
         .await
-        .unwrap_or_else(|e| { tracing::warn!("dashboard widget layout load error: {:?}", e); None });
+        .unwrap_or_else(|e| {
+            tracing::warn!("dashboard widget layout load error: {:?}", e);
+            None
+        });
 
     // Recent Drafts / Recently Published widgets: same author scoping as
     // /admin/posts?status=... (authors see only their own posts; other roles see
     // all posts on the site).
     let recent_posts_author = if is_author { Some(admin.user.id) } else { None };
-    let recent_drafts = fetch_recent_posts(&state, site_id, recent_posts_author, "draft", "updated_at").await;
-    let recent_published = fetch_recent_posts(&state, site_id, recent_posts_author, "published", "published_at").await;
-    let recent_pending = fetch_recent_posts(&state, site_id, recent_posts_author, "pending", "submitted_at").await;
-    let upcoming_scheduled = fetch_recent_posts(&state, site_id, recent_posts_author, "scheduled", "published_at_asc").await;
+    let recent_drafts =
+        fetch_recent_posts(&state, site_id, recent_posts_author, "draft", "updated_at").await;
+    let recent_published = fetch_recent_posts(
+        &state,
+        site_id,
+        recent_posts_author,
+        "published",
+        "published_at",
+    )
+    .await;
+    let recent_pending = fetch_recent_posts(
+        &state,
+        site_id,
+        recent_posts_author,
+        "pending",
+        "submitted_at",
+    )
+    .await;
+    let upcoming_scheduled = fetch_recent_posts(
+        &state,
+        site_id,
+        recent_posts_author,
+        "scheduled",
+        "published_at_asc",
+    )
+    .await;
 
     let data = DashboardData {
         widget_layout,
@@ -392,7 +535,8 @@ pub async fn dashboard(
         // Super-admin (agency/app owner) only, for now — see the Settings →
         // General "Welcome Panel" card's doc comment for the plan to
         // eventually let this be delegated to other roles.
-        show_welcome_panel: admin.caps.is_global_admin && admin.user.welcome_panel_dismissed_at.is_none(),
+        show_welcome_panel: admin.caps.is_global_admin
+            && admin.user.welcome_panel_dismissed_at.is_none(),
     };
 
     Html(admin::pages::dashboard::render(&data, None, &ctx))
@@ -412,10 +556,7 @@ pub async fn save_widget_layout(
     }
 }
 
-pub async fn dismiss_welcome_panel(
-    State(state): State<AppState>,
-    admin: AdminUser,
-) -> Response {
+pub async fn dismiss_welcome_panel(State(state): State<AppState>, admin: AdminUser) -> Response {
     match user::dismiss_welcome_panel(&state.db, admin.user.id).await {
         Ok(()) => StatusCode::NO_CONTENT.into_response(),
         Err(e) => {

@@ -1,6 +1,6 @@
 use pulldown_cmark::{html as cm_html, Options, Parser};
 
-use crate::{html_escape, admin_page, PageContext};
+use crate::{admin_page, html_escape, PageContext};
 
 /// Render a markdown string to an HTML string.
 fn render_markdown(md: &str) -> String {
@@ -46,7 +46,9 @@ fn render_nav_group(label: &str, entries: &[&DocEntry]) -> String {
 }
 
 fn render_doc_section(e: &DocEntry) -> String {
-    let by = e.updated_by.as_deref()
+    let by = e
+        .updated_by
+        .as_deref()
         .map(|b| format!(" &middot; {}", html_escape(b)))
         .unwrap_or_default();
     format!(
@@ -59,10 +61,10 @@ fn render_doc_section(e: &DocEntry) -> String {
     <div class="doc-content">{content}</div>
   </div>
 </div>"##,
-        slug    = html_escape(&e.slug),
-        title   = html_escape(&e.title),
+        slug = html_escape(&e.slug),
+        title = html_escape(&e.title),
         updated = html_escape(&e.last_updated),
-        by      = by,
+        by = by,
         content = render_markdown(&e.content),
     )
 }
@@ -78,7 +80,8 @@ pub fn render_list(entries: &[DocEntry], flash: Option<&str>, ctx: &PageContext)
 
     let system_entries: Vec<&DocEntry> = entries.iter().filter(|e| e.grp == "system").collect();
     let feature_entries: Vec<&DocEntry> = entries.iter().filter(|e| e.grp == "feature").collect();
-    let other_entries: Vec<&DocEntry> = entries.iter()
+    let other_entries: Vec<&DocEntry> = entries
+        .iter()
         .filter(|e| e.grp != "system" && e.grp != "feature")
         .collect();
 
@@ -88,19 +91,30 @@ pub fn render_list(entries: &[DocEntry], flash: Option<&str>, ctx: &PageContext)
   {feature_nav}
   {other_nav}
 </nav>"#,
-        system_nav  = render_nav_group("System", &system_entries),
+        system_nav = render_nav_group("System", &system_entries),
         feature_nav = render_nav_group("Features", &feature_entries),
-        other_nav   = render_nav_group("Other", &other_entries),
+        other_nav = render_nav_group("Other", &other_entries),
     );
 
-    let system_sections: String = system_entries.iter().map(|e| render_doc_section(e)).collect();
-    let feature_sections: String = feature_entries.iter().map(|e| render_doc_section(e)).collect();
-    let other_sections: String = other_entries.iter().map(|e| render_doc_section(e)).collect();
+    let system_sections: String = system_entries
+        .iter()
+        .map(|e| render_doc_section(e))
+        .collect();
+    let feature_sections: String = feature_entries
+        .iter()
+        .map(|e| render_doc_section(e))
+        .collect();
+    let other_sections: String = other_entries
+        .iter()
+        .map(|e| render_doc_section(e))
+        .collect();
 
-    let group_header = |label: &str| format!(
-        r#"<h2 style="font-size:.8rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:0 0 1rem;padding-bottom:.5rem;border-bottom:2px solid var(--border)">{label}</h2>"#,
-        label = label
-    );
+    let group_header = |label: &str| {
+        format!(
+            r#"<h2 style="font-size:.8rem;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:0 0 1rem;padding-bottom:.5rem;border-bottom:2px solid var(--border)">{label}</h2>"#,
+            label = label
+        )
+    };
 
     let mut sections = String::new();
     if !system_sections.is_empty() {
@@ -121,9 +135,15 @@ pub fn render_list(entries: &[DocEntry], flash: Option<&str>, ctx: &PageContext)
   {nav}
   <div>{sections}</div>
 </div>"#,
-        nav      = nav,
+        nav = nav,
         sections = sections,
     );
 
-    admin_page("Documentation", "/admin/documentation", flash, &content, ctx)
+    admin_page(
+        "Documentation",
+        "/admin/documentation",
+        flash,
+        &content,
+        ctx,
+    )
 }

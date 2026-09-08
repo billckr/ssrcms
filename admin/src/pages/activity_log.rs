@@ -62,9 +62,17 @@ pub fn humanize_action(action: &str) -> String {
 }
 
 fn action_badge_class(action: &str) -> &'static str {
-    if action.ends_with("deleted") || action.ends_with("removed") || action.ends_with("suspended") || action.ends_with("failed") {
+    if action.ends_with("deleted")
+        || action.ends_with("removed")
+        || action.ends_with("suspended")
+        || action.ends_with("failed")
+    {
         "badge-danger"
-    } else if action.ends_with("created") || action.ends_with("added") || action.ends_with("reactivated") || action.ends_with("succeeded") {
+    } else if action.ends_with("created")
+        || action.ends_with("added")
+        || action.ends_with("reactivated")
+        || action.ends_with("succeeded")
+    {
         "badge-published"
     } else {
         "badge"
@@ -77,12 +85,18 @@ fn pagination(page: i64, total_pages: i64, qs: &str) -> String {
     }
     let base = "/admin/activity-log";
     let prev = if page > 1 {
-        format!(r#"<a href="{base}?page={}{qs}" class="page-btn">&laquo; Prev</a>"#, page - 1)
+        format!(
+            r#"<a href="{base}?page={}{qs}" class="page-btn">&laquo; Prev</a>"#,
+            page - 1
+        )
     } else {
         r#"<span class="page-btn page-btn-disabled">&laquo; Prev</span>"#.to_string()
     };
     let next = if page < total_pages {
-        format!(r#"<a href="{base}?page={}{qs}" class="page-btn">Next &raquo;</a>"#, page + 1)
+        format!(
+            r#"<a href="{base}?page={}{qs}" class="page-btn">Next &raquo;</a>"#,
+            page + 1
+        )
     } else {
         r#"<span class="page-btn page-btn-disabled">Next &raquo;</span>"#.to_string()
     };
@@ -91,9 +105,13 @@ fn pagination(page: i64, total_pages: i64, qs: &str) -> String {
     let mut nums = String::new();
     for p in start..=end {
         if p == page {
-            nums.push_str(&format!(r#"<span class="page-btn page-btn-active">{p}</span>"#));
+            nums.push_str(&format!(
+                r#"<span class="page-btn page-btn-active">{p}</span>"#
+            ));
         } else {
-            nums.push_str(&format!(r#"<a href="{base}?page={p}{qs}" class="page-btn">{p}</a>"#));
+            nums.push_str(&format!(
+                r#"<a href="{base}?page={p}{qs}" class="page-btn">{p}</a>"#
+            ));
         }
     }
     format!(r#"<div class="pagination">{prev}{nums}{next}</div>"#)
@@ -128,7 +146,15 @@ pub fn list_fragment(
     let sort_th = |label: &str, key: &str| -> String {
         let is_active = sort == key;
         let next_dir = if is_active && asc { "desc" } else { "asc" };
-        let arrow = if is_active { if asc { " \u{25B2}" } else { " \u{25BC}" } } else { "" };
+        let arrow = if is_active {
+            if asc {
+                " \u{25B2}"
+            } else {
+                " \u{25BC}"
+            }
+        } else {
+            ""
+        };
         format!(
             r#"<th><a href="/admin/activity-log?sort={key}&dir={next_dir}{site_qs}{search_qs}" style="color:inherit;text-decoration:none;white-space:nowrap">{label}{arrow}</a></th>"#
         )
@@ -190,12 +216,27 @@ pub fn render_list(
     let site_filter = if site_options.is_empty() {
         String::new()
     } else {
-        let all_selected = if selected_site_id.is_empty() { " selected" } else { "" };
-        let opts: String = site_options.iter().map(|(id, hostname)| {
-            let sel = if id == selected_site_id { " selected" } else { "" };
-            format!(r#"<option value="{id}"{sel}>{hostname}</option>"#,
-                id = html_escape(id), sel = sel, hostname = html_escape(hostname))
-        }).collect();
+        let all_selected = if selected_site_id.is_empty() {
+            " selected"
+        } else {
+            ""
+        };
+        let opts: String = site_options
+            .iter()
+            .map(|(id, hostname)| {
+                let sel = if id == selected_site_id {
+                    " selected"
+                } else {
+                    ""
+                };
+                format!(
+                    r#"<option value="{id}"{sel}>{hostname}</option>"#,
+                    id = html_escape(id),
+                    sel = sel,
+                    hostname = html_escape(hostname)
+                )
+            })
+            .collect();
         format!(
             r#"<select class="appearance-filter-select" aria-label="Filter by site"
                        onchange="window.location = this.value ? '/admin/activity-log?site=' + this.value : '/admin/activity-log'">
@@ -207,7 +248,8 @@ pub fn render_list(
         )
     };
 
-    let search_toggle = crate::pill_search_toggle("activity-log-search", "Search activity&hellip;", search);
+    let search_toggle =
+        crate::pill_search_toggle("activity-log-search", "Search activity&hellip;", search);
 
     let fragment = list_fragment(rows, page, total_pages, selected_site_id, search, sort, dir);
 
@@ -216,15 +258,38 @@ pub fn render_list(
     } else {
         format!("&site={}", html_escape(selected_site_id))
     };
-    let sort_qs = if sort.is_empty() { String::new() } else { format!("&sort={}&dir={}", sort, if dir == "desc" { "desc" } else { "asc" }) };
+    let sort_qs = if sort.is_empty() {
+        String::new()
+    } else {
+        format!(
+            "&sort={}&dir={}",
+            sort,
+            if dir == "desc" { "desc" } else { "asc" }
+        )
+    };
     let fetch_prefix = format!("/admin/activity-log?partial=1{site_qs}{sort_qs}");
-    let live_search = crate::live_search_script("activity-log-search", "activity-log-list", &fetch_prefix);
+    let live_search =
+        crate::live_search_script("activity-log-search", "activity-log-list", &fetch_prefix);
 
     // Export/clear act on the current site filter (so a super admin can
     // scope either to one site), but never on the search box — they're
     // "everything in scope", not "everything matching my current filter".
-    let export_url = format!("/admin/activity-log/export{}", if site_qs.is_empty() { String::new() } else { format!("?{}", &site_qs[1..]) });
-    let clear_url = format!("/admin/activity-log/clear{}", if site_qs.is_empty() { String::new() } else { format!("?{}", &site_qs[1..]) });
+    let export_url = format!(
+        "/admin/activity-log/export{}",
+        if site_qs.is_empty() {
+            String::new()
+        } else {
+            format!("?{}", &site_qs[1..])
+        }
+    );
+    let clear_url = format!(
+        "/admin/activity-log/clear{}",
+        if site_qs.is_empty() {
+            String::new()
+        } else {
+            format!("?{}", &site_qs[1..])
+        }
+    );
 
     let content = format!(
         r#"<div style="display:flex;align-items:center;justify-content:flex-end;gap:.75rem;margin-bottom:1rem;flex-wrap:wrap">

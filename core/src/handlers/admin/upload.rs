@@ -6,10 +6,10 @@ use axum::{
 };
 use uuid::Uuid;
 
-use crate::app_state::AppState;
-use crate::middleware::admin_auth::AdminUser;
 use super::media_store::{store_and_create, StoreInput};
 use super::sanitize_media_text;
+use crate::app_state::AppState;
+use crate::middleware::admin_auth::AdminUser;
 
 pub async fn upload(
     State(state): State<AppState>,
@@ -32,18 +32,23 @@ pub async fn upload(
             }
         } else if name == "file" {
             let filename: String = field.file_name().unwrap_or("upload").to_string();
-            let mime: String = field.content_type().unwrap_or("application/octet-stream").to_string();
+            let mime: String = field
+                .content_type()
+                .unwrap_or("application/octet-stream")
+                .to_string();
             if let Ok(bytes) = field.bytes().await {
                 let raw: Vec<u8> = bytes.to_vec();
                 file_data = Some((filename, mime, raw));
             }
         } else if name == "alt_text" {
-            alt_text = field.text().await.ok()
+            alt_text = field
+                .text()
+                .await
+                .ok()
                 .map(|s| sanitize_media_text(&s))
                 .filter(|s| !s.is_empty());
         } else if name == "folder_id" {
-            folder_id = field.text().await.ok()
-                .and_then(|s| s.parse().ok());
+            folder_id = field.text().await.ok().and_then(|s| s.parse().ok());
         }
     }
 

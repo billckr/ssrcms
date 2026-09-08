@@ -22,7 +22,11 @@ const PER_PAGE: i64 = 50;
 /// escape it), then combines them into the final scope every query below
 /// filters by: `Some(&[selected])` if one site is picked, else the admin's
 /// own scope.
-async fn resolve_scope(state: &AppState, admin: &AdminUser, site: Option<&str>) -> (Option<Vec<Uuid>>, Option<Uuid>, Option<Vec<Uuid>>) {
+async fn resolve_scope(
+    state: &AppState,
+    admin: &AdminUser,
+    site: Option<&str>,
+) -> (Option<Vec<Uuid>>, Option<Uuid>, Option<Vec<Uuid>>) {
     let admin_scope: Option<Vec<Uuid>> = if admin.caps.is_global_admin {
         None
     } else {
@@ -35,7 +39,8 @@ async fn resolve_scope(state: &AppState, admin: &AdminUser, site: Option<&str>) 
                 .collect(),
         )
     };
-    let selected_site_id = site.and_then(|s| s.parse::<Uuid>().ok())
+    let selected_site_id = site
+        .and_then(|s| s.parse::<Uuid>().ok())
         .filter(|sid| admin_scope.as_ref().is_none_or(|scope| scope.contains(sid)));
     let scope = match selected_site_id {
         Some(sid) => Some(vec![sid]),
@@ -73,27 +78,48 @@ pub async fn list(
 
     // Resolve site hostnames/hierarchy up front — needed for both the site
     // filter dropdown and the per-row site label.
-    let all_sites = crate::models::site::list(&state.db).await.unwrap_or_default();
-    let hostnames: HashMap<Uuid, String> = all_sites.iter().map(|s| (s.id, s.hostname.clone())).collect();
+    let all_sites = crate::models::site::list(&state.db)
+        .await
+        .unwrap_or_default();
+    let hostnames: HashMap<Uuid, String> = all_sites
+        .iter()
+        .map(|s| (s.id, s.hostname.clone()))
+        .collect();
 
-    let (admin_scope, selected_site_id, scope) = resolve_scope(&state, &admin, query.site.as_deref()).await;
+    let (admin_scope, selected_site_id, scope) =
+        resolve_scope(&state, &admin, query.site.as_deref()).await;
     let scope_slice = scope.as_deref();
 
     let (entries, total) = tokio::join!(
-        crate::models::audit_log::list_filtered(&state.db, scope_slice, search, sort, dir, PER_PAGE, offset),
+        crate::models::audit_log::list_filtered(
+            &state.db,
+            scope_slice,
+            search,
+            sort,
+            dir,
+            PER_PAGE,
+            offset
+        ),
         crate::models::audit_log::count_filtered(&state.db, scope_slice, search),
     );
     let entries = entries.unwrap_or_default();
     let total = total.unwrap_or(0);
 
-    let rows: Vec<ActivityLogRow> = entries.iter().map(|e| ActivityLogRow {
-        created_at: e.created_at.format("%Y-%m-%d %H:%M UTC").to_string(),
-        actor_label: format!("{} ({})", e.actor_email, role_display(&e.actor_role)),
-        action_label: humanize_action(&e.action),
-        target_type: e.target_type.clone(),
-        target_label: e.target_label.clone(),
-        site_label: e.site_id.and_then(|sid| hostnames.get(&sid)).cloned().unwrap_or_else(|| "—".to_string()),
-    }).collect();
+    let rows: Vec<ActivityLogRow> = entries
+        .iter()
+        .map(|e| ActivityLogRow {
+            created_at: e.created_at.format("%Y-%m-%d %H:%M UTC").to_string(),
+            actor_label: format!("{} ({})", e.actor_email, role_display(&e.actor_role)),
+            action_label: humanize_action(&e.action),
+            target_type: e.target_type.clone(),
+            target_label: e.target_label.clone(),
+            site_label: e
+                .site_id
+                .and_then(|sid| hostnames.get(&sid))
+                .cloned()
+                .unwrap_or_else(|| "—".to_string()),
+        })
+        .collect();
 
     let total_pages = ((total + PER_PAGE - 1) / PER_PAGE).max(1);
 
@@ -113,7 +139,8 @@ pub async fn list(
             search,
             sort,
             dir,
-        )).into_response();
+        ))
+        .into_response();
     }
 
     Html(admin::pages::activity_log::render_list(
@@ -127,7 +154,8 @@ pub async fn list(
         dir,
         None,
         &ctx,
-    )).into_response()
+    ))
+    .into_response()
 }
 
 /// GET /admin/activity-log/export — CSV dump of every entry within the
@@ -145,8 +173,13 @@ pub async fn export_csv(
     }
 
     let (_, _, scope) = resolve_scope(&state, &admin, query.site.as_deref()).await;
-    let all_sites = crate::models::site::list(&state.db).await.unwrap_or_default();
-    let hostnames: HashMap<Uuid, String> = all_sites.iter().map(|s| (s.id, s.hostname.clone())).collect();
+    let all_sites = crate::models::site::list(&state.db)
+        .await
+        .unwrap_or_default();
+    let hostnames: HashMap<Uuid, String> = all_sites
+        .iter()
+        .map(|s| (s.id, s.hostname.clone()))
+        .collect();
 
     let entries = crate::models::audit_log::list_for_export(&state.db, scope.as_deref())
         .await
@@ -154,8 +187,14 @@ pub async fn export_csv(
 
     let mut csv = String::from("when,who,role,action,target_type,target,site\n");
     for e in &entries {
-        let site_label = e.site_id.and_then(|sid| hostnames.get(&sid)).cloned().unwrap_or_default();
-        csv.push_str(&csv_escape(&e.created_at.format("%Y-%m-%d %H:%M UTC").to_string()));
+        let site_label = e
+            .site_id
+            .and_then(|sid| hostnames.get(&sid))
+            .cloned()
+            .unwrap_or_default();
+        csv.push_str(&csv_escape(
+            &e.created_at.format("%Y-%m-%d %H:%M UTC").to_string(),
+        ));
         csv.push(',');
         csv.push_str(&csv_escape(&e.actor_email));
         csv.push(',');
@@ -174,10 +213,14 @@ pub async fn export_csv(
     (
         [
             (header::CONTENT_TYPE, "text/csv; charset=utf-8".to_string()),
-            (header::CONTENT_DISPOSITION, "attachment; filename=\"activity-log.csv\"".to_string()),
+            (
+                header::CONTENT_DISPOSITION,
+                "attachment; filename=\"activity-log.csv\"".to_string(),
+            ),
         ],
         csv,
-    ).into_response()
+    )
+        .into_response()
 }
 
 fn csv_escape(s: &str) -> String {
@@ -212,7 +255,16 @@ pub async fn clear(
 
     // Recorded after the delete, so the log isn't left silently empty —
     // this becomes the sole surviving entry describing who cleared it.
-    super::audit(&state, &admin, "activity_log.cleared", "audit_log", None, &format!("{cleared} entries"), admin.site_id).await;
+    super::audit(
+        &state,
+        &admin,
+        "activity_log.cleared",
+        "audit_log",
+        None,
+        &format!("{cleared} entries"),
+        admin.site_id,
+    )
+    .await;
 
     let redirect = match query.site.as_deref() {
         Some(site) => format!("/admin/activity-log?site={site}"),
@@ -226,12 +278,17 @@ pub async fn clear(
 /// own child sites, indented — rather than interleaved alphabetically with
 /// unrelated sites. When `allowed` is `Some`, only those site ids are
 /// included (a site admin's scope); `None` includes every site (global admin).
-fn build_site_options(all_sites: &[crate::models::site::Site], allowed: Option<&[Uuid]>) -> Vec<(String, String)> {
-    let visible: Vec<&crate::models::site::Site> = all_sites.iter()
+fn build_site_options(
+    all_sites: &[crate::models::site::Site],
+    allowed: Option<&[Uuid]>,
+) -> Vec<(String, String)> {
+    let visible: Vec<&crate::models::site::Site> = all_sites
+        .iter()
         .filter(|s| allowed.is_none_or(|ids| ids.contains(&s.id)))
         .collect();
 
-    let mut top_level: Vec<&crate::models::site::Site> = visible.iter()
+    let mut top_level: Vec<&crate::models::site::Site> = visible
+        .iter()
         .copied()
         .filter(|s| s.parent_site_id.is_none())
         .collect();
@@ -240,23 +297,29 @@ fn build_site_options(all_sites: &[crate::models::site::Site], allowed: Option<&
     let mut options = Vec::with_capacity(visible.len());
     for parent in &top_level {
         options.push((parent.id.to_string(), parent.hostname.clone()));
-        let mut children: Vec<&crate::models::site::Site> = visible.iter()
+        let mut children: Vec<&crate::models::site::Site> = visible
+            .iter()
             .copied()
             .filter(|s| s.parent_site_id == Some(parent.id))
             .collect();
         children.sort_by(|a, b| a.hostname.cmp(&b.hostname));
         for child in children {
-            options.push((child.id.to_string(), format!("\u{2003}\u{2514} {}", child.hostname)));
+            options.push((
+                child.id.to_string(),
+                format!("\u{2003}\u{2514} {}", child.hostname),
+            ));
         }
     }
 
     // Defensive: a child whose parent isn't in `visible` (e.g. a site admin
     // was removed from the parent site but still controls the child they
     // created) — list it top-level rather than dropping it silently.
-    let listed: std::collections::HashSet<Uuid> = options.iter()
+    let listed: std::collections::HashSet<Uuid> = options
+        .iter()
         .filter_map(|(id, _)| id.parse::<Uuid>().ok())
         .collect();
-    let mut orphans: Vec<&crate::models::site::Site> = visible.iter()
+    let mut orphans: Vec<&crate::models::site::Site> = visible
+        .iter()
         .copied()
         .filter(|s| !listed.contains(&s.id))
         .collect();

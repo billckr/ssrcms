@@ -8,7 +8,7 @@ use uuid::Uuid;
 
 use crate::app_state::AppState;
 use crate::middleware::admin_auth::AdminUser;
-use crate::models::post::{CreatePost, PostStatus, PostType, UpdatePost, ListFilter};
+use crate::models::post::{CreatePost, ListFilter, PostStatus, PostType, UpdatePost};
 use crate::models::taxonomy::TaxonomyType;
 use admin::pages::posts::{PostEdit, PostRow, TermOption};
 
@@ -37,8 +37,25 @@ pub async fn list(
 ) -> Html<String> {
     let cs = state.site_hostname(admin.site_id);
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
-    let author_filter = if admin.site_role == Some(crate::models::site_user::SiteRole::Author) { Some(admin.user.id) } else { None };
-    list_type(state, "post", q.page, q.status.as_deref(), q.search.as_deref(), q.partial.as_deref(), admin.site_id, author_filter, q.sort.as_deref(), q.dir.as_deref(), ctx).await
+    let author_filter = if admin.site_role == Some(crate::models::site_user::SiteRole::Author) {
+        Some(admin.user.id)
+    } else {
+        None
+    };
+    list_type(
+        state,
+        "post",
+        q.page,
+        q.status.as_deref(),
+        q.search.as_deref(),
+        q.partial.as_deref(),
+        admin.site_id,
+        author_filter,
+        q.sort.as_deref(),
+        q.dir.as_deref(),
+        ctx,
+    )
+    .await
 }
 
 pub async fn list_pages(
@@ -51,31 +68,63 @@ pub async fn list_pages(
     }
     let cs = state.site_hostname(admin.site_id);
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
-    list_type(state, "page", q.page, q.status.as_deref(), q.search.as_deref(), q.partial.as_deref(), admin.site_id, None, q.sort.as_deref(), q.dir.as_deref(), ctx).await.into_response()
+    list_type(
+        state,
+        "page",
+        q.page,
+        q.status.as_deref(),
+        q.search.as_deref(),
+        q.partial.as_deref(),
+        admin.site_id,
+        None,
+        q.sort.as_deref(),
+        q.dir.as_deref(),
+        ctx,
+    )
+    .await
+    .into_response()
 }
 
 #[allow(clippy::too_many_arguments)]
-async fn list_type(state: AppState, post_type: &str, page: Option<i64>, status_filter: Option<&str>, search: Option<&str>, partial: Option<&str>, site_id: Option<Uuid>, author_id: Option<Uuid>, sort: Option<&str>, dir: Option<&str>, ctx: admin::PageContext) -> Html<String> {
+async fn list_type(
+    state: AppState,
+    post_type: &str,
+    page: Option<i64>,
+    status_filter: Option<&str>,
+    search: Option<&str>,
+    partial: Option<&str>,
+    site_id: Option<Uuid>,
+    author_id: Option<Uuid>,
+    sort: Option<&str>,
+    dir: Option<&str>,
+    ctx: admin::PageContext,
+) -> Html<String> {
     let per_page = 20i64;
     let page = page.unwrap_or(1).max(1);
     let offset = (page - 1) * per_page;
 
     // Resolve the PostStatus filter. When no filter is selected ("All"), exclude trashed posts.
     let status_enum: Option<PostStatus> = match status_filter {
-        Some("draft")     => Some(PostStatus::Draft),
-        Some("pending")   => Some(PostStatus::Pending),
+        Some("draft") => Some(PostStatus::Draft),
+        Some("pending") => Some(PostStatus::Pending),
         Some("published") => Some(PostStatus::Published),
         Some("scheduled") => Some(PostStatus::Scheduled),
-        Some("trashed")   => Some(PostStatus::Trashed),
-        _                 => None,
+        Some("trashed") => Some(PostStatus::Trashed),
+        _ => None,
     };
     let status_sql = status_enum.as_ref().map(|s| s.as_str());
     let exclude_trashed = status_enum.is_none(); // When viewing "All", exclude trashed posts
 
     // Strip stop words from the search input once; reuse for both COUNT and SELECT.
     let search_str = search.unwrap_or("").trim();
-    let search_opt = if search_str.is_empty() { None } else { Some(search_str) };
-    let terms = search_opt.map(crate::models::post::search_terms).unwrap_or_default();
+    let search_opt = if search_str.is_empty() {
+        None
+    } else {
+        Some(search_str)
+    };
+    let terms = search_opt
+        .map(crate::models::post::search_terms)
+        .unwrap_or_default();
 
     // COUNT — same filters as SELECT. Dynamic ILIKE clauses mirror the SELECT query.
     // Fixed params: $1=site_id, $2=post_type, $3=author_id, $4=status, $5=exclude_trashed,
@@ -94,7 +143,9 @@ async fn list_type(state: AppState, post_type: &str, page: Option<i64>, status_f
         .to_string();
     for i in 0..terms.len() {
         let n = i + 7;
-        count_sql.push_str(&format!(" AND (LOWER(p.title) LIKE ${n} OR LOWER(u.display_name) LIKE ${n})"));
+        count_sql.push_str(&format!(
+            " AND (LOWER(p.title) LIKE ${n} OR LOWER(u.display_name) LIKE ${n})"
+        ));
     }
     let mut count_q = sqlx::query_scalar::<_, i64>(&count_sql)
         .bind(site_id)
@@ -147,7 +198,11 @@ async fn list_type(state: AppState, post_type: &str, page: Option<i64>, status_f
     let filter = ListFilter {
         site_id,
         status: status_enum,
-        post_type: Some(if post_type == "page" { PostType::Page } else { PostType::Post }),
+        post_type: Some(if post_type == "page" {
+            PostType::Page
+        } else {
+            PostType::Post
+        }),
         author_id,
         limit: per_page,
         offset,
@@ -159,20 +214,30 @@ async fn list_type(state: AppState, post_type: &str, page: Option<i64>, status_f
         ..Default::default()
     };
 
-    let raw = crate::models::post::list(&state.db, &filter).await.unwrap_or_else(|e| {
-        tracing::warn!("failed to list {} items: {:?}", post_type, e);
-        vec![]
-    });
+    let raw = crate::models::post::list(&state.db, &filter)
+        .await
+        .unwrap_or_else(|e| {
+            tracing::warn!("failed to list {} items: {:?}", post_type, e);
+            vec![]
+        });
 
     // Snapshot site hostname + permalink_structure once so we don't hold the
     // lock (or re-fetch settings) per-row.
     let (site_hostnames, permalink_structures): (
         std::collections::HashMap<Uuid, String>,
         std::collections::HashMap<Uuid, String>,
-    ) = state.site_cache.read()
+    ) = state
+        .site_cache
+        .read()
         .map(|cache| {
-            let hostnames = cache.values().map(|(s, _)| (s.id, s.hostname.clone())).collect();
-            let structures = cache.values().map(|(s, settings)| (s.id, settings.permalink_structure.clone())).collect();
+            let hostnames = cache
+                .values()
+                .map(|(s, _)| (s.id, s.hostname.clone()))
+                .collect();
+            let structures = cache
+                .values()
+                .map(|(s, settings)| (s.id, settings.permalink_structure.clone()))
+                .collect();
             (hostnames, structures)
         })
         .unwrap_or_default();
@@ -188,7 +253,8 @@ async fn list_type(state: AppState, post_type: &str, page: Option<i64>, status_f
                 "Unknown".to_string()
             });
 
-        let site_hostname = p.site_id
+        let site_hostname = p
+            .site_id
             .and_then(|sid| site_hostnames.get(&sid).cloned())
             .unwrap_or_default();
 
@@ -199,12 +265,14 @@ async fn list_type(state: AppState, post_type: &str, page: Option<i64>, status_f
         let view_path = if p.post_type == "page" {
             format!("/{}", p.slug)
         } else {
-            let structure = p.site_id
+            let structure = p
+                .site_id
                 .and_then(|sid| permalink_structures.get(&sid))
                 .map(|s| s.as_str())
                 .unwrap_or("/%postname%");
             let category_slug = if structure.contains("%category%") {
-                crate::models::taxonomy::for_post(&state.db, p.id).await
+                crate::models::taxonomy::for_post(&state.db, p.id)
+                    .await
                     .unwrap_or_default()
                     .into_iter()
                     .find(|t| t.taxonomy == "category")
@@ -222,7 +290,9 @@ async fn list_type(state: AppState, post_type: &str, page: Option<i64>, status_f
             slug: p.slug.clone(),
             post_type: p.post_type.clone(),
             author_name,
-            published_at: p.published_at.map(|d| d.format("%Y-%m-%d %H:%M").to_string()),
+            published_at: p
+                .published_at
+                .map(|d| d.format("%Y-%m-%d %H:%M").to_string()),
             post_password_set: p.post_password.is_some(),
             site_hostname,
             view_path,
@@ -232,9 +302,32 @@ async fn list_type(state: AppState, post_type: &str, page: Option<i64>, status_f
     // `partial=<anything>` means the JS live-search is requesting only the table
     // fragment so it can swap div#posts-list without a full page reload.
     if partial.is_some() {
-        Html(admin::pages::posts::posts_list_fragment(&rows, post_type, page, total_pages, &ctx, status_filter, search_str, sort, dir))
+        Html(admin::pages::posts::posts_list_fragment(
+            &rows,
+            post_type,
+            page,
+            total_pages,
+            &ctx,
+            status_filter,
+            search_str,
+            sort,
+            dir,
+        ))
     } else {
-        Html(admin::pages::posts::render_list(&rows, post_type, page, total_pages, None, &ctx, status_filter, pending_count, author_scheduled_count, search_str, sort, dir))
+        Html(admin::pages::posts::render_list(
+            &rows,
+            post_type,
+            page,
+            total_pages,
+            None,
+            &ctx,
+            status_filter,
+            pending_count,
+            author_scheduled_count,
+            search_str,
+            sort,
+            dir,
+        ))
     }
 }
 
@@ -251,30 +344,37 @@ async fn resolve_post_author(state: &AppState, post_id: Uuid) -> (String, bool, 
         .unwrap_or_else(|_| ("Unknown".to_string(), true, post.author_id.to_string()))
 }
 
-pub async fn new_post(
-    State(state): State<AppState>,
-    admin: AdminUser,
-) -> Html<String> {
+pub async fn new_post(State(state): State<AppState>, admin: AdminUser) -> Html<String> {
     let cs = state.site_hostname(admin.site_id);
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
     new_post_type(state, "post", admin.site_id, &admin, &cs, ctx).await
 }
 
-pub async fn new_page(
-    State(state): State<AppState>,
-    admin: AdminUser,
-) -> impl IntoResponse {
+pub async fn new_page(State(state): State<AppState>, admin: AdminUser) -> impl IntoResponse {
     if !admin.caps.can_manage_pages {
         return Redirect::to("/admin").into_response();
     }
     let cs = state.site_hostname(admin.site_id);
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
-    new_post_type(state, "page", admin.site_id, &admin, &cs, ctx).await.into_response()
+    new_post_type(state, "page", admin.site_id, &admin, &cs, ctx)
+        .await
+        .into_response()
 }
 
-async fn new_post_type(state: AppState, post_type: &str, site_id: Option<Uuid>, admin: &AdminUser, site_hostname: &str, ctx: admin::PageContext) -> Html<String> {
+async fn new_post_type(
+    state: AppState,
+    post_type: &str,
+    site_id: Option<Uuid>,
+    admin: &AdminUser,
+    site_hostname: &str,
+    ctx: admin::PageContext,
+) -> Html<String> {
     let (categories, tags) = fetch_term_options(&state, site_id).await;
-    let available_templates = if post_type == "page" { scan_templates(&state, site_id) } else { vec![] };
+    let available_templates = if post_type == "page" {
+        scan_templates(&state, site_id)
+    } else {
+        vec![]
+    };
     let available_parents = if post_type == "page" {
         fetch_parent_options(&state, site_id, None).await
     } else {
@@ -334,8 +434,18 @@ pub async fn edit_post(
 ) -> impl IntoResponse {
     let cs = state.site_hostname(admin.site_id);
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
-    let is_restricted_author = admin.site_role == Some(crate::models::site_user::SiteRole::Author) && !admin.can_self_publish;
-    edit_post_type(state, id, admin.site_id, is_restricted_author, admin.user.id, ctx, q.success.as_deref()).await
+    let is_restricted_author = admin.site_role == Some(crate::models::site_user::SiteRole::Author)
+        && !admin.can_self_publish;
+    edit_post_type(
+        state,
+        id,
+        admin.site_id,
+        is_restricted_author,
+        admin.user.id,
+        ctx,
+        q.success.as_deref(),
+    )
+    .await
 }
 
 pub async fn edit_page(
@@ -349,13 +459,31 @@ pub async fn edit_page(
     }
     let cs = state.site_hostname(admin.site_id);
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
-    edit_post_type(state, id, admin.site_id, false, admin.user.id, ctx, q.success.as_deref()).await.into_response()
+    edit_post_type(
+        state,
+        id,
+        admin.site_id,
+        false,
+        admin.user.id,
+        ctx,
+        q.success.as_deref(),
+    )
+    .await
+    .into_response()
 }
 
 /// `is_author` here really means "is a *restricted* Author" — callers
 /// already fold in `!admin.can_self_publish`, so a self-publishing author
 /// reaches this function with `false`, same as an Editor.
-async fn edit_post_type(state: AppState, id: Uuid, site_id: Option<Uuid>, is_author: bool, user_id: Uuid, ctx: admin::PageContext, success: Option<&str>) -> impl IntoResponse {
+async fn edit_post_type(
+    state: AppState,
+    id: Uuid,
+    site_id: Option<Uuid>,
+    is_author: bool,
+    user_id: Uuid,
+    ctx: admin::PageContext,
+    success: Option<&str>,
+) -> impl IntoResponse {
     let post = match crate::models::post::get_by_id(&state.db, id).await {
         Ok(p) => p,
         Err(e) => {
@@ -372,27 +500,43 @@ async fn edit_post_type(state: AppState, id: Uuid, site_id: Option<Uuid>, is_aut
     // Author restriction: authors can only edit their own draft/pending content.
     if is_author {
         if post.author_id != user_id {
-            let redirect = if post.post_type == "page" { "/admin/pages" } else { "/admin/posts" };
+            let redirect = if post.post_type == "page" {
+                "/admin/pages"
+            } else {
+                "/admin/posts"
+            };
             return Redirect::to(redirect).into_response();
         }
         if post.status == "published" || post.status == "scheduled" {
-            let redirect = if post.post_type == "page" { "/admin/pages" } else { "/admin/posts" };
+            let redirect = if post.post_type == "page" {
+                "/admin/pages"
+            } else {
+                "/admin/posts"
+            };
             return Redirect::to(redirect).into_response();
         }
     }
 
     let (categories, tags) = fetch_term_options(&state, site_id).await;
-    let available_templates = if post.post_type == "page" { scan_templates(&state, site_id) } else { vec![] };
-
-    let post_terms = crate::models::taxonomy::for_post(&state.db, id).await.unwrap_or_else(|e| {
-        tracing::warn!("failed to fetch terms for post {}: {:?}", id, e);
+    let available_templates = if post.post_type == "page" {
+        scan_templates(&state, site_id)
+    } else {
         vec![]
-    });
-    let selected_categories: Vec<String> = post_terms.iter()
+    };
+
+    let post_terms = crate::models::taxonomy::for_post(&state.db, id)
+        .await
+        .unwrap_or_else(|e| {
+            tracing::warn!("failed to fetch terms for post {}: {:?}", id, e);
+            vec![]
+        });
+    let selected_categories: Vec<String> = post_terms
+        .iter()
         .filter(|t| t.taxonomy == "category")
         .map(|t| t.id.to_string())
         .collect();
-    let selected_tags: Vec<String> = post_terms.iter()
+    let selected_tags: Vec<String> = post_terms
+        .iter()
         .filter(|t| t.taxonomy == "tag")
         .map(|t| t.id.to_string())
         .collect();
@@ -401,22 +545,29 @@ async fn edit_post_type(state: AppState, id: Uuid, site_id: Option<Uuid>, is_aut
     // bckr.local host, not the site's own domain), so a bare-filename URL
     // can't resolve; see the comment in handlers/admin/media.rs::list.
     let featured_image_url = if let Some(img_id) = post.featured_image_id {
-        crate::models::media::get_by_id(&state.db, img_id).await
+        crate::models::media::get_by_id(&state.db, img_id)
+            .await
             .ok()
             .map(|m| format!("/uploads/{}", m.path))
     } else {
         None
     };
 
-    let (author_name, author_is_active) = crate::models::user::get_by_id_include_inactive(&state.db, post.author_id)
-        .await
-        .map(|u| (u.display_name, u.is_active))
-        .unwrap_or_else(|_| ("Unknown".to_string(), true));
+    let (author_name, author_is_active) =
+        crate::models::user::get_by_id_include_inactive(&state.db, post.author_id)
+            .await
+            .map(|u| (u.display_name, u.is_active))
+            .unwrap_or_else(|_| ("Unknown".to_string(), true));
 
-    let site_name = post.site_id
+    let site_name = post
+        .site_id
         .and_then(|sid| {
-            state.site_cache.read().ok()
-                .and_then(|cache| cache.values().find(|(s, _)| s.id == sid).map(|(s, _)| s.hostname.clone()))
+            state.site_cache.read().ok().and_then(|cache| {
+                cache
+                    .values()
+                    .find(|(s, _)| s.id == sid)
+                    .map(|(s, _)| s.hostname.clone())
+            })
         })
         .unwrap_or_default();
 
@@ -439,11 +590,13 @@ async fn edit_post_type(state: AppState, id: Uuid, site_id: Option<Uuid>, is_aut
     let post_path = if post.post_type == "page" {
         crate::models::post::get_full_page_path(&state.db, &post).await
     } else {
-        let structure = site_lookup.as_ref()
+        let structure = site_lookup
+            .as_ref()
             .map(|(_, settings)| settings.permalink_structure.as_str())
             .unwrap_or("/%postname%");
         let category_slug = if structure.contains("%category%") {
-            crate::models::taxonomy::for_post(&state.db, post.id).await
+            crate::models::taxonomy::for_post(&state.db, post.id)
+                .await
                 .unwrap_or_default()
                 .into_iter()
                 .find(|t| t.taxonomy == "category")
@@ -463,7 +616,11 @@ async fn edit_post_type(state: AppState, id: Uuid, site_id: Option<Uuid>, is_aut
         })
         .unwrap_or_default();
     let post_url = format!("{}{}", post_base_url, post_path);
-    let live_url = if post.status == "published" { Some(post_url.clone()) } else { None };
+    let live_url = if post.status == "published" {
+        Some(post_url.clone())
+    } else {
+        None
+    };
     let preview_url = match post.status.as_str() {
         "draft" | "pending" | "scheduled" => Some(post_url),
         _ => None,
@@ -476,7 +633,9 @@ async fn edit_post_type(state: AppState, id: Uuid, site_id: Option<Uuid>, is_aut
         content: post.content.clone(),
         excerpt: post.excerpt.unwrap_or_default(),
         status: post.status.clone(),
-        published_at: post.published_at.map(|d| d.format("%Y-%m-%dT%H:%M").to_string()),
+        published_at: post
+            .published_at
+            .map(|d| d.format("%Y-%m-%dT%H:%M").to_string()),
         post_type: post.post_type.clone(),
         categories,
         tags,
@@ -579,7 +738,9 @@ pub async fn save_new(
     // draft — unless this specific author has been granted can_self_publish
     // (see PageContext::can_self_publish's doc comment), in which case they
     // behave like an Editor for status purposes.
-    let status = if admin.site_role == Some(crate::models::site_user::SiteRole::Author) && !admin.can_self_publish {
+    let status = if admin.site_role == Some(crate::models::site_user::SiteRole::Author)
+        && !admin.can_self_publish
+    {
         match parse_status(&form.status) {
             PostStatus::Pending => PostStatus::Pending,
             _ => PostStatus::Draft,
@@ -587,20 +748,39 @@ pub async fn save_new(
     } else {
         parse_status(&form.status)
     };
-    let post_type = if form.post_type == "page" { PostType::Page } else { PostType::Post };
+    let post_type = if form.post_type == "page" {
+        PostType::Page
+    } else {
+        PostType::Post
+    };
     let published_at = parse_datetime(form.published_at.as_deref());
 
     if matches!(status, PostStatus::Scheduled) && published_at.is_none() {
-        return (axum::http::StatusCode::BAD_REQUEST, "A scheduled post requires a valid publication date and time.").into_response();
+        return (
+            axum::http::StatusCode::BAD_REQUEST,
+            "A scheduled post requires a valid publication date and time.",
+        )
+            .into_response();
     }
 
     let form_comments_enabled = form.comments_enabled.as_deref() == Some("on");
 
-    let form_parent_id: Option<Uuid> = form.parent_id.as_deref()
+    let form_parent_id: Option<Uuid> = form
+        .parent_id
+        .as_deref()
         .filter(|s| !s.is_empty())
         .and_then(|s| s.parse::<Uuid>().ok());
 
-    if let Err(message) = validate_editor_references(&state, admin.site_id, form.featured_image_id.as_deref(), form_parent_id, None, form.post_type == "page").await {
+    if let Err(message) = validate_editor_references(
+        &state,
+        admin.site_id,
+        form.featured_image_id.as_deref(),
+        form_parent_id,
+        None,
+        form.post_type == "page",
+    )
+    .await
+    {
         return (axum::http::StatusCode::BAD_REQUEST, message).into_response();
     }
 
@@ -609,7 +789,11 @@ pub async fn save_new(
         let cs = state.site_hostname(admin.site_id);
         let ctx = super::page_ctx_full(&state, &admin, &cs).await;
         let (categories, tags) = fetch_term_options(&state, admin.site_id).await;
-        let available_parents = if form.post_type == "page" { fetch_parent_options(&state, admin.site_id, None).await } else { vec![] };
+        let available_parents = if form.post_type == "page" {
+            fetch_parent_options(&state, admin.site_id, None).await
+        } else {
+            vec![]
+        };
         let edit = PostEdit {
             id: None,
             title: form.title,
@@ -624,7 +808,11 @@ pub async fn save_new(
             selected_categories: form.categories,
             selected_tags: form.tags,
             template: form.template.clone().filter(|s| !s.is_empty()),
-            available_templates: if form.post_type == "page" { scan_templates(&state, admin.site_id) } else { vec![] },
+            available_templates: if form.post_type == "page" {
+                scan_templates(&state, admin.site_id)
+            } else {
+                vec![]
+            },
             featured_image_id: form.featured_image_id.clone(),
             featured_image_url: form.featured_image_url.clone(),
             post_password_set: false,
@@ -642,17 +830,23 @@ pub async fn save_new(
             live_url: None,
             preview_url: None,
             saved_forms: fetch_saved_forms(&state, admin.site_id).await,
-        saved_polls: fetch_saved_polls(&state, admin.site_id).await,
+            saved_polls: fetch_saved_polls(&state, admin.site_id).await,
             form_analytics: vec![],
             created_at: None,
             updated_at: None,
             version: None,
         };
-        return Html(admin::pages::posts::render_editor(&edit, Some("Content is required before publishing."), &ctx)).into_response();
+        return Html(admin::pages::posts::render_editor(
+            &edit,
+            Some("Content is required before publishing."),
+            &ctx,
+        ))
+        .into_response();
     }
 
     let post_password_hash = if form.post_protected.as_deref() == Some("on") {
-        form.post_password.as_deref()
+        form.post_password
+            .as_deref()
             .filter(|s| !s.is_empty())
             .and_then(|pw| crate::models::user::hash_password(pw).ok())
     } else {
@@ -662,14 +856,21 @@ pub async fn save_new(
     let create = CreatePost {
         site_id: admin.site_id,
         title: form.title.clone(),
-        slug: form.slug.clone().filter(|s| !s.is_empty()).map(|s| crate::utils::slugify::slugify(&s)),
+        slug: form
+            .slug
+            .clone()
+            .filter(|s| !s.is_empty())
+            .map(|s| crate::utils::slugify::slugify(&s)),
         content: form.content.clone(),
         content_format: Some("html".into()),
         excerpt: form.excerpt.clone().filter(|s| !s.is_empty()),
         status,
         post_type,
         author_id: admin.user.id,
-        featured_image_id: form.featured_image_id.as_deref().and_then(|s| s.parse::<Uuid>().ok()),
+        featured_image_id: form
+            .featured_image_id
+            .as_deref()
+            .and_then(|s| s.parse::<Uuid>().ok()),
         published_at,
         template: form.template.clone().filter(|s| !s.is_empty()),
         post_password_hash,
@@ -685,7 +886,11 @@ pub async fn save_new(
             if post.status == "published" {
                 crate::search::indexer::index_post(&state.search_index, &post);
             }
-            let redirect = if post.post_type == "page" { "/admin/pages" } else { "/admin/posts" };
+            let redirect = if post.post_type == "page" {
+                "/admin/pages"
+            } else {
+                "/admin/posts"
+            };
             Redirect::to(redirect).into_response()
         }
         Err(e) => {
@@ -693,7 +898,11 @@ pub async fn save_new(
             let cs = state.site_hostname(admin.site_id);
             let ctx = super::page_ctx_full(&state, &admin, &cs).await;
             let (categories, tags) = fetch_term_options(&state, admin.site_id).await;
-            let available_parents = if form.post_type == "page" { fetch_parent_options(&state, admin.site_id, None).await } else { vec![] };
+            let available_parents = if form.post_type == "page" {
+                fetch_parent_options(&state, admin.site_id, None).await
+            } else {
+                vec![]
+            };
             let edit = PostEdit {
                 id: None,
                 title: form.title,
@@ -708,7 +917,11 @@ pub async fn save_new(
                 selected_categories: form.categories,
                 selected_tags: form.tags,
                 template: form.template.clone().filter(|s| !s.is_empty()),
-                available_templates: if form.post_type == "page" { scan_templates(&state, admin.site_id) } else { vec![] },
+                available_templates: if form.post_type == "page" {
+                    scan_templates(&state, admin.site_id)
+                } else {
+                    vec![]
+                },
                 featured_image_id: form.featured_image_id,
                 featured_image_url: form.featured_image_url,
                 post_password_set: false,
@@ -726,7 +939,7 @@ pub async fn save_new(
                 live_url: None,
                 preview_url: None,
                 saved_forms: fetch_saved_forms(&state, admin.site_id).await,
-        saved_polls: fetch_saved_polls(&state, admin.site_id).await,
+                saved_polls: fetch_saved_polls(&state, admin.site_id).await,
                 form_analytics: vec![],
                 created_at: None,
                 updated_at: None,
@@ -744,13 +957,25 @@ pub async fn save_edit(
     Path(id): Path<Uuid>,
     Form(form): Form<PostForm>,
 ) -> impl IntoResponse {
-    let redirect = if form.post_type == "page" { "/admin/pages" } else { "/admin/posts" };
+    let redirect = if form.post_type == "page" {
+        "/admin/pages"
+    } else {
+        "/admin/posts"
+    };
     if form.post_type == "page" && !admin.caps.can_manage_pages {
         return Redirect::to("/admin").into_response();
     }
-    if let Some(expected) = form.expected_updated_at.as_deref().filter(|s| !s.is_empty()) {
+    if let Some(expected) = form
+        .expected_updated_at
+        .as_deref()
+        .filter(|s| !s.is_empty())
+    {
         let Ok(expected) = chrono::DateTime::parse_from_rfc3339(expected) else {
-            return (axum::http::StatusCode::BAD_REQUEST, "This edit form is invalid. Please reload the page.").into_response();
+            return (
+                axum::http::StatusCode::BAD_REQUEST,
+                "This edit form is invalid. Please reload the page.",
+            )
+                .into_response();
         };
         let Ok(current) = crate::models::post::get_by_id(&state.db, id).await else {
             return Redirect::to(redirect).into_response();
@@ -779,7 +1004,9 @@ pub async fn save_edit(
                     if p.author_id != admin.user.id {
                         return Redirect::to(redirect).into_response();
                     }
-                    if !admin.can_self_publish && (p.status == "published" || p.status == "scheduled") {
+                    if !admin.can_self_publish
+                        && (p.status == "published" || p.status == "scheduled")
+                    {
                         return Redirect::to(redirect).into_response();
                     }
                 }
@@ -792,7 +1019,9 @@ pub async fn save_edit(
     // draft — unless this specific author has been granted can_self_publish
     // (see PageContext::can_self_publish's doc comment), in which case they
     // behave like an Editor for status purposes.
-    let status = if admin.site_role == Some(crate::models::site_user::SiteRole::Author) && !admin.can_self_publish {
+    let status = if admin.site_role == Some(crate::models::site_user::SiteRole::Author)
+        && !admin.can_self_publish
+    {
         match parse_status(&form.status) {
             PostStatus::Pending => PostStatus::Pending,
             _ => PostStatus::Draft,
@@ -804,13 +1033,28 @@ pub async fn save_edit(
     let form_comments_enabled = form.comments_enabled.as_deref() == Some("on");
 
     if matches!(status, PostStatus::Scheduled) && published_at.is_none() {
-        return (axum::http::StatusCode::BAD_REQUEST, "A scheduled post requires a valid publication date and time.").into_response();
+        return (
+            axum::http::StatusCode::BAD_REQUEST,
+            "A scheduled post requires a valid publication date and time.",
+        )
+            .into_response();
     }
-    let form_parent_id: Option<Uuid> = form.parent_id.as_deref()
+    let form_parent_id: Option<Uuid> = form
+        .parent_id
+        .as_deref()
         .filter(|s| !s.is_empty())
         .and_then(|s| s.parse::<Uuid>().ok());
 
-    if let Err(message) = validate_editor_references(&state, admin.site_id, form.featured_image_id.as_deref(), form_parent_id, Some(id), form.post_type == "page").await {
+    if let Err(message) = validate_editor_references(
+        &state,
+        admin.site_id,
+        form.featured_image_id.as_deref(),
+        form_parent_id,
+        Some(id),
+        form.post_type == "page",
+    )
+    .await
+    {
         return (axum::http::StatusCode::BAD_REQUEST, message).into_response();
     }
 
@@ -819,7 +1063,11 @@ pub async fn save_edit(
         let cs = state.site_hostname(admin.site_id);
         let ctx = super::page_ctx_full(&state, &admin, &cs).await;
         let (categories, tags) = fetch_term_options(&state, admin.site_id).await;
-        let available_parents = if form.post_type == "page" { fetch_parent_options(&state, admin.site_id, Some(id)).await } else { vec![] };
+        let available_parents = if form.post_type == "page" {
+            fetch_parent_options(&state, admin.site_id, Some(id)).await
+        } else {
+            vec![]
+        };
         let (author_name, author_is_active, author_id) = resolve_post_author(&state, id).await;
         let edit = PostEdit {
             id: Some(id.to_string()),
@@ -835,7 +1083,11 @@ pub async fn save_edit(
             selected_categories: form.categories,
             selected_tags: form.tags,
             template: form.template.clone().filter(|s| !s.is_empty()),
-            available_templates: if form.post_type == "page" { scan_templates(&state, admin.site_id) } else { vec![] },
+            available_templates: if form.post_type == "page" {
+                scan_templates(&state, admin.site_id)
+            } else {
+                vec![]
+            },
             featured_image_id: form.featured_image_id.clone(),
             featured_image_url: form.featured_image_url.clone(),
             post_password_set: false,
@@ -853,18 +1105,25 @@ pub async fn save_edit(
             live_url: None,
             preview_url: None,
             saved_forms: fetch_saved_forms(&state, admin.site_id).await,
-        saved_polls: fetch_saved_polls(&state, admin.site_id).await,
+            saved_polls: fetch_saved_polls(&state, admin.site_id).await,
             form_analytics: vec![],
             created_at: None,
             updated_at: None,
             version: None,
         };
-        return Html(admin::pages::posts::render_editor(&edit, Some("Content is required before publishing."), &ctx)).into_response();
+        return Html(admin::pages::posts::render_editor(
+            &edit,
+            Some("Content is required before publishing."),
+            &ctx,
+        ))
+        .into_response();
     }
 
     let (clear_post_password, new_post_password_hash) =
         if form.post_protected.as_deref() == Some("on") {
-            let new_hash = form.post_password.as_deref()
+            let new_hash = form
+                .post_password
+                .as_deref()
                 .filter(|s| !s.is_empty())
                 .and_then(|pw| crate::models::user::hash_password(pw).ok());
             (false, new_hash) // keep existing if no new password typed
@@ -883,7 +1142,10 @@ pub async fn save_edit(
         excerpt: form.excerpt.clone(),
         status: Some(status),
         clear_featured_image: form.featured_image_cleared.as_deref() == Some("1"),
-        featured_image_id: form.featured_image_id.as_deref().and_then(|s| s.parse::<Uuid>().ok()),
+        featured_image_id: form
+            .featured_image_id
+            .as_deref()
+            .and_then(|s| s.parse::<Uuid>().ok()),
         published_at,
         template: form.template.clone().filter(|s| !s.is_empty()),
         clear_post_password,
@@ -915,16 +1177,24 @@ pub async fn save_edit(
             let cs = state.site_hostname(admin.site_id);
             let ctx = super::page_ctx_full(&state, &admin, &cs).await;
             let (categories, tags) = fetch_term_options(&state, admin.site_id).await;
-            let post_terms = crate::models::taxonomy::for_post(&state.db, id).await.unwrap_or_else(|_| vec![]);
-            let selected_categories: Vec<String> = post_terms.iter()
+            let post_terms = crate::models::taxonomy::for_post(&state.db, id)
+                .await
+                .unwrap_or_else(|_| vec![]);
+            let selected_categories: Vec<String> = post_terms
+                .iter()
                 .filter(|t| t.taxonomy == "category")
                 .map(|t| t.id.to_string())
                 .collect();
-            let selected_tags: Vec<String> = post_terms.iter()
+            let selected_tags: Vec<String> = post_terms
+                .iter()
                 .filter(|t| t.taxonomy == "tag")
                 .map(|t| t.id.to_string())
                 .collect();
-            let available_parents = if form.post_type == "page" { fetch_parent_options(&state, admin.site_id, Some(id)).await } else { vec![] };
+            let available_parents = if form.post_type == "page" {
+                fetch_parent_options(&state, admin.site_id, Some(id)).await
+            } else {
+                vec![]
+            };
             let (author_name, author_is_active, author_id) = resolve_post_author(&state, id).await;
             let edit = PostEdit {
                 id: Some(id.to_string()),
@@ -940,7 +1210,11 @@ pub async fn save_edit(
                 selected_categories,
                 selected_tags,
                 template: form.template.clone().filter(|s| !s.is_empty()),
-                available_templates: if form.post_type == "page" { scan_templates(&state, admin.site_id) } else { vec![] },
+                available_templates: if form.post_type == "page" {
+                    scan_templates(&state, admin.site_id)
+                } else {
+                    vec![]
+                },
                 featured_image_id: form.featured_image_id,
                 featured_image_url: form.featured_image_url,
                 post_password_set: form.post_protected.as_deref() == Some("on"),
@@ -958,7 +1232,7 @@ pub async fn save_edit(
                 live_url: None,
                 preview_url: None,
                 saved_forms: fetch_saved_forms(&state, admin.site_id).await,
-        saved_polls: fetch_saved_polls(&state, admin.site_id).await,
+                saved_polls: fetch_saved_polls(&state, admin.site_id).await,
                 form_analytics: vec![],
                 created_at: None,
                 updated_at: None,
@@ -978,17 +1252,36 @@ pub async fn api_set_sources_public(
     Path(id): Path<Uuid>,
     axum::Json(body): axum::Json<serde_json::Value>,
 ) -> impl IntoResponse {
-    let public = body.get("public").and_then(|v| v.as_bool()).unwrap_or(false);
+    let public = body
+        .get("public")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
 
     let post = match crate::models::post::get_by_id(&state.db, id).await {
         Ok(p) => p,
-        Err(_) => return (axum::http::StatusCode::NOT_FOUND, axum::Json(serde_json::json!({"error": "Not found"}))).into_response(),
+        Err(_) => {
+            return (
+                axum::http::StatusCode::NOT_FOUND,
+                axum::Json(serde_json::json!({"error": "Not found"})),
+            )
+                .into_response()
+        }
     };
     if !admin.caps.is_global_admin && post.site_id != admin.site_id {
-        return (axum::http::StatusCode::FORBIDDEN, axum::Json(serde_json::json!({"error": "Forbidden"}))).into_response();
+        return (
+            axum::http::StatusCode::FORBIDDEN,
+            axum::Json(serde_json::json!({"error": "Forbidden"})),
+        )
+            .into_response();
     }
-    if admin.site_role == Some(crate::models::site_user::SiteRole::Author) && post.author_id != admin.user.id {
-        return (axum::http::StatusCode::FORBIDDEN, axum::Json(serde_json::json!({"error": "Forbidden"}))).into_response();
+    if admin.site_role == Some(crate::models::site_user::SiteRole::Author)
+        && post.author_id != admin.user.id
+    {
+        return (
+            axum::http::StatusCode::FORBIDDEN,
+            axum::Json(serde_json::json!({"error": "Forbidden"})),
+        )
+            .into_response();
     }
 
     let update = UpdatePost {
@@ -1014,7 +1307,11 @@ pub async fn api_set_sources_public(
         Ok(_) => axum::Json(serde_json::json!({"ok": true})).into_response(),
         Err(e) => {
             tracing::error!("failed to update sources_public for post {}: {:?}", id, e);
-            (axum::http::StatusCode::INTERNAL_SERVER_ERROR, axum::Json(serde_json::json!({"error": "Update failed"}))).into_response()
+            (
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                axum::Json(serde_json::json!({"error": "Update failed"})),
+            )
+                .into_response()
         }
     }
 }
@@ -1031,21 +1328,45 @@ pub async fn api_set_sources(
     Path(id): Path<Uuid>,
     axum::Json(body): axum::Json<serde_json::Value>,
 ) -> impl IntoResponse {
-    let sources: Vec<String> = body.get("sources")
+    let sources: Vec<String> = body
+        .get("sources")
         .and_then(|v| v.as_array())
-        .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect()
+        })
         .unwrap_or_default();
-    let public = body.get("public").and_then(|v| v.as_bool()).unwrap_or(false);
+    let public = body
+        .get("public")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
 
     let post = match crate::models::post::get_by_id(&state.db, id).await {
         Ok(p) => p,
-        Err(_) => return (axum::http::StatusCode::NOT_FOUND, axum::Json(serde_json::json!({"error": "Not found"}))).into_response(),
+        Err(_) => {
+            return (
+                axum::http::StatusCode::NOT_FOUND,
+                axum::Json(serde_json::json!({"error": "Not found"})),
+            )
+                .into_response()
+        }
     };
     if !admin.caps.is_global_admin && post.site_id != admin.site_id {
-        return (axum::http::StatusCode::FORBIDDEN, axum::Json(serde_json::json!({"error": "Forbidden"}))).into_response();
+        return (
+            axum::http::StatusCode::FORBIDDEN,
+            axum::Json(serde_json::json!({"error": "Forbidden"})),
+        )
+            .into_response();
     }
-    if admin.site_role == Some(crate::models::site_user::SiteRole::Author) && post.author_id != admin.user.id {
-        return (axum::http::StatusCode::FORBIDDEN, axum::Json(serde_json::json!({"error": "Forbidden"}))).into_response();
+    if admin.site_role == Some(crate::models::site_user::SiteRole::Author)
+        && post.author_id != admin.user.id
+    {
+        return (
+            axum::http::StatusCode::FORBIDDEN,
+            axum::Json(serde_json::json!({"error": "Forbidden"})),
+        )
+            .into_response();
     }
 
     let update = UpdatePost {
@@ -1071,7 +1392,11 @@ pub async fn api_set_sources(
         Ok(_) => axum::Json(serde_json::json!({"ok": true})).into_response(),
         Err(e) => {
             tracing::error!("failed to update sources for post {}: {:?}", id, e);
-            (axum::http::StatusCode::INTERNAL_SERVER_ERROR, axum::Json(serde_json::json!({"error": "Update failed"}))).into_response()
+            (
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                axum::Json(serde_json::json!({"error": "Update failed"})),
+            )
+                .into_response()
         }
     }
 }
@@ -1088,10 +1413,14 @@ pub async fn delete_post(
                 if p.site_id != admin.site_id {
                     return Redirect::to("/admin/posts").into_response();
                 }
-                if admin.site_role == Some(crate::models::site_user::SiteRole::Author) && p.author_id != admin.user.id {
+                if admin.site_role == Some(crate::models::site_user::SiteRole::Author)
+                    && p.author_id != admin.user.id
+                {
                     return Redirect::to("/admin/posts").into_response();
                 }
-                if admin.site_role == Some(crate::models::site_user::SiteRole::Author) && p.status == "published" {
+                if admin.site_role == Some(crate::models::site_user::SiteRole::Author)
+                    && p.status == "published"
+                {
                     return Redirect::to("/admin/posts").into_response();
                 }
             }
@@ -1101,7 +1430,16 @@ pub async fn delete_post(
     if let Err(e) = crate::models::post::delete(&state.db, id).await {
         tracing::error!("failed to delete post {}: {:?}", id, e);
     } else if let Some(p) = &post {
-        super::audit(&state, &admin, "post.deleted", "post", Some(id), &p.title, p.site_id).await;
+        super::audit(
+            &state,
+            &admin,
+            "post.deleted",
+            "post",
+            Some(id),
+            &p.title,
+            p.site_id,
+        )
+        .await;
     }
     crate::search::indexer::delete_post(&state.search_index, &id.to_string());
     Redirect::to("/admin/posts").into_response()
@@ -1122,10 +1460,14 @@ pub async fn delete_page(
                 if p.site_id != admin.site_id {
                     return Redirect::to("/admin/pages").into_response();
                 }
-                if admin.site_role == Some(crate::models::site_user::SiteRole::Author) && p.author_id != admin.user.id {
+                if admin.site_role == Some(crate::models::site_user::SiteRole::Author)
+                    && p.author_id != admin.user.id
+                {
                     return Redirect::to("/admin/pages").into_response();
                 }
-                if admin.site_role == Some(crate::models::site_user::SiteRole::Author) && p.status == "published" {
+                if admin.site_role == Some(crate::models::site_user::SiteRole::Author)
+                    && p.status == "published"
+                {
                     return Redirect::to("/admin/pages").into_response();
                 }
             }
@@ -1135,7 +1477,16 @@ pub async fn delete_page(
     if let Err(e) = crate::models::post::delete(&state.db, id).await {
         tracing::error!("failed to delete page {}: {:?}", id, e);
     } else if let Some(p) = &page {
-        super::audit(&state, &admin, "page.deleted", "page", Some(id), &p.title, p.site_id).await;
+        super::audit(
+            &state,
+            &admin,
+            "page.deleted",
+            "page",
+            Some(id),
+            &p.title,
+            p.site_id,
+        )
+        .await;
     }
     crate::search::indexer::delete_post(&state.search_index, &id.to_string());
     Redirect::to("/admin/pages").into_response()
@@ -1152,7 +1503,12 @@ pub async fn bulk_delete_posts(
     admin: AdminUser,
     Form(form): Form<BulkDeleteForm>,
 ) -> impl IntoResponse {
-    let ids: Vec<String> = form.ids.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect();
+    let ids: Vec<String> = form
+        .ids
+        .split(',')
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect();
     bulk_delete_type(state, admin, ids, "/admin/posts").await
 }
 
@@ -1164,12 +1520,28 @@ pub async fn bulk_delete_pages(
     if !admin.caps.can_manage_pages {
         return Redirect::to("/admin").into_response();
     }
-    let ids: Vec<String> = form.ids.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect();
-    bulk_delete_type(state, admin, ids, "/admin/pages").await.into_response()
+    let ids: Vec<String> = form
+        .ids
+        .split(',')
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect();
+    bulk_delete_type(state, admin, ids, "/admin/pages")
+        .await
+        .into_response()
 }
 
-async fn bulk_delete_type(state: AppState, admin: AdminUser, ids: Vec<String>, redirect: &str) -> impl IntoResponse {
-    let kind = if redirect == "/admin/pages" { "page" } else { "post" };
+async fn bulk_delete_type(
+    state: AppState,
+    admin: AdminUser,
+    ids: Vec<String>,
+    redirect: &str,
+) -> impl IntoResponse {
+    let kind = if redirect == "/admin/pages" {
+        "page"
+    } else {
+        "post"
+    };
     for raw_id in &ids {
         let id = match raw_id.parse::<Uuid>() {
             Ok(u) => u,
@@ -1180,9 +1552,19 @@ async fn bulk_delete_type(state: AppState, admin: AdminUser, ids: Vec<String>, r
         if !admin.caps.is_global_admin {
             match &post {
                 Some(p) => {
-                    if p.site_id != admin.site_id { continue; }
-                    if admin.site_role == Some(crate::models::site_user::SiteRole::Author) && p.author_id != admin.user.id { continue; }
-                    if admin.site_role == Some(crate::models::site_user::SiteRole::Author) && p.status == "published" { continue; }
+                    if p.site_id != admin.site_id {
+                        continue;
+                    }
+                    if admin.site_role == Some(crate::models::site_user::SiteRole::Author)
+                        && p.author_id != admin.user.id
+                    {
+                        continue;
+                    }
+                    if admin.site_role == Some(crate::models::site_user::SiteRole::Author)
+                        && p.status == "published"
+                    {
+                        continue;
+                    }
                 }
                 None => continue,
             }
@@ -1192,7 +1574,16 @@ async fn bulk_delete_type(state: AppState, admin: AdminUser, ids: Vec<String>, r
         } else {
             crate::search::indexer::delete_post(&state.search_index, &id.to_string());
             if let Some(p) = &post {
-                super::audit(&state, &admin, &format!("{kind}.deleted"), kind, Some(id), &p.title, p.site_id).await;
+                super::audit(
+                    &state,
+                    &admin,
+                    &format!("{kind}.deleted"),
+                    kind,
+                    Some(id),
+                    &p.title,
+                    p.site_id,
+                )
+                .await;
             }
         }
     }
@@ -1214,23 +1605,43 @@ async fn fetch_parent_options(
             tracing::warn!("failed to fetch parent page options: {:?}", e);
             vec![]
         });
-    pages.into_iter()
+    pages
+        .into_iter()
         .filter(|p| exclude_id.map_or(true, |ex| p.id != ex))
         .map(|p| (p.id.to_string(), p.title.clone()))
         .collect()
 }
 
-async fn fetch_term_options(state: &AppState, site_id: Option<Uuid>) -> (Vec<TermOption>, Vec<TermOption>) {
-    let cats = crate::models::taxonomy::list(&state.db, site_id, TaxonomyType::Category).await.unwrap_or_else(|e| {
-        tracing::warn!("failed to fetch category options: {:?}", e);
-        vec![]
-    });
-    let tags = crate::models::taxonomy::list(&state.db, site_id, TaxonomyType::Tag).await.unwrap_or_else(|e| {
-        tracing::warn!("failed to fetch tag options: {:?}", e);
-        vec![]
-    });
-    let cat_opts = cats.iter().map(|t| TermOption { id: t.id.to_string(), name: t.name.clone() }).collect();
-    let tag_opts = tags.iter().map(|t| TermOption { id: t.id.to_string(), name: t.name.clone() }).collect();
+async fn fetch_term_options(
+    state: &AppState,
+    site_id: Option<Uuid>,
+) -> (Vec<TermOption>, Vec<TermOption>) {
+    let cats = crate::models::taxonomy::list(&state.db, site_id, TaxonomyType::Category)
+        .await
+        .unwrap_or_else(|e| {
+            tracing::warn!("failed to fetch category options: {:?}", e);
+            vec![]
+        });
+    let tags = crate::models::taxonomy::list(&state.db, site_id, TaxonomyType::Tag)
+        .await
+        .unwrap_or_else(|e| {
+            tracing::warn!("failed to fetch tag options: {:?}", e);
+            vec![]
+        });
+    let cat_opts = cats
+        .iter()
+        .map(|t| TermOption {
+            id: t.id.to_string(),
+            name: t.name.clone(),
+        })
+        .collect();
+    let tag_opts = tags
+        .iter()
+        .map(|t| TermOption {
+            id: t.id.to_string(),
+            name: t.name.clone(),
+        })
+        .collect();
     (cat_opts, tag_opts)
 }
 
@@ -1238,8 +1649,11 @@ async fn fetch_term_options(state: &AppState, site_id: Option<Uuid>) -> (Vec<Ter
 /// editor's "Insert Form" picker. Empty (not an error) for global/private
 /// theme contexts with no site_id, or sites with no forms defined yet.
 async fn fetch_saved_forms(state: &AppState, site_id: Option<Uuid>) -> Vec<(String, String)> {
-    let Some(site_id) = site_id else { return vec![] };
-    crate::models::form_def::list_for_site(&state.db, site_id).await
+    let Some(site_id) = site_id else {
+        return vec![];
+    };
+    crate::models::form_def::list_for_site(&state.db, site_id)
+        .await
         .unwrap_or_else(|e| {
             tracing::warn!("failed to fetch saved forms: {:?}", e);
             vec![]
@@ -1252,8 +1666,11 @@ async fn fetch_saved_forms(state: &AppState, site_id: Option<Uuid>) -> Vec<(Stri
 /// (slug, name) pairs for every saved poll on this site — powers the
 /// editor's "Insert Poll" picker. Mirrors `fetch_saved_forms`.
 async fn fetch_saved_polls(state: &AppState, site_id: Option<Uuid>) -> Vec<(String, String)> {
-    let Some(site_id) = site_id else { return vec![] };
-    crate::models::poll_def::list_for_site(&state.db, site_id).await
+    let Some(site_id) = site_id else {
+        return vec![];
+    };
+    crate::models::poll_def::list_for_site(&state.db, site_id)
+        .await
         .unwrap_or_else(|e| {
             tracing::warn!("failed to fetch saved polls: {:?}", e);
             vec![]
@@ -1272,21 +1689,31 @@ async fn fetch_saved_polls(state: &AppState, site_id: Option<Uuid>) -> Vec<(Stri
 /// column being misleadingly named "name". A form embed referencing a
 /// deleted/missing form is silently skipped, same convention as
 /// form_def::expand_embeds.
-async fn fetch_form_analytics(state: &AppState, site_id: Option<Uuid>, content: &str) -> Vec<(String, String, i64)> {
-    let Some(site_id) = site_id else { return vec![] };
+async fn fetch_form_analytics(
+    state: &AppState,
+    site_id: Option<Uuid>,
+    content: &str,
+) -> Vec<(String, String, i64)> {
+    let Some(site_id) = site_id else {
+        return vec![];
+    };
     if !content.contains("<ss-form") {
         return vec![];
     }
     let Ok(re) = regex_lite::Regex::new(r#"<ss-form\b[^>]*data-slug="([^"]*)"[^>]*>"#) else {
         return vec![];
     };
-    let mut slugs: Vec<String> = re.captures_iter(content).map(|c| c[1].to_string()).collect();
+    let mut slugs: Vec<String> = re
+        .captures_iter(content)
+        .map(|c| c[1].to_string())
+        .collect();
     slugs.sort();
     slugs.dedup();
 
     let mut results = Vec::with_capacity(slugs.len());
     for slug in slugs {
-        let Ok(Some(form)) = crate::models::form_def::get_by_slug(&state.db, site_id, &slug).await else {
+        let Ok(Some(form)) = crate::models::form_def::get_by_slug(&state.db, site_id, &slug).await
+        else {
             continue;
         };
         let count = crate::models::form_submission::count_for_form(&state.db, site_id, &slug)
@@ -1304,11 +1731,14 @@ async fn fetch_form_analytics(state: &AppState, site_id: Option<Uuid>, content: 
 fn scan_templates(state: &AppState, site_id: Option<Uuid>) -> Vec<String> {
     let theme = state.active_theme_for_site(site_id);
     let themes_dir = &state.config.themes_dir;
-    let sites_dir  = &state.config.sites_dir;
+    let sites_dir = &state.config.sites_dir;
 
     // Check site-specific theme dir first, then global.
     let theme_dir = if let Some(sid) = site_id {
-        let site_path = std::path::Path::new(sites_dir).join(sid.to_string()).join("themes").join(&theme);
+        let site_path = std::path::Path::new(sites_dir)
+            .join(sid.to_string())
+            .join("themes")
+            .join(&theme);
         if site_path.is_dir() {
             site_path
         } else {
@@ -1332,7 +1762,9 @@ fn scan_templates(state: &AppState, site_id: Option<Uuid>) -> Vec<String> {
     ];
     let mut results = Vec::new();
     fn walk(dir: &std::path::Path, base: &std::path::Path, results: &mut Vec<String>) {
-        let Ok(entries) = std::fs::read_dir(dir) else { return };
+        let Ok(entries) = std::fs::read_dir(dir) else {
+            return;
+        };
         for entry in entries.flatten() {
             let path = entry.path();
             if path.is_dir() {
@@ -1343,7 +1775,9 @@ fn scan_templates(state: &AppState, site_id: Option<Uuid>) -> Vec<String> {
                     let without_ext = s.trim_end_matches(".html").to_string();
                     let normalized = without_ext.replace('\\', "/");
                     // Skip reserved templates and anything inside partials/.
-                    if !EXCLUDED.contains(&normalized.as_str()) && !normalized.starts_with("partials/") {
+                    if !EXCLUDED.contains(&normalized.as_str())
+                        && !normalized.starts_with("partials/")
+                    {
                         results.push(normalized);
                     }
                 }
@@ -1355,10 +1789,19 @@ fn scan_templates(state: &AppState, site_id: Option<Uuid>) -> Vec<String> {
     results
 }
 
-async fn save_post_terms(state: &AppState, post_id: Uuid, site_id: Option<Uuid>, category_ids: &[String], tag_ids: &[String]) {
+async fn save_post_terms(
+    state: &AppState,
+    post_id: Uuid,
+    site_id: Option<Uuid>,
+    category_ids: &[String],
+    tag_ids: &[String],
+) {
     let categories: Vec<Uuid> = category_ids.iter().filter_map(|s| s.parse().ok()).collect();
     let tags: Vec<Uuid> = tag_ids.iter().filter_map(|s| s.parse().ok()).collect();
-    if let Err(e) = crate::models::taxonomy::replace_for_post(&state.db, post_id, site_id, &categories, &tags).await {
+    if let Err(e) =
+        crate::models::taxonomy::replace_for_post(&state.db, post_id, site_id, &categories, &tags)
+            .await
+    {
         tracing::error!("failed to replace terms for post {}: {:?}", post_id, e);
     }
 }
@@ -1381,15 +1824,27 @@ async fn validate_editor_references(
     is_page: bool,
 ) -> Result<(), &'static str> {
     if let Some(raw) = featured_image_id.filter(|s| !s.is_empty()) {
-        let Ok(id) = raw.parse::<Uuid>() else { return Err("The selected featured image is invalid."); };
-        let Ok(media) = crate::models::media::get_by_id(&state.db, id).await else { return Err("The selected featured image could not be found."); };
-        if media.site_id != site_id { return Err("The selected featured image does not belong to this site."); }
+        let Ok(id) = raw.parse::<Uuid>() else {
+            return Err("The selected featured image is invalid.");
+        };
+        let Ok(media) = crate::models::media::get_by_id(&state.db, id).await else {
+            return Err("The selected featured image could not be found.");
+        };
+        if media.site_id != site_id {
+            return Err("The selected featured image does not belong to this site.");
+        }
     }
     if let Some(parent_id) = parent_id {
-        if !is_page || Some(parent_id) == exclude_parent_id { return Err("The selected parent page is invalid."); }
-        let Ok(parent) = crate::models::post::get_by_id(&state.db, parent_id).await else { return Err("The selected parent page could not be found."); };
+        if !is_page || Some(parent_id) == exclude_parent_id {
+            return Err("The selected parent page is invalid.");
+        }
+        let Ok(parent) = crate::models::post::get_by_id(&state.db, parent_id).await else {
+            return Err("The selected parent page could not be found.");
+        };
         if parent.site_id != site_id || parent.post_type != "page" || parent.status != "published" {
-            return Err("The selected parent page does not belong to this site or is not published.");
+            return Err(
+                "The selected parent page does not belong to this site or is not published.",
+            );
         }
     }
     Ok(())
@@ -1426,20 +1881,19 @@ fn content_is_empty(html: &str) -> bool {
 
 fn parse_status(s: &str) -> PostStatus {
     match s {
-        "pending"   => PostStatus::Pending,
+        "pending" => PostStatus::Pending,
         "published" => PostStatus::Published,
         "scheduled" => PostStatus::Scheduled,
-        "trashed"   => PostStatus::Trashed,
+        "trashed" => PostStatus::Trashed,
         _ => PostStatus::Draft,
     }
 }
 
 fn parse_datetime(s: Option<&str>) -> Option<chrono::DateTime<chrono::Utc>> {
-    s.filter(|s| !s.is_empty())
-        .and_then(|s| {
-            // datetime-local format: "2026-01-15T10:30"
-            chrono::NaiveDateTime::parse_from_str(s, "%Y-%m-%dT%H:%M")
-                .ok()
-                .map(|dt| chrono::DateTime::from_naive_utc_and_offset(dt, chrono::Utc))
-        })
+    s.filter(|s| !s.is_empty()).and_then(|s| {
+        // datetime-local format: "2026-01-15T10:30"
+        chrono::NaiveDateTime::parse_from_str(s, "%Y-%m-%dT%H:%M")
+            .ok()
+            .map(|dt| chrono::DateTime::from_naive_utc_and_offset(dt, chrono::Utc))
+    })
 }

@@ -75,23 +75,21 @@ pub async fn create_with_defaults(
     // real copy to put there.
     let default_description = format!("{hostname} — homepage.");
     let defaults: &[(&str, &str)] = &[
-        ("site_name",        hostname),
+        ("site_name", hostname),
         ("site_description", &default_description),
-        ("site_url",         &format!("http://{hostname}")),
-        ("site_language",    "en-US"),
-        ("active_theme",     "default"),
-        ("posts_per_page",   "9"),
-        ("date_format",      "%B %-d, %Y"),
+        ("site_url", &format!("http://{hostname}")),
+        ("site_language", "en-US"),
+        ("active_theme", "default"),
+        ("posts_per_page", "9"),
+        ("date_format", "%B %-d, %Y"),
     ];
     for (key, value) in defaults {
-        sqlx::query(
-            "INSERT INTO site_settings (site_id, key, value) VALUES ($1, $2, $3)",
-        )
-        .bind(site.id)
-        .bind(key)
-        .bind(value)
-        .execute(&mut *tx)
-        .await?;
+        sqlx::query("INSERT INTO site_settings (site_id, key, value) VALUES ($1, $2, $3)")
+            .bind(site.id)
+            .bind(key)
+            .bind(value)
+            .execute(&mut *tx)
+            .await?;
     }
 
     if let Some(owner_id) = owner_user_id {
@@ -174,7 +172,6 @@ pub async fn count_by_owner(pool: &PgPool, owner_user_id: Uuid) -> Result<i64> {
     Ok(count)
 }
 
-
 pub async fn delete(pool: &PgPool, id: Uuid) -> Result<()> {
     let mut tx = pool.begin().await?;
 
@@ -230,23 +227,21 @@ pub async fn delete(pool: &PgPool, id: Uuid) -> Result<()> {
 
 /// Count published posts for a site (used in site listing).
 pub async fn post_count(pool: &PgPool, site_id: Uuid) -> Result<i64> {
-    let count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM posts WHERE site_id = $1 AND post_type = 'post'",
-    )
-    .bind(site_id)
-    .fetch_one(pool)
-    .await?;
+    let count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM posts WHERE site_id = $1 AND post_type = 'post'")
+            .bind(site_id)
+            .fetch_one(pool)
+            .await?;
     Ok(count)
 }
 
 /// Count pages for a site (used in site listing).
 pub async fn page_count(pool: &PgPool, site_id: Uuid) -> Result<i64> {
-    let count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM posts WHERE site_id = $1 AND post_type = 'page'",
-    )
-    .bind(site_id)
-    .fetch_one(pool)
-    .await?;
+    let count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM posts WHERE site_id = $1 AND post_type = 'page'")
+            .bind(site_id)
+            .fetch_one(pool)
+            .await?;
     Ok(count)
 }
 

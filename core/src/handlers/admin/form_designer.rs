@@ -13,7 +13,9 @@ use crate::app_state::AppState;
 use crate::middleware::admin_auth::AdminUser;
 use crate::models::form_def::{self, CreateFormDef, FormField, FormSettings, UpdateFormDef};
 
-use admin::pages::form_designer::{forms_list_fragment, render_editor, FieldRow, FormEditData, FormRow, ProviderOption};
+use admin::pages::form_designer::{
+    forms_list_fragment, render_editor, FieldRow, FormEditData, FormRow, ProviderOption,
+};
 
 fn require_forms_cap(admin: &AdminUser) -> Result<(), Response> {
     if !admin.caps.can_manage_forms {
@@ -24,7 +26,9 @@ fn require_forms_cap(admin: &AdminUser) -> Result<(), Response> {
 }
 
 fn require_site_id(admin: &AdminUser) -> Result<Uuid, Response> {
-    admin.site_id.ok_or_else(|| (StatusCode::BAD_REQUEST, "No site selected.").into_response())
+    admin
+        .site_id
+        .ok_or_else(|| (StatusCode::BAD_REQUEST, "No site selected.").into_response())
 }
 
 // ── list ─────────────────────────────────────────────────────────────────────
@@ -35,37 +39,53 @@ fn require_site_id(admin: &AdminUser) -> Result<Uuid, Response> {
 /// live-search requests still render `forms_list_fragment` directly, since
 /// nothing on the hub page issues those requests today, but the function
 /// stays in case a future hub redesign wants live search back.
-pub async fn list(State(state): State<AppState>, admin: AdminUser, Query(params): Query<HashMap<String, String>>) -> Response {
-    if let Err(e) = require_forms_cap(&admin) { return e; }
-    let site_id = match require_site_id(&admin) { Ok(id) => id, Err(e) => return e };
+pub async fn list(
+    State(state): State<AppState>,
+    admin: AdminUser,
+    Query(params): Query<HashMap<String, String>>,
+) -> Response {
+    if let Err(e) = require_forms_cap(&admin) {
+        return e;
+    }
+    let site_id = match require_site_id(&admin) {
+        Ok(id) => id,
+        Err(e) => return e,
+    };
 
     if !params.contains_key("partial") {
         return Redirect::to("/admin/designer?tab=forms").into_response();
     }
 
-    let forms = form_def::list_for_site(&state.db, site_id).await.unwrap_or_default();
+    let forms = form_def::list_for_site(&state.db, site_id)
+        .await
+        .unwrap_or_default();
     let blocked = crate::models::form_submission::blocked_names(&state.db, site_id).await;
-    let mut rows: Vec<FormRow> = forms.into_iter().map(|f| FormRow {
-        id: f.id.to_string(),
-        blocked: blocked.contains(&f.name),
-        name: f.name,
-        slug: f.slug,
-        field_count: f.fields.len(),
-        updated_at: f.updated_at.format("%Y-%m-%d %H:%M UTC").to_string(),
-    }).collect();
+    let mut rows: Vec<FormRow> = forms
+        .into_iter()
+        .map(|f| FormRow {
+            id: f.id.to_string(),
+            blocked: blocked.contains(&f.name),
+            name: f.name,
+            slug: f.slug,
+            field_count: f.fields.len(),
+            updated_at: f.updated_at.format("%Y-%m-%d %H:%M UTC").to_string(),
+        })
+        .collect();
 
     let search = params.get("search").map(|s| s.trim()).unwrap_or("");
     if !search.is_empty() {
         let needle = search.to_lowercase();
-        rows.retain(|r| r.name.to_lowercase().contains(&needle) || r.slug.to_lowercase().contains(&needle));
+        rows.retain(|r| {
+            r.name.to_lowercase().contains(&needle) || r.slug.to_lowercase().contains(&needle)
+        });
     }
 
     let sort = params.get("sort").map(|s| s.as_str()).unwrap_or("");
     let dir = params.get("dir").map(|s| s.as_str()).unwrap_or("");
     match sort {
-        "slug"   => rows.sort_by_key(|r| r.slug.to_lowercase()),
+        "slug" => rows.sort_by_key(|r| r.slug.to_lowercase()),
         "fields" => rows.sort_by_key(|r| r.field_count),
-        "name"   => rows.sort_by_key(|r| r.name.to_lowercase()),
+        "name" => rows.sort_by_key(|r| r.name.to_lowercase()),
         _ => {}
     }
     if !sort.is_empty() && dir == "desc" {
@@ -75,26 +95,51 @@ pub async fn list(State(state): State<AppState>, admin: AdminUser, Query(params)
     const PER_PAGE: i64 = 20;
     let total = rows.len() as i64;
     let total_pages = ((total + PER_PAGE - 1) / PER_PAGE).max(1);
-    let page = params.get("page").and_then(|p| p.parse::<i64>().ok()).unwrap_or(1).clamp(1, total_pages);
+    let page = params
+        .get("page")
+        .and_then(|p| p.parse::<i64>().ok())
+        .unwrap_or(1)
+        .clamp(1, total_pages);
     let start = ((page - 1) * PER_PAGE) as usize;
     let end = (start + PER_PAGE as usize).min(rows.len());
     let page_rows = rows.get(start..end).unwrap_or(&[]);
 
-    Html(forms_list_fragment(page_rows, page, total_pages, search, sort, dir)).into_response()
+    Html(forms_list_fragment(
+        page_rows,
+        page,
+        total_pages,
+        search,
+        sort,
+        dir,
+    ))
+    .into_response()
 }
 
 // ── new / edit form ─────────────────────────────────────────────────────────
 
 pub async fn new_form(State(state): State<AppState>, admin: AdminUser) -> Response {
-    if let Err(e) = require_forms_cap(&admin) { return e; }
-    let site_id = match require_site_id(&admin) { Ok(id) => id, Err(e) => return e };
+    if let Err(e) = require_forms_cap(&admin) {
+        return e;
+    }
+    let site_id = match require_site_id(&admin) {
+        Ok(id) => id,
+        Err(e) => return e,
+    };
 
     let cs = state.site_hostname(admin.site_id);
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
 
-    let providers = crate::models::email_provider::list_verified_for_site(&state.db, site_id).await.unwrap_or_default();
+    let providers = crate::models::email_provider::list_verified_for_site(&state.db, site_id)
+        .await
+        .unwrap_or_default();
     let data = FormEditData {
-        provider_options: providers.into_iter().map(|p| ProviderOption { id: p.id.to_string(), label: format!("{} - {}", p.label, p.provider_type) }).collect(),
+        provider_options: providers
+            .into_iter()
+            .map(|p| ProviderOption {
+                id: p.id.to_string(),
+                label: format!("{} - {}", p.label, p.provider_type),
+            })
+            .collect(),
         site_id: site_id.to_string(),
         ..FormEditData::default()
     };
@@ -102,9 +147,18 @@ pub async fn new_form(State(state): State<AppState>, admin: AdminUser) -> Respon
     Html(render_editor(&data, &ctx, None)).into_response()
 }
 
-pub async fn edit_form(State(state): State<AppState>, admin: AdminUser, Path(id): Path<Uuid>) -> Response {
-    if let Err(e) = require_forms_cap(&admin) { return e; }
-    let site_id = match require_site_id(&admin) { Ok(id) => id, Err(e) => return e };
+pub async fn edit_form(
+    State(state): State<AppState>,
+    admin: AdminUser,
+    Path(id): Path<Uuid>,
+) -> Response {
+    if let Err(e) = require_forms_cap(&admin) {
+        return e;
+    }
+    let site_id = match require_site_id(&admin) {
+        Ok(id) => id,
+        Err(e) => return e,
+    };
 
     let cs = state.site_hostname(admin.site_id);
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
@@ -113,20 +167,29 @@ pub async fn edit_form(State(state): State<AppState>, admin: AdminUser, Path(id)
         return Redirect::to("/admin/form-designer").into_response();
     };
 
-    let providers = crate::models::email_provider::list_verified_for_site(&state.db, site_id).await.unwrap_or_default();
+    let providers = crate::models::email_provider::list_verified_for_site(&state.db, site_id)
+        .await
+        .unwrap_or_default();
 
     let data = FormEditData {
         id: Some(form.id.to_string()),
         name: form.name,
-        fields: form.fields.into_iter().map(|f| FieldRow {
-            label: f.label,
-            name: f.name,
-            field_type: f.field_type,
-            required: f.required,
-            options_text: f.options.into_iter().map(|(v, l)| {
-                if v == l { l } else { format!("{v}|{l}") }
-            }).collect::<Vec<_>>().join("\n"),
-        }).collect(),
+        fields: form
+            .fields
+            .into_iter()
+            .map(|f| FieldRow {
+                label: f.label,
+                name: f.name,
+                field_type: f.field_type,
+                required: f.required,
+                options_text: f
+                    .options
+                    .into_iter()
+                    .map(|(v, l)| if v == l { l } else { format!("{v}|{l}") })
+                    .collect::<Vec<_>>()
+                    .join("\n"),
+            })
+            .collect(),
         success_message: form.settings.success_message,
         button_label: form.settings.button_label,
         include_honeypot: form.settings.include_honeypot,
@@ -135,8 +198,17 @@ pub async fn edit_form(State(state): State<AppState>, admin: AdminUser, Path(id)
         confirm_subject: form.settings.confirm_subject,
         confirm_body: form.settings.confirm_body,
         no_mail: form.settings.no_mail,
-        email_provider_id: form.email_provider_id.map(|id| id.to_string()).unwrap_or_default(),
-        provider_options: providers.into_iter().map(|p| ProviderOption { id: p.id.to_string(), label: format!("{} - {}", p.label, p.provider_type) }).collect(),
+        email_provider_id: form
+            .email_provider_id
+            .map(|id| id.to_string())
+            .unwrap_or_default(),
+        provider_options: providers
+            .into_iter()
+            .map(|p| ProviderOption {
+                id: p.id.to_string(),
+                label: format!("{} - {}", p.label, p.provider_type),
+            })
+            .collect(),
         site_id: site_id.to_string(),
     };
 
@@ -241,7 +313,8 @@ fn validate_form(name: &str, fields: &[FormField]) -> Option<String> {
 }
 
 fn parse_provider_id(form: &SaveFormForm) -> Option<Uuid> {
-    form.email_provider_id.as_deref()
+    form.email_provider_id
+        .as_deref()
         .map(str::trim)
         .filter(|s| !s.is_empty())
         .and_then(|s| Uuid::parse_str(s).ok())
@@ -260,7 +333,9 @@ fn settings_from_form(form: &SaveFormForm) -> FormSettings {
             form.button_label.clone()
         },
         include_honeypot: form.include_honeypot.as_deref() == Some("true"),
-        notify_email: form.notify_email.as_deref()
+        notify_email: form
+            .notify_email
+            .as_deref()
             .map(str::trim)
             .filter(|s| !s.is_empty())
             .map(str::to_string),
@@ -271,7 +346,8 @@ fn settings_from_form(form: &SaveFormForm) -> FormSettings {
             form.confirm_subject.clone()
         },
         confirm_body: if form.confirm_body.trim().is_empty() {
-            "Thanks for reaching out! We've received your submission and will follow up soon.".to_string()
+            "Thanks for reaching out! We've received your submission and will follow up soon."
+                .to_string()
         } else {
             form.confirm_body.clone()
         },
@@ -284,8 +360,13 @@ pub async fn create(
     admin: AdminUser,
     axum::Form(form): axum::Form<SaveFormForm>,
 ) -> Response {
-    if let Err(e) = require_forms_cap(&admin) { return e; }
-    let site_id = match require_site_id(&admin) { Ok(id) => id, Err(e) => return e };
+    if let Err(e) = require_forms_cap(&admin) {
+        return e;
+    }
+    let site_id = match require_site_id(&admin) {
+        Ok(id) => id,
+        Err(e) => return e,
+    };
 
     let fields = parse_fields(&form.fields_json);
     let email_provider_id = parse_provider_id(&form);
@@ -294,19 +375,27 @@ pub async fn create(
     if let Some(msg) = validate_form(&form.name, &fields) {
         let cs = state.site_hostname(admin.site_id);
         let ctx = super::page_ctx_full(&state, &admin, &cs).await;
-        let providers = crate::models::email_provider::list_verified_for_site(&state.db, site_id).await.unwrap_or_default();
+        let providers = crate::models::email_provider::list_verified_for_site(&state.db, site_id)
+            .await
+            .unwrap_or_default();
         let data = FormEditData {
             id: None,
             name: form.name,
-            fields: fields.into_iter().map(|f| FieldRow {
-                label: f.label,
-                name: f.name,
-                field_type: f.field_type,
-                required: f.required,
-                options_text: f.options.into_iter().map(|(v, l)| {
-                    if v == l { l } else { format!("{v}|{l}") }
-                }).collect::<Vec<_>>().join("\n"),
-            }).collect(),
+            fields: fields
+                .into_iter()
+                .map(|f| FieldRow {
+                    label: f.label,
+                    name: f.name,
+                    field_type: f.field_type,
+                    required: f.required,
+                    options_text: f
+                        .options
+                        .into_iter()
+                        .map(|(v, l)| if v == l { l } else { format!("{v}|{l}") })
+                        .collect::<Vec<_>>()
+                        .join("\n"),
+                })
+                .collect(),
             success_message: settings.success_message,
             button_label: settings.button_label,
             include_honeypot: settings.include_honeypot,
@@ -315,14 +404,33 @@ pub async fn create(
             confirm_subject: settings.confirm_subject,
             confirm_body: settings.confirm_body,
             no_mail: settings.no_mail,
-            email_provider_id: email_provider_id.map(|id| id.to_string()).unwrap_or_default(),
-            provider_options: providers.into_iter().map(|p| ProviderOption { id: p.id.to_string(), label: format!("{} - {}", p.label, p.provider_type) }).collect(),
+            email_provider_id: email_provider_id
+                .map(|id| id.to_string())
+                .unwrap_or_default(),
+            provider_options: providers
+                .into_iter()
+                .map(|p| ProviderOption {
+                    id: p.id.to_string(),
+                    label: format!("{} - {}", p.label, p.provider_type),
+                })
+                .collect(),
             site_id: site_id.to_string(),
         };
         return Html(render_editor(&data, &ctx, Some(&msg))).into_response();
     }
 
-    if let Err(e) = form_def::create(&state.db, CreateFormDef { site_id, name: form.name, fields, settings, email_provider_id }).await {
+    if let Err(e) = form_def::create(
+        &state.db,
+        CreateFormDef {
+            site_id,
+            name: form.name,
+            fields,
+            settings,
+            email_provider_id,
+        },
+    )
+    .await
+    {
         tracing::error!("form_designer::create failed: {e}");
     }
     Redirect::to("/admin/form-designer").into_response()
@@ -334,8 +442,13 @@ pub async fn update(
     Path(id): Path<Uuid>,
     axum::Form(form): axum::Form<SaveFormForm>,
 ) -> Response {
-    if let Err(e) = require_forms_cap(&admin) { return e; }
-    let site_id = match require_site_id(&admin) { Ok(id) => id, Err(e) => return e };
+    if let Err(e) = require_forms_cap(&admin) {
+        return e;
+    }
+    let site_id = match require_site_id(&admin) {
+        Ok(id) => id,
+        Err(e) => return e,
+    };
 
     let fields = parse_fields(&form.fields_json);
     let email_provider_id = parse_provider_id(&form);
@@ -344,19 +457,27 @@ pub async fn update(
     if let Some(msg) = validate_form(&form.name, &fields) {
         let cs = state.site_hostname(admin.site_id);
         let ctx = super::page_ctx_full(&state, &admin, &cs).await;
-        let providers = crate::models::email_provider::list_verified_for_site(&state.db, site_id).await.unwrap_or_default();
+        let providers = crate::models::email_provider::list_verified_for_site(&state.db, site_id)
+            .await
+            .unwrap_or_default();
         let data = FormEditData {
             id: Some(id.to_string()),
             name: form.name,
-            fields: fields.into_iter().map(|f| FieldRow {
-                label: f.label,
-                name: f.name,
-                field_type: f.field_type,
-                required: f.required,
-                options_text: f.options.into_iter().map(|(v, l)| {
-                    if v == l { l } else { format!("{v}|{l}") }
-                }).collect::<Vec<_>>().join("\n"),
-            }).collect(),
+            fields: fields
+                .into_iter()
+                .map(|f| FieldRow {
+                    label: f.label,
+                    name: f.name,
+                    field_type: f.field_type,
+                    required: f.required,
+                    options_text: f
+                        .options
+                        .into_iter()
+                        .map(|(v, l)| if v == l { l } else { format!("{v}|{l}") })
+                        .collect::<Vec<_>>()
+                        .join("\n"),
+                })
+                .collect(),
             success_message: settings.success_message,
             button_label: settings.button_label,
             include_honeypot: settings.include_honeypot,
@@ -365,24 +486,53 @@ pub async fn update(
             confirm_subject: settings.confirm_subject,
             confirm_body: settings.confirm_body,
             no_mail: settings.no_mail,
-            email_provider_id: email_provider_id.map(|id| id.to_string()).unwrap_or_default(),
-            provider_options: providers.into_iter().map(|p| ProviderOption { id: p.id.to_string(), label: format!("{} - {}", p.label, p.provider_type) }).collect(),
+            email_provider_id: email_provider_id
+                .map(|id| id.to_string())
+                .unwrap_or_default(),
+            provider_options: providers
+                .into_iter()
+                .map(|p| ProviderOption {
+                    id: p.id.to_string(),
+                    label: format!("{} - {}", p.label, p.provider_type),
+                })
+                .collect(),
             site_id: site_id.to_string(),
         };
         return Html(render_editor(&data, &ctx, Some(&msg))).into_response();
     }
 
     let suffix = tab_suffix(&form);
-    if let Err(e) = form_def::update(&state.db, site_id, id, UpdateFormDef { name: form.name, fields, settings, email_provider_id }).await {
+    if let Err(e) = form_def::update(
+        &state.db,
+        site_id,
+        id,
+        UpdateFormDef {
+            name: form.name,
+            fields,
+            settings,
+            email_provider_id,
+        },
+    )
+    .await
+    {
         tracing::error!("form_designer::update failed: {e}");
     }
 
     Redirect::to(&format!("/admin/form-designer/{id}{suffix}")).into_response()
 }
 
-pub async fn delete(State(state): State<AppState>, admin: AdminUser, Path(id): Path<Uuid>) -> Response {
-    if let Err(e) = require_forms_cap(&admin) { return e; }
-    let site_id = match require_site_id(&admin) { Ok(id) => id, Err(e) => return e };
+pub async fn delete(
+    State(state): State<AppState>,
+    admin: AdminUser,
+    Path(id): Path<Uuid>,
+) -> Response {
+    if let Err(e) = require_forms_cap(&admin) {
+        return e;
+    }
+    let site_id = match require_site_id(&admin) {
+        Ok(id) => id,
+        Err(e) => return e,
+    };
 
     if let Err(e) = form_def::delete(&state.db, site_id, id).await {
         tracing::error!("form_designer::delete failed: {e}");

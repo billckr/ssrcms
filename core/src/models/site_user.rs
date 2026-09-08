@@ -129,7 +129,12 @@ pub async fn get_can_self_publish(pool: &PgPool, site_id: Uuid, user_id: Uuid) -
 
 /// Toggles the self-publish flag on a user's existing Author row. No-op
 /// (affects zero rows) if they don't currently hold the Author role here.
-pub async fn set_can_self_publish(pool: &PgPool, site_id: Uuid, user_id: Uuid, value: bool) -> Result<()> {
+pub async fn set_can_self_publish(
+    pool: &PgPool,
+    site_id: Uuid,
+    user_id: Uuid,
+    value: bool,
+) -> Result<()> {
     sqlx::query(
         "UPDATE site_users SET can_self_publish = $1 WHERE site_id = $2 AND user_id = $3 AND role = 'author'",
     )
@@ -155,7 +160,12 @@ pub async fn remove(pool: &PgPool, site_id: Uuid, user_id: Uuid) -> Result<()> {
 
 /// Revoke a single role, leaving any other roles the user holds on this
 /// site intact.
-pub async fn remove_role(pool: &PgPool, site_id: Uuid, user_id: Uuid, role: SiteRole) -> Result<()> {
+pub async fn remove_role(
+    pool: &PgPool,
+    site_id: Uuid,
+    user_id: Uuid,
+    role: SiteRole,
+) -> Result<()> {
     sqlx::query("DELETE FROM site_users WHERE site_id = $1 AND user_id = $2 AND role = $3")
         .bind(site_id)
         .bind(user_id)
@@ -197,7 +207,12 @@ pub async fn list_roles_for_user_and_site(
         .filter_map(|r| match SiteRole::from_str(&r) {
             Some(role) => Some(role),
             None => {
-                tracing::warn!("unrecognized site_users.role value {:?} for site {} user {}", r, site_id, user_id);
+                tracing::warn!(
+                    "unrecognized site_users.role value {:?} for site {} user {}",
+                    r,
+                    site_id,
+                    user_id
+                );
                 None
             }
         })
@@ -208,12 +223,11 @@ pub async fn list_roles_for_user_and_site(
 /// removing/demoting the last one, since that leaves the site with no one
 /// (other than a super_admin) able to manage it.
 pub async fn count_admins(pool: &PgPool, site_id: Uuid) -> Result<i64> {
-    let count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM site_users WHERE site_id = $1 AND role = 'admin'",
-    )
-    .bind(site_id)
-    .fetch_one(pool)
-    .await?;
+    let count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM site_users WHERE site_id = $1 AND role = 'admin'")
+            .bind(site_id)
+            .fetch_one(pool)
+            .await?;
     Ok(count)
 }
 
@@ -223,12 +237,11 @@ pub async fn count_admins(pool: &PgPool, site_id: Uuid) -> Result<i64> {
 /// via "add as additional Site Admin", or left over after the owner was
 /// removed) is not reflected by `sites.owner_user_id` at all.
 pub async fn sole_admin(pool: &PgPool, site_id: Uuid) -> Result<Option<Uuid>> {
-    let ids: Vec<Uuid> = sqlx::query_scalar(
-        "SELECT user_id FROM site_users WHERE site_id = $1 AND role = 'admin'",
-    )
-    .bind(site_id)
-    .fetch_all(pool)
-    .await?;
+    let ids: Vec<Uuid> =
+        sqlx::query_scalar("SELECT user_id FROM site_users WHERE site_id = $1 AND role = 'admin'")
+            .bind(site_id)
+            .fetch_all(pool)
+            .await?;
     Ok(if ids.len() == 1 { Some(ids[0]) } else { None })
 }
 
@@ -285,21 +298,24 @@ pub async fn sole_admin_hostnames_batch(
 /// Replace this user's roles on this site with exactly the one given role
 /// (used by the single-role dropdown on the Users admin page). Does not
 /// support assigning multiple roles — see `add`/`remove_role` for that.
-pub async fn update_role(pool: &PgPool, site_id: Uuid, user_id: Uuid, role: SiteRole) -> Result<()> {
+pub async fn update_role(
+    pool: &PgPool,
+    site_id: Uuid,
+    user_id: Uuid,
+    role: SiteRole,
+) -> Result<()> {
     let mut tx = pool.begin().await?;
     sqlx::query("DELETE FROM site_users WHERE site_id = $1 AND user_id = $2")
         .bind(site_id)
         .bind(user_id)
         .execute(&mut *tx)
         .await?;
-    sqlx::query(
-        "INSERT INTO site_users (site_id, user_id, role) VALUES ($1, $2, $3)",
-    )
-    .bind(site_id)
-    .bind(user_id)
-    .bind(role.as_str())
-    .execute(&mut *tx)
-    .await?;
+    sqlx::query("INSERT INTO site_users (site_id, user_id, role) VALUES ($1, $2, $3)")
+        .bind(site_id)
+        .bind(user_id)
+        .bind(role.as_str())
+        .execute(&mut *tx)
+        .await?;
     tx.commit().await?;
     Ok(())
 }

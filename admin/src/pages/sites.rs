@@ -30,12 +30,18 @@ fn sites_pagination(page: i64, total_pages: i64, search_qs: &str, sort_qs: &str)
     }
     let qs = format!("{search_qs}{sort_qs}");
     let prev = if page > 1 {
-        format!(r#"<a href="/admin/sites?page={}{qs}" class="page-btn">&laquo; Prev</a>"#, page - 1)
+        format!(
+            r#"<a href="/admin/sites?page={}{qs}" class="page-btn">&laquo; Prev</a>"#,
+            page - 1
+        )
     } else {
         r#"<span class="page-btn page-btn-disabled">&laquo; Prev</span>"#.to_string()
     };
     let next = if page < total_pages {
-        format!(r#"<a href="/admin/sites?page={}{qs}" class="page-btn">Next &raquo;</a>"#, page + 1)
+        format!(
+            r#"<a href="/admin/sites?page={}{qs}" class="page-btn">Next &raquo;</a>"#,
+            page + 1
+        )
     } else {
         r#"<span class="page-btn page-btn-disabled">Next &raquo;</span>"#.to_string()
     };
@@ -44,9 +50,13 @@ fn sites_pagination(page: i64, total_pages: i64, search_qs: &str, sort_qs: &str)
     let mut nums = String::new();
     for p in start..=end {
         if p == page {
-            nums.push_str(&format!(r#"<span class="page-btn page-btn-active">{p}</span>"#));
+            nums.push_str(&format!(
+                r#"<span class="page-btn page-btn-active">{p}</span>"#
+            ));
         } else {
-            nums.push_str(&format!(r#"<a href="/admin/sites?page={p}{qs}" class="page-btn">{p}</a>"#));
+            nums.push_str(&format!(
+                r#"<a href="/admin/sites?page={p}{qs}" class="page-btn">{p}</a>"#
+            ));
         }
     }
     format!(r#"<div class="pagination">{prev}{nums}{next}</div>"#)
@@ -54,13 +64,29 @@ fn sites_pagination(page: i64, total_pages: i64, search_qs: &str, sort_qs: &str)
 
 /// Table + pagination only — swapped by the live-search JS, and reused for
 /// the initial full-page render so both paths render identically.
-pub fn sites_list_fragment(sites: &[SiteRow], page: i64, total_pages: i64, search: &str, sort: &str, dir: &str, ctx: &crate::PageContext) -> String {
+pub fn sites_list_fragment(
+    sites: &[SiteRow],
+    page: i64,
+    total_pages: i64,
+    search: &str,
+    sort: &str,
+    dir: &str,
+    ctx: &crate::PageContext,
+) -> String {
     let search_qs = if search.is_empty() {
         String::new()
     } else {
         format!("&search={}", crate::html_escape(search))
     };
-    let sort_qs = if sort.is_empty() { String::new() } else { format!("&sort={}&dir={}", sort, if dir == "desc" { "desc" } else { "asc" }) };
+    let sort_qs = if sort.is_empty() {
+        String::new()
+    } else {
+        format!(
+            "&sort={}&dir={}",
+            sort,
+            if dir == "desc" { "desc" } else { "asc" }
+        )
+    };
     let asc = dir != "desc";
 
     // Sortable column header: link toggles asc/desc for that column, preserving
@@ -68,7 +94,15 @@ pub fn sites_list_fragment(sites: &[SiteRow], page: i64, total_pages: i64, searc
     let sort_th = |label: &str, key: &str| -> String {
         let is_active = sort == key;
         let next_dir = if is_active && asc { "desc" } else { "asc" };
-        let arrow = if is_active { if asc { " \u{25B2}" } else { " \u{25BC}" } } else { "" };
+        let arrow = if is_active {
+            if asc {
+                " \u{25B2}"
+            } else {
+                " \u{25BC}"
+            }
+        } else {
+            ""
+        };
         format!(
             r#"<th><a href="/admin/sites?sort={key}&dir={next_dir}{search_qs}" style="color:inherit;text-decoration:none;white-space:nowrap">{label}{arrow}</a></th>"#
         )
@@ -218,10 +252,10 @@ pub fn sites_list_fragment(sites: &[SiteRow], page: i64, total_pages: i64, searc
 {pagination}"#,
         rows = rows,
         pagination = sites_pagination(page, total_pages, &search_qs, &sort_qs),
-        site_th  = sort_th("Site", "hostname"),
+        site_th = sort_th("Site", "hostname"),
         admin_th = sort_th("Admin", "admin"),
         users_th = sort_th("Users", "users"),
-        subs_th  = sort_th("Subs", "subs"),
+        subs_th = sort_th("Subs", "subs"),
         posts_th = sort_th("Posts", "posts"),
         pages_th = sort_th("Pages", "pages"),
     )
@@ -246,11 +280,22 @@ pub fn render_list(
             search_toggle = search_toggle,
         )
     } else {
-        format!(r#"<div class="icon-pill" style="align-self:flex-end;margin-top:0">{search_toggle}</div>"#, search_toggle = search_toggle)
+        format!(
+            r#"<div class="icon-pill" style="align-self:flex-end;margin-top:0">{search_toggle}</div>"#,
+            search_toggle = search_toggle
+        )
     };
 
     let fragment = sites_list_fragment(sites, page, total_pages, search, sort, dir, ctx);
-    let sort_qs = if sort.is_empty() { String::new() } else { format!("&sort={}&dir={}", sort, if dir == "desc" { "desc" } else { "asc" }) };
+    let sort_qs = if sort.is_empty() {
+        String::new()
+    } else {
+        format!(
+            "&sort={}&dir={}",
+            sort,
+            if dir == "desc" { "desc" } else { "asc" }
+        )
+    };
     let fetch_prefix = format!("/admin/sites?partial=1{}", sort_qs);
     let live_search = crate::live_search_script("site-search", "sites-list", &fetch_prefix);
 
@@ -331,10 +376,12 @@ fn provider_type_badge_html(provider_type: &str) -> String {
         "sendgrid" => ("/admin/static/icons/sendgrid.svg", "SendGrid", true),
         "postmark" => ("/admin/static/icons/postmark.svg", "Postmark", true),
         "smtp" => ("/admin/static/icons/at-sign.svg", "SMTP", false),
-        _ => return format!(
-            r#"<span class="form-note" style="margin:0">{}</span>"#,
-            provider_type_label(provider_type)
-        ),
+        _ => {
+            return format!(
+                r#"<span class="form-note" style="margin:0">{}</span>"#,
+                provider_type_label(provider_type)
+            )
+        }
     };
     format!(
         r#"<img src="{src}" alt="{alt}" title="{alt}" class="{class}" style="height:16px;width:16px;vertical-align:middle">"#,
@@ -445,7 +492,11 @@ fn provider_fields_html(
     }
 }
 
-pub fn render_settings(data: &SiteSettingsData, flash: Option<&str>, ctx: &crate::PageContext) -> String {
+pub fn render_settings(
+    data: &SiteSettingsData,
+    flash: Option<&str>,
+    ctx: &crate::PageContext,
+) -> String {
     let providers_list_html = if data.providers.is_empty() {
         r#"<p class="form-note" style="margin:0">No email providers configured yet — add one below.</p>"#.to_string()
     } else {
@@ -1169,14 +1220,28 @@ function toggleProviderEdit(id) {{
         date_format = crate::html_escape(&data.date_format),
         admin_email = crate::html_escape(&data.admin_email),
         admin_email_placeholder = crate::html_escape(&data.admin_email_placeholder),
-        allow_registration_checked = if data.allow_registration { " checked" } else { "" },
+        allow_registration_checked = if data.allow_registration {
+            " checked"
+        } else {
+            ""
+        },
         permalink_structure = crate::html_escape(&data.permalink_structure),
-        maintenance_checked = if data.maintenance_mode { " checked" } else { "" },
+        maintenance_checked = if data.maintenance_mode {
+            " checked"
+        } else {
+            ""
+        },
         maintenance_message = crate::html_escape(&data.maintenance_message),
         providers_list_html = providers_list_html,
     );
 
-    crate::admin_page(&format!("Site Settings - {}", data.hostname), "/admin/sites", flash, &content, ctx)
+    crate::admin_page(
+        &format!("Site Settings - {}", data.hostname),
+        "/admin/sites",
+        flash,
+        &content,
+        ctx,
+    )
 }
 
 /// An existing user selectable as the new site's admin.
@@ -1216,7 +1281,11 @@ impl Default for NewSiteData {
 /// Site admins always own what they create — no user picker. Kept as a
 /// separate, simpler render rather than branching deep inside render_new's
 /// template, since the two forms genuinely have different fields and JS.
-fn render_new_for_site_admin(data: &NewSiteData, flash: Option<&str>, ctx: &crate::PageContext) -> String {
+fn render_new_for_site_admin(
+    data: &NewSiteData,
+    flash: Option<&str>,
+    ctx: &crate::PageContext,
+) -> String {
     let content = format!(
         r#"<div class="card-boxed" style="max-width:560px">
   <h2 class="card-boxed-header">New Site</h2>
@@ -1293,16 +1362,31 @@ pub fn render_new(data: &NewSiteData, flash: Option<&str>, ctx: &crate::PageCont
     if !ctx.is_global_admin {
         return render_new_for_site_admin(data, flash, ctx);
     }
-    let checked = |val: &str| if data.user_assignment == val { " checked" } else { "" };
-    let existing_opts = data.existing_users.iter().map(|u| {
-        let sel = if data.existing_user_id == u.id { " selected" } else { "" };
-        format!(
-            r#"<option value="{id}"{sel}>{label}</option>"#,
-            id    = crate::html_escape(&u.id),
-            label = crate::html_escape(&u.label),
-            sel   = sel,
-        )
-    }).collect::<Vec<_>>().join("\n");
+    let checked = |val: &str| {
+        if data.user_assignment == val {
+            " checked"
+        } else {
+            ""
+        }
+    };
+    let existing_opts = data
+        .existing_users
+        .iter()
+        .map(|u| {
+            let sel = if data.existing_user_id == u.id {
+                " selected"
+            } else {
+                ""
+            };
+            format!(
+                r#"<option value="{id}"{sel}>{label}</option>"#,
+                id = crate::html_escape(&u.id),
+                label = crate::html_escape(&u.label),
+                sel = sel,
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
 
     let content = format!(
         r#"<div class="card-boxed" style="max-width:560px">
@@ -1520,13 +1604,13 @@ pub fn render_new(data: &NewSiteData, flash: Option<&str>, ctx: &crate::PageCont
   toggleUserFields();
 }})();
 </script>"#,
-        hostname            = crate::html_escape(&data.hostname),
-        existing_checked    = checked("existing"),
-        new_checked         = checked("new"),
-        existing_opts       = existing_opts,
-        new_username        = crate::html_escape(&data.new_username),
-        new_email           = crate::html_escape(&data.new_email),
-        new_display_name    = crate::html_escape(&data.new_display_name),
+        hostname = crate::html_escape(&data.hostname),
+        existing_checked = checked("existing"),
+        new_checked = checked("new"),
+        existing_opts = existing_opts,
+        new_username = crate::html_escape(&data.new_username),
+        new_email = crate::html_escape(&data.new_email),
+        new_display_name = crate::html_escape(&data.new_display_name),
     );
 
     crate::admin_page("New Site", "/admin/sites", flash, &content, ctx)

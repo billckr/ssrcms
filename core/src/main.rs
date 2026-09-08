@@ -27,7 +27,9 @@ async fn main() -> anyhow::Result<()> {
     let filter = EnvFilter::new(&cfg.log_level);
     let registry = tracing_subscriber::registry().with(filter);
     match cfg.log_format.as_str() {
-        "json" => registry.with(tracing_subscriber::fmt::layer().json()).init(),
+        "json" => registry
+            .with(tracing_subscriber::fmt::layer().json())
+            .init(),
         _ => registry.with(tracing_subscriber::fmt::layer()).init(),
     }
 
@@ -49,12 +51,16 @@ async fn main() -> anyhow::Result<()> {
         if let Ok(entries) = std::fs::read_dir(&cfg.themes_dir) {
             for entry in entries.flatten() {
                 let path = entry.path();
-                if !path.is_dir() { continue; }
+                if !path.is_dir() {
+                    continue;
+                }
                 let name = match path.file_name().and_then(|n| n.to_str()) {
                     Some(n) => n.to_string(),
                     None => continue,
                 };
-                if name == "global" || name == "private" { continue; }
+                if name == "global" || name == "private" {
+                    continue;
+                }
                 let dest = std::path::Path::new(&global_themes_dir).join(&name);
                 match std::fs::rename(&path, &dest) {
                     Ok(_) => info!("migrated theme '{}' → themes/global/", name),
@@ -123,39 +129,52 @@ async fn main() -> anyhow::Result<()> {
     // never written by the admin UI, so it drifts out of sync after the first
     // theme change.  Load sites now (before building the template engine) so
     // we can pick the correct startup theme.
-    let startup_sites = synaptic_core::models::site::list(&pool).await.unwrap_or_default();
+    let startup_sites = synaptic_core::models::site::list(&pool)
+        .await
+        .unwrap_or_default();
     let startup_theme = if let Some(primary_site) = startup_sites.first() {
-        let site_settings = SiteSettings::load(&pool, primary_site.id).await.unwrap_or_default();
+        let site_settings = SiteSettings::load(&pool, primary_site.id)
+            .await
+            .unwrap_or_default();
         info!(
             "startup theme resolved from site '{}' ({}): '{}'",
             primary_site.hostname, primary_site.id, site_settings.active_theme
         );
         site_settings.active_theme
     } else {
-        info!("no sites found — using global active_theme: '{}'", settings.active_theme);
+        info!(
+            "no sites found — using global active_theme: '{}'",
+            settings.active_theme
+        );
         settings.active_theme.clone()
     };
 
     // ── Plugin directory structure ────────────────────────────────────────────
     // Establish plugins/global/ and plugins/sites/ layout on first startup.
     let global_plugins_dir = format!("{}/global", cfg.plugins_dir);
-    let sites_plugins_dir  = format!("{}/sites", cfg.plugins_dir);
+    let sites_plugins_dir = format!("{}/sites", cfg.plugins_dir);
     if !std::path::Path::new(&global_plugins_dir).exists() {
         std::fs::create_dir_all(&global_plugins_dir)?;
         // Migrate any flat plugin directories (pre-restructure installs) into plugins/global/.
         if let Ok(entries) = std::fs::read_dir(&cfg.plugins_dir) {
             for entry in entries.flatten() {
                 let path = entry.path();
-                if !path.is_dir() { continue; }
+                if !path.is_dir() {
+                    continue;
+                }
                 let name = match path.file_name().and_then(|n| n.to_str()) {
                     Some(n) => n.to_string(),
                     None => continue,
                 };
-                if name == "global" || name == "sites" { continue; }
+                if name == "global" || name == "sites" {
+                    continue;
+                }
                 let dest = std::path::Path::new(&global_plugins_dir).join(&name);
                 match std::fs::rename(&path, &dest) {
                     Ok(_) => info!("migrated plugin '{}' → plugins/global/", name),
-                    Err(e) => tracing::warn!("could not migrate plugin '{}' to global: {}", name, e),
+                    Err(e) => {
+                        tracing::warn!("could not migrate plugin '{}' to global: {}", name, e)
+                    }
                 }
             }
         }
@@ -194,9 +213,8 @@ async fn main() -> anyhow::Result<()> {
     info!("metrics recorder installed — endpoint: GET /metrics");
 
     // ── Search index ──────────────────────────────────────────────────────────
-    let search_index = search::SearchIndex::open_or_create(
-        std::path::Path::new(&cfg.search_index_path),
-    )?;
+    let search_index =
+        search::SearchIndex::open_or_create(std::path::Path::new(&cfg.search_index_path))?;
     let search_index = Arc::new(search_index);
 
     // Rebuild index in the background on startup (non-blocking).
@@ -230,14 +248,23 @@ async fn main() -> anyhow::Result<()> {
         for (hostname, (site, _)) in cache.iter() {
             let tgt = std::path::Path::new(&cfg.uploads_dir).join(site.id.to_string());
             if tgt.is_dir() {
-                synaptic_core::handlers::uploads::ensure_hostname_symlink(&cfg.uploads_dir, hostname, site.id);
+                synaptic_core::handlers::uploads::ensure_hostname_symlink(
+                    &cfg.uploads_dir,
+                    hostname,
+                    site.id,
+                );
             }
         }
     }
 
     // ── App-wide settings (from DB) ───────────────────────────────────────────
-    let app_settings = AppSettings::load(&pool, cfg.max_upload_mb as i64).await.unwrap_or_default();
-    info!("app: {} | tz: {}", app_settings.app_name, app_settings.timezone);
+    let app_settings = AppSettings::load(&pool, cfg.max_upload_mb as i64)
+        .await
+        .unwrap_or_default();
+    info!(
+        "app: {} | tz: {}",
+        app_settings.app_name, app_settings.timezone
+    );
 
     // ── Admin sidebar logo (convention-based file, hot-reloadable after startup) ──
     let logo_url = synaptic_core::app_state::detect_admin_logo();
@@ -253,7 +280,8 @@ async fn main() -> anyhow::Result<()> {
     // AppState so every request handler can fire-and-forget a single `.send()`.
     // The receiver (`view_rx`) is handed exclusively to the background flush task,
     // which drains it every 60 s and batch-inserts deduplicated records into the DB.
-    let (view_tx, view_rx) = tokio::sync::mpsc::unbounded_channel::<(uuid::Uuid, String, chrono::NaiveDate)>();
+    let (view_tx, view_rx) =
+        tokio::sync::mpsc::unbounded_channel::<(uuid::Uuid, String, chrono::NaiveDate)>();
     let view_buffer: synaptic_core::app_state::ViewBuffer = view_tx;
     let state = AppState {
         db: pool.clone(),
@@ -297,15 +325,18 @@ async fn main() -> anyhow::Result<()> {
     {
         use tokio::signal::unix::{signal, SignalKind};
 
-        let templates    = state.templates.clone();
+        let templates = state.templates.clone();
         let active_theme = state.active_theme.clone();
-        let site_cache   = state.site_cache.clone();
-        let db           = pool.clone();
+        let site_cache = state.site_cache.clone();
+        let db = pool.clone();
 
         tokio::spawn(async move {
             let mut stream = match signal(SignalKind::user_defined1()) {
-                Ok(s)  => s,
-                Err(e) => { tracing::error!("failed to register SIGUSR1 handler: {}", e); return; }
+                Ok(s) => s,
+                Err(e) => {
+                    tracing::error!("failed to register SIGUSR1 handler: {}", e);
+                    return;
+                }
             };
             loop {
                 stream.recv().await;
@@ -319,27 +350,25 @@ async fn main() -> anyhow::Result<()> {
                      JOIN sites s ON s.id = ss.site_id
                      WHERE ss.key = 'active_theme'
                      ORDER BY s.created_at
-                     LIMIT 1"
+                     LIMIT 1",
                 )
                 .fetch_optional(&db)
                 .await
                 .unwrap_or(None)
-                .or(
-                    sqlx::query_scalar(
-                        "SELECT value FROM site_settings
-                         WHERE key = 'active_theme' AND site_id IS NULL"
-                    )
-                    .fetch_optional(&db)
-                    .await
-                    .unwrap_or(None)
+                .or(sqlx::query_scalar(
+                    "SELECT value FROM site_settings
+                         WHERE key = 'active_theme' AND site_id IS NULL",
                 )
+                .fetch_optional(&db)
+                .await
+                .unwrap_or(None))
                 .unwrap_or_else(|| "default".to_string());
 
                 // Also reload all per-site active_theme values from DB into
                 // the site cache — this is what per-request rendering reads.
                 let site_rows: Vec<(uuid::Uuid, String)> = sqlx::query_as(
                     "SELECT site_id, value FROM site_settings
-                     WHERE key = 'active_theme' AND site_id IS NOT NULL"
+                     WHERE key = 'active_theme' AND site_id IS NOT NULL",
                 )
                 .fetch_all(&db)
                 .await
@@ -347,7 +376,9 @@ async fn main() -> anyhow::Result<()> {
 
                 if let Ok(mut cache) = site_cache.write() {
                     for val in cache.values_mut() {
-                        if let Some((_, new_theme)) = site_rows.iter().find(|(id, _)| *id == val.0.id) {
+                        if let Some((_, new_theme)) =
+                            site_rows.iter().find(|(id, _)| *id == val.0.id)
+                        {
                             val.1.active_theme = new_theme.clone();
                         }
                     }
@@ -369,7 +400,11 @@ async fn main() -> anyhow::Result<()> {
     let listener = tokio::net::TcpListener::bind(&addr).await?;
     info!("listening on http://{}", addr);
 
-    axum::serve(listener, app.into_make_service_with_connect_info::<std::net::SocketAddr>()).await?;
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<std::net::SocketAddr>(),
+    )
+    .await?;
 
     // ── Cleanup ───────────────────────────────────────────────────────────────
     let _ = std::fs::remove_file(&cfg.pid_file);
@@ -388,23 +423,24 @@ fn load_plugins_into_engine(
     hook_registry: &Arc<HookRegistry>,
     engine: &TemplateEngine,
 ) -> (HashMap<String, RouteRegistration>, Vec<LoadedPlugin>) {
+    use std::path::Path;
     use synaptic_core::plugins::hook_registry::HookHandler;
     use synaptic_core::plugins::manifest::PluginManifest;
-    use std::path::Path;
 
     let mut plugin_routes: HashMap<String, RouteRegistration> = HashMap::new();
     let mut loaded_plugins: Vec<LoadedPlugin> = Vec::new();
     // Track which plugin names have already been registered (from global scan)
     // so that site copies of global plugins don't cause duplicate hook registration.
-    let mut registered_plugin_names: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut registered_plugin_names: std::collections::HashSet<String> =
+        std::collections::HashSet::new();
 
     // Helper: scan one directory and register plugins. `register_hooks_and_templates`
     // controls whether this scan registers Tera templates and hook handlers — set to
     // false for site copies of plugins that already have a global counterpart.
     let scan_plugin_dir = |dir: &std::path::PathBuf,
-                               source: &str,
-                               site_id: Option<uuid::Uuid>,
-                               registered: &std::collections::HashSet<String>|
+                           source: &str,
+                           site_id: Option<uuid::Uuid>,
+                           registered: &std::collections::HashSet<String>|
      -> Vec<(String, LoadedPlugin, HashMap<String, RouteRegistration>)> {
         let mut results = Vec::new();
         if !dir.exists() {
@@ -459,7 +495,11 @@ fn load_plugins_into_engine(
                                 }
                             };
                             if let Err(e) = engine.add_raw_template(&template_name, &tmpl_source) {
-                                tracing::warn!("could not register template '{}': {}", template_name, e);
+                                tracing::warn!(
+                                    "could not register template '{}': {}",
+                                    template_name,
+                                    e
+                                );
                             }
                         }
                     }
@@ -503,7 +543,8 @@ fn load_plugins_into_engine(
 
     // Scan global plugins first.
     let global_dir = Path::new(plugins_dir).join("global");
-    for (name, lp, routes) in scan_plugin_dir(&global_dir, "global", None, &registered_plugin_names) {
+    for (name, lp, routes) in scan_plugin_dir(&global_dir, "global", None, &registered_plugin_names)
+    {
         registered_plugin_names.insert(name);
         plugin_routes.extend(routes);
         loaded_plugins.push(lp);
@@ -523,7 +564,9 @@ fn load_plugins_into_engine(
                 .file_name()
                 .and_then(|n| n.to_str())
                 .and_then(|s| uuid::Uuid::parse_str(s).ok());
-            for (_name, lp, routes) in scan_plugin_dir(&site_dir, "site", site_id, &registered_plugin_names) {
+            for (_name, lp, routes) in
+                scan_plugin_dir(&site_dir, "site", site_id, &registered_plugin_names)
+            {
                 plugin_routes.extend(routes);
                 loaded_plugins.push(lp);
             }

@@ -23,15 +23,21 @@ pub fn slugify_name(s: &str) -> String {
     let mut prev_hyphen = true;
     for c in slug.chars() {
         if c == '-' {
-            if !prev_hyphen { result.push(c); }
+            if !prev_hyphen {
+                result.push(c);
+            }
             prev_hyphen = true;
         } else {
             result.push(c);
             prev_hyphen = false;
         }
     }
-    if result.ends_with('-') { result.pop(); }
-    if result.is_empty() { result.push_str("upload"); }
+    if result.ends_with('-') {
+        result.pop();
+    }
+    if result.is_empty() {
+        result.push_str("upload");
+    }
     result
 }
 
@@ -66,7 +72,11 @@ pub async fn store_and_create(
         .unwrap_or("upload");
     let slug = {
         let s = slugify_name(stem);
-        if s.chars().count() > 80 { s.chars().take(80).collect() } else { s }
+        if s.chars().count() > 80 {
+            s.chars().take(80).collect()
+        } else {
+            s
+        }
     };
     let short_id = &Uuid::new_v4().to_string()[..8];
     let stored_name = format!("{}-{}.{}", slug, short_id, ext);
@@ -78,7 +88,10 @@ pub async fn store_and_create(
             .map_err(|e| AppError::Internal(format!("failed to create upload dir: {e}")))?;
         (subdir, format!("{}/{}", sid, stored_name))
     } else {
-        (Path::new(&state.config.uploads_dir).to_path_buf(), stored_name.clone())
+        (
+            Path::new(&state.config.uploads_dir).to_path_buf(),
+            stored_name.clone(),
+        )
     };
 
     let upload_path = site_subdir.join(&stored_name);
@@ -91,7 +104,11 @@ pub async fn store_and_create(
         match imagesize::blob_size(&input.bytes) {
             Ok(size) => (Some(size.width as i32), Some(size.height as i32)),
             Err(e) => {
-                tracing::warn!("could not read image dimensions for {}: {:?}", input.filename, e);
+                tracing::warn!(
+                    "could not read image dimensions for {}: {:?}",
+                    input.filename,
+                    e
+                );
                 (None, None)
             }
         }

@@ -28,7 +28,10 @@ pub async fn serve(
         .unwrap_or_else(|| (state.active_theme.read().unwrap().clone(), None));
 
     // Resolve theme directory: site-specific first, then global, then legacy flat layout.
-    let static_base = if let Some(theme_dir) = state.templates.resolve_theme_dir_for_site(&active_theme, site_id) {
+    let static_base = if let Some(theme_dir) = state
+        .templates
+        .resolve_theme_dir_for_site(&active_theme, site_id)
+    {
         theme_dir.join("static")
     } else {
         // Fallback for legacy flat layout (themes/<name>/static/).
@@ -37,7 +40,11 @@ pub async fn serve(
             .join("static")
     };
 
-    tracing::debug!("theme_static: serving '{}' from theme '{}'", path, active_theme);
+    tracing::debug!(
+        "theme_static: serving '{}' from theme '{}'",
+        path,
+        active_theme
+    );
 
     let requested = static_base.join(&path);
 
@@ -72,10 +79,17 @@ pub async fn serve(
             // re-fetching on every repeat visit while still picking up changes
             // within minutes, rather than the "None" a bare Content-Type response
             // leaves browsers with today.
-            ([
-                (header::CONTENT_TYPE, content_type),
-                (header::CACHE_CONTROL, "public, max-age=300, must-revalidate"),
-            ], bytes).into_response()
+            (
+                [
+                    (header::CONTENT_TYPE, content_type),
+                    (
+                        header::CACHE_CONTROL,
+                        "public, max-age=300, must-revalidate",
+                    ),
+                ],
+                bytes,
+            )
+                .into_response()
         }
         Err(_) => StatusCode::NOT_FOUND.into_response(),
     }
@@ -83,21 +97,21 @@ pub async fn serve(
 
 fn content_type_for_path(path: &std::path::Path) -> &'static str {
     match path.extension().and_then(|e| e.to_str()) {
-        Some("css")          => "text/css; charset=utf-8",
-        Some("js")           => "application/javascript; charset=utf-8",
-        Some("html")         => "text/html; charset=utf-8",
-        Some("svg")          => "image/svg+xml",
-        Some("png")          => "image/png",
+        Some("css") => "text/css; charset=utf-8",
+        Some("js") => "application/javascript; charset=utf-8",
+        Some("html") => "text/html; charset=utf-8",
+        Some("svg") => "image/svg+xml",
+        Some("png") => "image/png",
         Some("jpg" | "jpeg") => "image/jpeg",
-        Some("gif")          => "image/gif",
-        Some("ico")          => "image/x-icon",
-        Some("webp")         => "image/webp",
-        Some("woff")         => "font/woff",
-        Some("woff2")        => "font/woff2",
-        Some("ttf")          => "font/ttf",
-        Some("otf")          => "font/otf",
+        Some("gif") => "image/gif",
+        Some("ico") => "image/x-icon",
+        Some("webp") => "image/webp",
+        Some("woff") => "font/woff",
+        Some("woff2") => "font/woff2",
+        Some("ttf") => "font/ttf",
+        Some("otf") => "font/otf",
         Some("json" | "map") => "application/json",
-        Some("xml")          => "application/xml",
-        _                    => "application/octet-stream",
+        Some("xml") => "application/xml",
+        _ => "application/octet-stream",
     }
 }

@@ -37,7 +37,9 @@ pub fn decrypt(secret_key: &str, encoded: &str) -> Option<String> {
         return None;
     }
     let (nonce_bytes, ciphertext) = combined.split_at(12);
-    let plaintext = cipher.decrypt(Nonce::from_slice(nonce_bytes), ciphertext).ok()?;
+    let plaintext = cipher
+        .decrypt(Nonce::from_slice(nonce_bytes), ciphertext)
+        .ok()?;
     String::from_utf8(plaintext).ok()
 }
 
@@ -48,7 +50,10 @@ mod tests {
     #[test]
     fn round_trip() {
         let encrypted = encrypt("test-secret-key", "key-0123456789abcdef");
-        assert_eq!(decrypt("test-secret-key", &encrypted).as_deref(), Some("key-0123456789abcdef"));
+        assert_eq!(
+            decrypt("test-secret-key", &encrypted).as_deref(),
+            Some("key-0123456789abcdef")
+        );
     }
 
     #[test]

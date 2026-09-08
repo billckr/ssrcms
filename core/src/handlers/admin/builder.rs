@@ -19,8 +19,8 @@ use axum::{
     response::{Html, IntoResponse, Json, Redirect, Response},
     Form,
 };
-use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use uuid::Uuid;
 
 use crate::app_state::AppState;
@@ -64,7 +64,10 @@ pub async fn list(
     let flash = params.get("flash").map(|s| s.as_str());
     let sort = params.get("sort").map(|s| s.as_str()).unwrap_or("");
     let dir = params.get("dir").map(|s| s.as_str()).unwrap_or("");
-    Html(admin::pages::builder::render_project_list(&rows, sort, dir, flash, &ctx)).into_response()
+    Html(admin::pages::builder::render_project_list(
+        &rows, sort, dir, flash, &ctx,
+    ))
+    .into_response()
 }
 
 // ── Create project ─────────────────────────────────────────────────────────────
@@ -92,7 +95,8 @@ pub async fn create_project(
         return Redirect::to("/admin/builder").into_response();
     }
 
-    let description = form.description
+    let description = form
+        .description
         .map(|d| d.trim().to_string())
         .filter(|d| !d.is_empty())
         .map(|d| d.chars().take(100).collect::<String>());
@@ -138,11 +142,20 @@ pub async fn rename_project(
     if name.is_empty() || name.len() > 35 {
         return Redirect::to("/admin/builder").into_response();
     }
-    let description = form.description
+    let description = form
+        .description
         .map(|d| d.trim().to_string())
         .filter(|d| !d.is_empty())
         .map(|d| d.chars().take(100).collect::<String>());
-    if let Err(e) = builder_project::update(&state.db, project_id, site_id, &name, description.as_deref()).await {
+    if let Err(e) = builder_project::update(
+        &state.db,
+        project_id,
+        site_id,
+        &name,
+        description.as_deref(),
+    )
+    .await
+    {
         tracing::error!("rename project error: {e}");
     }
     Redirect::to("/admin/builder").into_response()
@@ -225,20 +238,21 @@ pub async fn new_page_form(
     let existing = page_composition::list_by_project(&state.db, project_id)
         .await
         .unwrap_or_default();
-    let has_homepage         = existing.iter().any(|p| p.is_homepage);
-    let has_post_template    = existing.iter().any(|p| p.page_type == "post_template");
+    let has_homepage = existing.iter().any(|p| p.is_homepage);
+    let has_post_template = existing.iter().any(|p| p.page_type == "post_template");
     let has_archive_template = existing.iter().any(|p| p.page_type == "archive_template");
 
-    let page_rows: Vec<admin::pages::builder::PageRow> = existing.iter().map(|p| {
-        admin::pages::builder::PageRow {
+    let page_rows: Vec<admin::pages::builder::PageRow> = existing
+        .iter()
+        .map(|p| admin::pages::builder::PageRow {
             id: p.id.to_string(),
             name: p.name.clone(),
             slug: p.slug.clone(),
             page_type: p.page_type.clone(),
             is_homepage: p.is_homepage,
             updated_at: p.updated_at.format("%Y-%m-%d %H:%M").to_string(),
-        }
-    }).collect();
+        })
+        .collect();
 
     let cs = state.site_hostname(admin.site_id);
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
@@ -257,7 +271,8 @@ pub async fn new_page_form(
         has_archive_template,
         &page_rows,
         &ctx,
-    )).into_response()
+    ))
+    .into_response()
 }
 
 #[derive(Deserialize)]
@@ -265,7 +280,7 @@ pub struct CreatePageForm {
     pub name: String,
     pub page_type: String,
     pub slug: Option<String>,
-    pub copy_from: Option<String>,  // UUID of page to copy draft layout from
+    pub copy_from: Option<String>, // UUID of page to copy draft layout from
 }
 
 /// POST /admin/builder/:project_id/pages/new — create the page and open editor.
@@ -282,7 +297,12 @@ pub async fn create_page(
         return Redirect::to("/admin").into_response();
     }
 
-    if builder_project::get_by_id(&state.db, project_id, site_id).await.ok().flatten().is_none() {
+    if builder_project::get_by_id(&state.db, project_id, site_id)
+        .await
+        .ok()
+        .flatten()
+        .is_none()
+    {
         return Redirect::to("/admin/builder").into_response();
     }
 
@@ -291,8 +311,8 @@ pub async fn create_page(
         return Redirect::to(&format!("/admin/builder/{project_id}/pages/new")).into_response();
     }
 
-    let is_homepage         = form.page_type == "homepage";
-    let is_post_template    = form.page_type == "post_template";
+    let is_homepage = form.page_type == "homepage";
+    let is_post_template = form.page_type == "post_template";
     let is_archive_template = form.page_type == "archive_template";
 
     // Normalise slug: strip leading slash, lowercase, only allow safe chars
@@ -301,8 +321,15 @@ pub async fn create_page(
     } else {
         let raw = form.slug.as_deref().unwrap_or("").trim().to_lowercase();
         let raw = raw.trim_start_matches('/');
-        let clean: String = raw.chars()
-            .map(|c| if c.is_alphanumeric() || c == '-' || c == '_' { c } else { '-' })
+        let clean: String = raw
+            .chars()
+            .map(|c| {
+                if c.is_alphanumeric() || c == '-' || c == '_' {
+                    c
+                } else {
+                    '-'
+                }
+            })
             .collect();
         let clean = clean.trim_matches('-').to_string();
         if clean.is_empty() {
@@ -317,34 +344,52 @@ pub async fn create_page(
     }
 
     // Resolve copy_from draft if provided
-    let copy_draft = match form.copy_from.as_deref().filter(|s| !s.is_empty()).and_then(|s| Uuid::parse_str(s).ok()) {
-        Some(source_id) => {
-            page_composition::get_by_id(&state.db, source_id).await
-                .ok()
-                .flatten()
-                .filter(|p| p.site_id == site_id)
-                .map(|p| p.draft_composition)
-        }
+    let copy_draft = match form
+        .copy_from
+        .as_deref()
+        .filter(|s| !s.is_empty())
+        .and_then(|s| Uuid::parse_str(s).ok())
+    {
+        Some(source_id) => page_composition::get_by_id(&state.db, source_id)
+            .await
+            .ok()
+            .flatten()
+            .filter(|p| p.site_id == site_id)
+            .map(|p| p.draft_composition),
         None => None,
     };
 
     let result = if let Some(draft) = copy_draft {
         page_composition::create_with_draft(
-            &state.db, site_id, project_id, &name, &form.page_type,
-            slug.as_deref(), is_homepage, draft, Some(admin.user.id),
-        ).await
+            &state.db,
+            site_id,
+            project_id,
+            &name,
+            &form.page_type,
+            slug.as_deref(),
+            is_homepage,
+            draft,
+            Some(admin.user.id),
+        )
+        .await
     } else {
         page_composition::create(
-            &state.db, site_id, project_id, &name, &form.page_type,
-            slug.as_deref(), is_homepage, Some(admin.user.id),
-        ).await
+            &state.db,
+            site_id,
+            project_id,
+            &name,
+            &form.page_type,
+            slug.as_deref(),
+            is_homepage,
+            Some(admin.user.id),
+        )
+        .await
     };
 
-    match result
-    {
-        Ok(page) => Redirect::to(
-            &format!("/admin/builder/{project_id}/pages/{}", page.id)
-        ).into_response(),
+    match result {
+        Ok(page) => {
+            Redirect::to(&format!("/admin/builder/{project_id}/pages/{}", page.id)).into_response()
+        }
         Err(e) => {
             tracing::error!("create page error: {e}");
             Redirect::to(&format!("/admin/builder/{project_id}/pages/new")).into_response()
@@ -366,7 +411,12 @@ pub async fn edit_page(
         return Redirect::to("/admin").into_response();
     }
 
-    if builder_project::get_by_id(&state.db, project_id, site_id).await.ok().flatten().is_none() {
+    if builder_project::get_by_id(&state.db, project_id, site_id)
+        .await
+        .ok()
+        .flatten()
+        .is_none()
+    {
         return Redirect::to("/admin/builder").into_response();
     }
 
@@ -384,14 +434,28 @@ pub async fn edit_page(
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
     let site_label = ctx.current_site.clone();
 
-    let menus = nav_menu::list_by_site(&state.db, site_id).await.unwrap_or_default();
+    let menus = nav_menu::list_by_site(&state.db, site_id)
+        .await
+        .unwrap_or_default();
     let menus_json = serde_json::to_string(
-        &menus.iter().map(|m| serde_json::json!({ "id": m.id, "name": m.name })).collect::<Vec<_>>()
-    ).unwrap_or_else(|_| "[]".to_string());
+        &menus
+            .iter()
+            .map(|m| serde_json::json!({ "id": m.id, "name": m.name }))
+            .collect::<Vec<_>>(),
+    )
+    .unwrap_or_else(|_| "[]".to_string());
 
     Html(admin::pages::builder::render_editor(
-        Some(page_id), &page.name, project_id, site_id, &project.name, &site_label, &menus_json, &ctx,
-    )).into_response()
+        Some(page_id),
+        &page.name,
+        project_id,
+        site_id,
+        &project.name,
+        &site_label,
+        &menus_json,
+        &ctx,
+    ))
+    .into_response()
 }
 
 // ── JSON API ──────────────────────────────────────────────────────────────────
@@ -429,11 +493,17 @@ pub async fn save(
     };
 
     // Verify project belongs to this site
-    if builder_project::get_by_id(&state.db, project_id, site_id).await.ok().flatten().is_none() {
+    if builder_project::get_by_id(&state.db, project_id, site_id)
+        .await
+        .ok()
+        .flatten()
+        .is_none()
+    {
         return (StatusCode::FORBIDDEN, "Project not found").into_response();
     }
 
-    let page_id = match body.composition_id
+    let page_id = match body
+        .composition_id
         .as_deref()
         .filter(|s| !s.is_empty())
         .and_then(|s| Uuid::parse_str(s).ok())
@@ -442,21 +512,18 @@ pub async fn save(
         None => return (StatusCode::BAD_REQUEST, "Missing composition_id").into_response(),
     };
 
-    let name = if body.name.trim().is_empty() { "Untitled".to_string() } else { body.name.trim().to_string() };
+    let name = if body.name.trim().is_empty() {
+        "Untitled".to_string()
+    } else {
+        body.name.trim().to_string()
+    };
 
-    match page_composition::save_composition(
-        &state.db,
-        page_id,
-        site_id,
-        &name,
-        body.data,
-    )
-    .await
-    {
+    match page_composition::save_composition(&state.db, page_id, site_id, &name, body.data).await {
         Ok(comp) => Json(SaveResponse {
             id: comp.id.to_string(),
             project_id: project_id.to_string(),
-        }).into_response(),
+        })
+        .into_response(),
         Err(e) => {
             tracing::error!("builder save error: {e}");
             (StatusCode::INTERNAL_SERVER_ERROR, "Save failed").into_response()
@@ -501,11 +568,17 @@ pub async fn publish(
         Err(_) => return (StatusCode::BAD_REQUEST, "Invalid project_id").into_response(),
     };
 
-    if builder_project::get_by_id(&state.db, project_id, site_id).await.ok().flatten().is_none() {
+    if builder_project::get_by_id(&state.db, project_id, site_id)
+        .await
+        .ok()
+        .flatten()
+        .is_none()
+    {
         return (StatusCode::FORBIDDEN, "Project not found").into_response();
     }
 
-    let page_id = match body.composition_id
+    let page_id = match body
+        .composition_id
         .as_deref()
         .filter(|s| !s.is_empty())
         .and_then(|s| Uuid::parse_str(s).ok())
@@ -514,13 +587,19 @@ pub async fn publish(
         None => return (StatusCode::BAD_REQUEST, "Missing composition_id").into_response(),
     };
 
-    let name = if body.name.trim().is_empty() { "Untitled".to_string() } else { body.name.trim().to_string() };
+    let name = if body.name.trim().is_empty() {
+        "Untitled".to_string()
+    } else {
+        body.name.trim().to_string()
+    };
 
-    match page_composition::publish_composition(&state.db, page_id, site_id, &name, body.data).await {
+    match page_composition::publish_composition(&state.db, page_id, site_id, &name, body.data).await
+    {
         Ok(comp) => Json(SaveResponse {
             id: comp.id.to_string(),
             project_id: project_id.to_string(),
-        }).into_response(),
+        })
+        .into_response(),
         Err(e) => {
             tracing::error!("builder publish error: {e}");
             (StatusCode::INTERNAL_SERVER_ERROR, "Publish failed").into_response()
@@ -558,10 +637,7 @@ pub async fn activate_project(
     Redirect::to("/admin/builder").into_response()
 }
 
-pub async fn deactivate_project(
-    State(state): State<AppState>,
-    admin: AdminUser,
-) -> Response {
+pub async fn deactivate_project(State(state): State<AppState>, admin: AdminUser) -> Response {
     let Some(site_id) = admin.site_id else {
         return Redirect::to("/admin/builder").into_response();
     };
@@ -619,7 +695,12 @@ pub async fn set_homepage(
         return Redirect::to("/admin/builder").into_response();
     }
     // Verify project ownership
-    if builder_project::get_by_id(&state.db, project_id, site_id).await.ok().flatten().is_none() {
+    if builder_project::get_by_id(&state.db, project_id, site_id)
+        .await
+        .ok()
+        .flatten()
+        .is_none()
+    {
         return Redirect::to("/admin/builder").into_response();
     }
     if let Err(e) = page_composition::activate_homepage(&state.db, page_id, project_id).await {
@@ -645,12 +726,31 @@ pub async fn duplicate_page(
     if !admin.caps.can_manage_themes {
         return Redirect::to("/admin/builder").into_response();
     }
-    if builder_project::get_by_id(&state.db, project_id, site_id).await.ok().flatten().is_none() {
+    if builder_project::get_by_id(&state.db, project_id, site_id)
+        .await
+        .ok()
+        .flatten()
+        .is_none()
+    {
         return Redirect::to("/admin/builder").into_response();
     }
-    let custom_name = form.name.map(|n| n.trim().to_string()).filter(|n| !n.is_empty());
-    match page_composition::duplicate(&state.db, page_id, site_id, project_id, custom_name.as_deref(), Some(admin.user.id)).await {
-        Ok(page) => Redirect::to(&format!("/admin/builder/{project_id}/pages/{}", page.id)).into_response(),
+    let custom_name = form
+        .name
+        .map(|n| n.trim().to_string())
+        .filter(|n| !n.is_empty());
+    match page_composition::duplicate(
+        &state.db,
+        page_id,
+        site_id,
+        project_id,
+        custom_name.as_deref(),
+        Some(admin.user.id),
+    )
+    .await
+    {
+        Ok(page) => {
+            Redirect::to(&format!("/admin/builder/{project_id}/pages/{}", page.id)).into_response()
+        }
         Err(e) => {
             tracing::error!("duplicate page error: {e}");
             Redirect::to(&format!("/admin/builder/{project_id}")).into_response()

@@ -1,8 +1,8 @@
+use crate::state::{self, state};
+use crate::types::GridItem;
 use leptos::prelude::*;
 use leptos::web_sys;
 use wasm_bindgen::JsCast;
-use crate::state::{self, state};
-use crate::types::GridItem;
 
 fn type_key_label(k: &str) -> &'static str {
     match k {
@@ -287,11 +287,13 @@ fn item_node(i: usize, m: &GridItem) -> impl IntoView {
         view! {
             <img src=format!("/uploads/{}", m.path) alt=m.alt.clone()
                 style="width:100%;height:100%;object-fit:cover;display:block;pointer-events:none" />
-        }.into_any()
+        }
+        .into_any()
     } else {
         view! {
             <div class="mm-item-icon">{type_key_label(&m.type_key)}</div>
-        }.into_any()
+        }
+        .into_any()
     };
     view! {
         <div class="mm-item" data-idx=i data-type=m.type_key.clone()

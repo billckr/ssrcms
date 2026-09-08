@@ -45,7 +45,11 @@ pub async fn view(
         display_name: admin.user.display_name.clone(),
         bio: admin.user.bio.clone(),
     };
-    Html(admin::pages::profile::render_profile(&profile, flash_for(&q), &ctx))
+    Html(admin::pages::profile::render_profile(
+        &profile,
+        flash_for(&q),
+        &ctx,
+    ))
 }
 
 #[derive(Deserialize)]
@@ -130,12 +134,14 @@ pub async fn change_password(
 
     match crate::models::user::update(&state.db, admin.user.id, &update).await {
         Ok(updated) => {
-            let _ = session.insert(
-                crate::middleware::admin_auth::SESSION_CREDENTIAL_VERSION_KEY,
-                updated.credential_version(),
-            ).await;
+            let _ = session
+                .insert(
+                    crate::middleware::admin_auth::SESSION_CREDENTIAL_VERSION_KEY,
+                    updated.credential_version(),
+                )
+                .await;
             Redirect::to("/admin/profile?success=password_changed").into_response()
-        },
+        }
         Err(e) => {
             tracing::error!("password change failed: {e}");
             Redirect::to("/admin/profile?error=password_update_failed").into_response()

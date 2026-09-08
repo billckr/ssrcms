@@ -35,9 +35,12 @@ pub enum DevAction {
 
 pub async fn run(action: DevAction) -> anyhow::Result<()> {
     match action {
-        DevAction::Reset { force, password, install_dir, database_url } => {
-            reset(force, password, install_dir, database_url).await
-        }
+        DevAction::Reset {
+            force,
+            password,
+            install_dir,
+            database_url,
+        } => reset(force, password, install_dir, database_url).await,
     }
 }
 
@@ -49,7 +52,9 @@ async fn reset(
 ) -> anyhow::Result<()> {
     if let Some(url) = database_url {
         #[allow(unused_unsafe)]
-        unsafe { std::env::set_var("DATABASE_URL", url); }
+        unsafe {
+            std::env::set_var("DATABASE_URL", url);
+        }
     }
 
     let pool = super::connect_db().await?;
@@ -57,7 +62,7 @@ async fn reset(
     // ── Check a super_admin exists before showing the scary banner ─────────────
 
     let row: Option<(String,)> = sqlx::query_as(
-        "SELECT password_hash FROM users WHERE is_protected = TRUE AND deleted_at IS NULL LIMIT 1"
+        "SELECT password_hash FROM users WHERE is_protected = TRUE AND deleted_at IS NULL LIMIT 1",
     )
     .fetch_optional(&pool)
     .await
@@ -88,24 +93,21 @@ async fn reset(
 
     // ── Gather info to show the user before final confirm ─────────────────────
 
-    let sites: Vec<(String, String)> = sqlx::query_as(
-        "SELECT id::text, hostname FROM sites ORDER BY created_at"
-    )
-    .fetch_all(&pool)
-    .await
-    .unwrap_or_default();
+    let sites: Vec<(String, String)> =
+        sqlx::query_as("SELECT id::text, hostname FROM sites ORDER BY created_at")
+            .fetch_all(&pool)
+            .await
+            .unwrap_or_default();
 
     let user_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM users")
         .fetch_one(&pool)
         .await
         .unwrap_or(0);
 
-    let post_count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM posts WHERE post_type = 'post'"
-    )
-    .fetch_one(&pool)
-    .await
-    .unwrap_or(0);
+    let post_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM posts WHERE post_type = 'post'")
+        .fetch_one(&pool)
+        .await
+        .unwrap_or(0);
 
     let media_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM media")
         .fetch_one(&pool)
@@ -131,9 +133,9 @@ async fn reset(
 
     // Filesystem paths that will be cleaned.
     if let Some(ref dir) = install_dir {
-        let sites        = format!("{dir}/sites/");
-        let themes_priv  = format!("{dir}/themes/private/");
-        let uploads      = format!("{dir}/uploads/");
+        let sites = format!("{dir}/sites/");
+        let themes_priv = format!("{dir}/themes/private/");
+        let uploads = format!("{dir}/uploads/");
         println!("  Install dir : {dir}");
         println!("  Filesystem  : {sites}          (all per-site UUID subdirs)");
         println!("                {themes_priv}  (all subdirs)");
@@ -182,7 +184,10 @@ async fn reset(
 /// install`'s Fresh conflict-resolution path (which owns its own,
 /// differently-worded ceremony) — both call this only after their own gate
 /// has already been satisfied.
-pub(crate) async fn wipe_data(pool: &sqlx::PgPool, install_dir: Option<String>) -> anyhow::Result<()> {
+pub(crate) async fn wipe_data(
+    pool: &sqlx::PgPool,
+    install_dir: Option<String>,
+) -> anyhow::Result<()> {
     // _sqlx_migrations is intentionally kept so install doesn't re-run migrations.
     // `documentation` is intentionally kept — it holds skill-generated docs that
     // are not site data and should survive dev resets.
@@ -201,7 +206,7 @@ pub(crate) async fn wipe_data(pool: &sqlx::PgPool, install_dir: Option<String>) 
             taxonomies,
             sites,
             users
-         RESTART IDENTITY CASCADE"
+         RESTART IDENTITY CASCADE",
     )
     .execute(pool)
     .await
@@ -212,7 +217,7 @@ pub(crate) async fn wipe_data(pool: &sqlx::PgPool, install_dir: Option<String>) 
     if let Some(ref dir) = install_dir {
         let base = std::path::Path::new(dir);
 
-        remove_subdirs(&base.join("sites"),                  "sites/");
+        remove_subdirs(&base.join("sites"), "sites/");
         remove_subdirs(&base.join("themes").join("private"), "themes/private/");
         // Uploads are organised into per-site UUID subdirs — remove them as dirs.
         remove_subdirs(&base.join("uploads"), "uploads/");
@@ -262,7 +267,10 @@ fn remove_subdirs(parent: &std::path::Path, label: &str) {
         }
     }
     if removed > 0 {
-        println!("  Removed {removed} entr{} from {label}", if removed == 1 { "y" } else { "ies" });
+        println!(
+            "  Removed {removed} entr{} from {label}",
+            if removed == 1 { "y" } else { "ies" }
+        );
     } else {
         println!("  {label} already empty — nothing to remove.");
     }
@@ -273,8 +281,8 @@ fn verify_password(supplied: &str, hash: &str) -> anyhow::Result<()> {
         password_hash::{PasswordHash, PasswordVerifier},
         Argon2,
     };
-    let parsed = PasswordHash::new(hash)
-        .map_err(|e| anyhow::anyhow!("Invalid password hash in DB: {e}"))?;
+    let parsed =
+        PasswordHash::new(hash).map_err(|e| anyhow::anyhow!("Invalid password hash in DB: {e}"))?;
     Argon2::default()
         .verify_password(supplied.as_bytes(), &parsed)
         .map_err(|_| anyhow::anyhow!("Incorrect password."))

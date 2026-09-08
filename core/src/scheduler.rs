@@ -45,7 +45,10 @@ pub fn spawn_scheduled_publisher(pool: PgPool, search_index: Arc<crate::search::
 ///   Only one task should ever read from the receiver.  Keeping it out of
 ///   AppState enforces that at the type level — `UnboundedReceiver` is not
 ///   `Clone`, so it cannot accidentally be shared or double-consumed.
-pub fn spawn_view_flush(pool: PgPool, mut rx: mpsc::UnboundedReceiver<(Uuid, String, chrono::NaiveDate)>) {
+pub fn spawn_view_flush(
+    pool: PgPool,
+    mut rx: mpsc::UnboundedReceiver<(Uuid, String, chrono::NaiveDate)>,
+) {
     tokio::spawn(async move {
         let mut ticker = interval(Duration::from_secs(60));
         loop {
@@ -85,7 +88,10 @@ pub fn spawn_view_flush(pool: PgPool, mut rx: mpsc::UnboundedReceiver<(Uuid, Str
     });
 }
 
-async fn publish_due_posts(pool: &PgPool, search_index: &crate::search::SearchIndex) -> Result<u64, sqlx::Error> {
+async fn publish_due_posts(
+    pool: &PgPool,
+    search_index: &crate::search::SearchIndex,
+) -> Result<u64, sqlx::Error> {
     let posts = sqlx::query_as::<_, crate::models::post::Post>(
         r#"
         UPDATE posts

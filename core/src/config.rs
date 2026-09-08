@@ -81,7 +81,6 @@ pub struct AppConfig {
     // ── Agency contact ───────────────────────────────────────────────────────
     // Used as the reply-to / notification address for system emails.
     // Set via ADMIN_EMAIL in .env or synaptic.toml.
-
     /// Administrator contact email (e.g. admin@acme.com)
     pub admin_email: Option<String>,
 
@@ -89,7 +88,6 @@ pub struct AppConfig {
     // All mail config lives here, not in the database. Set via .env or synaptic.toml.
     // If smtp_host is not set, outbound mail is disabled and operations that
     // require email (password reset, form notifications) will log a warning.
-
     /// SMTP server hostname (e.g. smtp.mailgun.org)
     pub smtp_host: Option<String>,
 
@@ -119,7 +117,6 @@ pub struct AppConfig {
     // path is disabled and callers fall back to SMTP (or log a warning if
     // neither is configured). Reuses smtp_from_name/smtp_from_email above for
     // the From header rather than duplicating them.
-
     /// Mailgun API key. Set via MAILGUN_API_KEY in .env or synaptic.toml.
     pub mailgun_api_key: Option<String>,
 
@@ -178,14 +175,22 @@ fn default_pid_file() -> String {
     "synapcms.pid".to_string()
 }
 
-fn default_smtp_port() -> u16 { 587 }
+fn default_smtp_port() -> u16 {
+    587
+}
 
 fn default_caddyfile_path() -> String {
     "/etc/caddy/Caddyfile".to_string()
 }
-fn default_smtp_encryption() -> String { "starttls".to_string() }
-fn default_max_upload_mb() -> u64 { 25 }
-fn default_mailgun_base_url() -> String { "https://api.mailgun.net/v3".to_string() }
+fn default_smtp_encryption() -> String {
+    "starttls".to_string()
+}
+fn default_max_upload_mb() -> u64 {
+    25
+}
+fn default_mailgun_base_url() -> String {
+    "https://api.mailgun.net/v3".to_string()
+}
 
 impl AppConfig {
     /// Load configuration from an optional TOML file and environment variables.
@@ -202,15 +207,12 @@ impl AppConfig {
         let _ = dotenvy::dotenv();
 
         // Resolve config file path: CONFIG_FILE env var, else default "synaptic.toml"
-        let config_file = std::env::var("CONFIG_FILE")
-            .unwrap_or_else(|_| "synaptic.toml".to_string());
+        let config_file =
+            std::env::var("CONFIG_FILE").unwrap_or_else(|_| "synaptic.toml".to_string());
 
         let cfg = config::Config::builder()
             // TOML file layer — optional, missing file is not an error
-            .add_source(
-                config::File::from(std::path::Path::new(&config_file))
-                    .required(false),
-            )
+            .add_source(config::File::from(std::path::Path::new(&config_file)).required(false))
             // Env var layer — overrides anything in the file
             .add_source(
                 config::Environment::default()

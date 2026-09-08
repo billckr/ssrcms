@@ -19,7 +19,7 @@ pub struct MenuItemRow {
     pub label: String,
     pub url: Option<String>,
     pub page_id: Option<String>,
-    pub page_title: Option<String>,   // resolved title for display
+    pub page_title: Option<String>, // resolved title for display
     pub target: String,
 }
 
@@ -38,27 +38,37 @@ const LOCATION_OPTIONS: &[(&str, &str)] = &[
 fn location_label(location: Option<&str>) -> &'static str {
     match location {
         Some("primary") => "Primary Navigation",
-        Some("footer")  => "Footer Links",
-        _               => "Name only (custom get_menu)",
+        Some("footer") => "Footer Links",
+        _ => "Name only (custom get_menu)",
     }
 }
 
-pub fn render_list(menus: &[MenuRow], sort: &str, dir: &str, ctx: &crate::PageContext, flash: Option<&str>) -> String {
-    let location_opts = LOCATION_OPTIONS.iter().map(|(val, label)| {
-        format!(
-            r#"<option value="{val}">{label}</option>"#,
-            val = crate::html_escape(val),
-            label = label,
-        )
-    }).collect::<Vec<_>>().join("");
+pub fn render_list(
+    menus: &[MenuRow],
+    sort: &str,
+    dir: &str,
+    ctx: &crate::PageContext,
+    flash: Option<&str>,
+) -> String {
+    let location_opts = LOCATION_OPTIONS
+        .iter()
+        .map(|(val, label)| {
+            format!(
+                r#"<option value="{val}">{label}</option>"#,
+                val = crate::html_escape(val),
+                label = label,
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("");
 
     // Small, unpaginated list — sorted in-place here rather than in the handler.
     let mut sorted: Vec<&MenuRow> = menus.iter().collect();
     let asc = dir != "desc";
     match sort {
         "location" => sorted.sort_by_key(|m| location_label(m.location.as_deref()).to_lowercase()),
-        "items"    => sorted.sort_by_key(|m| m.item_count),
-        "name"     => sorted.sort_by_key(|m| m.name.to_lowercase()),
+        "items" => sorted.sort_by_key(|m| m.item_count),
+        "name" => sorted.sort_by_key(|m| m.name.to_lowercase()),
         _ => {}
     }
     if !sort.is_empty() && !asc {
@@ -69,7 +79,15 @@ pub fn render_list(menus: &[MenuRow], sort: &str, dir: &str, ctx: &crate::PageCo
     let sort_th = |label: &str, key: &str| -> String {
         let is_active = sort == key;
         let next_dir = if is_active && asc { "desc" } else { "asc" };
-        let arrow = if is_active { if asc { " \u{25B2}" } else { " \u{25BC}" } } else { "" };
+        let arrow = if is_active {
+            if asc {
+                " \u{25B2}"
+            } else {
+                " \u{25BC}"
+            }
+        } else {
+            ""
+        };
         format!(
             r#"<th><a href="/admin/menus?sort={key}&dir={next_dir}" style="color:inherit;text-decoration:none;white-space:nowrap">{label}{arrow}</a></th>"#
         )
@@ -162,10 +180,10 @@ pub fn render_list(menus: &[MenuRow], sort: &str, dir: &str, ctx: &crate::PageCo
 }})();
 </script>"#,
         location_opts = location_opts,
-        rows          = rows,
-        name_th       = sort_th("Name", "name"),
-        location_th   = sort_th("Location", "location"),
-        items_th      = sort_th("Items", "items"),
+        rows = rows,
+        name_th = sort_th("Name", "name"),
+        location_th = sort_th("Location", "location"),
+        items_th = sort_th("Items", "items"),
     );
 
     crate::admin_page("Menus", "/admin/menus", flash, &content, ctx)
@@ -178,15 +196,23 @@ pub fn render_edit(
     ctx: &crate::PageContext,
     flash: Option<&str>,
 ) -> String {
-    let location_opts = LOCATION_OPTIONS.iter().map(|(val, label)| {
-        let selected = if menu.location.as_deref().unwrap_or("") == *val { " selected" } else { "" };
-        format!(
-            r#"<option value="{val}"{selected}>{label}</option>"#,
-            val      = crate::html_escape(val),
-            label    = label,
-            selected = selected,
-        )
-    }).collect::<Vec<_>>().join("");
+    let location_opts = LOCATION_OPTIONS
+        .iter()
+        .map(|(val, label)| {
+            let selected = if menu.location.as_deref().unwrap_or("") == *val {
+                " selected"
+            } else {
+                ""
+            };
+            format!(
+                r#"<option value="{val}"{selected}>{label}</option>"#,
+                val = crate::html_escape(val),
+                label = label,
+                selected = selected,
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("");
 
     // Build item cards (recursive; nested in .menu-item-children containers so
     // drag-and-drop reordering can be scoped to one sibling group at a time).
@@ -358,33 +384,43 @@ pub fn render_edit(
 
     let items_html = render_items(items, pages, None, &menu.id);
     let items_section = if items.is_empty() {
-        r#"<p style="color:var(--muted);font-size:.875rem;margin:.25rem 0 1rem">No items yet.</p>"#.to_string()
+        r#"<p style="color:var(--muted);font-size:.875rem;margin:.25rem 0 1rem">No items yet.</p>"#
+            .to_string()
     } else {
         format!(
             r#"<div class="menu-item-list" data-parent-id="" data-reorder-url="/admin/menus/{menu_id}/items/reorder">{items_html}</div>"#,
-            menu_id   = crate::html_escape(&menu.id),
+            menu_id = crate::html_escape(&menu.id),
             items_html = items_html,
         )
     };
 
     // Add item form
     let page_opts_add: String = std::iter::once(("".to_string(), "Select Page".to_string()))
-        .chain(pages.iter().map(|(id, title)| (id.to_string(), title.clone())))
+        .chain(
+            pages
+                .iter()
+                .map(|(id, title)| (id.to_string(), title.clone())),
+        )
         .map(|(pid, ptitle)| {
-            format!(r#"<option value="{pid}">{ptitle}</option>"#,
-                pid    = crate::html_escape(&pid),
+            format!(
+                r#"<option value="{pid}">{ptitle}</option>"#,
+                pid = crate::html_escape(&pid),
                 ptitle = crate::html_escape(&ptitle),
             )
-        }).collect();
+        })
+        .collect();
 
-    let parent_opts_add: String = std::iter::once(("".to_string(), "— No parent (top level) —".to_string()))
-        .chain(items.iter().map(|i| (i.id.clone(), i.label.clone())))
-        .map(|(pid, plabel)| {
-            format!(r#"<option value="{pid}">{plabel}</option>"#,
-                pid    = crate::html_escape(&pid),
-                plabel = crate::html_escape(&plabel),
-            )
-        }).collect();
+    let parent_opts_add: String =
+        std::iter::once(("".to_string(), "— No parent (top level) —".to_string()))
+            .chain(items.iter().map(|i| (i.id.clone(), i.label.clone())))
+            .map(|(pid, plabel)| {
+                format!(
+                    r#"<option value="{pid}">{plabel}</option>"#,
+                    pid = crate::html_escape(&pid),
+                    plabel = crate::html_escape(&plabel),
+                )
+            })
+            .collect();
 
     let content = format!(
         r#"<style>
@@ -704,12 +740,11 @@ pub fn render_edit(
   document.querySelectorAll('.menu-item-list, .menu-item-children').forEach(setupReorder);
 }})();
 </script>"#,
-
-        menu_id         = crate::html_escape(&menu.id),
-        menu_name       = crate::html_escape(&menu.name),
-        location_opts   = location_opts,
-        items_section   = items_section,
-        page_opts_add   = page_opts_add,
+        menu_id = crate::html_escape(&menu.id),
+        menu_name = crate::html_escape(&menu.name),
+        location_opts = location_opts,
+        items_section = items_section,
+        page_opts_add = page_opts_add,
         parent_opts_add = parent_opts_add,
     );
 

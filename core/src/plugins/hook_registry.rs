@@ -27,9 +27,7 @@ impl HookRegistry {
     /// Register a handler for a named hook point.
     pub fn register(&self, hook_name: &str, handler: HookHandler) {
         let mut map = self.inner.write().unwrap();
-        map.entry(hook_name.to_string())
-            .or_default()
-            .push(handler);
+        map.entry(hook_name.to_string()).or_default().push(handler);
     }
 
     /// Get all handlers registered for a hook, sorted by plugin_name.

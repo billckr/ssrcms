@@ -79,7 +79,9 @@ impl Default for FormEditData {
             notify_email: String::new(),
             confirm_submitter: false,
             confirm_subject: "We've received your submission".to_string(),
-            confirm_body: "Thanks for reaching out! We've received your submission and will follow up soon.".to_string(),
+            confirm_body:
+                "Thanks for reaching out! We've received your submission and will follow up soon."
+                    .to_string(),
             no_mail: false,
             email_provider_id: String::new(),
             provider_options: Vec::new(),
@@ -115,7 +117,10 @@ fn is_visual_only(field_type: &str) -> bool {
 fn field_label_meta(field_type: &str) -> (&'static str, &'static str) {
     match field_type {
         "separator" => ("Section title (optional)", "e.g. Shipping details"),
-        "note" => ("Note text", "e.g. We'll never share your email with anyone."),
+        "note" => (
+            "Note text",
+            "e.g. We'll never share your email with anyone.",
+        ),
         _ => ("Field label", "e.g. Your name"),
     }
 }
@@ -126,12 +131,18 @@ fn forms_pagination(page: i64, total_pages: i64, search_qs: &str, sort_qs: &str)
     }
     let qs = format!("{search_qs}{sort_qs}");
     let prev = if page > 1 {
-        format!(r#"<a href="/admin/form-designer?page={}{qs}" class="page-btn">&laquo; Prev</a>"#, page - 1)
+        format!(
+            r#"<a href="/admin/form-designer?page={}{qs}" class="page-btn">&laquo; Prev</a>"#,
+            page - 1
+        )
     } else {
         r#"<span class="page-btn page-btn-disabled">&laquo; Prev</span>"#.to_string()
     };
     let next = if page < total_pages {
-        format!(r#"<a href="/admin/form-designer?page={}{qs}" class="page-btn">Next &raquo;</a>"#, page + 1)
+        format!(
+            r#"<a href="/admin/form-designer?page={}{qs}" class="page-btn">Next &raquo;</a>"#,
+            page + 1
+        )
     } else {
         r#"<span class="page-btn page-btn-disabled">Next &raquo;</span>"#.to_string()
     };
@@ -140,9 +151,13 @@ fn forms_pagination(page: i64, total_pages: i64, search_qs: &str, sort_qs: &str)
     let mut nums = String::new();
     for p in start..=end {
         if p == page {
-            nums.push_str(&format!(r#"<span class="page-btn page-btn-active">{p}</span>"#));
+            nums.push_str(&format!(
+                r#"<span class="page-btn page-btn-active">{p}</span>"#
+            ));
         } else {
-            nums.push_str(&format!(r#"<a href="/admin/form-designer?page={p}{qs}" class="page-btn">{p}</a>"#));
+            nums.push_str(&format!(
+                r#"<a href="/admin/form-designer?page={p}{qs}" class="page-btn">{p}</a>"#
+            ));
         }
     }
     format!(r#"<div class="pagination">{prev}{nums}{next}</div>"#)
@@ -150,13 +165,28 @@ fn forms_pagination(page: i64, total_pages: i64, search_qs: &str, sort_qs: &str)
 
 /// Table + pagination only — swapped by the live-search JS, and reused for
 /// the initial full-page render so both paths render identically.
-pub fn forms_list_fragment(rows: &[FormRow], page: i64, total_pages: i64, search: &str, sort: &str, dir: &str) -> String {
+pub fn forms_list_fragment(
+    rows: &[FormRow],
+    page: i64,
+    total_pages: i64,
+    search: &str,
+    sort: &str,
+    dir: &str,
+) -> String {
     let search_qs = if search.is_empty() {
         String::new()
     } else {
         format!("&search={}", html_escape(search))
     };
-    let sort_qs = if sort.is_empty() { String::new() } else { format!("&sort={}&dir={}", sort, if dir == "desc" { "desc" } else { "asc" }) };
+    let sort_qs = if sort.is_empty() {
+        String::new()
+    } else {
+        format!(
+            "&sort={}&dir={}",
+            sort,
+            if dir == "desc" { "desc" } else { "asc" }
+        )
+    };
     let asc = dir != "desc";
 
     // Sortable column header: link toggles asc/desc for that column, preserving
@@ -164,7 +194,15 @@ pub fn forms_list_fragment(rows: &[FormRow], page: i64, total_pages: i64, search
     let sort_th = |label: &str, key: &str| -> String {
         let is_active = sort == key;
         let next_dir = if is_active && asc { "desc" } else { "asc" };
-        let arrow = if is_active { if asc { " \u{25B2}" } else { " \u{25BC}" } } else { "" };
+        let arrow = if is_active {
+            if asc {
+                " \u{25B2}"
+            } else {
+                " \u{25BC}"
+            }
+        } else {
+            ""
+        };
         format!(
             r#"<th><a href="/admin/form-designer?sort={key}&dir={next_dir}{search_qs}" style="color:inherit;text-decoration:none;white-space:nowrap">{label}{arrow}</a></th>"#
         )
@@ -215,9 +253,26 @@ pub fn forms_list_fragment(rows: &[FormRow], page: i64, total_pages: i64, search
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn render_list(rows: &[FormRow], page: i64, total_pages: i64, search: &str, sort: &str, dir: &str, ctx: &PageContext, flash: Option<&str>) -> String {
+pub fn render_list(
+    rows: &[FormRow],
+    page: i64,
+    total_pages: i64,
+    search: &str,
+    sort: &str,
+    dir: &str,
+    ctx: &PageContext,
+    flash: Option<&str>,
+) -> String {
     let fragment = forms_list_fragment(rows, page, total_pages, search, sort, dir);
-    let sort_qs = if sort.is_empty() { String::new() } else { format!("&sort={}&dir={}", sort, if dir == "desc" { "desc" } else { "asc" }) };
+    let sort_qs = if sort.is_empty() {
+        String::new()
+    } else {
+        format!(
+            "&sort={}&dir={}",
+            sort,
+            if dir == "desc" { "desc" } else { "asc" }
+        )
+    };
     let fetch_prefix = format!("/admin/form-designer?partial=1{}", sort_qs);
     let live_search = crate::live_search_script("form-search", "form-designer-list", &fetch_prefix);
     let search_toggle = crate::pill_search_toggle("form-search", "Search forms&hellip;", search);
@@ -238,7 +293,13 @@ pub fn render_list(rows: &[FormRow], page: i64, total_pages: i64, search: &str, 
         pill_search_init = crate::pill_search_init_script(),
     );
 
-    admin_page("Form Designer", "/admin/form-designer", flash, &content, ctx)
+    admin_page(
+        "Form Designer",
+        "/admin/form-designer",
+        flash,
+        &content,
+        ctx,
+    )
 }
 
 /// (has_options, options label text, hint, placeholder) for a field type.
@@ -264,15 +325,32 @@ fn options_meta(field_type: &str) -> (bool, &'static str, &'static str, &'static
 }
 
 fn field_row_html(f: &FieldRow, index: usize) -> String {
-    let type_opts: String = FIELD_TYPES.iter().map(|(val, label)| {
-        let sel = if f.field_type == *val { " selected" } else { "" };
-        format!(r#"<option value="{val}"{sel}>{label}</option>"#, val = val, label = label, sel = sel)
-    }).collect();
+    let type_opts: String = FIELD_TYPES
+        .iter()
+        .map(|(val, label)| {
+            let sel = if f.field_type == *val {
+                " selected"
+            } else {
+                ""
+            };
+            format!(
+                r#"<option value="{val}"{sel}>{label}</option>"#,
+                val = val,
+                label = label,
+                sel = sel
+            )
+        })
+        .collect();
 
-    let (has_options, options_label, options_hint, options_placeholder) = options_meta(&f.field_type);
+    let (has_options, options_label, options_hint, options_placeholder) =
+        options_meta(&f.field_type);
     let options_display = if has_options { "" } else { "display:none" };
     let (label_of_label, label_placeholder) = field_label_meta(&f.field_type);
-    let visual_only_display = if is_visual_only(&f.field_type) { "display:none" } else { "" };
+    let visual_only_display = if is_visual_only(&f.field_type) {
+        "display:none"
+    } else {
+        ""
+    };
 
     format!(
         r#"<div class="field-row" data-index="{index}" style="border:1px solid var(--border);border-radius:var(--radius);padding:.85rem 1rem;margin-bottom:.6rem;background:var(--tint)">
@@ -331,17 +409,36 @@ pub fn render_editor(data: &FormEditData, ctx: &PageContext, flash: Option<&str>
         Some(id) => format!("/admin/form-designer/{id}"),
         None => "/admin/form-designer".to_string(),
     };
-    let title = if is_edit { format!("Editing form - {}", html_escape(&data.name)) } else { "New Form".to_string() };
+    let title = if is_edit {
+        format!("Editing form - {}", html_escape(&data.name))
+    } else {
+        "New Form".to_string()
+    };
 
-    let rows_html: String = data.fields.iter().enumerate()
+    let rows_html: String = data
+        .fields
+        .iter()
+        .enumerate()
         .map(|(i, f)| field_row_html(f, i))
         .collect::<Vec<_>>()
         .join("\n");
 
-    let provider_options_html: String = data.provider_options.iter().map(|p| {
-        let selected = if p.id == data.email_provider_id { " selected" } else { "" };
-        format!(r#"<option value="{id}"{selected}>{label}</option>"#, id = html_escape(&p.id), label = html_escape(&p.label))
-    }).collect();
+    let provider_options_html: String = data
+        .provider_options
+        .iter()
+        .map(|p| {
+            let selected = if p.id == data.email_provider_id {
+                " selected"
+            } else {
+                ""
+            };
+            format!(
+                r#"<option value="{id}"{selected}>{label}</option>"#,
+                id = html_escape(&p.id),
+                label = html_escape(&p.label)
+            )
+        })
+        .collect();
 
     // Delete lives as an icon button next to Save (see below) rather than a
     // nested <form> — the whole editor is already one big <form>, and nested
@@ -887,15 +984,38 @@ pub fn render_editor(data: &FormEditData, ctx: &PageContext, flash: Option<&str>
         provider_options_html = provider_options_html,
         site_id = crate::html_escape(&data.site_id),
         notify_email = html_escape(&data.notify_email),
-        honeypot_checked = if data.include_honeypot { " checked" } else { "" },
-        confirm_submitter_checked = if data.confirm_submitter { " checked" } else { "" },
-        confirm_fields_display = if data.confirm_submitter { "block" } else { "none" },
+        honeypot_checked = if data.include_honeypot {
+            " checked"
+        } else {
+            ""
+        },
+        confirm_submitter_checked = if data.confirm_submitter {
+            " checked"
+        } else {
+            ""
+        },
+        confirm_fields_display = if data.confirm_submitter {
+            "block"
+        } else {
+            "none"
+        },
         no_mail_checked = if data.no_mail { " checked" } else { "" },
         mail_fields_display = if data.no_mail { "none" } else { "block" },
         confirm_subject = html_escape(&data.confirm_subject),
         confirm_body = html_escape(&data.confirm_body),
-        save_label = if is_edit { "Save Changes" } else { "Create Form" },
-        type_opts_js = format!("[{}]", FIELD_TYPES.iter().map(|(v, l)| format!("['{v}','{l}']")).collect::<Vec<_>>().join(",")),
+        save_label = if is_edit {
+            "Save Changes"
+        } else {
+            "Create Form"
+        },
+        type_opts_js = format!(
+            "[{}]",
+            FIELD_TYPES
+                .iter()
+                .map(|(v, l)| format!("['{v}','{l}']"))
+                .collect::<Vec<_>>()
+                .join(",")
+        ),
     );
 
     admin_page(&title, "/admin/form-designer", flash, &content, ctx)

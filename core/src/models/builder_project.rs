@@ -118,23 +118,19 @@ pub async fn deactivate(pool: &PgPool, site_id: Uuid) -> Result<()> {
 }
 
 pub async fn delete(pool: &PgPool, id: Uuid, site_id: Uuid) -> Result<()> {
-    sqlx::query(
-        "DELETE FROM builder_projects WHERE id = $1 AND site_id = $2",
-    )
-    .bind(id)
-    .bind(site_id)
-    .execute(pool)
-    .await?;
+    sqlx::query("DELETE FROM builder_projects WHERE id = $1 AND site_id = $2")
+        .bind(id)
+        .bind(site_id)
+        .execute(pool)
+        .await?;
     Ok(())
 }
 
 /// Page count for a project — used in the list view.
 pub async fn page_count(pool: &PgPool, project_id: Uuid) -> i64 {
-    sqlx::query_scalar(
-        "SELECT COUNT(*) FROM page_compositions WHERE project_id = $1",
-    )
-    .bind(project_id)
-    .fetch_one(pool)
-    .await
-    .unwrap_or(0)
+    sqlx::query_scalar("SELECT COUNT(*) FROM page_compositions WHERE project_id = $1")
+        .bind(project_id)
+        .fetch_one(pool)
+        .await
+        .unwrap_or(0)
 }

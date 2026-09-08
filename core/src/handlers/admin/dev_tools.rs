@@ -43,31 +43,100 @@ fn gen_password() -> String {
 }
 
 const FIRST_NAMES: &[&str] = &[
-    "James", "Mary", "Robert", "Patricia", "John", "Jennifer", "Michael", "Linda",
-    "David", "Elizabeth", "William", "Barbara", "Richard", "Susan", "Joseph", "Jessica",
-    "Thomas", "Sarah", "Charles", "Karen", "Daniel", "Nancy", "Matthew", "Lisa",
-    "Anthony", "Margaret", "Mark", "Betty", "Paul", "Sandra",
+    "James",
+    "Mary",
+    "Robert",
+    "Patricia",
+    "John",
+    "Jennifer",
+    "Michael",
+    "Linda",
+    "David",
+    "Elizabeth",
+    "William",
+    "Barbara",
+    "Richard",
+    "Susan",
+    "Joseph",
+    "Jessica",
+    "Thomas",
+    "Sarah",
+    "Charles",
+    "Karen",
+    "Daniel",
+    "Nancy",
+    "Matthew",
+    "Lisa",
+    "Anthony",
+    "Margaret",
+    "Mark",
+    "Betty",
+    "Paul",
+    "Sandra",
 ];
 const LAST_NAMES: &[&str] = &[
-    "Smith", "Johnson", "Williams", "Brown", "Jones", "Garcia", "Miller", "Davis",
-    "Rodriguez", "Martinez", "Hernandez", "Lopez", "Gonzalez", "Wilson", "Anderson",
-    "Thomas", "Taylor", "Moore", "Jackson", "Martin", "Lee", "Perez", "Thompson",
-    "White", "Harris", "Sanchez", "Clark", "Ramirez", "Lewis", "Robinson",
+    "Smith",
+    "Johnson",
+    "Williams",
+    "Brown",
+    "Jones",
+    "Garcia",
+    "Miller",
+    "Davis",
+    "Rodriguez",
+    "Martinez",
+    "Hernandez",
+    "Lopez",
+    "Gonzalez",
+    "Wilson",
+    "Anderson",
+    "Thomas",
+    "Taylor",
+    "Moore",
+    "Jackson",
+    "Martin",
+    "Lee",
+    "Perez",
+    "Thompson",
+    "White",
+    "Harris",
+    "Sanchez",
+    "Clark",
+    "Ramirez",
+    "Lewis",
+    "Robinson",
 ];
 const ADJECTIVES: &[&str] = &[
-    "Quick", "Lazy", "Bright", "Dark", "Modern", "Ancient", "Silent", "Loud",
-    "Hidden", "Bold", "Clever", "Simple", "Complex", "Fresh", "Wild", "Calm",
-    "Sharp", "Soft", "Vast", "Narrow", "Golden", "Silver", "Rustic", "Digital",
+    "Quick", "Lazy", "Bright", "Dark", "Modern", "Ancient", "Silent", "Loud", "Hidden", "Bold",
+    "Clever", "Simple", "Complex", "Fresh", "Wild", "Calm", "Sharp", "Soft", "Vast", "Narrow",
+    "Golden", "Silver", "Rustic", "Digital",
 ];
 const NOUNS: &[&str] = &[
-    "Guide", "Journey", "Story", "Vision", "Future", "Secret", "Path", "World",
-    "Truth", "Dream", "Plan", "Theory", "Chapter", "Moment", "Change", "Force",
-    "Light", "Shadow", "Wave", "Edge", "Bridge", "Signal", "Layer", "Canvas",
+    "Guide", "Journey", "Story", "Vision", "Future", "Secret", "Path", "World", "Truth", "Dream",
+    "Plan", "Theory", "Chapter", "Moment", "Change", "Force", "Light", "Shadow", "Wave", "Edge",
+    "Bridge", "Signal", "Layer", "Canvas",
 ];
 const TOPICS: &[&str] = &[
-    "Technology", "Design", "Nature", "Travel", "Food", "Music", "Science",
-    "History", "Culture", "Business", "Health", "Education", "Art", "Sport",
-    "Finance", "Philosophy", "Architecture", "Photography", "Writing", "Code",
+    "Technology",
+    "Design",
+    "Nature",
+    "Travel",
+    "Food",
+    "Music",
+    "Science",
+    "History",
+    "Culture",
+    "Business",
+    "Health",
+    "Education",
+    "Art",
+    "Sport",
+    "Finance",
+    "Philosophy",
+    "Architecture",
+    "Photography",
+    "Writing",
+    "Code",
 ];
 const CATEGORY_NAMES: &[&str] = &["Technology", "Design", "Business", "Lifestyle", "Tutorial"];
 const TAG_NAMES: &[&str] = &["featured", "popular", "tips", "beginner", "advanced"];
@@ -104,7 +173,11 @@ pub async fn seed_users(
     }
 
     if body.count < 1 || body.count > 200 {
-        return (StatusCode::BAD_REQUEST, Json(json!({"error": "count must be between 1 and 200"}))).into_response();
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": "count must be between 1 and 200"})),
+        )
+            .into_response();
     }
     let (site_role, users_role) = match body.role.as_str() {
         "admin" => (site_user::SiteRole::Admin, user::UserRole::SiteAdmin),
@@ -112,13 +185,23 @@ pub async fn seed_users(
         "author" => (site_user::SiteRole::Author, user::UserRole::Author),
         "subscriber" => (site_user::SiteRole::Subscriber, user::UserRole::Subscriber),
         _ => {
-            return (StatusCode::BAD_REQUEST, Json(json!({"error": "role must be admin, editor, author, or subscriber"}))).into_response();
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({"error": "role must be admin, editor, author, or subscriber"})),
+            )
+                .into_response();
         }
     };
 
     let site = match crate::models::site::get_by_id(&state.db, body.site_id).await {
         Ok(s) => s,
-        Err(_) => return (StatusCode::NOT_FOUND, Json(json!({"error": "Site not found"}))).into_response(),
+        Err(_) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(json!({"error": "Site not found"})),
+            )
+                .into_response()
+        }
     };
 
     let mut rng = StdRng::from_entropy();
@@ -130,7 +213,12 @@ pub async fn seed_users(
         let last = LAST_NAMES.choose(&mut rng).unwrap();
         let display_name = format!("{first} {last}");
         let suffix = rand_suffix(5);
-        let username = format!("{}-{}-{}", first.to_lowercase(), last.to_lowercase(), suffix);
+        let username = format!(
+            "{}-{}-{}",
+            first.to_lowercase(),
+            last.to_lowercase(),
+            suffix
+        );
         let email = format!("{username}@{}", site.hostname);
 
         let (used_password, echoed_password) = match &body.password {
@@ -162,7 +250,16 @@ pub async fn seed_users(
             }
         };
 
-        if let Err(e) = site_user::add(&state.db, site.id, new_user.id, site_role, admin.user.id.into(), false).await {
+        if let Err(e) = site_user::add(
+            &state.db,
+            site.id,
+            new_user.id,
+            site_role,
+            admin.user.id.into(),
+            false,
+        )
+        .await
+        {
             tracing::error!("seed_users: site_user::add failed: {e}");
             skipped += 1;
             continue;
@@ -178,7 +275,10 @@ pub async fn seed_users(
             tracing::error!("seed_users: failed to mark is_seeded: {e}");
         }
 
-        created.push(CreatedUser { email, password: echoed_password });
+        created.push(CreatedUser {
+            email,
+            password: echoed_password,
+        });
     }
 
     Json(json!({
@@ -212,30 +312,58 @@ pub async fn seed_posts(
     }
 
     if body.count < 1 || body.count > 200 {
-        return (StatusCode::BAD_REQUEST, Json(json!({"error": "count must be between 1 and 200"}))).into_response();
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": "count must be between 1 and 200"})),
+        )
+            .into_response();
     }
     let post_type = match body.post_type.as_str() {
         "post" => PostType::Post,
         "page" => PostType::Page,
-        _ => return (StatusCode::BAD_REQUEST, Json(json!({"error": "post_type must be post or page"}))).into_response(),
+        _ => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({"error": "post_type must be post or page"})),
+            )
+                .into_response()
+        }
     };
     if !["mixed", "published", "draft", "pending"].contains(&body.status.as_str()) {
-        return (StatusCode::BAD_REQUEST, Json(json!({"error": "status must be mixed, published, draft, or pending"}))).into_response();
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": "status must be mixed, published, draft, or pending"})),
+        )
+            .into_response();
     }
 
     let site = match crate::models::site::get_by_id(&state.db, body.site_id).await {
         Ok(s) => s,
-        Err(_) => return (StatusCode::NOT_FOUND, Json(json!({"error": "Site not found"}))).into_response(),
+        Err(_) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(json!({"error": "Site not found"})),
+            )
+                .into_response()
+        }
     };
 
     let author = match user::get_by_email(&state.db, &body.author_email).await {
         Ok(u) => u,
-        Err(_) => return (StatusCode::NOT_FOUND, Json(json!({"error": "No user found with that email"}))).into_response(),
+        Err(_) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(json!({"error": "No user found with that email"})),
+            )
+                .into_response()
+        }
     };
 
     // Mirrors seed_posts.sh's access check: super_admin OR a site_users row.
     if !admin.caps.is_global_admin {
-        let has_role = site_user::has_any_role(&state.db, site.id, author.id).await.unwrap_or(false);
+        let has_role = site_user::has_any_role(&state.db, site.id, author.id)
+            .await
+            .unwrap_or(false);
         if author.role != "super_admin" && !has_role {
             return (
                 StatusCode::BAD_REQUEST,
@@ -345,7 +473,10 @@ pub async fn seed_posts(
                     let mut c = cat_ids.clone();
                     c.shuffle(&mut rng);
                     for tid in &c[..n] {
-                        if taxonomy::attach_to_post(&state.db, *post_id, *tid).await.is_ok() {
+                        if taxonomy::attach_to_post(&state.db, *post_id, *tid)
+                            .await
+                            .is_ok()
+                        {
                             assigned += 1;
                         }
                     }
@@ -355,7 +486,10 @@ pub async fn seed_posts(
                     let mut t = tag_ids.clone();
                     t.shuffle(&mut rng);
                     for tid in &t[..n] {
-                        if taxonomy::attach_to_post(&state.db, *post_id, *tid).await.is_ok() {
+                        if taxonomy::attach_to_post(&state.db, *post_id, *tid)
+                            .await
+                            .is_ok()
+                        {
                             assigned += 1;
                         }
                     }
@@ -377,9 +511,15 @@ pub async fn seed_posts(
 
 /// Look up a category/tag by slug for this site, creating it if missing.
 /// Mirrors seed_posts.sh's `INSERT ... ON CONFLICT DO NOTHING` + re-select.
-async fn ensure_taxonomy(state: &AppState, site_id: Uuid, name: &str, kind: TaxonomyType) -> Option<Uuid> {
+async fn ensure_taxonomy(
+    state: &AppState,
+    site_id: Uuid,
+    name: &str,
+    kind: TaxonomyType,
+) -> Option<Uuid> {
     let slug = slugify_word(name);
-    if let Ok(existing) = taxonomy::get_by_slug(&state.db, Some(site_id), &slug, kind.clone()).await {
+    if let Ok(existing) = taxonomy::get_by_slug(&state.db, Some(site_id), &slug, kind.clone()).await
+    {
         return Some(existing.id);
     }
     let create = CreateTaxonomy {
@@ -391,7 +531,10 @@ async fn ensure_taxonomy(state: &AppState, site_id: Uuid, name: &str, kind: Taxo
     };
     match taxonomy::create(&state.db, &create).await {
         Ok(t) => Some(t.id),
-        Err(_) => taxonomy::get_by_slug(&state.db, Some(site_id), &slug, kind).await.ok().map(|t| t.id),
+        Err(_) => taxonomy::get_by_slug(&state.db, Some(site_id), &slug, kind)
+            .await
+            .ok()
+            .map(|t| t.id),
     }
 }
 
@@ -424,25 +567,43 @@ fn remove_site_disk_data(state: &AppState, site_id: Uuid, hostname: &str) {
     let site_data_dir = std::path::Path::new(&state.config.sites_dir).join(site_id.to_string());
     if site_data_dir.exists() {
         if let Err(e) = std::fs::remove_dir_all(&site_data_dir) {
-            tracing::warn!("nuke_all: failed to remove site data dir for {}: {:?}", site_id, e);
+            tracing::warn!(
+                "nuke_all: failed to remove site data dir for {}: {:?}",
+                site_id,
+                e
+            );
         }
     }
     let sym_path = std::path::Path::new(&state.config.uploads_dir).join(hostname);
     if sym_path.is_symlink() {
         if let Err(e) = std::fs::remove_file(&sym_path) {
-            tracing::warn!("nuke_all: failed to remove upload symlink for '{}': {:?}", hostname, e);
+            tracing::warn!(
+                "nuke_all: failed to remove upload symlink for '{}': {:?}",
+                hostname,
+                e
+            );
         }
     }
     let site_upload_dir = std::path::Path::new(&state.config.uploads_dir).join(site_id.to_string());
     if site_upload_dir.exists() {
         if let Err(e) = std::fs::remove_dir_all(&site_upload_dir) {
-            tracing::warn!("nuke_all: failed to remove upload dir for site {}: {:?}", site_id, e);
+            tracing::warn!(
+                "nuke_all: failed to remove upload dir for site {}: {:?}",
+                site_id,
+                e
+            );
         }
     }
-    let site_plugin_dir = std::path::Path::new(&state.config.plugins_dir).join("sites").join(site_id.to_string());
+    let site_plugin_dir = std::path::Path::new(&state.config.plugins_dir)
+        .join("sites")
+        .join(site_id.to_string());
     if site_plugin_dir.exists() {
         if let Err(e) = std::fs::remove_dir_all(&site_plugin_dir) {
-            tracing::warn!("nuke_all: failed to remove plugin dir for site {}: {:?}", site_id, e);
+            tracing::warn!(
+                "nuke_all: failed to remove plugin dir for site {}: {:?}",
+                site_id,
+                e
+            );
         }
     }
 }
@@ -466,7 +627,11 @@ pub async fn nuke_all(
         return forbidden();
     }
     if body.confirm != "DELETE ALL" {
-        return (StatusCode::BAD_REQUEST, Json(json!({"error": "Confirmation text did not match \"DELETE ALL\""}))).into_response();
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": "Confirmation text did not match \"DELETE ALL\""})),
+        )
+            .into_response();
     }
 
     let default_site_id = match admin.user.default_site_id {
@@ -484,7 +649,11 @@ pub async fn nuke_all(
         Ok(s) => s,
         Err(e) => {
             tracing::error!("nuke_all: failed to list sites: {e}");
-            return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "Database error"}))).into_response();
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "Database error"})),
+            )
+                .into_response();
         }
     };
 
@@ -516,19 +685,47 @@ pub async fn nuke_all(
         Ok(tx) => tx,
         Err(e) => {
             tracing::error!("nuke_all: begin failed: {e}");
-            return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "Database error"}))).into_response();
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "Database error"})),
+            )
+                .into_response();
         }
     };
     let clear_result: Result<(), sqlx::Error> = async {
-        sqlx::query("DELETE FROM posts WHERE site_id = $1").bind(default_site_id).execute(&mut *tx).await?;
-        sqlx::query("DELETE FROM taxonomies WHERE site_id = $1").bind(default_site_id).execute(&mut *tx).await?;
-        sqlx::query("DELETE FROM form_submissions WHERE site_id = $1").bind(default_site_id).execute(&mut *tx).await?;
-        sqlx::query("DELETE FROM media WHERE site_id = $1").bind(default_site_id).execute(&mut *tx).await?;
-        sqlx::query("DELETE FROM media_folders WHERE site_id = $1").bind(default_site_id).execute(&mut *tx).await?;
-        sqlx::query("DELETE FROM nav_menus WHERE site_id = $1").bind(default_site_id).execute(&mut *tx).await?;
+        sqlx::query("DELETE FROM posts WHERE site_id = $1")
+            .bind(default_site_id)
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query("DELETE FROM taxonomies WHERE site_id = $1")
+            .bind(default_site_id)
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query("DELETE FROM form_submissions WHERE site_id = $1")
+            .bind(default_site_id)
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query("DELETE FROM media WHERE site_id = $1")
+            .bind(default_site_id)
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query("DELETE FROM media_folders WHERE site_id = $1")
+            .bind(default_site_id)
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query("DELETE FROM nav_menus WHERE site_id = $1")
+            .bind(default_site_id)
+            .execute(&mut *tx)
+            .await?;
         // builder_projects cascades to page_compositions.project_id.
-        sqlx::query("DELETE FROM builder_projects WHERE site_id = $1").bind(default_site_id).execute(&mut *tx).await?;
-        sqlx::query("DELETE FROM page_compositions WHERE site_id = $1").bind(default_site_id).execute(&mut *tx).await?;
+        sqlx::query("DELETE FROM builder_projects WHERE site_id = $1")
+            .bind(default_site_id)
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query("DELETE FROM page_compositions WHERE site_id = $1")
+            .bind(default_site_id)
+            .execute(&mut *tx)
+            .await?;
         Ok(())
     }
     .await;
@@ -539,7 +736,11 @@ pub async fn nuke_all(
     }
     if let Err(e) = tx.commit().await {
         tracing::error!("nuke_all: commit failed: {e}");
-        return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "Database error"}))).into_response();
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": "Database error"})),
+        )
+            .into_response();
     }
 
     // Remove the default site's uploaded files from disk now that the DB
@@ -547,7 +748,11 @@ pub async fn nuke_all(
     for path in &media_paths {
         let full_path = std::path::Path::new(&state.config.uploads_dir).join(path);
         if let Err(e) = std::fs::remove_file(&full_path) {
-            tracing::warn!("nuke_all: failed to remove media file {:?}: {:?}", full_path, e);
+            tracing::warn!(
+                "nuke_all: failed to remove media file {:?}: {:?}",
+                full_path,
+                e
+            );
         }
     }
 
@@ -555,14 +760,19 @@ pub async fn nuke_all(
     // the default site — its content is already gone, so posts/media
     // ON DELETE RESTRICT won't block it). One at a time so a single
     // unexpected FK reference doesn't abort the whole batch.
-    let victim_ids: Vec<Uuid> = sqlx::query_scalar("SELECT id FROM users WHERE role != 'super_admin'")
-        .fetch_all(&state.db)
-        .await
-        .unwrap_or_default();
+    let victim_ids: Vec<Uuid> =
+        sqlx::query_scalar("SELECT id FROM users WHERE role != 'super_admin'")
+            .fetch_all(&state.db)
+            .await
+            .unwrap_or_default();
     let mut deleted_users: u32 = 0;
     let mut skipped_users: u32 = 0;
     for uid in victim_ids {
-        match sqlx::query("DELETE FROM users WHERE id = $1").bind(uid).execute(&state.db).await {
+        match sqlx::query("DELETE FROM users WHERE id = $1")
+            .bind(uid)
+            .execute(&state.db)
+            .await
+        {
             Ok(_) => deleted_users += 1,
             Err(e) => {
                 tracing::warn!("nuke_all: failed to delete user {}: {:?}", uid, e);
@@ -606,14 +816,24 @@ pub async fn clear_test_data(
 
     let site = match crate::models::site::get_by_id(&state.db, body.site_id).await {
         Ok(s) => s,
-        Err(_) => return (StatusCode::NOT_FOUND, Json(json!({"error": "Site not found"}))).into_response(),
+        Err(_) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(json!({"error": "Site not found"})),
+            )
+                .into_response()
+        }
     };
 
     let mut tx = match state.db.begin().await {
         Ok(tx) => tx,
         Err(e) => {
             tracing::error!("clear_test_data: begin failed: {e}");
-            return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "Database error"}))).into_response();
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "Database error"})),
+            )
+                .into_response();
         }
     };
 
@@ -623,15 +843,39 @@ pub async fn clear_test_data(
     // and even then only rows tagged is_seeded — i.e. exactly the users this feature
     // created, never a real account.
     let result: Result<i64, sqlx::Error> = async {
-        sqlx::query("DELETE FROM posts WHERE site_id = $1").bind(site.id).execute(&mut *tx).await?;
-        sqlx::query("DELETE FROM taxonomies WHERE site_id = $1").bind(site.id).execute(&mut *tx).await?;
-        sqlx::query("DELETE FROM form_submissions WHERE site_id = $1").bind(site.id).execute(&mut *tx).await?;
-        sqlx::query("DELETE FROM media WHERE site_id = $1").bind(site.id).execute(&mut *tx).await?;
-        sqlx::query("DELETE FROM media_folders WHERE site_id = $1").bind(site.id).execute(&mut *tx).await?;
-        sqlx::query("DELETE FROM nav_menus WHERE site_id = $1").bind(site.id).execute(&mut *tx).await?;
+        sqlx::query("DELETE FROM posts WHERE site_id = $1")
+            .bind(site.id)
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query("DELETE FROM taxonomies WHERE site_id = $1")
+            .bind(site.id)
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query("DELETE FROM form_submissions WHERE site_id = $1")
+            .bind(site.id)
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query("DELETE FROM media WHERE site_id = $1")
+            .bind(site.id)
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query("DELETE FROM media_folders WHERE site_id = $1")
+            .bind(site.id)
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query("DELETE FROM nav_menus WHERE site_id = $1")
+            .bind(site.id)
+            .execute(&mut *tx)
+            .await?;
         // builder_projects cascades to page_compositions.project_id.
-        sqlx::query("DELETE FROM builder_projects WHERE site_id = $1").bind(site.id).execute(&mut *tx).await?;
-        sqlx::query("DELETE FROM page_compositions WHERE site_id = $1").bind(site.id).execute(&mut *tx).await?;
+        sqlx::query("DELETE FROM builder_projects WHERE site_id = $1")
+            .bind(site.id)
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query("DELETE FROM page_compositions WHERE site_id = $1")
+            .bind(site.id)
+            .execute(&mut *tx)
+            .await?;
 
         if body.delete_users {
             let deleted = sqlx::query(
@@ -652,14 +896,22 @@ pub async fn clear_test_data(
         Ok(deleted_users) => {
             if let Err(e) = tx.commit().await {
                 tracing::error!("clear_test_data: commit failed: {e}");
-                return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "Database error"}))).into_response();
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({"error": "Database error"})),
+                )
+                    .into_response();
             }
             Json(json!({"ok": true, "deleted_users": deleted_users})).into_response()
         }
         Err(e) => {
             tracing::error!("clear_test_data: delete failed: {e}");
             let _ = tx.rollback().await;
-            (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "Failed to clear data — no changes were made"}))).into_response()
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "Failed to clear data — no changes were made"})),
+            )
+                .into_response()
         }
     }
 }
@@ -672,10 +924,7 @@ pub async fn clear_test_data(
 /// the UI can report how many documents were indexed.
 ///
 /// Index-wide (covers every site), so gated like Nuke All: super_admin only.
-pub async fn reindex_search(
-    State(state): State<AppState>,
-    admin: AdminUser,
-) -> impl IntoResponse {
+pub async fn reindex_search(State(state): State<AppState>, admin: AdminUser) -> impl IntoResponse {
     if !admin.caps.can_manage_settings || !admin.caps.is_global_admin {
         return forbidden();
     }
@@ -684,6 +933,10 @@ pub async fn reindex_search(
     let db = state.db.clone();
     match crate::search::indexer::rebuild_index(index, db).await {
         Some(count) => Json(json!({"ok": true, "indexed": count})).into_response(),
-        None => (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": "Reindex failed — check server logs"}))).into_response(),
+        None => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": "Reindex failed — check server logs"})),
+        )
+            .into_response(),
     }
 }

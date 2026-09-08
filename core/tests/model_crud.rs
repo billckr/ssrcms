@@ -7,17 +7,19 @@
 //!     cargo test -p synaptic-core --test model_crud -- --include-ignored
 
 use synaptic_core::db;
-use synaptic_core::models::{post, taxonomy, user};
 use synaptic_core::models::post::{CreatePost, ListFilter, PostStatus, PostType, UpdatePost};
-use synaptic_core::models::taxonomy::{CreateTaxonomy, TaxonomyType};
-use synaptic_core::models::user::{CreateUser, UserRole};
 use synaptic_core::models::site;
 use synaptic_core::models::site_user;
+use synaptic_core::models::taxonomy::{CreateTaxonomy, TaxonomyType};
+use synaptic_core::models::user::{CreateUser, UserRole};
+use synaptic_core::models::{post, taxonomy, user};
 
 async fn test_pool() -> sqlx::PgPool {
-    let url = std::env::var("DATABASE_URL")
-        .expect("DATABASE_URL must be set to run integration tests");
-    db::connect(&url).await.expect("failed to connect to test database")
+    let url =
+        std::env::var("DATABASE_URL").expect("DATABASE_URL must be set to run integration tests");
+    db::connect(&url)
+        .await
+        .expect("failed to connect to test database")
 }
 
 /// Generate a unique 8-char suffix for test isolation.
@@ -29,38 +31,48 @@ fn uid() -> String {
 
 async fn make_test_user(pool: &sqlx::PgPool) -> user::User {
     let id = uid();
-    user::create(pool, &CreateUser {
-        username: format!("testuser_{id}"),
-        email: format!("test_{id}@example.com"),
-        display_name: format!("Test User {id}"),
-        password: "TestPass123!".to_string(),
-        role: UserRole::Author,
-    })
+    user::create(
+        pool,
+        &CreateUser {
+            username: format!("testuser_{id}"),
+            email: format!("test_{id}@example.com"),
+            display_name: format!("Test User {id}"),
+            password: "TestPass123!".to_string(),
+            role: UserRole::Author,
+        },
+    )
     .await
     .expect("failed to create test user")
 }
 
-async fn make_test_post(pool: &sqlx::PgPool, author_id: uuid::Uuid, status: PostStatus) -> post::Post {
+async fn make_test_post(
+    pool: &sqlx::PgPool,
+    author_id: uuid::Uuid,
+    status: PostStatus,
+) -> post::Post {
     let id = uid();
-    post::create(pool, &CreatePost {
-        site_id: None,
-        title: format!("Test Post {id}"),
-        slug: Some(format!("test-post-{id}")),
-        content: "<p>Integration test content.</p>".to_string(),
-        content_format: Some("html".to_string()),
-        excerpt: None,
-        status,
-        post_type: PostType::Post,
-        author_id,
-        featured_image_id: None,
-        published_at: Some(chrono::Utc::now()),
-        template: None,
-        post_password_hash: None,
-        comments_enabled: false,
-        parent_id: None,
-        sources: Vec::new(),
-        sources_public: false,
-    })
+    post::create(
+        pool,
+        &CreatePost {
+            site_id: None,
+            title: format!("Test Post {id}"),
+            slug: Some(format!("test-post-{id}")),
+            content: "<p>Integration test content.</p>".to_string(),
+            content_format: Some("html".to_string()),
+            excerpt: None,
+            status,
+            post_type: PostType::Post,
+            author_id,
+            featured_image_id: None,
+            published_at: Some(chrono::Utc::now()),
+            template: None,
+            post_password_hash: None,
+            comments_enabled: false,
+            parent_id: None,
+            sources: Vec::new(),
+            sources_public: false,
+        },
+    )
     .await
     .expect("failed to create test post")
 }
@@ -96,24 +108,28 @@ async fn test_post_update() {
     let author = make_test_user(&pool).await;
     let created = make_test_post(&pool, author.id, PostStatus::Draft).await;
 
-    let updated = post::update(&pool, created.id, &UpdatePost {
-        title: Some("Updated Title".to_string()),
-        slug: None,
-        content: None,
-        content_format: None,
-        excerpt: None,
-        status: Some(PostStatus::Published),
-        featured_image_id: None,
-        clear_featured_image: false,
-        published_at: None,
-        template: None,
-        clear_post_password: false,
-        new_post_password_hash: None,
-        comments_enabled: None,
-        parent_id: None,
-        sources: None,
-        sources_public: None,
-    })
+    let updated = post::update(
+        &pool,
+        created.id,
+        &UpdatePost {
+            title: Some("Updated Title".to_string()),
+            slug: None,
+            content: None,
+            content_format: None,
+            excerpt: None,
+            status: Some(PostStatus::Published),
+            featured_image_id: None,
+            clear_featured_image: false,
+            published_at: None,
+            template: None,
+            clear_post_password: false,
+            new_post_password_hash: None,
+            comments_enabled: None,
+            parent_id: None,
+            sources: None,
+            sources_public: None,
+        },
+    )
     .await
     .expect("update should succeed");
 
@@ -154,18 +170,27 @@ async fn test_post_list_filter_published_only() {
     let published = make_test_post(&pool, author.id, PostStatus::Published).await;
     let draft = make_test_post(&pool, author.id, PostStatus::Draft).await;
 
-    let results = post::list(&pool, &ListFilter {
-        status: Some(PostStatus::Published),
-        post_type: Some(PostType::Post),
-        author_id: Some(author.id),
-        ..Default::default()
-    })
+    let results = post::list(
+        &pool,
+        &ListFilter {
+            status: Some(PostStatus::Published),
+            post_type: Some(PostType::Post),
+            author_id: Some(author.id),
+            ..Default::default()
+        },
+    )
     .await
     .expect("list should succeed");
 
     let ids: Vec<_> = results.iter().map(|p| p.id).collect();
-    assert!(ids.contains(&published.id), "published post should be in results");
-    assert!(!ids.contains(&draft.id), "draft post should not be in filtered results");
+    assert!(
+        ids.contains(&published.id),
+        "published post should be in results"
+    );
+    assert!(
+        !ids.contains(&draft.id),
+        "draft post should not be in filtered results"
+    );
 
     // Cleanup
     post::delete(&pool, published.id).await.ok();
@@ -179,13 +204,16 @@ async fn test_user_create_and_auth() {
     let pool = test_pool().await;
 
     let id = uid();
-    let created = user::create(&pool, &CreateUser {
-        username: format!("authuser_{id}"),
-        email: format!("auth_{id}@example.com"),
-        display_name: format!("Auth User {id}"),
-        password: "CorrectPass!99".to_string(),
-        role: UserRole::Author,
-    })
+    let created = user::create(
+        &pool,
+        &CreateUser {
+            username: format!("authuser_{id}"),
+            email: format!("auth_{id}@example.com"),
+            display_name: format!("Auth User {id}"),
+            password: "CorrectPass!99".to_string(),
+            role: UserRole::Author,
+        },
+    )
     .await
     .expect("user create should succeed");
 
@@ -211,13 +239,16 @@ async fn test_taxonomy_attach_detach() {
     let p = make_test_post(&pool, author.id, PostStatus::Published).await;
 
     let id = uid();
-    let term = taxonomy::create(&pool, &CreateTaxonomy {
-        site_id: None,
-        name: format!("Test Category {id}"),
-        slug: format!("test-cat-{id}"),
-        taxonomy: TaxonomyType::Category,
-        description: None,
-    })
+    let term = taxonomy::create(
+        &pool,
+        &CreateTaxonomy {
+            site_id: None,
+            name: format!("Test Category {id}"),
+            slug: format!("test-cat-{id}"),
+            taxonomy: TaxonomyType::Category,
+            description: None,
+        },
+    )
     .await
     .expect("taxonomy create should succeed");
 
@@ -230,7 +261,10 @@ async fn test_taxonomy_attach_detach() {
         .await
         .expect("for_post should succeed");
     let term_ids: Vec<_> = terms.iter().map(|t| t.id).collect();
-    assert!(term_ids.contains(&term.id), "term should be attached to post");
+    assert!(
+        term_ids.contains(&term.id),
+        "term should be attached to post"
+    );
 
     // Detach
     taxonomy::detach_from_post(&pool, p.id, term.id)
@@ -287,48 +321,54 @@ async fn test_user_delete_cascades_posts() {
 
     // Create a post and a page under this user
     let id = uid();
-    let p = post::create(&pool, &CreatePost {
-        site_id: None,
-        title: format!("Cascade Post {id}"),
-        slug: Some(format!("cascade-post-{id}")),
-        content: "<p>Will be cascaded.</p>".to_string(),
-        content_format: Some("html".to_string()),
-        excerpt: None,
-        status: PostStatus::Draft,
-        post_type: PostType::Post,
-        author_id: author.id,
-        featured_image_id: None,
-        published_at: None,
-        template: None,
-        post_password_hash: None,
-        comments_enabled: false,
-        parent_id: None,
-        sources: Vec::new(),
-        sources_public: false,
-    })
+    let p = post::create(
+        &pool,
+        &CreatePost {
+            site_id: None,
+            title: format!("Cascade Post {id}"),
+            slug: Some(format!("cascade-post-{id}")),
+            content: "<p>Will be cascaded.</p>".to_string(),
+            content_format: Some("html".to_string()),
+            excerpt: None,
+            status: PostStatus::Draft,
+            post_type: PostType::Post,
+            author_id: author.id,
+            featured_image_id: None,
+            published_at: None,
+            template: None,
+            post_password_hash: None,
+            comments_enabled: false,
+            parent_id: None,
+            sources: Vec::new(),
+            sources_public: false,
+        },
+    )
     .await
     .expect("post create should succeed");
 
     let id2 = uid();
-    let pg = post::create(&pool, &CreatePost {
-        site_id: None,
-        title: format!("Cascade Page {id2}"),
-        slug: Some(format!("cascade-page-{id2}")),
-        content: "<p>Will be cascaded.</p>".to_string(),
-        content_format: Some("html".to_string()),
-        excerpt: None,
-        status: PostStatus::Draft,
-        post_type: PostType::Page,
-        author_id: author.id,
-        featured_image_id: None,
-        published_at: None,
-        template: None,
-        post_password_hash: None,
-        comments_enabled: false,
-        parent_id: None,
-        sources: Vec::new(),
-        sources_public: false,
-    })
+    let pg = post::create(
+        &pool,
+        &CreatePost {
+            site_id: None,
+            title: format!("Cascade Page {id2}"),
+            slug: Some(format!("cascade-page-{id2}")),
+            content: "<p>Will be cascaded.</p>".to_string(),
+            content_format: Some("html".to_string()),
+            excerpt: None,
+            status: PostStatus::Draft,
+            post_type: PostType::Page,
+            author_id: author.id,
+            featured_image_id: None,
+            published_at: None,
+            template: None,
+            post_password_hash: None,
+            comments_enabled: false,
+            parent_id: None,
+            sources: Vec::new(),
+            sources_public: false,
+        },
+    )
     .await
     .expect("page create should succeed");
 
@@ -378,7 +418,11 @@ async fn test_create_site_with_defaults_seeds_settings_and_admin_role() {
     let roles = site_user::list_roles_for_user_and_site(&pool, s.id, owner.id)
         .await
         .expect("list_roles_for_user_and_site should succeed");
-    assert_eq!(roles, vec![site_user::SiteRole::Admin], "owner should be admin on their site");
+    assert_eq!(
+        roles,
+        vec![site_user::SiteRole::Admin],
+        "owner should be admin on their site"
+    );
 
     // Cleanup
     site::delete(&pool, s.id).await.ok();
@@ -393,12 +437,22 @@ async fn test_list_by_owner_scoped_to_creator() {
     let admin2 = make_test_user(&pool).await;
     let id = uid();
 
-    let s1 = site::create_with_defaults(&pool, &format!("admin1-{id}.example.com"), Some(admin1.id), None)
-        .await
-        .expect("create s1");
-    let s2 = site::create_with_defaults(&pool, &format!("admin2-{id}.example.com"), Some(admin2.id), None)
-        .await
-        .expect("create s2");
+    let s1 = site::create_with_defaults(
+        &pool,
+        &format!("admin1-{id}.example.com"),
+        Some(admin1.id),
+        None,
+    )
+    .await
+    .expect("create s1");
+    let s2 = site::create_with_defaults(
+        &pool,
+        &format!("admin2-{id}.example.com"),
+        Some(admin2.id),
+        None,
+    )
+    .await
+    .expect("create s2");
 
     let admin1_sites = site::list_by_owner(&pool, admin1.id)
         .await
@@ -406,7 +460,10 @@ async fn test_list_by_owner_scoped_to_creator() {
     let site_ids: Vec<_> = admin1_sites.iter().map(|s| s.id).collect();
 
     assert!(site_ids.contains(&s1.id), "admin1 should see their site");
-    assert!(!site_ids.contains(&s2.id), "admin1 should NOT see admin2's site");
+    assert!(
+        !site_ids.contains(&s2.id),
+        "admin1 should NOT see admin2's site"
+    );
 
     // Cleanup
     site::delete(&pool, s1.id).await.ok();
@@ -423,13 +480,25 @@ async fn test_invited_by_recorded_on_site_user() {
     let invitee = make_test_user(&pool).await;
     let id = uid();
 
-    let s = site::create_with_defaults(&pool, &format!("invitetest-{id}.example.com"), Some(inviter.id), None)
-        .await
-        .expect("create site");
+    let s = site::create_with_defaults(
+        &pool,
+        &format!("invitetest-{id}.example.com"),
+        Some(inviter.id),
+        None,
+    )
+    .await
+    .expect("create site");
 
-    site_user::add(&pool, s.id, invitee.id, site_user::SiteRole::Author, Some(inviter.id), false)
-        .await
-        .expect("add invitee");
+    site_user::add(
+        &pool,
+        s.id,
+        invitee.id,
+        site_user::SiteRole::Author,
+        Some(inviter.id),
+        false,
+    )
+    .await
+    .expect("add invitee");
 
     // Check that invited_by is stored correctly
     let su = sqlx::query_as::<_, synaptic_core::models::site_user::SiteUser>(
@@ -441,7 +510,11 @@ async fn test_invited_by_recorded_on_site_user() {
     .await
     .expect("should find site_user row");
 
-    assert_eq!(su.invited_by, Some(inviter.id), "invited_by should be the inviter");
+    assert_eq!(
+        su.invited_by,
+        Some(inviter.id),
+        "invited_by should be the inviter"
+    );
 
     // Cleanup
     site::delete(&pool, s.id).await.ok();
@@ -457,17 +530,36 @@ async fn test_multi_role_add_is_idempotent_and_coexists() {
     let member = make_test_user(&pool).await;
     let id = uid();
 
-    let s = site::create_with_defaults(&pool, &format!("multirole-{id}.example.com"), Some(owner.id), None)
-        .await
-        .expect("create site");
+    let s = site::create_with_defaults(
+        &pool,
+        &format!("multirole-{id}.example.com"),
+        Some(owner.id),
+        None,
+    )
+    .await
+    .expect("create site");
 
     // Grant two different roles on the same site.
-    site_user::add(&pool, s.id, member.id, site_user::SiteRole::Editor, Some(owner.id), false)
-        .await
-        .expect("add editor role");
-    site_user::add(&pool, s.id, member.id, site_user::SiteRole::Author, Some(owner.id), false)
-        .await
-        .expect("add author role");
+    site_user::add(
+        &pool,
+        s.id,
+        member.id,
+        site_user::SiteRole::Editor,
+        Some(owner.id),
+        false,
+    )
+    .await
+    .expect("add editor role");
+    site_user::add(
+        &pool,
+        s.id,
+        member.id,
+        site_user::SiteRole::Author,
+        Some(owner.id),
+        false,
+    )
+    .await
+    .expect("add author role");
 
     let roles = site_user::list_roles_for_user_and_site(&pool, s.id, member.id)
         .await
@@ -477,16 +569,29 @@ async fn test_multi_role_add_is_idempotent_and_coexists() {
     assert!(roles.contains(&site_user::SiteRole::Author));
 
     // Re-adding an already-held role is a no-op, not an error, and doesn't duplicate.
-    site_user::add(&pool, s.id, member.id, site_user::SiteRole::Editor, Some(owner.id), false)
-        .await
-        .expect("re-adding an existing role should succeed idempotently");
+    site_user::add(
+        &pool,
+        s.id,
+        member.id,
+        site_user::SiteRole::Editor,
+        Some(owner.id),
+        false,
+    )
+    .await
+    .expect("re-adding an existing role should succeed idempotently");
     let roles_after = site_user::list_roles_for_user_and_site(&pool, s.id, member.id)
         .await
         .expect("list_roles_for_user_and_site should succeed");
-    assert_eq!(roles_after.len(), 2, "re-adding a held role must not duplicate it");
+    assert_eq!(
+        roles_after.len(),
+        2,
+        "re-adding a held role must not duplicate it"
+    );
 
     assert!(
-        site_user::has_any_role(&pool, s.id, member.id).await.expect("has_any_role"),
+        site_user::has_any_role(&pool, s.id, member.id)
+            .await
+            .expect("has_any_role"),
         "member should have access to the site"
     );
 
@@ -512,7 +617,10 @@ fn test_site_role_rejects_global_only_values() {
     // site_users.role CHECK constraint (which also never allows them).
     assert_eq!(site_user::SiteRole::from_str("super_admin"), None);
     assert_eq!(site_user::SiteRole::from_str("site_admin"), None);
-    assert_eq!(site_user::SiteRole::from_str("admin"), Some(site_user::SiteRole::Admin));
+    assert_eq!(
+        site_user::SiteRole::from_str("admin"),
+        Some(site_user::SiteRole::Admin)
+    );
 }
 
 #[tokio::test]
@@ -560,10 +668,15 @@ async fn test_soft_delete_idempotent_on_already_deleted_user() {
     let pool = test_pool().await;
     let author = make_test_user(&pool).await;
 
-    user::soft_delete(&pool, author.id).await.expect("first soft_delete");
+    user::soft_delete(&pool, author.id)
+        .await
+        .expect("first soft_delete");
     // Second call should return NotFound (already deleted_at IS NOT NULL)
     let result = user::soft_delete(&pool, author.id).await;
-    assert!(result.is_err(), "soft_delete on already-deleted user should fail");
+    assert!(
+        result.is_err(),
+        "soft_delete on already-deleted user should fail"
+    );
 
     // Hard cleanup
     sqlx::query("DELETE FROM users WHERE id = $1")

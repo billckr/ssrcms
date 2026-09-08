@@ -31,7 +31,16 @@ pub async fn search(
     let site_id = current_site.site.id;
     let base_url = current_site.base_url.clone();
     let session_ctx = super::resolve_session(&state, &session).await;
-    match render_search(state.clone(), params.q, uri, site_id, &base_url, session_ctx).await {
+    match render_search(
+        state.clone(),
+        params.q,
+        uri,
+        site_id,
+        &base_url,
+        session_ctx,
+    )
+    .await
+    {
         Ok(html) => Html(html).into_response(),
         Err(e) => render_error_page(e, &state, &path, Some(current_site.site.id)).await,
     }
@@ -115,10 +124,21 @@ async fn render_search(
     let hook_outputs = state.templates.render_hooks_for_theme(
         &theme,
         Some(site_id),
-        &["head_start", "head_end", "body_start", "body_end", "before_content", "after_content", "footer"],
+        &[
+            "head_start",
+            "head_end",
+            "body_start",
+            "body_end",
+            "before_content",
+            "after_content",
+            "footer",
+        ],
         &ctx,
-    Some(&active_plugins));
+        Some(&active_plugins),
+    );
     ContextBuilder::add_hook_outputs(&mut ctx, &hook_outputs);
 
-    state.templates.render_for_theme(&theme, Some(site_id), "search.html", &ctx)
+    state
+        .templates
+        .render_for_theme(&theme, Some(site_id), "search.html", &ctx)
 }

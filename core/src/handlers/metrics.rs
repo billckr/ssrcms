@@ -29,7 +29,10 @@ pub async fn metrics(State(state): State<AppState>, headers: HeaderMap) -> impl 
     }
 
     (
-        [(header::CONTENT_TYPE, "text/plain; version=0.0.4; charset=utf-8")],
+        [(
+            header::CONTENT_TYPE,
+            "text/plain; version=0.0.4; charset=utf-8",
+        )],
         state.metrics_handle.render(),
     )
         .into_response()

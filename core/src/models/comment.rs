@@ -9,12 +9,12 @@ use crate::errors::{AppError, Result};
 
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Comment {
-    pub id:         Uuid,
-    pub post_id:    Uuid,
-    pub site_id:    Option<Uuid>,
-    pub author_id:  Uuid,
-    pub parent_id:  Option<Uuid>,
-    pub body:       String,
+    pub id: Uuid,
+    pub post_id: Uuid,
+    pub site_id: Option<Uuid>,
+    pub author_id: Uuid,
+    pub parent_id: Option<Uuid>,
+    pub body: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub deleted_at: Option<DateTime<Utc>>,
@@ -23,54 +23,54 @@ pub struct Comment {
 /// Flat JOIN result used internally when fetching comments with author names.
 #[derive(Debug, sqlx::FromRow)]
 struct CommentRow {
-    id:                  Uuid,
-    parent_id:           Option<Uuid>,
-    body:                String,
-    created_at:          DateTime<Utc>,
-    deleted_at:          Option<DateTime<Utc>>,
+    id: Uuid,
+    parent_id: Option<Uuid>,
+    body: String,
+    created_at: DateTime<Utc>,
+    deleted_at: Option<DateTime<Utc>>,
     author_display_name: String,
 }
 
 /// Pagination envelope returned by `list_for_post`.
 pub struct CommentPage {
-    pub comments:     Vec<CommentContext>,
+    pub comments: Vec<CommentContext>,
     pub current_page: usize,
-    pub total_pages:  usize,
-    pub total_count:  usize,
+    pub total_pages: usize,
+    pub total_count: usize,
 }
 
 /// Comment context exposed to Tera templates.
 /// Top-level comments carry their replies nested in `replies`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CommentContext {
-    pub id:         String,
+    pub id: String,
     pub author_name: String,
-    pub parent_id:  Option<String>,
-    pub body:       String,
+    pub parent_id: Option<String>,
+    pub body: String,
     /// True when the comment has been soft-deleted (body should render as [deleted]).
     pub is_deleted: bool,
     /// ISO 8601 timestamp.
     pub created_at: String,
-    pub replies:    Vec<CommentContext>,
+    pub replies: Vec<CommentContext>,
 }
 
 pub struct CreateComment {
-    pub post_id:    Uuid,
-    pub site_id:    Option<Uuid>,
-    pub author_id:  Uuid,
-    pub parent_id:  Option<Uuid>,
-    pub body:       String,
+    pub post_id: Uuid,
+    pub site_id: Option<Uuid>,
+    pub author_id: Uuid,
+    pub parent_id: Option<Uuid>,
+    pub body: String,
     pub ip_address: Option<String>,
 }
 
 /// Raw DB result used by `list_for_user` before UI mapping.
 pub struct UserCommentRecord {
-    pub id:            Uuid,
-    pub body:          String,
-    pub post_title:    String,
-    pub post_slug:     String,
+    pub id: Uuid,
+    pub body: String,
+    pub post_title: String,
+    pub post_slug: String,
     pub site_hostname: String,
-    pub created_at:    DateTime<Utc>,
+    pub created_at: DateTime<Utc>,
 }
 
 pub async fn create(pool: &PgPool, data: &CreateComment) -> Result<Comment> {
@@ -97,9 +97,9 @@ pub async fn create(pool: &PgPool, data: &CreateComment) -> Result<Comment> {
 /// - Deleted top-level with replies → kept, body replaced with "[deleted]", is_deleted = true.
 /// - Deleted top-level with no replies → excluded entirely.
 pub async fn list_for_post(
-    pool:     &PgPool,
-    post_id:  Uuid,
-    page:     usize,
+    pool: &PgPool,
+    post_id: Uuid,
+    page: usize,
     per_page: usize,
 ) -> Result<CommentPage> {
     let rows: Vec<CommentRow> = sqlx::query_as(
@@ -136,15 +136,17 @@ pub async fn list_for_post(
 
         if is_reply {
             // Deleted replies are excluded entirely.
-            if is_deleted { continue; }
+            if is_deleted {
+                continue;
+            }
             let ctx = CommentContext {
-                id:          row.id.to_string(),
+                id: row.id.to_string(),
                 author_name: row.author_display_name,
-                parent_id:   row.parent_id.map(|id| id.to_string()),
-                body:        row.body,
-                is_deleted:  false,
-                created_at:  row.created_at.format("%B %-d, %Y at %-I:%M %p").to_string(),
-                replies:     vec![],
+                parent_id: row.parent_id.map(|id| id.to_string()),
+                body: row.body,
+                is_deleted: false,
+                created_at: row.created_at.format("%B %-d, %Y at %-I:%M %p").to_string(),
+                replies: vec![],
             };
             replies_map
                 .entry(ctx.parent_id.clone().unwrap())
@@ -161,13 +163,13 @@ pub async fn list_for_post(
                 (row.body, false)
             };
             top_level.push(CommentContext {
-                id:          row.id.to_string(),
+                id: row.id.to_string(),
                 author_name: row.author_display_name,
-                parent_id:   None,
+                parent_id: None,
                 body,
-                is_deleted:  flagged,
-                created_at:  row.created_at.format("%B %-d, %Y at %-I:%M %p").to_string(),
-                replies:     vec![],
+                is_deleted: flagged,
+                created_at: row.created_at.format("%B %-d, %Y at %-I:%M %p").to_string(),
+                replies: vec![],
             });
         }
     }
@@ -180,33 +182,41 @@ pub async fn list_for_post(
     }
 
     let total_count = top_level.len();
-    let total_pages = if total_count == 0 { 1 } else { (total_count + per_page - 1) / per_page };
+    let total_pages = if total_count == 0 {
+        1
+    } else {
+        (total_count + per_page - 1) / per_page
+    };
     let page = page.max(1).min(total_pages);
     let start = (page - 1) * per_page;
     let comments = top_level.into_iter().skip(start).take(per_page).collect();
 
-    Ok(CommentPage { comments, current_page: page, total_pages, total_count })
+    Ok(CommentPage {
+        comments,
+        current_page: page,
+        total_pages,
+        total_count,
+    })
 }
 
 /// Common English stop words — mirrors the list in `search/index.rs`.
 /// Stripped from user search input before building ILIKE clauses so that
 /// searching "the rust comment" only filters on meaningful terms.
 static COMMENT_STOP_WORDS: &[&str] = &[
-    "a", "an", "the", "and", "or", "but", "in", "on", "at", "to", "for",
-    "of", "with", "by", "from", "up", "about", "into", "through", "is",
-    "was", "are", "were", "be", "been", "being", "have", "has", "had",
-    "do", "does", "did", "will", "would", "could", "should", "may", "might",
-    "shall", "can", "i", "me", "my", "we", "our", "you", "your", "he",
-    "him", "his", "she", "her", "it", "its", "they", "them", "their",
-    "this", "that", "these", "those", "what", "which", "who", "whom",
-    "not", "no", "so", "if", "as", "than", "too", "very", "just", "also",
-    "more", "most", "other", "some", "such", "only", "own", "same",
+    "a", "an", "the", "and", "or", "but", "in", "on", "at", "to", "for", "of", "with", "by",
+    "from", "up", "about", "into", "through", "is", "was", "are", "were", "be", "been", "being",
+    "have", "has", "had", "do", "does", "did", "will", "would", "could", "should", "may", "might",
+    "shall", "can", "i", "me", "my", "we", "our", "you", "your", "he", "him", "his", "she", "her",
+    "it", "its", "they", "them", "their", "this", "that", "these", "those", "what", "which", "who",
+    "whom", "not", "no", "so", "if", "as", "than", "too", "very", "just", "also", "more", "most",
+    "other", "some", "such", "only", "own", "same",
 ];
 
 /// Split a search string into lowercase terms, stripping stop words.
 /// Returns an empty Vec if all terms are stop words (→ no filter applied).
 fn search_terms(input: &str) -> Vec<String> {
-    input.split_whitespace()
+    input
+        .split_whitespace()
         .map(|w| w.to_lowercase())
         .filter(|w| !COMMENT_STOP_WORDS.contains(&w.as_str()))
         .collect()
@@ -215,10 +225,10 @@ fn search_terms(input: &str) -> Vec<String> {
 /// Count a user's non-deleted comments for a site — used for pagination.
 /// When `search` is provided, only counts rows matching all search terms.
 pub async fn count_for_user(
-    pool:    &PgPool,
+    pool: &PgPool,
     user_id: Uuid,
     site_id: Uuid,
-    search:  Option<&str>,
+    search: Option<&str>,
 ) -> Result<i64> {
     let terms = search.map(search_terms).unwrap_or_default();
 
@@ -251,20 +261,20 @@ pub async fn count_for_user(
 /// When `search` is provided, results are filtered to rows matching all terms
 /// (after stop-word stripping) in either the comment body or the post title.
 pub async fn list_for_user(
-    pool:    &PgPool,
+    pool: &PgPool,
     user_id: Uuid,
     site_id: Uuid,
-    search:  Option<&str>,
-    limit:   i64,
-    offset:  i64,
+    search: Option<&str>,
+    limit: i64,
+    offset: i64,
 ) -> Result<Vec<UserCommentRecord>> {
     #[derive(sqlx::FromRow)]
     struct Row {
-        id:            Uuid,
-        body:          String,
-        created_at:    DateTime<Utc>,
-        post_title:    String,
-        post_slug:     String,
+        id: Uuid,
+        body: String,
+        created_at: DateTime<Utc>,
+        post_title: String,
+        post_slug: String,
         site_hostname: String,
     }
 
@@ -289,26 +299,34 @@ pub async fn list_for_user(
     }
 
     // LIMIT and OFFSET params come after all search-term params.
-    let limit_n  = terms.len() + 3;
+    let limit_n = terms.len() + 3;
     let offset_n = terms.len() + 4;
-    sql.push_str(&format!(" ORDER BY c.created_at DESC LIMIT ${limit_n} OFFSET ${offset_n}"));
+    sql.push_str(&format!(
+        " ORDER BY c.created_at DESC LIMIT ${limit_n} OFFSET ${offset_n}"
+    ));
 
-    let mut q = sqlx::query_as::<_, Row>(&sql)
-        .bind(user_id)
-        .bind(site_id);
+    let mut q = sqlx::query_as::<_, Row>(&sql).bind(user_id).bind(site_id);
     for term in &terms {
         q = q.bind(format!("%{term}%"));
     }
-    let rows = q.bind(limit).bind(offset).fetch_all(pool).await.map_err(AppError::from)?;
+    let rows = q
+        .bind(limit)
+        .bind(offset)
+        .fetch_all(pool)
+        .await
+        .map_err(AppError::from)?;
 
-    Ok(rows.into_iter().map(|r| UserCommentRecord {
-        id:            r.id,
-        body:          r.body,
-        post_title:    r.post_title,
-        post_slug:     r.post_slug,
-        site_hostname: r.site_hostname,
-        created_at:    r.created_at,
-    }).collect())
+    Ok(rows
+        .into_iter()
+        .map(|r| UserCommentRecord {
+            id: r.id,
+            body: r.body,
+            post_title: r.post_title,
+            post_slug: r.post_slug,
+            site_hostname: r.site_hostname,
+            created_at: r.created_at,
+        })
+        .collect())
 }
 
 /// Soft-delete a comment. Only succeeds if the comment belongs to `author_id`
@@ -347,13 +365,11 @@ pub async fn delete(pool: &PgPool, id: Uuid) -> Result<()> {
 
 /// Count of visible (non-deleted) comments for a post (used in PostContext).
 pub async fn count_for_post(pool: &PgPool, post_id: Uuid) -> Result<i64> {
-    sqlx::query_scalar(
-        "SELECT COUNT(*) FROM comments WHERE post_id = $1 AND deleted_at IS NULL",
-    )
-    .bind(post_id)
-    .fetch_one(pool)
-    .await
-    .map_err(AppError::from)
+    sqlx::query_scalar("SELECT COUNT(*) FROM comments WHERE post_id = $1 AND deleted_at IS NULL")
+        .bind(post_id)
+        .fetch_one(pool)
+        .await
+        .map_err(AppError::from)
 }
 
 /// Strips the stored IP from every comment by this author — part of GDPR

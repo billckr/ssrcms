@@ -34,7 +34,8 @@ pub fn render(
         String::new()
     };
 
-    let content = format!(r#"
+    let content = format!(
+        r#"
 <style>
 .settings-panel {{ display: none; max-width: 720px; }}
 .settings-panel.active {{ display: block; }}
@@ -136,5 +137,11 @@ window.resetLogoConfirm = function() {{
         reset_logo_btn = reset_logo_btn,
     );
 
-    crate::admin_page("System Settings", "/admin/site-settings", flash, &content, ctx)
+    crate::admin_page(
+        "System Settings",
+        "/admin/site-settings",
+        flash,
+        &content,
+        ctx,
+    )
 }

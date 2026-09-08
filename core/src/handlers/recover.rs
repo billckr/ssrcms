@@ -32,7 +32,12 @@ pub struct ResetForm {
 /// GET /recover — show the "type your email" request form.
 pub async fn request_form(State(state): State<AppState>) -> Response {
     let default_theme = state.app_settings.read().unwrap().default_theme.clone();
-    Html(admin::pages::recover::render_request(None, false, &default_theme)).into_response()
+    Html(admin::pages::recover::render_request(
+        None,
+        false,
+        &default_theme,
+    ))
+    .into_response()
 }
 
 /// POST /recover — always shows the same "check your email" message
@@ -47,17 +52,32 @@ pub async fn request_post(
     let default_theme = state.app_settings.read().unwrap().default_theme.clone();
     if !form.website.trim().is_empty() {
         // Bot caught by the honeypot — pretend success, don't tip it off.
-        return Html(admin::pages::recover::render_request(None, true, &default_theme)).into_response();
+        return Html(admin::pages::recover::render_request(
+            None,
+            true,
+            &default_theme,
+        ))
+        .into_response();
     }
 
     let email = user::normalize_email(&form.email);
     if email.len() > 254 {
-        return Html(admin::pages::recover::render_request(None, true, &default_theme)).into_response();
+        return Html(admin::pages::recover::render_request(
+            None,
+            true,
+            &default_theme,
+        ))
+        .into_response();
     }
     if !crate::middleware::auth_security::allow("recover", &headers, &email) {
         // Preserve the non-enumerating response and avoid giving automated
         // callers a useful distinction between addresses.
-        return Html(admin::pages::recover::render_request(None, true, &default_theme)).into_response();
+        return Html(admin::pages::recover::render_request(
+            None,
+            true,
+            &default_theme,
+        ))
+        .into_response();
     }
     let target = user::get_by_email(&state.db, &email).await.ok();
     // Staff accounts (super_admin/site_admin/editor/author) are excluded the
@@ -90,22 +110,43 @@ pub async fn request_post(
                 )
                 .await
                 {
-                    tracing::error!("recover: failed to send reset email to {}: {:?}", target.email, e);
+                    tracing::error!(
+                        "recover: failed to send reset email to {}: {:?}",
+                        target.email,
+                        e
+                    );
                 }
             }
-            Err(e) => tracing::error!("recover: failed to create reset token for {}: {:?}", target.email, e),
+            Err(e) => tracing::error!(
+                "recover: failed to create reset token for {}: {:?}",
+                target.email,
+                e
+            ),
         }
     }
 
-    Html(admin::pages::recover::render_request(None, true, &default_theme)).into_response()
+    Html(admin::pages::recover::render_request(
+        None,
+        true,
+        &default_theme,
+    ))
+    .into_response()
 }
 
 /// GET /recover/{token} — show the "set a new password" form if the token
 /// is still valid (unexpired, unused).
 pub async fn reset_form(State(state): State<AppState>, Path(token): Path<String>) -> Response {
-    let valid = password_reset::find_valid_user_id(&state.db, &token).await.is_some();
+    let valid = password_reset::find_valid_user_id(&state.db, &token)
+        .await
+        .is_some();
     let default_theme = state.app_settings.read().unwrap().default_theme.clone();
-    Html(admin::pages::recover::render_reset(&token, valid, None, &default_theme)).into_response()
+    Html(admin::pages::recover::render_reset(
+        &token,
+        valid,
+        None,
+        &default_theme,
+    ))
+    .into_response()
 }
 
 /// POST /recover/{token} — validate the new password, consume the token,
@@ -118,7 +159,13 @@ pub async fn reset_post(
     let default_theme = state.app_settings.read().unwrap().default_theme.clone();
     macro_rules! invalid_form {
         ($msg:expr) => {
-            return Html(admin::pages::recover::render_reset(&token, true, Some($msg), &default_theme)).into_response()
+            return Html(admin::pages::recover::render_reset(
+                &token,
+                true,
+                Some($msg),
+                &default_theme,
+            ))
+            .into_response()
         };
     }
 
@@ -138,8 +185,16 @@ pub async fn reset_post(
     };
 
     match password_reset::consume_and_set_password(&state.db, &token, &password_hash).await {
-        Ok(Some(_)) => Redirect::to("/login?flash=Password+reset.+You+can+now+sign+in.").into_response(),
-        Ok(None) => Html(admin::pages::recover::render_reset(&token, false, None, &default_theme)).into_response(),
+        Ok(Some(_)) => {
+            Redirect::to("/login?flash=Password+reset.+You+can+now+sign+in.").into_response()
+        }
+        Ok(None) => Html(admin::pages::recover::render_reset(
+            &token,
+            false,
+            None,
+            &default_theme,
+        ))
+        .into_response(),
         Err(e) => {
             tracing::error!("recover: failed to update password: {:?}", e);
             invalid_form!("Something went wrong. Please try again.");

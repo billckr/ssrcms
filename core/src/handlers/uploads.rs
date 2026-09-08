@@ -45,7 +45,9 @@ pub async fn serve(
                 .and_then(|v| v.to_str().ok())
                 .map(|raw| raw.split(':').next().unwrap_or(raw));
             match host.and_then(|h| state.resolve_site(h)) {
-                Some((site, _)) => resolve_file_path(uploads_dir, &site.id.to_string(), &path, &state),
+                Some((site, _)) => {
+                    resolve_file_path(uploads_dir, &site.id.to_string(), &path, &state)
+                }
                 None => None,
             }
         }
@@ -53,7 +55,7 @@ pub async fn serve(
 
     let file_path = match file_path {
         Some(p) => p,
-        None    => return StatusCode::NOT_FOUND.into_response(),
+        None => return StatusCode::NOT_FOUND.into_response(),
     };
 
     // Canonicalize to resolve symlinks and guard against path traversal.
@@ -152,26 +154,26 @@ fn resolve_file_path(
 fn content_type_for_path(path: &std::path::Path) -> &'static str {
     match path.extension().and_then(|e| e.to_str()) {
         Some("jpg" | "jpeg") => "image/jpeg",
-        Some("png")           => "image/png",
-        Some("gif")           => "image/gif",
-        Some("webp")          => "image/webp",
-        Some("avif")          => "image/avif",
-        Some("svg")           => "image/svg+xml",
-        Some("ico")           => "image/x-icon",
-        Some("mp4")           => "video/mp4",
-        Some("webm")          => "video/webm",
-        Some("mov")           => "video/quicktime",
-        Some("avi")           => "video/x-msvideo",
-        Some("mp3")           => "audio/mpeg",
-        Some("wav")           => "audio/wav",
-        Some("ogg")           => "audio/ogg",
-        Some("flac")          => "audio/flac",
-        Some("pdf")           => "application/pdf",
-        Some("zip")           => "application/zip",
-        Some("doc")           => "application/msword",
-        Some("docx")          => "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        Some("xls")           => "application/vnd.ms-excel",
-        Some("xlsx")          => "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        _                     => "application/octet-stream",
+        Some("png") => "image/png",
+        Some("gif") => "image/gif",
+        Some("webp") => "image/webp",
+        Some("avif") => "image/avif",
+        Some("svg") => "image/svg+xml",
+        Some("ico") => "image/x-icon",
+        Some("mp4") => "video/mp4",
+        Some("webm") => "video/webm",
+        Some("mov") => "video/quicktime",
+        Some("avi") => "video/x-msvideo",
+        Some("mp3") => "audio/mpeg",
+        Some("wav") => "audio/wav",
+        Some("ogg") => "audio/ogg",
+        Some("flac") => "audio/flac",
+        Some("pdf") => "application/pdf",
+        Some("zip") => "application/zip",
+        Some("doc") => "application/msword",
+        Some("docx") => "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        Some("xls") => "application/vnd.ms-excel",
+        Some("xlsx") => "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        _ => "application/octet-stream",
     }
 }

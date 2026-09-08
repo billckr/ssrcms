@@ -99,17 +99,22 @@ pub struct CreateMedia {
     pub folder_id: Option<Uuid>,
 }
 
-pub async fn update_media_meta(pool: &PgPool, id: Uuid, alt_text: &str, title: &str, caption: &str) -> Result<()> {
-    let affected = sqlx::query(
-        "UPDATE media SET alt_text = $1, title = $2, caption = $3 WHERE id = $4"
-    )
-    .bind(alt_text)
-    .bind(title)
-    .bind(caption)
-    .bind(id)
-    .execute(pool)
-    .await?
-    .rows_affected();
+pub async fn update_media_meta(
+    pool: &PgPool,
+    id: Uuid,
+    alt_text: &str,
+    title: &str,
+    caption: &str,
+) -> Result<()> {
+    let affected =
+        sqlx::query("UPDATE media SET alt_text = $1, title = $2, caption = $3 WHERE id = $4")
+            .bind(alt_text)
+            .bind(title)
+            .bind(caption)
+            .bind(id)
+            .execute(pool)
+            .await?
+            .rows_affected();
 
     if affected == 0 {
         return Err(AppError::NotFound(format!("media {id}")));
@@ -193,7 +198,12 @@ pub async fn delete(pool: &PgPool, id: Uuid) -> Result<()> {
     Ok(())
 }
 
-pub async fn count(pool: &PgPool, site_id: Option<Uuid>, uploaded_by: Option<Uuid>, folder_id: Option<Uuid>) -> Result<i64> {
+pub async fn count(
+    pool: &PgPool,
+    site_id: Option<Uuid>,
+    uploaded_by: Option<Uuid>,
+    folder_id: Option<Uuid>,
+) -> Result<i64> {
     let n = sqlx::query_scalar::<_, i64>(
         "SELECT COUNT(*) FROM media \
          WHERE ($1::uuid IS NULL OR site_id = $1) \
@@ -208,7 +218,14 @@ pub async fn count(pool: &PgPool, site_id: Option<Uuid>, uploaded_by: Option<Uui
     Ok(n)
 }
 
-pub async fn list(pool: &PgPool, site_id: Option<Uuid>, uploaded_by: Option<Uuid>, folder_id: Option<Uuid>, limit: i64, offset: i64) -> Result<Vec<Media>> {
+pub async fn list(
+    pool: &PgPool,
+    site_id: Option<Uuid>,
+    uploaded_by: Option<Uuid>,
+    folder_id: Option<Uuid>,
+    limit: i64,
+    offset: i64,
+) -> Result<Vec<Media>> {
     let items = sqlx::query_as::<_, Media>(
         "SELECT * FROM media \
          WHERE ($1::uuid IS NULL OR site_id = $1) \

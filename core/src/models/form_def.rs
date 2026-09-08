@@ -3,10 +3,10 @@
 //! `form_submission` — this module owns the *shape* of a form (its fields
 //! and settings); `form_submission` owns the data visitors send in.
 
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use uuid::Uuid;
-use chrono::{DateTime, Utc};
 
 use crate::errors::Result;
 use crate::utils::slugify::slugify;
@@ -58,10 +58,18 @@ pub struct FormSettings {
     pub no_mail: bool,
 }
 
-fn default_success_message() -> String { "Thank you for your submission!".to_string() }
-fn default_button_label() -> String { "Submit".to_string() }
-fn default_true() -> bool { true }
-fn default_confirm_subject() -> String { "We've received your submission".to_string() }
+fn default_success_message() -> String {
+    "Thank you for your submission!".to_string()
+}
+fn default_button_label() -> String {
+    "Submit".to_string()
+}
+fn default_true() -> bool {
+    true
+}
+fn default_confirm_subject() -> String {
+    "We've received your submission".to_string()
+}
 fn default_confirm_body() -> String {
     "Thanks for reaching out! We've received your submission and will follow up soon.".to_string()
 }
@@ -152,31 +160,37 @@ pub async fn list_for_site(pool: &PgPool, site_id: Uuid) -> Result<Vec<FormDef>>
 }
 
 pub async fn get_by_id(pool: &PgPool, site_id: Uuid, id: Uuid) -> Result<Option<FormDef>> {
-    let row = sqlx::query_as::<_, FormDefRow>(
-        "SELECT * FROM forms WHERE site_id = $1 AND id = $2",
-    )
-    .bind(site_id)
-    .bind(id)
-    .fetch_optional(pool)
-    .await?;
+    let row = sqlx::query_as::<_, FormDefRow>("SELECT * FROM forms WHERE site_id = $1 AND id = $2")
+        .bind(site_id)
+        .bind(id)
+        .fetch_optional(pool)
+        .await?;
     Ok(row.map(FormDef::from))
 }
 
 pub async fn get_by_slug(pool: &PgPool, site_id: Uuid, slug: &str) -> Result<Option<FormDef>> {
-    let row = sqlx::query_as::<_, FormDefRow>(
-        "SELECT * FROM forms WHERE site_id = $1 AND slug = $2",
-    )
-    .bind(site_id)
-    .bind(slug)
-    .fetch_optional(pool)
-    .await?;
+    let row =
+        sqlx::query_as::<_, FormDefRow>("SELECT * FROM forms WHERE site_id = $1 AND slug = $2")
+            .bind(site_id)
+            .bind(slug)
+            .fetch_optional(pool)
+            .await?;
     Ok(row.map(FormDef::from))
 }
 
 /// Generate a unique slug for a site by suffixing `-2`, `-3`, ... on
 /// collision — same convention used for post/page slugs.
-async fn unique_slug(pool: &PgPool, site_id: Uuid, base: &str, ignore_id: Option<Uuid>) -> Result<String> {
-    let base = if base.is_empty() { "form".to_string() } else { base.to_string() };
+async fn unique_slug(
+    pool: &PgPool,
+    site_id: Uuid,
+    base: &str,
+    ignore_id: Option<Uuid>,
+) -> Result<String> {
+    let base = if base.is_empty() {
+        "form".to_string()
+    } else {
+        base.to_string()
+    };
     let mut candidate = base.clone();
     let mut n = 2;
     loop {
@@ -235,7 +249,12 @@ pub struct UpdateFormDef {
 /// changed after creation — it's what post/page embeds and existing
 /// `form_submissions.form_name` rows reference, so renaming it here would
 /// silently break both.
-pub async fn update(pool: &PgPool, site_id: Uuid, id: Uuid, input: UpdateFormDef) -> Result<Option<FormDef>> {
+pub async fn update(
+    pool: &PgPool,
+    site_id: Uuid,
+    id: Uuid,
+    input: UpdateFormDef,
+) -> Result<Option<FormDef>> {
     let fields_json = serde_json::to_value(&input.fields).unwrap_or_default();
     let settings_json = serde_json::to_value(&input.settings).unwrap_or_default();
     let row = sqlx::query_as::<_, FormDefRow>(
@@ -283,7 +302,11 @@ fn html_escape(s: &str) -> String {
 fn render_field_html(f: &FormField, slug: &str) -> String {
     let id = format!("ss-form-{}-{}", html_escape(slug), html_escape(&f.name));
     let required_attr = if f.required { " required" } else { "" };
-    let required_mark = if f.required { r#" <span class="form-required" aria-hidden="true">*</span>"# } else { "" };
+    let required_mark = if f.required {
+        r#" <span class="form-required" aria-hidden="true">*</span>"#
+    } else {
+        ""
+    };
     let label = html_escape(&f.label);
     let name = html_escape(&f.name);
 
@@ -344,9 +367,17 @@ fn render_field_html(f: &FormField, slug: &str) -> String {
 "#
         ),
         "select" => {
-            let options: String = f.options.iter().map(|(v, l)| {
-                format!(r#"<option value="{}">{}</option>"#, html_escape(v), html_escape(l))
-            }).collect();
+            let options: String = f
+                .options
+                .iter()
+                .map(|(v, l)| {
+                    format!(
+                        r#"<option value="{}">{}</option>"#,
+                        html_escape(v),
+                        html_escape(l)
+                    )
+                })
+                .collect();
             format!(
                 r#"<div class="form-field form-field-select">
   <label for="{id}">{label}{required_mark}</label>
@@ -462,11 +493,16 @@ pub async fn expand_embeds(pool: &PgPool, site_id: Uuid, content: &str) -> Strin
     if !content.contains("<ss-form") {
         return content.to_string();
     }
-    let Ok(tag_re) = regex_lite::Regex::new(r#"<ss-form\b[^>]*data-slug="([^"]*)"[^>]*></ss-form>"#) else {
+    let Ok(tag_re) =
+        regex_lite::Regex::new(r#"<ss-form\b[^>]*data-slug="([^"]*)"[^>]*></ss-form>"#)
+    else {
         return content.to_string();
     };
 
-    let mut slugs: Vec<String> = tag_re.captures_iter(content).map(|c| c[1].to_string()).collect();
+    let mut slugs: Vec<String> = tag_re
+        .captures_iter(content)
+        .map(|c| c[1].to_string())
+        .collect();
     slugs.sort();
     slugs.dedup();
 
@@ -477,10 +513,14 @@ pub async fn expand_embeds(pool: &PgPool, site_id: Uuid, content: &str) -> Strin
             _ => String::new(),
         };
         let escaped_slug = slug.replace('\\', "\\\\").replace('"', "\\\"");
-        let Ok(specific_re) = regex_lite::Regex::new(
-            &format!(r#"<ss-form\b[^>]*data-slug="{escaped_slug}"[^>]*></ss-form>"#),
-        ) else { continue };
-        result = specific_re.replace_all(&result, replacement.as_str()).to_string();
+        let Ok(specific_re) = regex_lite::Regex::new(&format!(
+            r#"<ss-form\b[^>]*data-slug="{escaped_slug}"[^>]*></ss-form>"#
+        )) else {
+            continue;
+        };
+        result = specific_re
+            .replace_all(&result, replacement.as_str())
+            .to_string();
     }
     result
 }

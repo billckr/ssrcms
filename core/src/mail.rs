@@ -37,9 +37,17 @@ pub const SETTING_API_KEY_ENCRYPTED: &str = "mailgun_api_key_encrypted";
 /// `msg.provider_id` points at, or the install-wide Mailgun account if
 /// unset. A no-op (logs a warning, returns `Ok`) when neither is
 /// configured — sending mail is opt-in, not a hard requirement.
-pub async fn send_for_site(state: &AppState, site_id: Uuid, msg: EmailMessage<'_>) -> anyhow::Result<()> {
+pub async fn send_for_site(
+    state: &AppState,
+    site_id: Uuid,
+    msg: EmailMessage<'_>,
+) -> anyhow::Result<()> {
     let Some(config) = resolve_provider(state, site_id, msg.provider_id).await else {
-        tracing::warn!("no email provider configured for site {} — skipping email to {}", site_id, msg.to);
+        tracing::warn!(
+            "no email provider configured for site {} — skipping email to {}",
+            site_id,
+            msg.to
+        );
         return Ok(());
     };
 
@@ -49,7 +57,9 @@ pub async fn send_for_site(state: &AppState, site_id: Uuid, msg: EmailMessage<'_
         Ok(message_id) => {
             tracing::info!(
                 "email accepted for {} (site {}, message id: {})",
-                msg.to, site_id, message_id.as_deref().unwrap_or("unknown"),
+                msg.to,
+                site_id,
+                message_id.as_deref().unwrap_or("unknown"),
             );
             record_attempt(state, site_id, &msg, true, message_id.as_deref(), None).await;
             Ok(())
@@ -71,24 +81,49 @@ pub async fn send_test_email(config: &ProviderConfig, to: &str) -> anyhow::Resul
         to,
         "Test email from Synaptic Signals",
         "This is a test email confirming your email provider is configured correctly.",
-    ).await?;
+    )
+    .await?;
     Ok(())
 }
 
 /// Dispatches to the right provider's API/transport. Returns the
 /// provider's own message id, when it gives one, for the mail_log entry.
-async fn send_via(config: &ProviderConfig, to: &str, subject: &str, text: &str) -> anyhow::Result<Option<String>> {
+async fn send_via(
+    config: &ProviderConfig,
+    to: &str,
+    subject: &str,
+    text: &str,
+) -> anyhow::Result<Option<String>> {
     match config {
-        ProviderConfig::Mailgun { domain, api_key } => send_via_mailgun(domain, api_key, to, subject, text).await,
-        ProviderConfig::Smtp { host, port, username, password, tls_mode } =>
-            send_via_smtp(host, *port, username, password, tls_mode, to, subject, text).await,
-        ProviderConfig::SendGrid { api_key, from_email } => send_via_sendgrid(api_key, from_email, to, subject, text).await,
-        ProviderConfig::Postmark { server_token, message_stream, from_email } =>
-            send_via_postmark(server_token, message_stream, from_email, to, subject, text).await,
+        ProviderConfig::Mailgun { domain, api_key } => {
+            send_via_mailgun(domain, api_key, to, subject, text).await
+        }
+        ProviderConfig::Smtp {
+            host,
+            port,
+            username,
+            password,
+            tls_mode,
+        } => send_via_smtp(host, *port, username, password, tls_mode, to, subject, text).await,
+        ProviderConfig::SendGrid {
+            api_key,
+            from_email,
+        } => send_via_sendgrid(api_key, from_email, to, subject, text).await,
+        ProviderConfig::Postmark {
+            server_token,
+            message_stream,
+            from_email,
+        } => send_via_postmark(server_token, message_stream, from_email, to, subject, text).await,
     }
 }
 
-async fn send_via_mailgun(domain: &str, api_key: &str, to: &str, subject: &str, text: &str) -> anyhow::Result<Option<String>> {
+async fn send_via_mailgun(
+    domain: &str,
+    api_key: &str,
+    to: &str,
+    subject: &str,
+    text: &str,
+) -> anyhow::Result<Option<String>> {
     // Always send From the configured domain, not some other address —
     // Mailgun sandbox domains in particular reject a From address outside
     // the sending domain.
@@ -121,7 +156,13 @@ async fn send_via_mailgun(domain: &str, api_key: &str, to: &str, subject: &str, 
     Ok(message_id)
 }
 
-async fn send_via_sendgrid(api_key: &str, from_email: &str, to: &str, subject: &str, text: &str) -> anyhow::Result<Option<String>> {
+async fn send_via_sendgrid(
+    api_key: &str,
+    from_email: &str,
+    to: &str,
+    subject: &str,
+    text: &str,
+) -> anyhow::Result<Option<String>> {
     let body = serde_json::json!({
         "personalizations": [{ "to": [{ "email": to }] }],
         "from": { "email": from_email },
@@ -143,14 +184,22 @@ async fn send_via_sendgrid(api_key: &str, from_email: &str, to: &str, subject: &
     }
 
     // SendGrid returns the message id in an `X-Message-Id` header, not a body.
-    let message_id = resp.headers()
+    let message_id = resp
+        .headers()
         .get("x-message-id")
         .and_then(|v| v.to_str().ok())
         .map(str::to_string);
     Ok(message_id)
 }
 
-async fn send_via_postmark(server_token: &str, message_stream: &str, from_email: &str, to: &str, subject: &str, text: &str) -> anyhow::Result<Option<String>> {
+async fn send_via_postmark(
+    server_token: &str,
+    message_stream: &str,
+    from_email: &str,
+    to: &str,
+    subject: &str,
+    text: &str,
+) -> anyhow::Result<Option<String>> {
     let body = serde_json::json!({
         "From": from_email,
         "To": to,
@@ -175,7 +224,11 @@ async fn send_via_postmark(server_token: &str, message_stream: &str, from_email:
     let body = resp.text().await.unwrap_or_default();
     let message_id = serde_json::from_str::<serde_json::Value>(&body)
         .ok()
-        .and_then(|v| v.get("MessageID").and_then(|id| id.as_str()).map(str::to_string));
+        .and_then(|v| {
+            v.get("MessageID")
+                .and_then(|id| id.as_str())
+                .map(str::to_string)
+        });
     Ok(message_id)
 }
 
@@ -224,40 +277,64 @@ async fn record_attempt(
     provider_message_id: Option<&str>,
     error: Option<&str>,
 ) {
-    let result = mail_log::record(&state.db, RecordSend {
-        site_id,
-        form_id: msg.form_id,
-        to_email: msg.to,
-        subject: msg.subject,
-        success,
-        mailgun_message_id: provider_message_id,
-        error,
-    }).await;
+    let result = mail_log::record(
+        &state.db,
+        RecordSend {
+            site_id,
+            form_id: msg.form_id,
+            to_email: msg.to,
+            subject: msg.subject,
+            success,
+            mailgun_message_id: provider_message_id,
+            error,
+        },
+    )
+    .await;
     if let Err(e) = result {
-        tracing::error!("failed to write mail_log entry for site {}: {:?}", site_id, e);
+        tracing::error!(
+            "failed to write mail_log entry for site {}: {:?}",
+            site_id,
+            e
+        );
     }
 }
 
 /// Resolves `provider_id` (a form's chosen `email_providers` row) into a
 /// ready-to-send `ProviderConfig`, or falls back to the install-wide
 /// Mailgun account in `AppConfig` when unset.
-async fn resolve_provider(state: &AppState, site_id: Uuid, provider_id: Option<Uuid>) -> Option<ProviderConfig> {
+async fn resolve_provider(
+    state: &AppState,
+    site_id: Uuid,
+    provider_id: Option<Uuid>,
+) -> Option<ProviderConfig> {
     if let Some(provider_id) = provider_id {
         return match email_provider::get_by_id(&state.db, provider_id).await {
             Ok(Some(row)) if row.site_id == site_id => {
                 match email_provider::decrypt_config(&state.config.secret_key, &row) {
                     Some(config) => {
-                        tracing::info!("using provider '{}' ({}) for site {}", row.label, row.provider_type, site_id);
+                        tracing::info!(
+                            "using provider '{}' ({}) for site {}",
+                            row.label,
+                            row.provider_type,
+                            site_id
+                        );
                         Some(config)
                     }
                     None => {
-                        tracing::error!("failed to decrypt email_providers config for provider {}", provider_id);
+                        tracing::error!(
+                            "failed to decrypt email_providers config for provider {}",
+                            provider_id
+                        );
                         None
                     }
                 }
             }
             Ok(_) => {
-                tracing::warn!("email provider {} not found (or not owned by site {})", provider_id, site_id);
+                tracing::warn!(
+                    "email provider {} not found (or not owned by site {})",
+                    provider_id,
+                    site_id
+                );
                 None
             }
             Err(e) => {
@@ -267,9 +344,17 @@ async fn resolve_provider(state: &AppState, site_id: Uuid, provider_id: Option<U
         };
     }
 
-    let (Some(api_key), Some(domain)) = (&state.config.mailgun_api_key, &state.config.mailgun_domain) else {
+    let (Some(api_key), Some(domain)) =
+        (&state.config.mailgun_api_key, &state.config.mailgun_domain)
+    else {
         return None;
     };
-    tracing::info!("using install-wide mailgun account for site {} (no provider selected)", site_id);
-    Some(ProviderConfig::Mailgun { domain: domain.clone(), api_key: api_key.clone() })
+    tracing::info!(
+        "using install-wide mailgun account for site {} (no provider selected)",
+        site_id
+    );
+    Some(ProviderConfig::Mailgun {
+        domain: domain.clone(),
+        api_key: api_key.clone(),
+    })
 }

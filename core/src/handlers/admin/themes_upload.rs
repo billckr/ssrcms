@@ -3,7 +3,7 @@
 //! also owns the theme list/activate/delete/screenshot handlers.
 
 use axum::{
-    extract::{Multipart, State, Form},
+    extract::{Form, Multipart, State},
     http::StatusCode,
     response::{Html, IntoResponse, Redirect},
 };
@@ -48,9 +48,15 @@ pub async fn upload_theme(
                 }
                 Err(e) => {
                     tracing::error!("failed to read theme zip field: {:?}", e);
-                    return render_theme_list(&state, Some("Failed to read uploaded file. Please try again."), &ctx, admin.site_id, "my")
-                        .await
-                        .into_response();
+                    return render_theme_list(
+                        &state,
+                        Some("Failed to read uploaded file. Please try again."),
+                        &ctx,
+                        admin.site_id,
+                        "my",
+                    )
+                    .await
+                    .into_response();
                 }
             }
         }
@@ -58,36 +64,51 @@ pub async fn upload_theme(
 
     let zip_bytes = match zip_bytes {
         Some(b) => b,
-        None => return render_theme_list(&state, Some("No file received."), &ctx, admin.site_id, "my").await.into_response(),
+        None => {
+            return render_theme_list(&state, Some("No file received."), &ctx, admin.site_id, "my")
+                .await
+                .into_response()
+        }
     };
 
     // Route the upload to the correct subdirectory.
     // Super admins upload to themes/global/; site admins upload to sites/<site_id>/themes/.
     let themes_parent = state.config.themes_dir.clone();
-    let sites_parent  = state.config.sites_dir.clone();
+    let sites_parent = state.config.sites_dir.clone();
     let target_dir = if admin.caps.is_global_admin {
         format!("{}/global", themes_parent)
     } else if let Some(sid) = admin.site_id {
         format!("{}/{}/themes", sites_parent, sid)
     } else {
-        return render_theme_list(&state, Some("No site selected. Cannot install theme."), &ctx, admin.site_id, "my")
-            .await
-            .into_response();
+        return render_theme_list(
+            &state,
+            Some("No site selected. Cannot install theme."),
+            &ctx,
+            admin.site_id,
+            "my",
+        )
+        .await
+        .into_response();
     };
 
     // Ensure target directory exists.
     if let Err(e) = std::fs::create_dir_all(&target_dir) {
         tracing::error!("failed to create theme target dir '{}': {}", target_dir, e);
-        return render_theme_list(&state, Some("Failed to prepare theme directory."), &ctx, admin.site_id, "my")
-            .await
-            .into_response();
+        return render_theme_list(
+            &state,
+            Some("Failed to prepare theme directory."),
+            &ctx,
+            admin.site_id,
+            "my",
+        )
+        .await
+        .into_response();
     }
 
     // Run zip extraction on a blocking thread (zip crate is synchronous).
-    let result = tokio::task::spawn_blocking(move || {
-        extract_and_install_theme(&zip_bytes, &target_dir)
-    })
-    .await;
+    let result =
+        tokio::task::spawn_blocking(move || extract_and_install_theme(&zip_bytes, &target_dir))
+            .await;
 
     match result {
         Ok(Ok(theme_name)) => {
@@ -96,26 +117,61 @@ pub async fn upload_theme(
             // Always reload the active theme in Tera after a successful upload.
             let active = state.active_theme.read().unwrap().clone();
             if let Err(e) = state.templates.switch_theme(&active) {
-                tracing::error!("theme '{}' installed but Tera reload of '{}' failed: {:?}", theme_name, active, e);
-                return render_theme_list(&state, Some("Theme installed but could not be reloaded. Please restart the server."), &ctx, admin.site_id, "my")
-                    .await
-                    .into_response();
-            }
-            tracing::info!("reloaded active theme '{}' after installing '{}'", active, theme_name);
-
-            render_theme_list(&state, Some(&format!("Theme '{}' installed successfully.", theme_name)), &ctx, admin.site_id, "my")
+                tracing::error!(
+                    "theme '{}' installed but Tera reload of '{}' failed: {:?}",
+                    theme_name,
+                    active,
+                    e
+                );
+                return render_theme_list(
+                    &state,
+                    Some("Theme installed but could not be reloaded. Please restart the server."),
+                    &ctx,
+                    admin.site_id,
+                    "my",
+                )
                 .await
-                .into_response()
+                .into_response();
+            }
+            tracing::info!(
+                "reloaded active theme '{}' after installing '{}'",
+                active,
+                theme_name
+            );
+
+            render_theme_list(
+                &state,
+                Some(&format!("Theme '{}' installed successfully.", theme_name)),
+                &ctx,
+                admin.site_id,
+                "my",
+            )
+            .await
+            .into_response()
         }
         Ok(Err(msg)) => {
             tracing::warn!("theme upload rejected: {}", msg);
-            render_theme_list(&state, Some("Installation failed. Please try again."), &ctx, admin.site_id, "my").await.into_response()
+            render_theme_list(
+                &state,
+                Some("Installation failed. Please try again."),
+                &ctx,
+                admin.site_id,
+                "my",
+            )
+            .await
+            .into_response()
         }
         Err(e) => {
             tracing::error!("theme upload task panicked: {:?}", e);
-            render_theme_list(&state, Some("Installation failed. Please try again."), &ctx, admin.site_id, "my")
-                .await
-                .into_response()
+            render_theme_list(
+                &state,
+                Some("Installation failed. Please try again."),
+                &ctx,
+                admin.site_id,
+                "my",
+            )
+            .await
+            .into_response()
         }
     }
 }
@@ -137,7 +193,8 @@ fn extract_and_install_theme(zip_bytes: &[u8], target_dir: &str) -> Result<Strin
     let tmp_path = tmp_dir.clone();
 
     for i in 0..archive.len() {
-        let mut entry = archive.by_index(i)
+        let mut entry = archive
+            .by_index(i)
             .map_err(|e| format!("Failed to read zip entry: {}", e))?;
 
         let raw_name = entry.name().to_string();
@@ -163,18 +220,17 @@ fn extract_and_install_theme(zip_bytes: &[u8], target_dir: &str) -> Result<Strin
         let dest = PathBuf::from(&tmp_path).join(&relative);
 
         if entry.is_dir() {
-            fs::create_dir_all(&dest)
-                .map_err(|e| format!("Failed to create directory: {}", e))?;
+            fs::create_dir_all(&dest).map_err(|e| format!("Failed to create directory: {}", e))?;
         } else {
             if let Some(parent) = dest.parent() {
                 fs::create_dir_all(parent)
                     .map_err(|e| format!("Failed to create directory: {}", e))?;
             }
             let mut buf = Vec::new();
-            entry.read_to_end(&mut buf)
+            entry
+                .read_to_end(&mut buf)
                 .map_err(|e| format!("Failed to read zip entry: {}", e))?;
-            fs::write(&dest, &buf)
-                .map_err(|e| format!("Failed to write file: {}", e))?;
+            fs::write(&dest, &buf).map_err(|e| format!("Failed to write file: {}", e))?;
         }
     }
 
@@ -183,8 +239,8 @@ fn extract_and_install_theme(zip_bytes: &[u8], target_dir: &str) -> Result<Strin
     let toml_content = fs::read_to_string(&toml_path)
         .map_err(|_| "theme.toml not found in zip. Is this a valid SynapCMS theme?".to_string())?;
 
-    let parsed: toml::Table = toml::from_str(&toml_content)
-        .map_err(|_| "theme.toml is not valid TOML.".to_string())?;
+    let parsed: toml::Table =
+        toml::from_str(&toml_content).map_err(|_| "theme.toml is not valid TOML.".to_string())?;
 
     let theme_name = parsed
         .get("theme")
@@ -194,7 +250,11 @@ fn extract_and_install_theme(zip_bytes: &[u8], target_dir: &str) -> Result<Strin
         .ok_or("theme.toml is missing [theme] name field.".to_string())?
         .to_string();
 
-    if theme_name.is_empty() || theme_name.contains('/') || theme_name.contains('\\') || theme_name.contains("..") {
+    if theme_name.is_empty()
+        || theme_name.contains('/')
+        || theme_name.contains('\\')
+        || theme_name.contains("..")
+    {
         return Err("theme.toml contains an invalid theme name.".to_string());
     }
 
@@ -218,8 +278,7 @@ fn extract_and_install_theme(zip_bytes: &[u8], target_dir: &str) -> Result<Strin
         fs::remove_dir_all(&final_path)
             .map_err(|e| format!("Failed to replace existing theme: {}", e))?;
     }
-    fs::rename(&tmp_path, &final_path)
-        .map_err(|e| format!("Failed to install theme: {}", e))?;
+    fs::rename(&tmp_path, &final_path).map_err(|e| format!("Failed to install theme: {}", e))?;
 
     Ok(theme_name)
 }
@@ -230,10 +289,13 @@ fn extract_and_install_theme(zip_bytes: &[u8], target_dir: &str) -> Result<Strin
 /// Prefers a root-level theme.toml over one nested inside a subdirectory —
 /// this prevents a stale nested copy of an old theme from being used when the
 /// zip contains both a root theme.toml and a subdirectory with its own toml.
-fn find_theme_prefix(archive: &mut zip::ZipArchive<std::io::Cursor<&[u8]>>) -> Result<String, String> {
+fn find_theme_prefix(
+    archive: &mut zip::ZipArchive<std::io::Cursor<&[u8]>>,
+) -> Result<String, String> {
     let mut nested: Option<String> = None;
     for i in 0..archive.len() {
-        let entry = archive.by_index(i)
+        let entry = archive
+            .by_index(i)
             .map_err(|e| format!("Failed to read zip: {}", e))?;
         let name = entry.name().to_string();
         if name == "theme.toml" {
@@ -259,9 +321,9 @@ fn tempdir_in(dir: &str) -> Result<String, String> {
         .subsec_nanos();
     let tmp_name = format!(".theme_upload_tmp_{}", ts);
     let tmp_path = PathBuf::from(dir).join(&tmp_name);
-    fs::create_dir_all(&tmp_path)
-        .map_err(|e| format!("Failed to create temp directory: {}", e))?;
-    tmp_path.to_str()
+    fs::create_dir_all(&tmp_path).map_err(|e| format!("Failed to create temp directory: {}", e))?;
+    tmp_path
+        .to_str()
         .map(|s| s.to_string())
         .ok_or("Temp path is not valid UTF-8.".to_string())
 }
@@ -278,12 +340,13 @@ pub struct CreateThemeForm {
     pub visibility: Option<String>,
 }
 
-pub async fn create_form(
-    State(state): State<AppState>,
-    admin: AdminUser,
-) -> impl IntoResponse {
+pub async fn create_form(State(state): State<AppState>, admin: AdminUser) -> impl IntoResponse {
     if !admin.caps.can_manage_themes {
-        return (StatusCode::FORBIDDEN, Html("<h1>403 Forbidden</h1>".to_string())).into_response();
+        return (
+            StatusCode::FORBIDDEN,
+            Html("<h1>403 Forbidden</h1>".to_string()),
+        )
+            .into_response();
     }
     let cs = state.site_hostname(admin.site_id);
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
@@ -296,7 +359,11 @@ pub async fn create_theme(
     Form(form): Form<CreateThemeForm>,
 ) -> impl IntoResponse {
     if !admin.caps.can_manage_themes {
-        return (StatusCode::FORBIDDEN, Html("<h1>403 Forbidden</h1>".to_string())).into_response();
+        return (
+            StatusCode::FORBIDDEN,
+            Html("<h1>403 Forbidden</h1>".to_string()),
+        )
+            .into_response();
     }
     let cs = state.site_hostname(admin.site_id);
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
@@ -331,7 +398,10 @@ pub async fn create_theme(
             FsPath::new(themes_parent).join("private").join(&name)
         }
     } else if let Some(sid) = admin.site_id {
-        FsPath::new(&state.config.sites_dir).join(sid.to_string()).join("themes").join(&name)
+        FsPath::new(&state.config.sites_dir)
+            .join(sid.to_string())
+            .join("themes")
+            .join(&name)
     } else {
         form_err!("No site selected. Cannot create theme.");
     };
@@ -348,7 +418,11 @@ pub async fn create_theme(
         form_err!("The global 'default' theme was not found. Cannot create theme.");
     }
     if let Err(e) = copy_dir_all(&default_src, &target_dir) {
-        tracing::error!("create_theme: failed to copy default theme to '{}': {}", name, e);
+        tracing::error!(
+            "create_theme: failed to copy default theme to '{}': {}",
+            name,
+            e
+        );
         let _ = fs::remove_dir_all(&target_dir);
         form_err!("Failed to copy theme files. Please try again.");
     }
@@ -363,11 +437,23 @@ pub async fn create_theme(
         author = author.replace('"', "\\\""),
     );
     if let Err(e) = fs::write(target_dir.join("theme.toml"), toml_content.as_bytes()) {
-        tracing::error!("create_theme: failed to write theme.toml for '{}': {}", name, e);
+        tracing::error!(
+            "create_theme: failed to write theme.toml for '{}': {}",
+            name,
+            e
+        );
         let _ = fs::remove_dir_all(&target_dir);
         form_err!("Failed to write theme files. Please try again.");
     }
 
-    tracing::info!("theme '{}' created by {}", name, if admin.caps.is_global_admin { "super_admin" } else { "site_admin" });
+    tracing::info!(
+        "theme '{}' created by {}",
+        name,
+        if admin.caps.is_global_admin {
+            "super_admin"
+        } else {
+            "site_admin"
+        }
+    );
     Redirect::to(&format!("/admin/themes/editor/{}", url_encode_param(&name))).into_response()
 }

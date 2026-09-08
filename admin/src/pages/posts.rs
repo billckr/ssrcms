@@ -97,29 +97,46 @@ pub struct TermOption {
 
 /// Build pagination controls for the posts/pages list.
 /// Preserves `status_qs` (e.g. `"&status=published"`), `search_qs`, and `sort_qs` across page nav.
-fn posts_pagination(base_path: &str, page: i64, total_pages: i64, status_qs: &str, search_qs: &str, sort_qs: &str) -> String {
+fn posts_pagination(
+    base_path: &str,
+    page: i64,
+    total_pages: i64,
+    status_qs: &str,
+    search_qs: &str,
+    sort_qs: &str,
+) -> String {
     if total_pages <= 1 {
         return String::new();
     }
     let qs = format!("{status_qs}{search_qs}{sort_qs}");
     let prev = if page > 1 {
-        format!(r#"<a href="{base_path}?page={}{qs}" class="page-btn">&laquo; Prev</a>"#, page - 1)
+        format!(
+            r#"<a href="{base_path}?page={}{qs}" class="page-btn">&laquo; Prev</a>"#,
+            page - 1
+        )
     } else {
         r#"<span class="page-btn page-btn-disabled">&laquo; Prev</span>"#.to_string()
     };
     let next = if page < total_pages {
-        format!(r#"<a href="{base_path}?page={}{qs}" class="page-btn">Next &raquo;</a>"#, page + 1)
+        format!(
+            r#"<a href="{base_path}?page={}{qs}" class="page-btn">Next &raquo;</a>"#,
+            page + 1
+        )
     } else {
         r#"<span class="page-btn page-btn-disabled">Next &raquo;</span>"#.to_string()
     };
     let start = (page - 3).max(1);
-    let end   = (page + 3).min(total_pages);
+    let end = (page + 3).min(total_pages);
     let mut nums = String::new();
     for p in start..=end {
         if p == page {
-            nums.push_str(&format!(r#"<span class="page-btn page-btn-active">{p}</span>"#));
+            nums.push_str(&format!(
+                r#"<span class="page-btn page-btn-active">{p}</span>"#
+            ));
         } else {
-            nums.push_str(&format!(r#"<a href="{base_path}?page={p}{qs}" class="page-btn">{p}</a>"#));
+            nums.push_str(&format!(
+                r#"<a href="{base_path}?page={p}{qs}" class="page-btn">{p}</a>"#
+            ));
         }
     }
     format!(r#"<div class="pagination">{prev}{nums}{next}</div>"#)
@@ -139,11 +156,22 @@ pub fn posts_list_fragment(
     sort: Option<&str>,
     dir: Option<&str>,
 ) -> String {
-    let edit_prefix = if post_type == "page" { "/admin/pages" } else { "/admin/posts" };
-    let base_path   = if post_type == "page" { "/admin/pages" } else { "/admin/posts" };
+    let edit_prefix = if post_type == "page" {
+        "/admin/pages"
+    } else {
+        "/admin/posts"
+    };
+    let base_path = if post_type == "page" {
+        "/admin/pages"
+    } else {
+        "/admin/posts"
+    };
 
     // Only published/scheduled (and the mixed "all") views show a date column.
-    let show_date_col = matches!(status_filter, None | Some("") | Some("published") | Some("scheduled"));
+    let show_date_col = matches!(
+        status_filter,
+        None | Some("") | Some("published") | Some("scheduled")
+    );
     let date_col_label = match status_filter {
         Some("scheduled") => "Scheduled (UTC)",
         Some("published") => "Published (UTC)",
@@ -166,17 +194,21 @@ pub fn posts_list_fragment(
 
     if posts.is_empty() {
         let noun = match status_filter {
-            Some("draft")     => format!("draft {}s", post_type),
-            Some("pending")   => format!("{}s pending review", post_type),
+            Some("draft") => format!("draft {}s", post_type),
+            Some("pending") => format!("{}s pending review", post_type),
             Some("scheduled") => format!("scheduled {}s", post_type),
             Some("published") => format!("published {}s", post_type),
-            Some("trashed")   => format!("trashed {}s", post_type),
-            _                 => format!("{}s", post_type),
+            Some("trashed") => format!("trashed {}s", post_type),
+            _ => format!("{}s", post_type),
         };
         let msg = if search.is_empty() {
             format!("No {} found.", noun)
         } else {
-            format!("No {} matched &ldquo;{}&rdquo;.", noun, crate::html_escape(search))
+            format!(
+                "No {} matched &ldquo;{}&rdquo;.",
+                noun,
+                crate::html_escape(search)
+            )
         };
         return format!(r#"<p class="muted">{msg}</p>"#);
     }
@@ -299,9 +331,17 @@ pub fn posts_list_fragment(
     // current status/search filters and resetting to page 1 (a new sort is a new view).
     let sort_th = |label: &str, key: &str| -> String {
         let is_active = sort == Some(key);
-        let next_dir = if is_active && dir == Some("asc") { "desc" } else { "asc" };
+        let next_dir = if is_active && dir == Some("asc") {
+            "desc"
+        } else {
+            "asc"
+        };
         let arrow = if is_active {
-            if dir == Some("asc") { " \u{25B2}" } else { " \u{25BC}" }
+            if dir == Some("asc") {
+                " \u{25B2}"
+            } else {
+                " \u{25BC}"
+            }
         } else {
             ""
         };
@@ -312,14 +352,34 @@ pub fn posts_list_fragment(
 
     // Thead middle columns mirror the tbody column ordering.
     let middle_ths = match status_filter {
-        Some("draft") | Some("pending") => format!("{}{}", sort_th("Author", "author"), sort_th("Domain", "domain")),
+        Some("draft") | Some("pending") => format!(
+            "{}{}",
+            sort_th("Author", "author"),
+            sort_th("Domain", "domain")
+        ),
         _ => {
-            let date_th = if show_date_col { sort_th(date_col_label, "date") } else { String::new() };
-            format!("{}{}{}", sort_th("Author", "author"), sort_th("Domain", "domain"), date_th)
-        },
+            let date_th = if show_date_col {
+                sort_th(date_col_label, "date")
+            } else {
+                String::new()
+            };
+            format!(
+                "{}{}{}",
+                sort_th("Author", "author"),
+                sort_th("Domain", "domain"),
+                date_th
+            )
+        }
     };
 
-    let pagination = posts_pagination(base_path, page, total_pages, &status_qs, &search_qs, &sort_qs);
+    let pagination = posts_pagination(
+        base_path,
+        page,
+        total_pages,
+        &status_qs,
+        &search_qs,
+        &sort_qs,
+    );
 
     format!(
         r#"<table class="data-table">
@@ -330,21 +390,54 @@ pub fn posts_list_fragment(
   <tbody>{rows}</tbody>
 </table>
 {pagination}"#,
-        title_th   = sort_th("Title", "title"),
-        status_th  = sort_th("Status", "status"),
+        title_th = sort_th("Title", "title"),
+        status_th = sort_th("Status", "status"),
         middle_ths = middle_ths,
-        rows       = rows,
+        rows = rows,
         pagination = pagination,
     )
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn render_list(posts: &[PostRow], post_type: &str, page: i64, total_pages: i64, flash: Option<&str>, ctx: &crate::PageContext, status_filter: Option<&str>, pending_count: i64, author_scheduled_count: i64, search: &str, sort: Option<&str>, dir: Option<&str>) -> String {
-    let title     = if post_type == "page" { "Pages" } else { "Posts" };
-    let new_label = if post_type == "page" { "New Page" } else { "New Post" };
-    let new_href  = if post_type == "page" { "/admin/pages/new" } else { "/admin/posts/new" };
-    let base_path = if post_type == "page" { "/admin/pages" } else { "/admin/posts" };
-    let bulk_action = if post_type == "page" { "/admin/pages/bulk-delete" } else { "/admin/posts/bulk-delete" };
+pub fn render_list(
+    posts: &[PostRow],
+    post_type: &str,
+    page: i64,
+    total_pages: i64,
+    flash: Option<&str>,
+    ctx: &crate::PageContext,
+    status_filter: Option<&str>,
+    pending_count: i64,
+    author_scheduled_count: i64,
+    search: &str,
+    sort: Option<&str>,
+    dir: Option<&str>,
+) -> String {
+    let title = if post_type == "page" {
+        "Pages"
+    } else {
+        "Posts"
+    };
+    let new_label = if post_type == "page" {
+        "New Page"
+    } else {
+        "New Post"
+    };
+    let new_href = if post_type == "page" {
+        "/admin/pages/new"
+    } else {
+        "/admin/posts/new"
+    };
+    let base_path = if post_type == "page" {
+        "/admin/pages"
+    } else {
+        "/admin/posts"
+    };
+    let bulk_action = if post_type == "page" {
+        "/admin/pages/bulk-delete"
+    } else {
+        "/admin/posts/bulk-delete"
+    };
 
     let status_qs = match status_filter {
         Some(s) if !s.is_empty() => format!("&status={}", s),
@@ -358,15 +451,38 @@ pub fn render_list(posts: &[PostRow], post_type: &str, page: i64, total_pages: i
     // Filter tabs — pages have fewer statuses; authors don't see Trash and only see
     // Scheduled when they actually have scheduled posts.
     let tab_specs: &[(&str, &str)] = if post_type == "page" {
-        &[("all", "All"), ("published", "Published"), ("draft", "Draft"), ("trashed", "Trashed")]
+        &[
+            ("all", "All"),
+            ("published", "Published"),
+            ("draft", "Draft"),
+            ("trashed", "Trashed"),
+        ]
     } else if ctx.user_role.eq_ignore_ascii_case("author") {
         if author_scheduled_count > 0 {
-            &[("all", "All"), ("published", "Published"), ("draft", "Draft"), ("pending", "Pending Review"), ("scheduled", "Scheduled")]
+            &[
+                ("all", "All"),
+                ("published", "Published"),
+                ("draft", "Draft"),
+                ("pending", "Pending Review"),
+                ("scheduled", "Scheduled"),
+            ]
         } else {
-            &[("all", "All"), ("published", "Published"), ("draft", "Draft"), ("pending", "Pending Review")]
+            &[
+                ("all", "All"),
+                ("published", "Published"),
+                ("draft", "Draft"),
+                ("pending", "Pending Review"),
+            ]
         }
     } else {
-        &[("all", "All"), ("published", "Published"), ("draft", "Draft"), ("pending", "Pending Review"), ("scheduled", "Scheduled"), ("trashed", "Trashed")]
+        &[
+            ("all", "All"),
+            ("published", "Published"),
+            ("draft", "Draft"),
+            ("pending", "Pending Review"),
+            ("scheduled", "Scheduled"),
+            ("trashed", "Trashed"),
+        ]
     };
     let tabs: String = tab_specs.iter().map(|(val, label)| {
         let is_active = match status_filter {
@@ -389,10 +505,23 @@ pub fn render_list(posts: &[PostRow], post_type: &str, page: i64, total_pages: i
         };
         format!(r#"<a href="{}" class="page-tab{}">{}{}</a>"#, href, active_class, label, extra)
     }).collect();
-    let tabs_html = format!(r#"<div class="page-tabs" style="margin-bottom:0">{}</div>"#, tabs);
+    let tabs_html = format!(
+        r#"<div class="page-tabs" style="margin-bottom:0">{}</div>"#,
+        tabs
+    );
 
     // Fragment: table + bottom pagination — swapped by the live-search JS.
-    let fragment = posts_list_fragment(posts, post_type, page, total_pages, ctx, status_filter, search, sort, dir);
+    let fragment = posts_list_fragment(
+        posts,
+        post_type,
+        page,
+        total_pages,
+        ctx,
+        status_filter,
+        search,
+        sort,
+        dir,
+    );
 
     // The live-search fetch URL includes status=/sort= so results stay scoped to the
     // current tab and column sort.
@@ -460,24 +589,32 @@ pub fn render_list(posts: &[PostRow], post_type: &str, page: i64, total_pages: i
   }};
 }})();
 </script>"#,
-        tabs_html      = tabs_html,
-        new_href       = new_href,
-        new_label      = new_label,
-        search_toggle  = search_toggle,
-        fragment       = fragment,
-        live_search    = crate::live_search_script("post-search", "posts-list", &fetch_prefix),
+        tabs_html = tabs_html,
+        new_href = new_href,
+        new_label = new_label,
+        search_toggle = search_toggle,
+        fragment = fragment,
+        live_search = crate::live_search_script("post-search", "posts-list", &fetch_prefix),
         pill_search_init = crate::pill_search_init_script(),
-        bulk_action    = bulk_action,
+        bulk_action = bulk_action,
     );
 
-    let path = if post_type == "page" { "/admin/pages" } else { "/admin/posts" };
+    let path = if post_type == "page" {
+        "/admin/pages"
+    } else {
+        "/admin/posts"
+    };
     crate::admin_page(title, path, flash, &content, ctx)
 }
 
 pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageContext) -> String {
     let is_new = post.id.is_none();
     let title = if is_new {
-        if post.post_type == "page" { "New Page".to_string() } else { "New Post".to_string() }
+        if post.post_type == "page" {
+            "New Page".to_string()
+        } else {
+            "New Post".to_string()
+        }
     } else {
         let display_title = if post.title.chars().count() > 150 {
             format!("{}...", post.title.chars().take(150).collect::<String>())
@@ -489,7 +626,11 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
         // double-escape entities like &#x27; into literal text.
         format!("Editing - {}", display_title)
     };
-    let publish_options_label = if post.post_type == "page" { "Page Options" } else { "Post Options" };
+    let publish_options_label = if post.post_type == "page" {
+        "Page Options"
+    } else {
+        "Post Options"
+    };
 
     let action = match &post.id {
         Some(id) => {
@@ -498,14 +639,14 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
             } else {
                 format!("/admin/posts/{}/edit", id)
             }
-        },
+        }
         None => {
             if post.post_type == "page" {
                 "/admin/pages/new".to_string()
             } else {
                 "/admin/posts/new".to_string()
             }
-        },
+        }
     };
 
     let cat_options = post.categories.iter().map(|t| {
@@ -529,24 +670,46 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
     }).collect::<Vec<_>>().join("\n");
 
     let status_options = if ctx.user_role.eq_ignore_ascii_case("author") && !ctx.can_self_publish {
-        [("draft", "Draft"), ("pending", "Submit for Review")].iter().map(|(val, label)| {
-            let selected = if *val == post.status { " selected" } else { "" };
-            format!(r#"<option value="{val}"{selected}>{label}</option>"#, val = val, label = label, selected = selected)
-        }).collect::<Vec<_>>().join("")
+        [("draft", "Draft"), ("pending", "Submit for Review")]
+            .iter()
+            .map(|(val, label)| {
+                let selected = if *val == post.status { " selected" } else { "" };
+                format!(
+                    r#"<option value="{val}"{selected}>{label}</option>"#,
+                    val = val,
+                    label = label,
+                    selected = selected
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("")
     } else {
         // Editors/admins, and any author granted can_self_publish: include
         // pending so they can see/change it too.
         // Trashed only makes sense once a post exists to trash — a brand-new,
         // never-saved post has nothing for it to do, and Delete already
         // covers removing real content.
-        let mut opts: Vec<(&str, &str)> = vec![("draft", "Draft"), ("pending", "Pending Review"), ("published", "Published"), ("scheduled", "Scheduled")];
+        let mut opts: Vec<(&str, &str)> = vec![
+            ("draft", "Draft"),
+            ("pending", "Pending Review"),
+            ("published", "Published"),
+            ("scheduled", "Scheduled"),
+        ];
         if !is_new {
             opts.push(("trashed", "Trashed"));
         }
-        opts.iter().map(|(val, label)| {
-            let selected = if *val == post.status { " selected" } else { "" };
-            format!(r#"<option value="{val}"{selected}>{label}</option>"#, val = val, label = label, selected = selected)
-        }).collect::<Vec<_>>().join("")
+        opts.iter()
+            .map(|(val, label)| {
+                let selected = if *val == post.status { " selected" } else { "" };
+                format!(
+                    r#"<option value="{val}"{selected}>{label}</option>"#,
+                    val = val,
+                    label = label,
+                    selected = selected
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("")
     };
 
     let live_url_link = match &post.live_url {
@@ -626,7 +789,11 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
     let datetime_picker_display = if is_scheduled { "" } else { "display:none" };
     // Nothing to show at all yet on a brand-new, unsaved, non-scheduled
     // post — hide the whole section rather than leaving an empty box.
-    let datetime_section_display = if !is_scheduled && post.created_at.is_none() { "display:none" } else { "" };
+    let datetime_section_display = if !is_scheduled && post.created_at.is_none() {
+        "display:none"
+    } else {
+        ""
+    };
     // One label/value block per embedded form (see fetch_form_analytics) —
     // named per-form ("Form Analytics — {name}") when there's more than one,
     // since summing submission counts across different forms wouldn't mean
@@ -707,21 +874,35 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
 
     let template_section = if post.post_type == "page" && !post.available_templates.is_empty() {
         let opts = std::iter::once(("".to_string(), "Default (page.html)".to_string()))
-            .chain(post.available_templates.iter().map(|t| (t.clone(), t.clone())))
+            .chain(
+                post.available_templates
+                    .iter()
+                    .map(|t| (t.clone(), t.clone())),
+            )
             .map(|(val, label)| {
-                let selected = if post.template.as_deref().unwrap_or("") == val { " selected" } else { "" };
-                format!(r#"<option value="{val}"{selected}>{label}</option>"#,
+                let selected = if post.template.as_deref().unwrap_or("") == val {
+                    " selected"
+                } else {
+                    ""
+                };
+                format!(
+                    r#"<option value="{val}"{selected}>{label}</option>"#,
                     val = crate::html_escape(&val),
                     label = crate::html_escape(&label),
-                    selected = selected)
+                    selected = selected
+                )
             })
-            .collect::<Vec<_>>().join("");
-        format!(r#"<div class="card-boxed-section card-boxed-section-hidden">
+            .collect::<Vec<_>>()
+            .join("");
+        format!(
+            r#"<div class="card-boxed-section card-boxed-section-hidden">
           <div class="form-group">
             <label for="template">Template</label>
             <select id="template" name="template">{opts}</select>
           </div>
-        </div>"#, opts = opts)
+        </div>"#,
+            opts = opts
+        )
     } else {
         String::new()
     };
@@ -730,9 +911,17 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
     let parent_section = if post.post_type == "page" && !post.available_parents.is_empty() {
         let current_parent = post.parent_id.as_deref().unwrap_or("");
         let opts = std::iter::once(("".to_string(), "— None (top-level) —".to_string()))
-            .chain(post.available_parents.iter().map(|(id, title)| (id.clone(), title.clone())))
+            .chain(
+                post.available_parents
+                    .iter()
+                    .map(|(id, title)| (id.clone(), title.clone())),
+            )
             .map(|(val, label)| {
-                let selected = if val == current_parent { " selected" } else { "" };
+                let selected = if val == current_parent {
+                    " selected"
+                } else {
+                    ""
+                };
                 format!(
                     r#"<option value="{val}"{selected}>{label}</option>"#,
                     val = crate::html_escape(&val),
@@ -740,7 +929,8 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
                     selected = selected,
                 )
             })
-            .collect::<Vec<_>>().join("");
+            .collect::<Vec<_>>()
+            .join("");
         format!(
             r#"<div class="form-group">
           <label for="parent_id">Parent Page</label>
@@ -763,11 +953,16 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
         let tag_count = post.selected_tags.len();
         let cat_badge = if cat_count > 0 {
             format!(r#"<span class="inline-media-count">{}</span>"#, cat_count)
-        } else { String::new() };
+        } else {
+            String::new()
+        };
         let tag_badge = if tag_count > 0 {
             format!(r#"<span class="inline-media-count">{}</span>"#, tag_count)
-        } else { String::new() };
-        format!(r#"<details class="form-section">
+        } else {
+            String::new()
+        };
+        format!(
+            r#"<details class="form-section">
           <summary>
             <span>Categories</span>
             {cat_badge}
@@ -823,8 +1018,16 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
     } else {
         r#"<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" style="opacity:.35"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10.5" r="1.5"/><path d="M3 16l4.5-4.5 3 3 2.5-2.5 5 5"/></svg><span style="color:var(--muted);font-size:12px">No image selected</span>"#.to_string()
     };
-    let has_image_class = if post.featured_image_url.is_some() { " has-image" } else { "" };
-    let remove_display = if post.featured_image_url.is_some() { "" } else { "display:none" };
+    let has_image_class = if post.featured_image_url.is_some() {
+        " has-image"
+    } else {
+        ""
+    };
+    let remove_display = if post.featured_image_url.is_some() {
+        ""
+    } else {
+        "display:none"
+    };
     let featured_image_section = format!(
         r#"<div class="form-section">
       <h3>Featured Image</h3>
@@ -848,8 +1051,16 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
         remove_display = remove_display,
     );
 
-    let protected_checked = if post.post_password_set { "checked" } else { "" };
-    let pw_group_display  = if post.post_password_set { "" } else { "display:none" };
+    let protected_checked = if post.post_password_set {
+        "checked"
+    } else {
+        ""
+    };
+    let pw_group_display = if post.post_password_set {
+        ""
+    } else {
+        "display:none"
+    };
 
     // A post that already has a password shows a compact "Password set ·
     // Change" row instead of an empty field with "leave blank to keep it"
@@ -863,8 +1074,16 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
           <label for="post-password" class="sr-only">Password</label>
           <input type="password" id="post-password" name="post_password" autocomplete="new-password" placeholder="{placeholder}" style="font-size:13px">
         </div>"#,
-        display = if post.post_password_set { "display:none" } else { "" },
-        placeholder = if post.post_password_set { "Enter new password" } else { "Enter password" },
+        display = if post.post_password_set {
+            "display:none"
+        } else {
+            ""
+        },
+        placeholder = if post.post_password_set {
+            "Enter new password"
+        } else {
+            "Enter password"
+        },
     );
     let pw_set_row = if post.post_password_set {
         r#"<div class="form-group" id="post-pw-set-row" style="display:flex;align-items:center;gap:.4rem">
@@ -905,7 +1124,11 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
         String::new()
     } else {
         let checked = if post.comments_enabled { "checked" } else { "" };
-        let label_text = if post.comments_enabled { "Disable Comments" } else { "Allow Comments" };
+        let label_text = if post.comments_enabled {
+            "Disable Comments"
+        } else {
+            "Allow Comments"
+        };
         let count_badge = if post.comment_count > 0 {
             format!(
                 r#" <span style="display:inline-block;background:var(--tint);color:var(--text);border-radius:4px;padding:.15rem .5rem;font-size:.78rem;font-weight:500" title="{n} comment{s}">{n}</span>"#,
@@ -943,7 +1166,9 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
     );
 
     // Author card: shown to editors/admins when viewing an existing post written by someone else.
-    let author_card = if !ctx.user_role.eq_ignore_ascii_case("author") && !post.author_name.is_empty() {
+    let author_card = if !ctx.user_role.eq_ignore_ascii_case("author")
+        && !post.author_name.is_empty()
+    {
         let site_line = if post.site_name.is_empty() {
             String::new()
         } else if post.site_id.is_empty() {
@@ -964,7 +1189,11 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
             ""
         };
         let name_html = if post.author_id.is_empty() {
-            format!(r#"<div class="author-card-name">{}{}</div>"#, crate::html_escape(&post.author_name), suspended_badge)
+            format!(
+                r#"<div class="author-card-name">{}{}</div>"#,
+                crate::html_escape(&post.author_name),
+                suspended_badge
+            )
         } else {
             format!(
                 r#"<a class="author-card-name" href="/admin/users/{id}/edit">{name}</a>{suspended_badge}"#,
@@ -1825,7 +2054,10 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
         datetime_picker_display = datetime_picker_display,
         post_dates_info = post_dates_info,
         datetime_field = if ctx.user_role.eq_ignore_ascii_case("author") && !ctx.can_self_publish {
-            format!(r#"<input type="hidden" name="published_at" value="{}">"#, crate::html_escape(&published_at))
+            format!(
+                r#"<input type="hidden" name="published_at" value="{}">"#,
+                crate::html_escape(&published_at)
+            )
         } else {
             format!(
                 r#"<label for="published_at">Date and Time (UTC)</label>
@@ -1845,7 +2077,11 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
         delete_btn_inline = delete_btn_inline,
     );
 
-    let path = if post.post_type == "page" { "/admin/pages" } else { "/admin/posts" };
+    let path = if post.post_type == "page" {
+        "/admin/pages"
+    } else {
+        "/admin/posts"
+    };
     content.push_str(&crate::media_picker_modal_html());
     crate::admin_page(&title, path, flash, &content, ctx)
 }
@@ -1897,23 +2133,93 @@ mod tests {
 
     #[test]
     fn post_view_link_uses_blog_prefix() {
-        let html = render_list(&[make_row("post", "my-post")], "post", 1, 1, None, &make_ctx(), None, 0, 0, "", None, None);
-        assert!(html.contains("href=\"/my-post\""), "post view href should be /{{slug}}");
-        assert!(html.contains("target=\"_blank\""), "view link should open in new tab");
+        let html = render_list(
+            &[make_row("post", "my-post")],
+            "post",
+            1,
+            1,
+            None,
+            &make_ctx(),
+            None,
+            0,
+            0,
+            "",
+            None,
+            None,
+        );
+        assert!(
+            html.contains("href=\"/my-post\""),
+            "post view href should be /{{slug}}"
+        );
+        assert!(
+            html.contains("target=\"_blank\""),
+            "view link should open in new tab"
+        );
     }
 
     #[test]
     fn page_view_link_uses_root_prefix() {
-        let html = render_list(&[make_row("page", "about")], "page", 1, 1, None, &make_ctx(), None, 0, 0, "", None, None);
-        assert!(html.contains("href=\"/about\""), "page view href should be /{{slug}}");
-        assert!(html.contains("target=\"_blank\""), "view link should open in new tab");
+        let html = render_list(
+            &[make_row("page", "about")],
+            "page",
+            1,
+            1,
+            None,
+            &make_ctx(),
+            None,
+            0,
+            0,
+            "",
+            None,
+            None,
+        );
+        assert!(
+            html.contains("href=\"/about\""),
+            "page view href should be /{{slug}}"
+        );
+        assert!(
+            html.contains("target=\"_blank\""),
+            "view link should open in new tab"
+        );
     }
 
     #[test]
     fn view_icon_present_in_both_post_and_page_lists() {
-        let post_html = render_list(&[make_row("post", "hello")], "post", 1, 1, None, &make_ctx(), None, 0, 0, "", None, None);
-        let page_html = render_list(&[make_row("page", "hello")], "page", 1, 1, None, &make_ctx(), None, 0, 0, "", None, None);
-        assert!(post_html.contains("eye.svg"), "post list should include eye icon");
-        assert!(page_html.contains("eye.svg"), "page list should include eye icon");
+        let post_html = render_list(
+            &[make_row("post", "hello")],
+            "post",
+            1,
+            1,
+            None,
+            &make_ctx(),
+            None,
+            0,
+            0,
+            "",
+            None,
+            None,
+        );
+        let page_html = render_list(
+            &[make_row("page", "hello")],
+            "page",
+            1,
+            1,
+            None,
+            &make_ctx(),
+            None,
+            0,
+            0,
+            "",
+            None,
+            None,
+        );
+        assert!(
+            post_html.contains("eye.svg"),
+            "post list should include eye icon"
+        );
+        assert!(
+            page_html.contains("eye.svg"),
+            "page list should include eye icon"
+        );
     }
 }

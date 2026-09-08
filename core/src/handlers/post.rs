@@ -14,20 +14,23 @@ use uuid::Uuid;
 use std::collections::HashMap;
 
 use crate::app_state::AppState;
+use crate::errors::Result;
+use crate::handlers::home::enrich_builder_context;
 use crate::middleware::site::CurrentSite;
 use crate::models::{page_composition, post};
-use crate::templates::{composer, context::{ContextBuilder, RequestContext, SessionContext}};
-use crate::handlers::home::enrich_builder_context;
-use crate::errors::Result;
+use crate::templates::{
+    composer,
+    context::{ContextBuilder, RequestContext, SessionContext},
+};
 
 #[derive(Serialize)]
 struct CommentPaginationContext {
     current_page: usize,
-    total_pages:  usize,
-    total_count:  usize,
-    prev_page:    Option<usize>,
-    next_page:    Option<usize>,
-    post_url:     String,
+    total_pages: usize,
+    total_count: usize,
+    prev_page: Option<usize>,
+    next_page: Option<usize>,
+    post_url: String,
 }
 
 use super::home::{build_post_context, build_site_context, render_error_page};
@@ -47,7 +50,10 @@ pub async fn single_post(
     let path = uri.path().to_string();
     let site_id = current_site.site.id;
     let base_url = current_site.base_url.clone();
-    let cpage: usize = params.get("cpage").and_then(|v| v.parse().ok()).unwrap_or(1);
+    let cpage: usize = params
+        .get("cpage")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(1);
 
     // ── Builder page check ─────────────────────────────────────────────────
     // If the active builder project owns a page with this slug, render it via
@@ -64,7 +70,10 @@ pub async fn single_post(
     }
     // ── End builder check ──────────────────────────────────────────────────
 
-    render_single_post_response(&state, site_id, &base_url, slug, uri, &jar, &session, addr, &headers, cpage).await
+    render_single_post_response(
+        &state, site_id, &base_url, slug, uri, &jar, &session, addr, &headers, cpage,
+    )
+    .await
 }
 
 /// Full "render a single post" pipeline — password gate, view tracking, then
@@ -118,7 +127,9 @@ pub(crate) async fn render_single_post_response(
             let ip_hash = anonymize_ip(&client_ip);
             // Resolve post_id without a second DB query by re-fetching only if needed.
             // We use a lightweight slug→id lookup path here.
-            if let Ok(post_record) = post::get_published_by_slug(&state.db, Some(site_id), &slug).await {
+            if let Ok(post_record) =
+                post::get_published_by_slug(&state.db, Some(site_id), &slug).await
+            {
                 let today = Local::now().date_naive();
                 // Fire-and-forget: send() on an UnboundedSender is non-blocking
                 // and lock-free — it enqueues immediately regardless of how many
@@ -131,7 +142,18 @@ pub(crate) async fn render_single_post_response(
 
     let preview_allowed = super::can_preview_site(state, headers, site_id).await;
 
-    match render_post(state.clone(), slug, uri, site_id, base_url, session_ctx, cpage, preview_allowed).await {
+    match render_post(
+        state.clone(),
+        slug,
+        uri,
+        site_id,
+        base_url,
+        session_ctx,
+        cpage,
+        preview_allowed,
+    )
+    .await
+    {
         Ok(html) => Html(html).into_response(),
         Err(e) => render_error_page(e, state, &path, Some(site_id)).await,
     }
@@ -180,9 +202,11 @@ fn is_bot(ua: &str) -> bool {
         return true;
     }
     let lower = ua.to_lowercase();
-    ["bot", "crawler", "spider", "slurp", "curl", "wget", "python", "go-http", "java/", "libwww"]
-        .iter()
-        .any(|kw| lower.contains(kw))
+    [
+        "bot", "crawler", "spider", "slurp", "curl", "wget", "python", "go-http", "java/", "libwww",
+    ]
+    .iter()
+    .any(|kw| lower.contains(kw))
 }
 
 async fn render_post(
@@ -208,7 +232,16 @@ async fn render_post(
 
     // If this slug belongs to a page, delegate to the page renderer.
     if post_record.post_type == "page" {
-        return super::page::render_page(state, vec![slug.as_str()], uri, site_id, base_url, session_ctx, preview_allowed).await;
+        return super::page::render_page(
+            state,
+            vec![slug.as_str()],
+            uri,
+            site_id,
+            base_url,
+            session_ctx,
+            preview_allowed,
+        )
+        .await;
     }
 
     let post_ctx = build_post_context(&state, &post_record, base_url).await?;
@@ -243,27 +276,35 @@ async fn render_post(
         crate::models::comment::list_for_post(&state.db, post_record.id, cpage, PER_PAGE)
             .await
             .unwrap_or_else(|_| crate::models::comment::CommentPage {
-                comments:     vec![],
+                comments: vec![],
                 current_page: 1,
-                total_pages:  1,
-                total_count:  0,
+                total_pages: 1,
+                total_count: 0,
             })
     } else {
         crate::models::comment::CommentPage {
-            comments:     vec![],
+            comments: vec![],
             current_page: 1,
-            total_pages:  1,
-            total_count:  0,
+            total_pages: 1,
+            total_count: 0,
         }
     };
 
     let comment_pagination = CommentPaginationContext {
         current_page: comment_page.current_page,
-        total_pages:  comment_page.total_pages,
-        total_count:  comment_page.total_count,
-        prev_page:    if comment_page.current_page > 1 { Some(comment_page.current_page - 1) } else { None },
-        next_page:    if comment_page.current_page < comment_page.total_pages { Some(comment_page.current_page + 1) } else { None },
-        post_url:     format!("/{}", slug),
+        total_pages: comment_page.total_pages,
+        total_count: comment_page.total_count,
+        prev_page: if comment_page.current_page > 1 {
+            Some(comment_page.current_page - 1)
+        } else {
+            None
+        },
+        next_page: if comment_page.current_page < comment_page.total_pages {
+            Some(comment_page.current_page + 1)
+        } else {
+            None
+        },
+        post_url: format!("/{}", slug),
     };
 
     let site_ctx = build_site_context(&state, Some(site_id), base_url).await?;
@@ -281,13 +322,18 @@ async fn render_post(
         false
     };
 
-    let query_params: std::collections::HashMap<String, String> = uri.query()
-        .map(|q| q.split('&').filter_map(|pair| {
-            let mut parts = pair.splitn(2, '=');
-            let k = parts.next()?.to_string();
-            let v = parts.next().unwrap_or("").to_string();
-            Some((k, v))
-        }).collect())
+    let query_params: std::collections::HashMap<String, String> = uri
+        .query()
+        .map(|q| {
+            q.split('&')
+                .filter_map(|pair| {
+                    let mut parts = pair.splitn(2, '=');
+                    let k = parts.next()?.to_string();
+                    let v = parts.next().unwrap_or("").to_string();
+                    Some((k, v))
+                })
+                .collect()
+        })
         .unwrap_or_default();
 
     let nav = crate::models::nav_menu::build_nav_context(&state.db, site_id, uri.path()).await;
@@ -319,9 +365,18 @@ async fn render_post(
     let hook_outputs = state.templates.render_hooks_for_theme(
         &theme,
         Some(site_id),
-        &["head_start", "head_end", "body_start", "body_end", "before_content", "after_content", "footer"],
+        &[
+            "head_start",
+            "head_end",
+            "body_start",
+            "body_end",
+            "before_content",
+            "after_content",
+            "footer",
+        ],
         &ctx,
-    Some(&active_plugins));
+        Some(&active_plugins),
+    );
     ContextBuilder::add_hook_outputs(&mut ctx, &hook_outputs);
 
     // ── Post template check ────────────────────────────────────────────────────
@@ -335,7 +390,9 @@ async fn render_post(
     }
     // ── End post template check ────────────────────────────────────────────────
 
-    state.templates.render_for_theme(&theme, Some(site_id), "single.html", &ctx)
+    state
+        .templates
+        .render_for_theme(&theme, Some(site_id), "single.html", &ctx)
 }
 
 // ── Save / Unsave post ────────────────────────────────────────────────────────
@@ -357,7 +414,8 @@ pub async fn save_post(
     };
     let site_id = current_site.site.id;
     if let Ok(post_record) = post::get_published_by_slug(&state.db, Some(site_id), &slug).await {
-        let _ = crate::models::saved_post::save(&state.db, uid, post_record.id, Some(site_id)).await;
+        let _ =
+            crate::models::saved_post::save(&state.db, uid, post_record.id, Some(site_id)).await;
     }
     redirect.into_response()
 }
@@ -376,7 +434,8 @@ pub async fn unsave_post(
     Form(form): Form<UnsaveForm>,
 ) -> Response {
     let fallback = format!("/{}", slug);
-    let return_to = form.return_to
+    let return_to = form
+        .return_to
         .as_deref()
         .filter(|s| s.starts_with('/'))
         .unwrap_or(&fallback)

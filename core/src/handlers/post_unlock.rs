@@ -55,7 +55,12 @@ pub fn is_unlocked(jar: &SignedCookieJar, post_id: uuid::Uuid, current_hash: &st
 }
 
 /// Return a full-page password gate `Response`.
-pub fn gate_response(post_title: &str, action: &str, error: Option<&str>, default_theme: &str) -> Response {
+pub fn gate_response(
+    post_title: &str,
+    action: &str,
+    error: Option<&str>,
+    default_theme: &str,
+) -> Response {
     Html(gate_html(post_title, action, error, default_theme)).into_response()
 }
 
@@ -119,7 +124,12 @@ async fn unlock_inner(
 
     // Reject immediately if the human checkbox wasn't ticked.
     if human_check.as_deref() != Some("on") {
-        return gate_response("Protected Content", form_action, Some("Please confirm you are human."), &default_theme);
+        return gate_response(
+            "Protected Content",
+            form_action,
+            Some("Please confirm you are human."),
+            &default_theme,
+        );
     }
     let site_id = current_site.site.id;
 
@@ -145,19 +155,21 @@ async fn unlock_inner(
             .build();
         (jar.add(cookie), Redirect::to(redirect_to)).into_response()
     } else {
-        gate_response(&post_record.title, form_action, Some("Incorrect password. Please try again."), &default_theme)
+        gate_response(
+            &post_record.title,
+            form_action,
+            Some("Incorrect password. Please try again."),
+            &default_theme,
+        )
     }
 }
 
 // ── Gate HTML ─────────────────────────────────────────────────────────────────
 
 fn gate_html(_post_title: &str, action: &str, error: Option<&str>, default_theme: &str) -> String {
-    let error_html = error.map(|e| {
-        format!(
-            r#"<div class="error">{}</div>"#,
-            html_escape(e)
-        )
-    }).unwrap_or_default();
+    let error_html = error
+        .map(|e| format!(r#"<div class="error">{}</div>"#, html_escape(e)))
+        .unwrap_or_default();
 
     // Already validated to one of these three literals when saved — safe to
     // splice into JS, but re-checked here since callers pass it through untrusted.

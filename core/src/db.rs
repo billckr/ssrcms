@@ -19,6 +19,8 @@ pub async fn migrate(pool: &PgPool) -> Result<()> {
     sqlx::migrate!("../migrations")
         .run(pool)
         .await
-        .map_err(|e: sqlx::migrate::MigrateError| AppError::Config(format!("migration failed: {e}")))?;
+        .map_err(|e: sqlx::migrate::MigrateError| {
+            AppError::Config(format!("migration failed: {e}"))
+        })?;
     Ok(())
 }

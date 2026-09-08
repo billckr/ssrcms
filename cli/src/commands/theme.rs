@@ -19,7 +19,9 @@ pub enum ThemeAction {
     /// If the site does not already have a local copy of the theme it is copied
     /// from themes/global/ first, then set as active — matching the behaviour
     /// of the 'Get Theme' button in the admin UI.
-    #[command(after_help = "Examples:\n  synap theme activate default --site example.com\n  synap theme activate testing --site example.com")]
+    #[command(
+        after_help = "Examples:\n  synap theme activate default --site example.com\n  synap theme activate testing --site example.com"
+    )]
     Activate {
         /// Name of the theme to activate (directory name, e.g. default)
         #[arg(value_name = "THEME")]
@@ -60,12 +62,17 @@ pub enum ThemeAction {
 pub async fn run(action: ThemeAction) -> anyhow::Result<()> {
     match action {
         ThemeAction::List { site, database_url } => list(site, database_url).await,
-        ThemeAction::Activate { name, site, database_url, pid_file } => {
-            activate(name, site, database_url, pid_file).await
-        }
-        ThemeAction::Remove { name, site, database_url } => {
-            remove(name, site, database_url).await
-        }
+        ThemeAction::Activate {
+            name,
+            site,
+            database_url,
+            pid_file,
+        } => activate(name, site, database_url, pid_file).await,
+        ThemeAction::Remove {
+            name,
+            site,
+            database_url,
+        } => remove(name, site, database_url).await,
         ThemeAction::Reload { pid_file } => {
             signal_reload(&pid_file, "current");
             Ok(())
@@ -77,7 +84,7 @@ pub async fn run(action: ThemeAction) -> anyhow::Result<()> {
 /// Returns (path, source_label) pairs. Falls back to flat themes/ for pre-multisite layouts.
 fn collect_theme_dirs() -> Vec<(std::path::PathBuf, String)> {
     let themes_root = Path::new("themes");
-    let sites_root  = Path::new("sites");
+    let sites_root = Path::new("sites");
     let mut dirs: Vec<(std::path::PathBuf, String)> = Vec::new();
 
     let global_dir = themes_root.join("global");
@@ -87,10 +94,20 @@ fn collect_theme_dirs() -> Vec<(std::path::PathBuf, String)> {
 
     // Per-site themes live at sites/{uuid}/themes/.
     if sites_root.is_dir() {
-        for entry in std::fs::read_dir(sites_root).into_iter().flatten().flatten() {
+        for entry in std::fs::read_dir(sites_root)
+            .into_iter()
+            .flatten()
+            .flatten()
+        {
             let site_dir = entry.path();
-            if !site_dir.is_dir() { continue; }
-            let uuid_str = site_dir.file_name().unwrap_or_default().to_string_lossy().to_string();
+            if !site_dir.is_dir() {
+                continue;
+            }
+            let uuid_str = site_dir
+                .file_name()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .to_string();
             let themes_dir = site_dir.join("themes");
             if themes_dir.is_dir() {
                 let label = format!("site:{uuid_str}");
@@ -116,21 +133,55 @@ fn scan_themes() -> anyhow::Result<Vec<(String, String, String, String, String, 
     for (dir, source) in collect_theme_dirs() {
         for entry in std::fs::read_dir(&dir).into_iter().flatten().flatten() {
             let path = entry.path();
-            if !path.is_dir() { continue; }
-            let dir_name = path.file_name().unwrap_or_default().to_string_lossy().to_string();
-            if dir_name.starts_with('.') { continue; }
+            if !path.is_dir() {
+                continue;
+            }
+            let dir_name = path
+                .file_name()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .to_string();
+            if dir_name.starts_with('.') {
+                continue;
+            }
             let toml_path = path.join("theme.toml");
-            if !toml_path.exists() { continue; }
+            if !toml_path.exists() {
+                continue;
+            }
             let content = std::fs::read_to_string(&toml_path)
                 .map_err(|e| anyhow::anyhow!("Cannot read {}: {e}", toml_path.display()))?;
-            let table: toml::Value = content.parse()
+            let table: toml::Value = content
+                .parse()
                 .map_err(|e| anyhow::anyhow!("Invalid TOML in {}: {e}", toml_path.display()))?;
             let theme = table.get("theme").unwrap_or(&table);
-            let display_name = theme.get("name").and_then(|v| v.as_str()).unwrap_or(&dir_name).to_string();
-            let version      = theme.get("version").and_then(|v| v.as_str()).unwrap_or("?").to_string();
-            let api_version  = theme.get("api_version").and_then(|v| v.as_str()).unwrap_or("?").to_string();
-            let description  = theme.get("description").and_then(|v| v.as_str()).unwrap_or("").to_string();
-            themes.push((dir_name, display_name, version, api_version, description, source.clone()));
+            let display_name = theme
+                .get("name")
+                .and_then(|v| v.as_str())
+                .unwrap_or(&dir_name)
+                .to_string();
+            let version = theme
+                .get("version")
+                .and_then(|v| v.as_str())
+                .unwrap_or("?")
+                .to_string();
+            let api_version = theme
+                .get("api_version")
+                .and_then(|v| v.as_str())
+                .unwrap_or("?")
+                .to_string();
+            let description = theme
+                .get("description")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            themes.push((
+                dir_name,
+                display_name,
+                version,
+                api_version,
+                description,
+                source.clone(),
+            ));
         }
     }
     themes.sort_by(|a, b| a.5.cmp(&b.5).then(a.0.cmp(&b.0)));
@@ -154,14 +205,18 @@ async fn list(site: Option<String>, database_url: Option<String>) -> anyhow::Res
             // Resolve site identifier to UUID + hostname.
             let pool = super::connect_db().await?;
             let site_id = resolve_site_id(&pool, s).await?;
-            let hostname = all_site_names.get(&site_id).cloned()
+            let hostname = all_site_names
+                .get(&site_id)
+                .cloned()
                 .unwrap_or_else(|| site_id.to_string());
-            let active_theme = active_map.get(&Some(site_id)).cloned()
-                .unwrap_or_default();
+            let active_theme = active_map.get(&Some(site_id)).cloned().unwrap_or_default();
 
             println!("\nThemes for {} ({})", hostname, site_id);
             println!("{}", "-".repeat(96));
-            println!("{:<22} {:<20} {:<10} {:<6} {:<10} {}", "Name", "Slug", "Version", "API", "Status", "Description");
+            println!(
+                "{:<22} {:<20} {:<10} {:<6} {:<10} {}",
+                "Name", "Slug", "Version", "API", "Status", "Description"
+            );
             println!("{}", "-".repeat(96));
 
             // Show global themes and this site's local copies, deduplicated by dir_name.
@@ -174,14 +229,28 @@ async fn list(site: Option<String>, database_url: Option<String>) -> anyhow::Res
             for (dir_name, display_name, version, api, desc, source) in &themes {
                 if source == &site_prefix {
                     let is_active = dir_name == &active_theme;
-                    rows.push((dir_name.clone(), display_name.clone(), version.clone(), api.clone(), desc.clone(), is_active));
+                    rows.push((
+                        dir_name.clone(),
+                        display_name.clone(),
+                        version.clone(),
+                        api.clone(),
+                        desc.clone(),
+                        is_active,
+                    ));
                     seen.insert(dir_name.clone());
                 }
             }
             // Second pass: global themes not already installed locally.
             for (dir_name, display_name, version, api, desc, source) in &themes {
                 if source == "global" && !seen.contains(dir_name) {
-                    rows.push((dir_name.clone(), display_name.clone(), version.clone(), api.clone(), desc.clone(), false));
+                    rows.push((
+                        dir_name.clone(),
+                        display_name.clone(),
+                        version.clone(),
+                        api.clone(),
+                        desc.clone(),
+                        false,
+                    ));
                 }
             }
             rows.sort_by(|a, b| a.0.cmp(&b.0));
@@ -195,14 +264,20 @@ async fn list(site: Option<String>, database_url: Option<String>) -> anyhow::Res
                 } else {
                     "available"
                 };
-                println!("  {:<20} {:<20} {:<10} {:<6} {:<10} {}", display_name, dir_name, version, api, status, desc);
+                println!(
+                    "  {:<20} {:<20} {:<10} {:<6} {:<10} {}",
+                    display_name, dir_name, version, api, status, desc
+                );
             }
             println!();
         }
 
         // ── Overview: all sites ───────────────────────────────────────────────
         None => {
-            println!("\n{:<22} {:<20} {:<10} {:<6} {:<16} {}", "Name", "Slug", "Version", "API", "Domain", "Description");
+            println!(
+                "\n{:<22} {:<20} {:<10} {:<6} {:<16} {}",
+                "Name", "Slug", "Version", "API", "Domain", "Description"
+            );
             println!("{}", "-".repeat(96));
 
             for (dir_name, display_name, version, api, desc, source) in &themes {
@@ -210,7 +285,10 @@ async fn list(site: Option<String>, database_url: Option<String>) -> anyhow::Res
                     "global".to_string()
                 } else if let Some(uuid_str) = source.strip_prefix("site:") {
                     if let Ok(id) = uuid_str.parse::<Uuid>() {
-                        all_site_names.get(&id).cloned().unwrap_or_else(|| uuid_str.to_string())
+                        all_site_names
+                            .get(&id)
+                            .cloned()
+                            .unwrap_or_else(|| uuid_str.to_string())
                     } else {
                         source.clone()
                     }
@@ -218,7 +296,10 @@ async fn list(site: Option<String>, database_url: Option<String>) -> anyhow::Res
                     source.clone()
                 };
 
-                println!("  {:<20} {:<20} {:<10} {:<6} {:<16} {}", display_name, dir_name, version, api, display_source, desc);
+                println!(
+                    "  {:<20} {:<20} {:<10} {:<6} {:<16} {}",
+                    display_name, dir_name, version, api, display_source, desc
+                );
             }
             println!();
         }
@@ -228,21 +309,24 @@ async fn list(site: Option<String>, database_url: Option<String>) -> anyhow::Res
 }
 
 /// Load active_theme setting for every site from site_settings.
-async fn load_active_themes(database_url: Option<String>) -> std::collections::HashMap<Option<Uuid>, String> {
+async fn load_active_themes(
+    database_url: Option<String>,
+) -> std::collections::HashMap<Option<Uuid>, String> {
     let mut map = std::collections::HashMap::new();
     if let Some(url) = database_url {
-        unsafe { std::env::set_var("DATABASE_URL", url); }
+        unsafe {
+            std::env::set_var("DATABASE_URL", url);
+        }
     }
     let pool = match super::connect_db().await {
         Ok(p) => p,
         Err(_) => return map,
     };
-    let rows: Vec<(Option<Uuid>, String)> = sqlx::query_as(
-        "SELECT site_id, value FROM site_settings WHERE key = 'active_theme'"
-    )
-    .fetch_all(&pool)
-    .await
-    .unwrap_or_default();
+    let rows: Vec<(Option<Uuid>, String)> =
+        sqlx::query_as("SELECT site_id, value FROM site_settings WHERE key = 'active_theme'")
+            .fetch_all(&pool)
+            .await
+            .unwrap_or_default();
 
     for (site_id, value) in rows {
         map.insert(site_id, value);
@@ -274,9 +358,12 @@ async fn resolve_site_id(pool: &sqlx::PgPool, site: &str) -> anyhow::Result<Uuid
         .fetch_optional(pool)
         .await
         .map_err(|e| anyhow::anyhow!("DB error looking up site: {e}"))?
-        .ok_or_else(|| anyhow::anyhow!(
-            "No site found with hostname '{}'. Run 'synap site list' to see available sites.", site
-        ))
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "No site found with hostname '{}'. Run 'synap site list' to see available sites.",
+                site
+            )
+        })
 }
 
 /// Recursive directory copy — matches the behaviour of copy_dir_all in the web handler.
@@ -306,7 +393,9 @@ async fn activate(
     }
 
     if let Some(url) = database_url {
-        unsafe { std::env::set_var("DATABASE_URL", url); }
+        unsafe {
+            std::env::set_var("DATABASE_URL", url);
+        }
     }
 
     let pool = super::connect_db().await?;
@@ -322,7 +411,7 @@ async fn activate(
 
             sqlx::query(
                 "INSERT INTO site_settings (key, value) VALUES ('active_theme', $1)
-                 ON CONFLICT (key) WHERE site_id IS NULL DO UPDATE SET value = EXCLUDED.value"
+                 ON CONFLICT (key) WHERE site_id IS NULL DO UPDATE SET value = EXCLUDED.value",
             )
             .bind(&name)
             .execute(&pool)
@@ -337,7 +426,7 @@ async fn activate(
 
             // Bail early if this theme is already active.
             let current: Option<String> = sqlx::query_scalar(
-                "SELECT value FROM site_settings WHERE site_id = $1 AND key = 'active_theme'"
+                "SELECT value FROM site_settings WHERE site_id = $1 AND key = 'active_theme'",
             )
             .bind(site_id)
             .fetch_optional(&pool)
@@ -349,23 +438,33 @@ async fn activate(
                 return Ok(());
             }
 
-            let global_src  = themes_root.join("global").join(&name);
-            let site_dest   = Path::new("sites").join(site_id.to_string()).join("themes").join(&name);
+            let global_src = themes_root.join("global").join(&name);
+            let site_dest = Path::new("sites")
+                .join(site_id.to_string())
+                .join("themes")
+                .join(&name);
 
             if site_dest.is_dir() {
                 // Already has a local copy — just update the DB setting.
-                println!("Site already has a local copy of '{}' — skipping copy.", name);
+                println!(
+                    "Site already has a local copy of '{}' — skipping copy.",
+                    name
+                );
             } else {
                 // Copy from global into the site folder, exactly as the web UI does.
                 if !global_src.is_dir() {
                     anyhow::bail!(
                         "Theme '{}' not found in themes/global/. \
-                         Only global themes can be copied to a site.", name
+                         Only global themes can be copied to a site.",
+                        name
                     );
                 }
                 copy_dir_all(&global_src, &site_dest)
                     .map_err(|e| anyhow::anyhow!("Failed to copy theme '{}': {e}", name))?;
-                println!("Copied '{}' from global → sites/{}/themes/{}.", name, site_id, name);
+                println!(
+                    "Copied '{}' from global → sites/{}/themes/{}.",
+                    name, site_id, name
+                );
             }
 
             // Update site_settings for this site.
@@ -398,7 +497,9 @@ async fn remove(
     }
 
     if let Some(url) = database_url {
-        unsafe { std::env::set_var("DATABASE_URL", url); }
+        unsafe {
+            std::env::set_var("DATABASE_URL", url);
+        }
     }
 
     let pool = super::connect_db().await?;
@@ -413,7 +514,9 @@ async fn remove(
                 .unwrap_or_default();
             match rows.as_slice() {
                 [(id,)] => *id,
-                [] => anyhow::bail!("No sites found. Run 'synap install' to set up the first site."),
+                [] => {
+                    anyhow::bail!("No sites found. Run 'synap install' to set up the first site.")
+                }
                 _ => anyhow::bail!(
                     "Multiple sites found — use --site <hostname> to specify which one."
                 ),
@@ -421,7 +524,10 @@ async fn remove(
         }
     };
 
-    let site_path = Path::new("sites").join(site_id.to_string()).join("themes").join(&name);
+    let site_path = Path::new("sites")
+        .join(site_id.to_string())
+        .join("themes")
+        .join(&name);
 
     if !site_path.is_dir() {
         anyhow::bail!(
@@ -433,7 +539,7 @@ async fn remove(
 
     // Guard: refuse to remove the currently active theme.
     let active: Option<String> = sqlx::query_scalar(
-        "SELECT value FROM site_settings WHERE site_id = $1 AND key = 'active_theme'"
+        "SELECT value FROM site_settings WHERE site_id = $1 AND key = 'active_theme'",
     )
     .bind(site_id)
     .fetch_optional(&pool)
@@ -442,7 +548,8 @@ async fn remove(
 
     if active.as_deref() == Some(&name) {
         anyhow::bail!(
-            "Cannot remove the active theme '{}'. Activate a different theme first.", name
+            "Cannot remove the active theme '{}'. Activate a different theme first.",
+            name
         );
     }
 
@@ -450,7 +557,8 @@ async fn remove(
     let site_themes_dir = Path::new("sites").join(site_id.to_string()).join("themes");
     let local_theme_count = std::fs::read_dir(&site_themes_dir)
         .map(|entries| {
-            entries.flatten()
+            entries
+                .flatten()
                 .filter(|e| e.path().is_dir() && e.path().join("theme.toml").exists())
                 .count()
         })
@@ -472,7 +580,8 @@ async fn remove(
         .canonicalize()
         .map_err(|_| anyhow::anyhow!("Site theme directory not found."))?;
 
-    let canonical = site_path.canonicalize()
+    let canonical = site_path
+        .canonicalize()
         .map_err(|_| anyhow::anyhow!("Theme path could not be resolved."))?;
 
     if canonical.parent() != Some(expected_parent.as_path()) {
@@ -484,7 +593,10 @@ async fn remove(
 
     let id_str = site_id.to_string();
     let label = site.as_deref().unwrap_or(&id_str);
-    println!("Theme '{}' removed from site '{}'. The global original is untouched.", name, label);
+    println!(
+        "Theme '{}' removed from site '{}'. The global original is untouched.",
+        name, label
+    );
     Ok(())
 }
 
@@ -493,14 +605,20 @@ fn signal_reload(pid_file: &str, theme_name: &str) {
     let pid_path = std::path::Path::new(pid_file);
 
     if !pid_path.exists() {
-        println!("No PID file found at '{}' — start the server and it will use the new theme.", pid_file);
+        println!(
+            "No PID file found at '{}' — start the server and it will use the new theme.",
+            pid_file
+        );
         return;
     }
 
     let contents = match std::fs::read_to_string(pid_path) {
         Ok(s) => s,
         Err(e) => {
-            println!("Could not read PID file: {}. Restart the server to apply the theme.", e);
+            println!(
+                "Could not read PID file: {}. Restart the server to apply the theme.",
+                e
+            );
             return;
         }
     };
@@ -519,7 +637,10 @@ fn signal_reload(pid_file: &str, theme_name: &str) {
 
     match status {
         Ok(s) if s.success() => {
-            println!("Server (PID {}) signalled — theme '{}' is now live.", pid, theme_name);
+            println!(
+                "Server (PID {}) signalled — theme '{}' is now live.",
+                pid, theme_name
+            );
         }
         _ => {
             println!("Could not signal server (PID {}). It may not be running — restart to apply the theme.", pid);

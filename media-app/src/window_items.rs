@@ -10,7 +10,9 @@
 use crate::types::{GridFolder, GridItem};
 
 pub fn sync_items(items: &[GridItem]) {
-    let Some(window) = web_sys::window() else { return };
+    let Some(window) = web_sys::window() else {
+        return;
+    };
     let arr = js_sys::Array::new();
     for it in items {
         let obj = js_sys::Object::new();
@@ -39,12 +41,22 @@ pub fn sync_items(items: &[GridItem]) {
 }
 
 pub fn sync_folders(folders: &[GridFolder]) {
-    let Some(window) = web_sys::window() else { return };
+    let Some(window) = web_sys::window() else {
+        return;
+    };
     let arr = js_sys::Array::new();
     for f in folders {
         let obj = js_sys::Object::new();
-        let _ = js_sys::Reflect::set(&obj, &wasm_bindgen::JsValue::from_str("id"), &f.id.clone().into());
-        let _ = js_sys::Reflect::set(&obj, &wasm_bindgen::JsValue::from_str("name"), &f.name.clone().into());
+        let _ = js_sys::Reflect::set(
+            &obj,
+            &wasm_bindgen::JsValue::from_str("id"),
+            &f.id.clone().into(),
+        );
+        let _ = js_sys::Reflect::set(
+            &obj,
+            &wasm_bindgen::JsValue::from_str("name"),
+            &f.name.clone().into(),
+        );
         arr.push(&obj);
     }
     let _ = js_sys::Reflect::set(&window, &wasm_bindgen::JsValue::from_str("FOLDERS"), &arr);

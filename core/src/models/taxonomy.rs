@@ -115,7 +115,11 @@ pub async fn get_by_slug(
     .ok_or_else(|| AppError::NotFound(format!("{} '{slug}'", taxonomy.as_str())))
 }
 
-pub async fn list(pool: &PgPool, site_id: Option<Uuid>, taxonomy: TaxonomyType) -> Result<Vec<Taxonomy>> {
+pub async fn list(
+    pool: &PgPool,
+    site_id: Option<Uuid>,
+    taxonomy: TaxonomyType,
+) -> Result<Vec<Taxonomy>> {
     sqlx::query_as::<_, Taxonomy>(
         "SELECT * FROM taxonomies WHERE taxonomy = $1 AND ($2::uuid IS NULL OR site_id = $2) ORDER BY name",
     )
@@ -161,13 +165,11 @@ pub async fn attach_to_post(pool: &PgPool, post_id: Uuid, taxonomy_id: Uuid) -> 
 
 /// Remove a taxonomy term from a post.
 pub async fn detach_from_post(pool: &PgPool, post_id: Uuid, taxonomy_id: Uuid) -> Result<()> {
-    sqlx::query(
-        "DELETE FROM post_taxonomies WHERE post_id = $1 AND taxonomy_id = $2",
-    )
-    .bind(post_id)
-    .bind(taxonomy_id)
-    .execute(pool)
-    .await?;
+    sqlx::query("DELETE FROM post_taxonomies WHERE post_id = $1 AND taxonomy_id = $2")
+        .bind(post_id)
+        .bind(taxonomy_id)
+        .execute(pool)
+        .await?;
     Ok(())
 }
 
@@ -183,17 +185,26 @@ pub async fn replace_for_post(
 ) -> Result<()> {
     let mut tx = pool.begin().await?;
     sqlx::query("DELETE FROM post_taxonomies WHERE post_id = $1")
-        .bind(post_id).execute(&mut *tx).await?;
+        .bind(post_id)
+        .execute(&mut *tx)
+        .await?;
     for (ids, kind) in [(category_ids, "category"), (tag_ids, "tag")] {
-        if ids.is_empty() { continue; }
+        if ids.is_empty() {
+            continue;
+        }
         sqlx::query(
             "INSERT INTO post_taxonomies (post_id, taxonomy_id)
              SELECT $1, t.id FROM taxonomies t
              WHERE t.id = ANY($2) AND t.taxonomy = $3
                AND t.site_id IS NOT DISTINCT FROM $4
-             ON CONFLICT DO NOTHING")
-            .bind(post_id).bind(ids).bind(kind).bind(site_id)
-            .execute(&mut *tx).await?;
+             ON CONFLICT DO NOTHING",
+        )
+        .bind(post_id)
+        .bind(ids)
+        .bind(kind)
+        .bind(site_id)
+        .execute(&mut *tx)
+        .await?;
     }
     tx.commit().await?;
     Ok(())

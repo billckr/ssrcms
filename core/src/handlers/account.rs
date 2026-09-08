@@ -7,8 +7,8 @@ use axum::{
     Form,
 };
 use serde::Deserialize;
-use uuid::Uuid;
 use tower_sessions::Session;
+use uuid::Uuid;
 
 use crate::app_state::AppState;
 use crate::middleware::account_auth::AccountUser;
@@ -17,9 +17,9 @@ use admin::pages::account::{AccountContext, MyCommentRow, ProfileData};
 fn build_ctx(state: &AppState, account: &AccountUser) -> AccountContext {
     let default_theme = state.app_settings.read().unwrap().default_theme.clone();
     AccountContext {
-        user_email:        account.user.email.clone(),
+        user_email: account.user.email.clone(),
         user_display_name: account.user.display_name.clone(),
-        site_name:         account.site_name.clone(),
+        site_name: account.site_name.clone(),
         default_theme,
     }
 }
@@ -42,10 +42,10 @@ pub async fn profile_view(
 ) -> Html<String> {
     let ctx = build_ctx(&state, &account);
     let data = ProfileData {
-        username:     account.user.username.clone(),
-        email:        account.user.email.clone(),
+        username: account.user.username.clone(),
+        email: account.user.email.clone(),
         display_name: account.user.display_name.clone(),
-        bio:          account.user.bio.clone(),
+        bio: account.user.bio.clone(),
     };
     let flash = params.get("flash").map(|s| s.as_str());
     Html(admin::pages::account::render_profile(&data, flash, &ctx))
@@ -53,9 +53,9 @@ pub async fn profile_view(
 
 #[derive(Deserialize)]
 pub struct UpdateForm {
-    pub email:        String,
+    pub email: String,
     pub display_name: Option<String>,
-    pub bio:          Option<String>,
+    pub bio: Option<String>,
 }
 
 /// POST /account/profile/update
@@ -69,29 +69,32 @@ pub async fn profile_update(
     // empty actually persists instead of update() silently falling back to
     // the current DB value (its None means "leave untouched", not "clear").
     let update = UpdateUser {
-        username:      None,
+        username: None,
         // Email changes require a verified pending-email flow. Keep the current
         // identity address until that flow is implemented.
-        email:         None,
-        display_name:  Some(form.display_name.unwrap_or_default()),
+        email: None,
+        display_name: Some(form.display_name.unwrap_or_default()),
         password_hash: None,
-        role:          None,
-        bio:           Some(form.bio.unwrap_or_default()),
+        role: None,
+        bio: Some(form.bio.unwrap_or_default()),
     };
 
     let flash = match crate::models::user::update(&state.db, account.user.id, &update).await {
-        Ok(_)  => "Profile updated!",
+        Ok(_) => "Profile updated!",
         Err(_) => "Error saving profile. Please try again.",
     };
 
-    Redirect::to(&format!("/account/profile?flash={}", flash.replace(' ', "+")))
+    Redirect::to(&format!(
+        "/account/profile?flash={}",
+        flash.replace(' ', "+")
+    ))
 }
 
 #[derive(Deserialize)]
 pub struct ChangePasswordForm {
-    pub current_password:  String,
-    pub new_password:      String,
-    pub confirm_password:  String,
+    pub current_password: String,
+    pub new_password: String,
+    pub confirm_password: String,
 }
 
 /// POST /account/profile/change-password
@@ -101,7 +104,12 @@ pub async fn profile_change_password(
     session: Session,
     Form(form): Form<ChangePasswordForm>,
 ) -> Redirect {
-    let redirect = |flash: &str| Redirect::to(&format!("/account/profile?flash={}", flash.replace(' ', "+")));
+    let redirect = |flash: &str| {
+        Redirect::to(&format!(
+            "/account/profile?flash={}",
+            flash.replace(' ', "+")
+        ))
+    };
 
     if form.new_password != form.confirm_password {
         return redirect("New passwords do not match.");
@@ -120,16 +128,22 @@ pub async fn profile_change_password(
 
     use crate::models::user::UpdateUser;
     let update = UpdateUser {
-        username: None, email: None, display_name: None,
-        password_hash: Some(new_hash), role: None, bio: None,
+        username: None,
+        email: None,
+        display_name: None,
+        password_hash: Some(new_hash),
+        role: None,
+        bio: None,
     };
 
     let flash = match crate::models::user::update(&state.db, account.user.id, &update).await {
         Ok(updated) => {
-            let _ = session.insert(
-                crate::middleware::account_auth::SESSION_ACCOUNT_CREDENTIAL_VERSION_KEY,
-                updated.credential_version(),
-            ).await;
+            let _ = session
+                .insert(
+                    crate::middleware::account_auth::SESSION_ACCOUNT_CREDENTIAL_VERSION_KEY,
+                    updated.credential_version(),
+                )
+                .await;
             "Password changed successfully!"
         }
         Err(_) => "Error changing password. Please try again.",
@@ -162,7 +176,11 @@ pub async fn saved_posts(
     let page = query.page.unwrap_or(1).max(1);
     let offset = (page - 1) * per_page;
     let search = query.search.as_deref().unwrap_or("").trim().to_string();
-    let search_opt = if search.is_empty() { None } else { Some(search.as_str()) };
+    let search_opt = if search.is_empty() {
+        None
+    } else {
+        Some(search.as_str())
+    };
 
     let total = crate::models::saved_post::count_for_user(
         &state.db,
@@ -192,8 +210,8 @@ pub async fn saved_posts(
         .map(|r| {
             let post_url = format!("{}/{}", base_url, r.slug);
             admin::pages::account::SavedPostRow {
-                title:    r.title,
-                slug:     r.slug,
+                title: r.title,
+                slug: r.slug,
                 post_url,
                 saved_at: r.saved_at.format("%B %-d, %Y at %-I:%M %p").to_string(),
             }
@@ -201,9 +219,20 @@ pub async fn saved_posts(
         .collect();
 
     if query.partial.is_some() {
-        Html(admin::pages::account::saved_posts_list_fragment(&rows, page, total_pages, &search))
+        Html(admin::pages::account::saved_posts_list_fragment(
+            &rows,
+            page,
+            total_pages,
+            &search,
+        ))
     } else {
-        Html(admin::pages::account::render_saved_posts(&rows, page, total_pages, &search, &ctx))
+        Html(admin::pages::account::render_saved_posts(
+            &rows,
+            page,
+            total_pages,
+            &search,
+            &ctx,
+        ))
     }
 }
 
@@ -234,53 +263,92 @@ pub async fn my_comments(
     let page = query.page.unwrap_or(1).max(1);
     let offset = (page - 1) * per_page;
     let search = query.search.as_deref().unwrap_or("").trim().to_string();
-    let search_opt = if search.is_empty() { None } else { Some(search.as_str()) };
+    let search_opt = if search.is_empty() {
+        None
+    } else {
+        Some(search.as_str())
+    };
     let window = chrono::Duration::minutes(15);
     let now = chrono::Utc::now();
 
     let (total, records) = if let Some(site_id) = account.site_id {
-        let total = crate::models::comment::count_for_user(&state.db, account.user.id, site_id, search_opt)
-            .await.unwrap_or(0);
-        let recs = crate::models::comment::list_for_user(&state.db, account.user.id, site_id, search_opt, per_page, offset)
-            .await
-            .unwrap_or_else(|e| {
-                tracing::warn!("failed to fetch comments for user {}: {:?}", account.user.id, e);
-                vec![]
-            });
+        let total =
+            crate::models::comment::count_for_user(&state.db, account.user.id, site_id, search_opt)
+                .await
+                .unwrap_or(0);
+        let recs = crate::models::comment::list_for_user(
+            &state.db,
+            account.user.id,
+            site_id,
+            search_opt,
+            per_page,
+            offset,
+        )
+        .await
+        .unwrap_or_else(|e| {
+            tracing::warn!(
+                "failed to fetch comments for user {}: {:?}",
+                account.user.id,
+                e
+            );
+            vec![]
+        });
         (total, recs)
     } else {
         (0, vec![])
     };
 
     let total_pages = ((total + per_page - 1) / per_page).max(1);
-    let rows: Vec<MyCommentRow> = records.into_iter().map(|r| {
-        let can_delete = (now - r.created_at) < window;
-        let body_preview = {
-            let mut chars = r.body.chars();
-            let s: String = chars.by_ref().take(35).collect();
-            if chars.next().is_some() { format!("{s}…") } else { s }
-        };
-        let post_title = {
-            let mut chars = r.post_title.chars();
-            let s: String = chars.by_ref().take(25).collect();
-            if chars.next().is_some() { format!("{s}…") } else { s }
-        };
-        MyCommentRow {
-            id:            r.id.to_string(),
-            body_preview,
-            post_title,
-            post_slug:     r.post_slug,
-            site_hostname: r.site_hostname,
-            created_at:    r.created_at.format("%B %-d, %Y at %-I:%M %p").to_string(),
-            can_delete,
-        }
-    }).collect();
+    let rows: Vec<MyCommentRow> = records
+        .into_iter()
+        .map(|r| {
+            let can_delete = (now - r.created_at) < window;
+            let body_preview = {
+                let mut chars = r.body.chars();
+                let s: String = chars.by_ref().take(35).collect();
+                if chars.next().is_some() {
+                    format!("{s}…")
+                } else {
+                    s
+                }
+            };
+            let post_title = {
+                let mut chars = r.post_title.chars();
+                let s: String = chars.by_ref().take(25).collect();
+                if chars.next().is_some() {
+                    format!("{s}…")
+                } else {
+                    s
+                }
+            };
+            MyCommentRow {
+                id: r.id.to_string(),
+                body_preview,
+                post_title,
+                post_slug: r.post_slug,
+                site_hostname: r.site_hostname,
+                created_at: r.created_at.format("%B %-d, %Y at %-I:%M %p").to_string(),
+                can_delete,
+            }
+        })
+        .collect();
     // `partial=<anything>` means the JS live-search is requesting only the
     // list fragment so it can swap the table div without a full page reload.
     if query.partial.is_some() {
-        Html(admin::pages::account::comments_list_fragment(&rows, page, total_pages, &search))
+        Html(admin::pages::account::comments_list_fragment(
+            &rows,
+            page,
+            total_pages,
+            &search,
+        ))
     } else {
-        Html(admin::pages::account::render_my_comments(&rows, page, total_pages, &search, &ctx))
+        Html(admin::pages::account::render_my_comments(
+            &rows,
+            page,
+            total_pages,
+            &search,
+            &ctx,
+        ))
     }
 }
 
@@ -298,7 +366,9 @@ pub async fn delete_comment(
             let is_owner = comment.author_id == account.user.id;
 
             if is_owner && within_window && comment.deleted_at.is_none() {
-                if let Err(e) = crate::models::comment::soft_delete(&state.db, id, account.user.id).await {
+                if let Err(e) =
+                    crate::models::comment::soft_delete(&state.db, id, account.user.id).await
+                {
                     tracing::warn!("soft-delete failed for comment {}: {:?}", id, e);
                 }
             }

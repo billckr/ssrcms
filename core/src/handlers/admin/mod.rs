@@ -1,5 +1,5 @@
-use crate::middleware::admin_auth::AdminUser;
 use crate::app_state::AppState;
+use crate::middleware::admin_auth::AdminUser;
 
 /// Records an account/site lifecycle event to the persistent audit_log
 /// table (who did what, to what, when) — see core/src/models/audit_log.rs.
@@ -15,31 +15,47 @@ pub async fn audit(
     target_label: &str,
     site_id: Option<uuid::Uuid>,
 ) {
-    let actor_role = if admin.caps.is_global_admin { "super_admin" } else { "site_admin" };
-    if let Err(e) = crate::models::audit_log::record(&state.db, crate::models::audit_log::NewAuditLog {
-        actor_user_id: Some(admin.user.id),
-        actor_email: &admin.user.email,
-        actor_role,
-        action,
-        target_type,
-        target_id,
-        target_label,
-        site_id,
-        details: None,
-    }).await {
-        tracing::warn!("audit log failed: action={} target_type={} target_id={:?}: {:?}", action, target_type, target_id, e);
+    let actor_role = if admin.caps.is_global_admin {
+        "super_admin"
+    } else {
+        "site_admin"
+    };
+    if let Err(e) = crate::models::audit_log::record(
+        &state.db,
+        crate::models::audit_log::NewAuditLog {
+            actor_user_id: Some(admin.user.id),
+            actor_email: &admin.user.email,
+            actor_role,
+            action,
+            target_type,
+            target_id,
+            target_label,
+            site_id,
+            details: None,
+        },
+    )
+    .await
+    {
+        tracing::warn!(
+            "audit log failed: action={} target_type={} target_id={:?}: {:?}",
+            action,
+            target_type,
+            target_id,
+            e
+        );
     }
 }
 
 fn role_display_name(role: &str) -> String {
     match role {
         "super_admin" => "Super Admin",
-        "admin"       => "Site Admin",
-        "editor"      => "Editor",
-        "author"      => "Author",
-        "subscriber"  => "Subscriber",
-        other         => other,
-    }.to_string()
+        "admin" => "Site Admin",
+        "editor" => "Editor",
+        "author" => "Author",
+        "subscriber" => "Subscriber",
+        other => other,
+    }
+    .to_string()
 }
 
 /// Build a [`admin::PageContext`] synchronously (unread count defaults to 0).
@@ -73,8 +89,12 @@ pub fn page_ctx(state: &AppState, admin: &AdminUser, current_site: &str) -> admi
                     logo_url = None;
                     match state.get_site_by_id(parent_id) {
                         Some((parent_site, parent_settings)) => {
-                            app_name = parent_settings.admin_brand_name.unwrap_or(parent_site.hostname);
-                            if let Some(parent_logo) = crate::app_state::detect_site_admin_logo(parent_id) {
+                            app_name = parent_settings
+                                .admin_brand_name
+                                .unwrap_or(parent_site.hostname);
+                            if let Some(parent_logo) =
+                                crate::app_state::detect_site_admin_logo(parent_id)
+                            {
                                 logo_url = Some(parent_logo);
                             }
                         }
@@ -110,7 +130,10 @@ pub fn page_ctx(state: &AppState, admin: &AdminUser, current_site: &str) -> admi
         // who doesn't own any site) means there's nothing to compare
         // against — default to "home" so the badge doesn't spuriously
         // append the site name for a user who can't actually switch sites.
-        is_on_home_site: admin.user.default_site_id.map_or(true, |d| admin.site_id == Some(d)),
+        is_on_home_site: admin
+            .user
+            .default_site_id
+            .map_or(true, |d| admin.site_id == Some(d)),
         can_manage_users: admin.caps.can_manage_users,
         can_manage_sites: admin.caps.can_manage_sites,
         can_manage_plugins: admin.caps.can_manage_plugins,
@@ -131,13 +154,18 @@ pub fn page_ctx(state: &AppState, admin: &AdminUser, current_site: &str) -> admi
 
 /// Build a [`admin::PageContext`] with a live unread form submissions count.
 /// Use this in all standard async admin handlers.
-pub async fn page_ctx_full(state: &AppState, admin: &AdminUser, current_site: &str) -> admin::PageContext {
+pub async fn page_ctx_full(
+    state: &AppState,
+    admin: &AdminUser,
+    current_site: &str,
+) -> admin::PageContext {
     let mut ctx = page_ctx(state, admin, current_site);
     if admin.caps.can_manage_forms {
         if let Some(site_id) = admin.site_id {
-            ctx.unread_forms_count = crate::models::form_submission::count_unread(&state.db, site_id)
-                .await
-                .unwrap_or(0);
+            ctx.unread_forms_count =
+                crate::models::form_submission::count_unread(&state.db, site_id)
+                    .await
+                    .unwrap_or(0);
         }
     }
     ctx
@@ -170,33 +198,33 @@ pub fn sanitize_media_text(input: &str) -> String {
 
 pub mod activity_log;
 pub mod analytics;
-pub mod themes;
-pub mod themes_editor;
-pub mod themes_publish;
-pub mod themes_upload;
 pub mod builder;
 pub mod comments;
 pub mod dashboard;
+pub mod designer_hub;
 pub mod dev_tools;
 pub mod documentation;
 pub mod email_providers;
 pub mod form_designer;
 pub mod forms;
-pub mod poll_designer;
-pub mod poll_results;
-pub mod designer_hub;
+pub mod logo_upload;
 pub mod media;
 pub mod media_store;
 pub mod menus;
 pub mod plugins;
+pub mod poll_designer;
+pub mod poll_results;
 pub mod posts;
 pub mod profile;
 pub mod role_picker;
 pub mod settings;
 pub mod site_settings;
-pub mod logo_upload;
 pub mod sites;
 pub mod taxonomy;
+pub mod themes;
+pub mod themes_editor;
+pub mod themes_publish;
+pub mod themes_upload;
 pub mod upload;
-pub mod wp_import;
 pub mod users;
+pub mod wp_import;

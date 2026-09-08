@@ -61,7 +61,13 @@ pub struct PageContext {
 
 /// Wrap a rendered content HTML string in the full admin page shell.
 /// The sidebar nav, head, and body wrapper are all here.
-pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content: &str, ctx: &PageContext) -> String {
+pub fn admin_page(
+    title: &str,
+    current_path: &str,
+    flash: Option<&str>,
+    content: &str,
+    ctx: &PageContext,
+) -> String {
     let visiting_badge = if ctx.is_impersonating && !ctx.current_site.is_empty() {
         let site = html_escape(&ctx.current_site);
         format!(
@@ -95,7 +101,11 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
         // super-admin badge. Once switched to another site, clicking it
         // returns to the home site instead — mirroring go-home's behavior
         // for the impersonation badge.
-        let href = if ctx.is_on_home_site { "/admin/sites" } else { "/admin/sites/go-home" };
+        let href = if ctx.is_on_home_site {
+            "/admin/sites"
+        } else {
+            "/admin/sites/go-home"
+        };
         format!(
             r#"<a href="{href}" class="site-indicator">{}</a>"#,
             html_escape(&label)
@@ -120,7 +130,8 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
         None => String::new(),
     };
 
-    let media_nav = "<li><a href=\"#\" onclick=\"openMediaBrowser();return false;\">Media</a></li>".to_string();
+    let media_nav =
+        "<li><a href=\"#\" onclick=\"openMediaBrowser();return false;\">Media</a></li>".to_string();
 
     // No separate .mpicker-header row here — the iframe's own toolbar
     // (admin/src/pages/media.rs, picker_mode branch) renders the "Media
@@ -418,11 +429,27 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
         brand_html = brand_html,
         dash = nav_link("/admin", "Dashboard"),
         posts = nav_link("/admin/posts", "Posts"),
-        pages = if ctx.can_manage_pages { nav_link("/admin/pages", "Pages") } else { String::new() },
+        pages = if ctx.can_manage_pages {
+            nav_link("/admin/pages", "Pages")
+        } else {
+            String::new()
+        },
         media = media_nav,
-        cats = if ctx.can_manage_taxonomies { nav_link("/admin/categories", "Categories") } else { String::new() },
-        tags = if ctx.can_manage_taxonomies { nav_link("/admin/tags", "Tags") } else { String::new() },
-        users = if ctx.can_manage_users { nav_link("/admin/users", "Users") } else { String::new() },
+        cats = if ctx.can_manage_taxonomies {
+            nav_link("/admin/categories", "Categories")
+        } else {
+            String::new()
+        },
+        tags = if ctx.can_manage_taxonomies {
+            nav_link("/admin/tags", "Tags")
+        } else {
+            String::new()
+        },
+        users = if ctx.can_manage_users {
+            nav_link("/admin/users", "Users")
+        } else {
+            String::new()
+        },
         sites = nav_link("/admin/sites", "Sites"),
         forms = if ctx.can_manage_forms {
             let badge = if ctx.unread_forms_count > 0 {
@@ -433,29 +460,81 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
             } else {
                 String::new()
             };
-            let active = if current_path.starts_with("/admin/analytics") || current_path.starts_with("/admin/form-data-analytics") { " class=\"active\"" } else { "" };
-            format!(r#"<li><a href="/admin/analytics?tab=general"{}>{}</a></li>"#,
+            let active = if current_path.starts_with("/admin/analytics")
+                || current_path.starts_with("/admin/form-data-analytics")
+            {
+                " class=\"active\""
+            } else {
+                ""
+            };
+            format!(
+                r#"<li><a href="/admin/analytics?tab=general"{}>{}</a></li>"#,
                 active,
                 format!("Analytics{}", badge)
             )
-        } else { String::new() },
+        } else {
+            String::new()
+        },
         form_designer = if ctx.can_manage_forms {
-            let active = if current_path.starts_with("/admin/designer") || current_path.starts_with("/admin/form-designer") { " class=\"active\"" } else { "" };
-            format!(r#"<li><a href="/admin/designer"{}>Designer</a></li>"#, active)
-        } else { String::new() },
+            let active = if current_path.starts_with("/admin/designer")
+                || current_path.starts_with("/admin/form-designer")
+            {
+                " class=\"active\""
+            } else {
+                ""
+            };
+            format!(
+                r#"<li><a href="/admin/designer"{}>Designer</a></li>"#,
+                active
+            )
+        } else {
+            String::new()
+        },
         plugins = String::new(), // plugins disabled pre-launch
-        documentation = if ctx.is_global_admin { nav_link("/admin/documentation", "Documentation") } else { String::new() },
-        appearance = if ctx.can_manage_themes { nav_link("/admin/themes", "Themes") } else { String::new() },
-        menus = if ctx.can_manage_themes { nav_link("/admin/menus", "Menus") } else { String::new() },
-        builder = if ctx.can_manage_themes { nav_link("/admin/builder", "Page Builder") } else { String::new() },
-        settings = if ctx.can_manage_settings { nav_link("/admin/settings", "System Settings") } else { String::new() },
-        site_settings = if ctx.can_manage_site_settings { nav_link("/admin/site-settings", "System Settings") } else { String::new() },
-        activity_log = if ctx.can_manage_users { nav_link("/admin/activity-log", "Activity Log") } else { String::new() },
+        documentation = if ctx.is_global_admin {
+            nav_link("/admin/documentation", "Documentation")
+        } else {
+            String::new()
+        },
+        appearance = if ctx.can_manage_themes {
+            nav_link("/admin/themes", "Themes")
+        } else {
+            String::new()
+        },
+        menus = if ctx.can_manage_themes {
+            nav_link("/admin/menus", "Menus")
+        } else {
+            String::new()
+        },
+        builder = if ctx.can_manage_themes {
+            nav_link("/admin/builder", "Page Builder")
+        } else {
+            String::new()
+        },
+        settings = if ctx.can_manage_settings {
+            nav_link("/admin/settings", "System Settings")
+        } else {
+            String::new()
+        },
+        site_settings = if ctx.can_manage_site_settings {
+            nav_link("/admin/site-settings", "System Settings")
+        } else {
+            String::new()
+        },
+        activity_log = if ctx.can_manage_users {
+            nav_link("/admin/activity-log", "Activity Log")
+        } else {
+            String::new()
+        },
         flash_html = flash_html,
         content = content,
         visiting_badge = visiting_badge,
         site_indicator = site_indicator,
-        profile_or_home = if ctx.is_impersonating { "/admin/sites/go-home?next=/admin/profile" } else { "/admin/profile" },
+        profile_or_home = if ctx.is_impersonating {
+            "/admin/sites/go-home?next=/admin/profile"
+        } else {
+            "/admin/profile"
+        },
         media_browser_modal = media_browser_modal,
     )
 }
@@ -532,7 +611,8 @@ pub fn admin2_page(ctx: &PageContext) -> String {
         dash = nav_link("/admin", "Dashboard"),
         posts = nav_link("/admin/posts", "Posts"),
         media = "<li><a href=\"/admin/media\">Media</a></li>",
-        filler = "<p style=\"height:1800px\">Filler content to force scrolling for the layout test.</p>",
+        filler =
+            "<p style=\"height:1800px\">Filler content to force scrolling for the layout test.</p>",
     )
 }
 
@@ -571,7 +651,7 @@ pub fn picker_page(content: &str) -> String {
   {content}
 </body>
 </html>"#,
-        css     = ADMIN_CSS,
+        css = ADMIN_CSS,
         content = content,
     )
 }
@@ -583,7 +663,8 @@ pub fn picker_page(content: &str) -> String {
 pub fn media_picker_modal_html() -> String {
     // No separate .mpicker-header row here — see the matching comment on
     // media_browser_modal above; the iframe renders its own title/Close.
-    String::from(r#"<div id="media-picker-modal" class="mpicker-overlay" style="display:none" onclick="if(event.target===this)closeMediaPicker()">
+    String::from(
+        r#"<div id="media-picker-modal" class="mpicker-overlay" style="display:none" onclick="if(event.target===this)closeMediaPicker()">
   <div class="mpicker-dialog" style="display:flex;flex-direction:column">
     <iframe id="media-picker-frame" src="about:blank" style="flex:1;width:100%;border:none;display:block;min-height:0"></iframe>
   </div>
@@ -727,15 +808,16 @@ pub fn media_picker_modal_html() -> String {
     if (window.markDirty) window.markDirty();
   };
 })();
-</script>"#)
+</script>"#,
+    )
 }
 
 pub fn html_escape(s: &str) -> String {
     s.replace('&', "&amp;")
-     .replace('<', "&lt;")
-     .replace('>', "&gt;")
-     .replace('"', "&quot;")
-     .replace('\'', "&#x27;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+        .replace('\'', "&#x27;")
 }
 
 /// Generate the live-search `<script>` block used by list pages with a search input.
@@ -770,8 +852,8 @@ pub fn live_search_script(input_id: &str, list_id: &str, url_prefix: &str) -> St
   }});
 }})();
 </script>"#,
-        input_id   = input_id,
-        list_id    = list_id,
+        input_id = input_id,
+        list_id = list_id,
         url_prefix = url_prefix,
     )
 }

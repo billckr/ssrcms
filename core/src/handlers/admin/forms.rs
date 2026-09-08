@@ -24,9 +24,9 @@ fn require_forms_cap(admin: &AdminUser) -> Result<(), Response> {
 }
 
 fn require_site_id(admin: &AdminUser) -> Result<uuid::Uuid, Response> {
-    admin.site_id.ok_or_else(|| {
-        (StatusCode::BAD_REQUEST, "No site selected.").into_response()
-    })
+    admin
+        .site_id
+        .ok_or_else(|| (StatusCode::BAD_REQUEST, "No site selected.").into_response())
 }
 
 // ── view a single form's submissions ─────────────────────────────────────────
@@ -44,8 +44,13 @@ pub async fn view_form(
     Path(name): Path<String>,
     Query(q): Query<ViewFormQuery>,
 ) -> Response {
-    if let Err(r) = require_forms_cap(&admin) { return r; }
-    let site_id = match require_site_id(&admin) { Ok(id) => id, Err(r) => return r };
+    if let Err(r) = require_forms_cap(&admin) {
+        return r;
+    }
+    let site_id = match require_site_id(&admin) {
+        Ok(id) => id,
+        Err(r) => return r,
+    };
 
     let cs = state.site_hostname(admin.site_id);
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
@@ -57,13 +62,19 @@ pub async fn view_form(
     // here directly.
     if let Ok(Some(form)) = form_def::get_by_slug(&state.db, site_id, &name).await {
         let page_qs = q.page.map(|p| format!("&page={p}")).unwrap_or_default();
-        return Redirect::to(&format!("/admin/analytics/form/{}?tab=submissions{page_qs}", form.id)).into_response();
+        return Redirect::to(&format!(
+            "/admin/analytics/form/{}?tab=submissions{page_qs}",
+            form.id
+        ))
+        .into_response();
     }
 
     // Mark as read in the background (fire-and-forget; errors are non-fatal)
     let _ = form_submission::mark_all_read(&state.db, site_id, &name).await;
 
-    let total: i64 = form_submission::count_for_form(&state.db, site_id, &name).await.unwrap_or(0);
+    let total: i64 = form_submission::count_for_form(&state.db, site_id, &name)
+        .await
+        .unwrap_or(0);
     let total_pages = ((total + SUBMISSIONS_PER_PAGE - 1) / SUBMISSIONS_PER_PAGE).max(1);
     let page = q.page.unwrap_or(1).clamp(1, total_pages);
     let offset = (page - 1) * SUBMISSIONS_PER_PAGE;
@@ -71,24 +82,51 @@ pub async fn view_form(
     // Column set is derived from every submission ever made to this form,
     // not just the current page — otherwise a field only present on an
     // older page would silently disappear from the displayed rows.
-    let all_data = form_submission::list_all_data_for_form(&state.db, site_id, &name).await.unwrap_or_default();
+    let all_data = form_submission::list_all_data_for_form(&state.db, site_id, &name)
+        .await
+        .unwrap_or_default();
     let columns = collect_columns(&all_data.iter().collect::<Vec<_>>());
 
-    match form_submission::list_submissions(&state.db, site_id, &name, SUBMISSIONS_PER_PAGE, offset).await {
+    match form_submission::list_submissions(&state.db, site_id, &name, SUBMISSIONS_PER_PAGE, offset)
+        .await
+    {
         Ok(subs) => {
-            let rows: Vec<SubmissionRow> = subs.into_iter().map(|s| SubmissionRow {
-                id: s.id.to_string(),
-                data: s.data,
-                ip_address: s.ip_address,
-                read_at: s.read_at.map(|dt| dt.format("%Y-%m-%d %H:%M UTC").to_string()),
-                submitted_at: s.submitted_at.format("%Y-%m-%d %H:%M UTC").to_string(),
-            }).collect();
+            let rows: Vec<SubmissionRow> = subs
+                .into_iter()
+                .map(|s| SubmissionRow {
+                    id: s.id.to_string(),
+                    data: s.data,
+                    ip_address: s.ip_address,
+                    read_at: s
+                        .read_at
+                        .map(|dt| dt.format("%Y-%m-%d %H:%M UTC").to_string()),
+                    submitted_at: s.submitted_at.format("%Y-%m-%d %H:%M UTC").to_string(),
+                })
+                .collect();
 
-            Html(admin::pages::forms::render_form_detail(&name, &rows, &columns, page, total_pages, None, &ctx)).into_response()
+            Html(admin::pages::forms::render_form_detail(
+                &name,
+                &rows,
+                &columns,
+                page,
+                total_pages,
+                None,
+                &ctx,
+            ))
+            .into_response()
         }
         Err(e) => {
             tracing::error!("view_form '{}' error: {:?}", name, e);
-            Html(admin::pages::forms::render_form_detail(&name, &[], &[], 1, 1, Some("Failed to load submissions."), &ctx)).into_response()
+            Html(admin::pages::forms::render_form_detail(
+                &name,
+                &[],
+                &[],
+                1,
+                1,
+                Some("Failed to load submissions."),
+                &ctx,
+            ))
+            .into_response()
         }
     }
 }
@@ -100,8 +138,13 @@ pub async fn delete_submission(
     admin: AdminUser,
     Path((name, id)): Path<(String, uuid::Uuid)>,
 ) -> Response {
-    if let Err(r) = require_forms_cap(&admin) { return r; }
-    let site_id = match require_site_id(&admin) { Ok(id) => id, Err(r) => return r };
+    if let Err(r) = require_forms_cap(&admin) {
+        return r;
+    }
+    let site_id = match require_site_id(&admin) {
+        Ok(id) => id,
+        Err(r) => return r,
+    };
 
     if let Err(e) = form_submission::delete(&state.db, site_id, id).await {
         tracing::error!("delete_submission error: {:?}", e);
@@ -116,8 +159,13 @@ pub async fn delete_all(
     admin: AdminUser,
     Path(name): Path<String>,
 ) -> Response {
-    if let Err(r) = require_forms_cap(&admin) { return r; }
-    let site_id = match require_site_id(&admin) { Ok(id) => id, Err(r) => return r };
+    if let Err(r) = require_forms_cap(&admin) {
+        return r;
+    }
+    let site_id = match require_site_id(&admin) {
+        Ok(id) => id,
+        Err(r) => return r,
+    };
 
     if let Err(e) = form_submission::delete_all(&state.db, site_id, &name).await {
         tracing::error!("delete_all '{}' error: {:?}", name, e);
@@ -142,13 +190,22 @@ pub async fn export_csv(
     admin: AdminUser,
     Path(name): Path<String>,
 ) -> Response {
-    if let Err(r) = require_forms_cap(&admin) { return r; }
-    let site_id = match require_site_id(&admin) { Ok(id) => id, Err(r) => return r };
+    if let Err(r) = require_forms_cap(&admin) {
+        return r;
+    }
+    let site_id = match require_site_id(&admin) {
+        Ok(id) => id,
+        Err(r) => return r,
+    };
 
     match form_submission::list_submissions(&state.db, site_id, &name, 10_000, 0).await {
         Err(e) => {
             tracing::error!("export_csv '{}' error: {:?}", name, e);
-            (axum::http::StatusCode::INTERNAL_SERVER_ERROR, "Export failed").into_response()
+            (
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                "Export failed",
+            )
+                .into_response()
         }
         Ok(subs) => {
             let columns = collect_columns(&subs.iter().map(|s| &s.data).collect::<Vec<_>>());
@@ -157,7 +214,9 @@ pub async fn export_csv(
 
             // Header row
             for (i, col) in columns.iter().enumerate() {
-                if i > 0 { csv.push(','); }
+                if i > 0 {
+                    csv.push(',');
+                }
                 csv.push_str(&csv_escape(col));
             }
             csv.push_str(",submitted_at,ip_address\n");
@@ -165,10 +224,10 @@ pub async fn export_csv(
             // Data rows
             for s in &subs {
                 for (i, col) in columns.iter().enumerate() {
-                    if i > 0 { csv.push(','); }
-                    let val = s.data.get(col)
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("");
+                    if i > 0 {
+                        csv.push(',');
+                    }
+                    let val = s.data.get(col).and_then(|v| v.as_str()).unwrap_or("");
                     csv.push_str(&csv_escape(val));
                 }
                 let ts = s.submitted_at.format("%Y-%m-%d %H:%M:%S UTC").to_string();
@@ -184,10 +243,14 @@ pub async fn export_csv(
             (
                 [
                     (header::CONTENT_TYPE, "text/csv; charset=utf-8".to_string()),
-                    (header::CONTENT_DISPOSITION, format!("attachment; filename=\"{}\"", filename)),
+                    (
+                        header::CONTENT_DISPOSITION,
+                        format!("attachment; filename=\"{}\"", filename),
+                    ),
                 ],
                 csv,
-            ).into_response()
+            )
+                .into_response()
         }
     }
 }
@@ -244,8 +307,13 @@ pub async fn toggle_block(
     admin: AdminUser,
     Path(name): Path<String>,
 ) -> Response {
-    if let Err(r) = require_forms_cap(&admin) { return r; }
-    let site_id = match require_site_id(&admin) { Ok(id) => id, Err(r) => return r };
+    if let Err(r) = require_forms_cap(&admin) {
+        return r;
+    }
+    let site_id = match require_site_id(&admin) {
+        Ok(id) => id,
+        Err(r) => return r,
+    };
 
     if form_submission::is_blocked(&state.db, site_id, &name).await {
         let _ = form_submission::unblock(&state.db, site_id, &name).await;

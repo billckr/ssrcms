@@ -18,7 +18,10 @@ use uuid::Uuid;
 pub const DEFAULT_GROUP: &str = "Layout Options";
 
 fn read_group(def: &toml::Table, default: &str) -> String {
-    def.get("group").and_then(|v| v.as_str()).unwrap_or(default).to_string()
+    def.get("group")
+        .and_then(|v| v.as_str())
+        .unwrap_or(default)
+        .to_string()
 }
 
 /// Which customizer column an option's card renders in — "main" (the wide
@@ -76,7 +79,10 @@ pub fn parse_option_defs(parsed: &toml::Table) -> Vec<ThemeOptionDef> {
             if option_type != "bool" {
                 return None;
             }
-            let default = def.get("default").and_then(|v| v.as_bool()).unwrap_or(false);
+            let default = def
+                .get("default")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
             let label = def
                 .get("label")
                 .and_then(|v| v.as_str())
@@ -84,13 +90,24 @@ pub fn parse_option_defs(parsed: &toml::Table) -> Vec<ThemeOptionDef> {
                 .to_string();
             let group = read_group(def, DEFAULT_GROUP);
             let placement = read_placement(def, "main");
-            Some(ThemeOptionDef { key: key.clone(), option_type, default, label, group, placement })
+            Some(ThemeOptionDef {
+                key: key.clone(),
+                option_type,
+                default,
+                label,
+                group,
+                placement,
+            })
         })
         .collect()
 }
 
 /// Fetch this site's stored overrides for `theme_name`, keyed by option_key.
-async fn load_stored_values(pool: &PgPool, site_id: Uuid, theme_name: &str) -> HashMap<String, String> {
+async fn load_stored_values(
+    pool: &PgPool,
+    site_id: Uuid,
+    theme_name: &str,
+) -> HashMap<String, String> {
     let rows: Vec<(String, String)> = sqlx::query_as(
         "SELECT option_key, value FROM theme_options WHERE site_id = $1 AND theme_name = $2",
     )
@@ -125,7 +142,10 @@ pub async fn resolve_options(
     let stored = load_stored_values(pool, site_id, theme_name).await;
     defs.into_iter()
         .map(|def| {
-            let value = stored.get(&def.key).map(|v| v == "true").unwrap_or(def.default);
+            let value = stored
+                .get(&def.key)
+                .map(|v| v == "true")
+                .unwrap_or(def.default);
             (def, value)
         })
         .collect()
@@ -140,7 +160,9 @@ pub async fn build_theme_options_context(
     site_id: Uuid,
     theme_name: &str,
 ) -> HashMap<String, bool> {
-    let Some(theme_dir) = theme_dir else { return HashMap::new(); };
+    let Some(theme_dir) = theme_dir else {
+        return HashMap::new();
+    };
     resolve_options(pool, theme_dir, site_id, theme_name)
         .await
         .into_iter()
@@ -180,7 +202,14 @@ pub async fn save_option(
     key: &str,
     value: bool,
 ) -> Result<(), sqlx::Error> {
-    save_raw_value(pool, site_id, theme_name, key, if value { "true" } else { "false" }).await
+    save_raw_value(
+        pool,
+        site_id,
+        theme_name,
+        key,
+        if value { "true" } else { "false" },
+    )
+    .await
 }
 
 /// One declared `type = "order"` option from theme.toml: a fixed set of named
@@ -219,11 +248,19 @@ pub fn parse_order_defs(parsed: &toml::Table) -> Vec<ThemeOrderDef> {
             if option_type != "order" {
                 return None;
             }
-            let label = def.get("label").and_then(|v| v.as_str()).unwrap_or(key).to_string();
+            let label = def
+                .get("label")
+                .and_then(|v| v.as_str())
+                .unwrap_or(key)
+                .to_string();
             let default: Vec<String> = def
                 .get("default")
                 .and_then(|v| v.as_array())
-                .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|v| v.as_str().map(String::from))
+                        .collect()
+                })
                 .unwrap_or_default();
             let items: Vec<(String, String)> = def
                 .get("items")
@@ -236,7 +273,14 @@ pub fn parse_order_defs(parsed: &toml::Table) -> Vec<ThemeOrderDef> {
                 .unwrap_or_default();
             let group = read_group(def, DEFAULT_GROUP);
             let placement = read_placement(def, "main");
-            Some(ThemeOrderDef { key: key.clone(), label, items, default, group, placement })
+            Some(ThemeOrderDef {
+                key: key.clone(),
+                label,
+                items,
+                default,
+                group,
+                placement,
+            })
         })
         .collect()
 }
@@ -294,7 +338,9 @@ pub async fn build_theme_option_lists_context(
     site_id: Uuid,
     theme_name: &str,
 ) -> HashMap<String, Vec<String>> {
-    let Some(theme_dir) = theme_dir else { return HashMap::new(); };
+    let Some(theme_dir) = theme_dir else {
+        return HashMap::new();
+    };
     resolve_order(pool, theme_dir, site_id, theme_name)
         .await
         .into_iter()
@@ -352,7 +398,11 @@ pub fn parse_choice_defs(parsed: &toml::Table) -> Vec<ThemeChoiceDef> {
             if option_type != "choice" {
                 return None;
             }
-            let label = def.get("label").and_then(|v| v.as_str()).unwrap_or(key).to_string();
+            let label = def
+                .get("label")
+                .and_then(|v| v.as_str())
+                .unwrap_or(key)
+                .to_string();
             let choices: Vec<(String, String)> = def
                 .get("choices")
                 .and_then(|v| v.as_table())
@@ -369,7 +419,14 @@ pub fn parse_choice_defs(parsed: &toml::Table) -> Vec<ThemeChoiceDef> {
                 .to_string();
             let group = read_group(def, DEFAULT_GROUP);
             let placement = read_placement(def, "main");
-            Some(ThemeChoiceDef { key: key.clone(), label, choices, default, group, placement })
+            Some(ThemeChoiceDef {
+                key: key.clone(),
+                label,
+                choices,
+                default,
+                group,
+                placement,
+            })
         })
         .collect()
 }
@@ -415,7 +472,9 @@ pub async fn build_theme_option_choices_context(
     site_id: Uuid,
     theme_name: &str,
 ) -> HashMap<String, String> {
-    let Some(theme_dir) = theme_dir else { return HashMap::new(); };
+    let Some(theme_dir) = theme_dir else {
+        return HashMap::new();
+    };
     resolve_choices(pool, theme_dir, site_id, theme_name)
         .await
         .into_iter()
@@ -473,11 +532,25 @@ pub fn parse_text_defs(parsed: &toml::Table) -> Vec<ThemeTextDef> {
             if option_type != "text" {
                 return None;
             }
-            let label = def.get("label").and_then(|v| v.as_str()).unwrap_or(key).to_string();
-            let default = def.get("default").and_then(|v| v.as_str()).unwrap_or("").to_string();
+            let label = def
+                .get("label")
+                .and_then(|v| v.as_str())
+                .unwrap_or(key)
+                .to_string();
+            let default = def
+                .get("default")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
             let group = read_group(def, DEFAULT_GROUP);
             let placement = read_placement(def, "main");
-            Some(ThemeTextDef { key: key.clone(), label, default, group, placement })
+            Some(ThemeTextDef {
+                key: key.clone(),
+                label,
+                default,
+                group,
+                placement,
+            })
         })
         .collect()
 }
@@ -503,7 +576,10 @@ pub async fn resolve_texts(
     let stored = load_stored_values(pool, site_id, theme_name).await;
     defs.into_iter()
         .map(|def| {
-            let value = stored.get(&def.key).cloned().unwrap_or_else(|| def.default.clone());
+            let value = stored
+                .get(&def.key)
+                .cloned()
+                .unwrap_or_else(|| def.default.clone());
             (def, value)
         })
         .collect()
@@ -518,7 +594,9 @@ pub async fn build_theme_option_texts_context(
     site_id: Uuid,
     theme_name: &str,
 ) -> HashMap<String, String> {
-    let Some(theme_dir) = theme_dir else { return HashMap::new(); };
+    let Some(theme_dir) = theme_dir else {
+        return HashMap::new();
+    };
     resolve_texts(pool, theme_dir, site_id, theme_name)
         .await
         .into_iter()
@@ -546,8 +624,15 @@ pub async fn save_text(
 /// stored override row (regardless of whether that value equals the schema
 /// default) — used to gate the customizer's per-card "Restore original"
 /// button so it only appears once a setting has actually been changed.
-pub async fn overridden_keys(pool: &PgPool, site_id: Uuid, theme_name: &str) -> std::collections::HashSet<String> {
-    load_stored_values(pool, site_id, theme_name).await.into_keys().collect()
+pub async fn overridden_keys(
+    pool: &PgPool,
+    site_id: Uuid,
+    theme_name: &str,
+) -> std::collections::HashSet<String> {
+    load_stored_values(pool, site_id, theme_name)
+        .await
+        .into_keys()
+        .collect()
 }
 
 /// Delete this site's stored overrides for the given option keys (any mix of
@@ -615,12 +700,30 @@ pub fn parse_image_defs(parsed: &toml::Table) -> Vec<ThemeImageDef> {
             if option_type != "image" {
                 return None;
             }
-            let label = def.get("label").and_then(|v| v.as_str()).unwrap_or(key).to_string();
-            let default = def.get("default").and_then(|v| v.as_str()).unwrap_or("").to_string();
+            let label = def
+                .get("label")
+                .and_then(|v| v.as_str())
+                .unwrap_or(key)
+                .to_string();
+            let default = def
+                .get("default")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
             let group = read_group(def, DEFAULT_GROUP);
-            let default_preview = def.get("default_preview").and_then(|v| v.as_str()).map(|s| s.to_string());
+            let default_preview = def
+                .get("default_preview")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
             let placement = read_placement(def, "sidebar");
-            Some(ThemeImageDef { key: key.clone(), label, default, group, default_preview, placement })
+            Some(ThemeImageDef {
+                key: key.clone(),
+                label,
+                default,
+                group,
+                default_preview,
+                placement,
+            })
         })
         .collect()
 }
@@ -647,7 +750,10 @@ pub async fn resolve_images(
     let stored = load_stored_values(pool, site_id, theme_name).await;
     defs.into_iter()
         .map(|def| {
-            let value = stored.get(&def.key).cloned().unwrap_or_else(|| def.default.clone());
+            let value = stored
+                .get(&def.key)
+                .cloned()
+                .unwrap_or_else(|| def.default.clone());
             (def, value)
         })
         .collect()
@@ -662,7 +768,9 @@ pub async fn build_theme_option_images_context(
     site_id: Uuid,
     theme_name: &str,
 ) -> HashMap<String, String> {
-    let Some(theme_dir) = theme_dir else { return HashMap::new(); };
+    let Some(theme_dir) = theme_dir else {
+        return HashMap::new();
+    };
     resolve_images(pool, theme_dir, site_id, theme_name)
         .await
         .into_iter()

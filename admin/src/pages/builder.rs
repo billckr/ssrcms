@@ -22,13 +22,21 @@ pub struct PageRow {
 
 // ── Project list ──────────────────────────────────────────────────────────────
 
-pub fn render_project_list(projects: &[ProjectRow], sort: &str, dir: &str, flash: Option<&str>, ctx: &crate::PageContext) -> String {
+pub fn render_project_list(
+    projects: &[ProjectRow],
+    sort: &str,
+    dir: &str,
+    flash: Option<&str>,
+    ctx: &crate::PageContext,
+) -> String {
     let mut sorted: Vec<&ProjectRow> = projects.iter().collect();
     match sort {
-        "description" => sorted.sort_by_key(|p| p.description.as_deref().unwrap_or("").to_lowercase()),
-        "pages"        => sorted.sort_by_key(|p| p.page_count),
-        "updated"      => sorted.sort_by(|a, b| a.updated_at.cmp(&b.updated_at)),
-        "name"         => sorted.sort_by_key(|p| p.name.to_lowercase()),
+        "description" => {
+            sorted.sort_by_key(|p| p.description.as_deref().unwrap_or("").to_lowercase())
+        }
+        "pages" => sorted.sort_by_key(|p| p.page_count),
+        "updated" => sorted.sort_by(|a, b| a.updated_at.cmp(&b.updated_at)),
+        "name" => sorted.sort_by_key(|p| p.name.to_lowercase()),
         _ => {}
     }
     let asc = dir != "desc";
@@ -40,7 +48,15 @@ pub fn render_project_list(projects: &[ProjectRow], sort: &str, dir: &str, flash
     let sort_th = |label: &str, key: &str| -> String {
         let is_active = sort == key;
         let next_dir = if is_active && asc { "desc" } else { "asc" };
-        let arrow = if is_active { if asc { " \u{25B2}" } else { " \u{25BC}" } } else { "" };
+        let arrow = if is_active {
+            if asc {
+                " \u{25B2}"
+            } else {
+                " \u{25BC}"
+            }
+        } else {
+            ""
+        };
         format!(
             r#"<th><a href="/admin/builder?sort={key}&dir={next_dir}" style="color:inherit;text-decoration:none;white-space:nowrap">{label}{arrow}</a></th>"#
         )
@@ -49,7 +65,8 @@ pub fn render_project_list(projects: &[ProjectRow], sort: &str, dir: &str, flash
     let rows = if sorted.is_empty() {
         r#"<tr><td colspan="5" style="text-align:center;color:var(--muted)">
             No projects yet. Create one below to get started.
-        </td></tr>"#.to_string()
+        </td></tr>"#
+            .to_string()
     } else {
         sorted.iter().map(|p| {
             let active_badge = if p.is_active {
@@ -243,9 +260,9 @@ var updateRenameSaveState;
 </script>"#,
         flash_html = flash_html,
         rows = rows,
-        name_th    = sort_th("Project", "name"),
-        desc_th    = sort_th("Description", "description"),
-        pages_th   = sort_th("Pages", "pages"),
+        name_th = sort_th("Project", "name"),
+        desc_th = sort_th("Description", "description"),
+        pages_th = sort_th("Pages", "pages"),
         updated_th = sort_th("Updated", "updated"),
     );
 
@@ -254,15 +271,22 @@ var updateRenameSaveState;
 
 // ── Page list within a project ────────────────────────────────────────────────
 
-pub fn render_page_list(project: &ProjectRow, pages: &[PageRow], ctx: &crate::PageContext) -> String {
+pub fn render_page_list(
+    project: &ProjectRow,
+    pages: &[PageRow],
+    ctx: &crate::PageContext,
+) -> String {
     let active_badge = if project.is_active {
         r#" <span class="badge" style="font-size:.7rem;background:#16a34a;color:#fff">Live</span>"#
-    } else { "" };
+    } else {
+        ""
+    };
 
     let rows = if pages.is_empty() {
         r#"<tr><td colspan="4" style="text-align:center;color:var(--muted)">
             No pages yet. Click <strong>+ New Page</strong> to add one.
-        </td></tr>"#.to_string()
+        </td></tr>"#
+            .to_string()
     } else {
         pages.iter().map(|p| {
             let homepage_badge = if p.is_homepage {
@@ -392,8 +416,8 @@ document.getElementById('duplicate-form').addEventListener('submit', function() 
 }});
 </script>"#,
         active_badge = active_badge,
-        proj_id      = crate::html_escape(&project.id),
-        rows         = rows,
+        proj_id = crate::html_escape(&project.id),
+        rows = rows,
     );
 
     crate::admin_page(
@@ -421,9 +445,9 @@ pub fn render_editor(
         Some(id) => format!(r#""{}""#, id),
         None => "null".to_string(),
     };
-    let name_escaped    = crate::html_escape(page_name);
+    let name_escaped = crate::html_escape(page_name);
     let project_escaped = crate::html_escape(project_name);
-    let site_escaped    = crate::html_escape(site_label);
+    let site_escaped = crate::html_escape(site_label);
 
     format!(
         r#"<!DOCTYPE html>
@@ -457,13 +481,13 @@ pub fn render_editor(
   <script type="module" src="/admin/static/builder/builder.js"></script>
 </body>
 </html>"#,
-        page_id_js      = page_id_js,
-        name_escaped    = name_escaped,
+        page_id_js = page_id_js,
+        name_escaped = name_escaped,
         project_escaped = project_escaped,
-        site_escaped    = site_escaped,
-        project_id      = project_id,
-        site_id         = site_id,
-        menus_json      = menus_json,
+        site_escaped = site_escaped,
+        project_id = project_id,
+        site_id = site_id,
+        menus_json = menus_json,
     )
 }
 
@@ -496,13 +520,17 @@ pub fn render_new_page_form(
     let copy_from_field = if existing_pages.is_empty() {
         String::new()
     } else {
-        let options = existing_pages.iter().map(|p| {
-            format!(
-                r#"<option value="{id}">{name}</option>"#,
-                id   = crate::html_escape(&p.id),
-                name = crate::html_escape(&p.name),
-            )
-        }).collect::<Vec<_>>().join("\n");
+        let options = existing_pages
+            .iter()
+            .map(|p| {
+                format!(
+                    r#"<option value="{id}">{name}</option>"#,
+                    id = crate::html_escape(&p.id),
+                    name = crate::html_escape(&p.name),
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
         format!(
             r#"<div class="form-group">
       <label for="copy-from">Copy layout from <span style="color:var(--muted)">(optional)</span></label>
@@ -608,12 +636,12 @@ pub fn render_new_page_form(
     updateSaveState();
   }});
 </script>"#,
-        proj_id                  = crate::html_escape(&project.id),
-        proj_name                = crate::html_escape(&project.name),
-        homepage_option          = homepage_option,
-        post_template_option     = post_template_option,
-        archive_template_option  = archive_template_option,
-        copy_from_field          = copy_from_field,
+        proj_id = crate::html_escape(&project.id),
+        proj_name = crate::html_escape(&project.name),
+        homepage_option = homepage_option,
+        post_template_option = post_template_option,
+        archive_template_option = archive_template_option,
+        copy_from_field = copy_from_field,
     );
 
     crate::admin_page(

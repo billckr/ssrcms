@@ -3,10 +3,10 @@
 //! `poll_vote` — this module owns the *shape* of a poll (its question and
 //! options); `poll_vote` owns the votes visitors cast.
 
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use uuid::Uuid;
-use chrono::{DateTime, Utc};
 
 use crate::errors::Result;
 use crate::utils::slugify::slugify;
@@ -37,7 +37,9 @@ impl VoteProtection {
 }
 
 impl Default for VoteProtection {
-    fn default() -> Self { VoteProtection::CookieAndIp }
+    fn default() -> Self {
+        VoteProtection::CookieAndIp
+    }
 }
 
 /// One selectable option. `key` is what gets stored on the vote row and
@@ -58,8 +60,12 @@ pub struct PollSettings {
     pub vote_protection: VoteProtection,
 }
 
-fn default_success_message() -> String { "Thanks for voting!".to_string() }
-fn default_button_label() -> String { "Vote".to_string() }
+fn default_success_message() -> String {
+    "Thanks for voting!".to_string()
+}
+fn default_button_label() -> String {
+    "Vote".to_string()
+}
 
 impl Default for PollSettings {
     fn default() -> Self {
@@ -127,31 +133,37 @@ pub async fn list_for_site(pool: &PgPool, site_id: Uuid) -> Result<Vec<PollDef>>
 }
 
 pub async fn get_by_id(pool: &PgPool, site_id: Uuid, id: Uuid) -> Result<Option<PollDef>> {
-    let row = sqlx::query_as::<_, PollDefRow>(
-        "SELECT * FROM polls WHERE site_id = $1 AND id = $2",
-    )
-    .bind(site_id)
-    .bind(id)
-    .fetch_optional(pool)
-    .await?;
+    let row = sqlx::query_as::<_, PollDefRow>("SELECT * FROM polls WHERE site_id = $1 AND id = $2")
+        .bind(site_id)
+        .bind(id)
+        .fetch_optional(pool)
+        .await?;
     Ok(row.map(PollDef::from))
 }
 
 pub async fn get_by_slug(pool: &PgPool, site_id: Uuid, slug: &str) -> Result<Option<PollDef>> {
-    let row = sqlx::query_as::<_, PollDefRow>(
-        "SELECT * FROM polls WHERE site_id = $1 AND slug = $2",
-    )
-    .bind(site_id)
-    .bind(slug)
-    .fetch_optional(pool)
-    .await?;
+    let row =
+        sqlx::query_as::<_, PollDefRow>("SELECT * FROM polls WHERE site_id = $1 AND slug = $2")
+            .bind(site_id)
+            .bind(slug)
+            .fetch_optional(pool)
+            .await?;
     Ok(row.map(PollDef::from))
 }
 
 /// Generate a unique slug for a site by suffixing `-2`, `-3`, ... on
 /// collision — same convention as `form_def::unique_slug`.
-async fn unique_slug(pool: &PgPool, site_id: Uuid, base: &str, ignore_id: Option<Uuid>) -> Result<String> {
-    let base = if base.is_empty() { "poll".to_string() } else { base.to_string() };
+async fn unique_slug(
+    pool: &PgPool,
+    site_id: Uuid,
+    base: &str,
+    ignore_id: Option<Uuid>,
+) -> Result<String> {
+    let base = if base.is_empty() {
+        "poll".to_string()
+    } else {
+        base.to_string()
+    };
     let mut candidate = base.clone();
     let mut n = 2;
     loop {
@@ -212,7 +224,12 @@ pub struct UpdatePollDef {
 /// `key` after votes exist under the old key will orphan those votes from
 /// the new label in the results view — the editor should warn about this,
 /// not silently allow it (handled in the admin UI, not here).
-pub async fn update(pool: &PgPool, site_id: Uuid, id: Uuid, input: UpdatePollDef) -> Result<Option<PollDef>> {
+pub async fn update(
+    pool: &PgPool,
+    site_id: Uuid,
+    id: Uuid,
+    input: UpdatePollDef,
+) -> Result<Option<PollDef>> {
     let options_json = serde_json::to_value(&input.options).unwrap_or_default();
     let settings_json = serde_json::to_value(&input.settings).unwrap_or_default();
     let row = sqlx::query_as::<_, PollDefRow>(
@@ -313,11 +330,16 @@ pub async fn expand_embeds(pool: &PgPool, site_id: Uuid, content: &str) -> Strin
     if !content.contains("<ss-poll") {
         return content.to_string();
     }
-    let Ok(tag_re) = regex_lite::Regex::new(r#"<ss-poll\b[^>]*data-slug="([^"]*)"[^>]*></ss-poll>"#) else {
+    let Ok(tag_re) =
+        regex_lite::Regex::new(r#"<ss-poll\b[^>]*data-slug="([^"]*)"[^>]*></ss-poll>"#)
+    else {
         return content.to_string();
     };
 
-    let mut slugs: Vec<String> = tag_re.captures_iter(content).map(|c| c[1].to_string()).collect();
+    let mut slugs: Vec<String> = tag_re
+        .captures_iter(content)
+        .map(|c| c[1].to_string())
+        .collect();
     slugs.sort();
     slugs.dedup();
 
@@ -328,10 +350,14 @@ pub async fn expand_embeds(pool: &PgPool, site_id: Uuid, content: &str) -> Strin
             _ => String::new(),
         };
         let escaped_slug = slug.replace('\\', "\\\\").replace('"', "\\\"");
-        let Ok(specific_re) = regex_lite::Regex::new(
-            &format!(r#"<ss-poll\b[^>]*data-slug="{escaped_slug}"[^>]*></ss-poll>"#),
-        ) else { continue };
-        result = specific_re.replace_all(&result, replacement.as_str()).to_string();
+        let Ok(specific_re) = regex_lite::Regex::new(&format!(
+            r#"<ss-poll\b[^>]*data-slug="{escaped_slug}"[^>]*></ss-poll>"#
+        )) else {
+            continue;
+        };
+        result = specific_re
+            .replace_all(&result, replacement.as_str())
+            .to_string();
     }
     result
 }

@@ -8,14 +8,19 @@ use crate::models::post::Post;
 /// Lightweight row returned by the paginated saved-posts query.
 #[derive(Debug, sqlx::FromRow)]
 pub struct SavedPostRecord {
-    pub id:       Uuid,
-    pub title:    String,
-    pub slug:     String,
+    pub id: Uuid,
+    pub title: String,
+    pub slug: String,
     pub saved_at: DateTime<Utc>,
 }
 
 /// Save a post for a user. Silently ignores duplicate saves.
-pub async fn save(pool: &PgPool, user_id: Uuid, post_id: Uuid, site_id: Option<Uuid>) -> Result<()> {
+pub async fn save(
+    pool: &PgPool,
+    user_id: Uuid,
+    post_id: Uuid,
+    site_id: Option<Uuid>,
+) -> Result<()> {
     sqlx::query(
         r#"INSERT INTO saved_posts (user_id, post_id, site_id)
            VALUES ($1, $2, $3)
@@ -52,7 +57,11 @@ pub async fn is_saved(pool: &PgPool, user_id: Uuid, post_id: Uuid) -> Result<boo
 }
 
 /// List all saved posts for a user on a given site, newest saved first.
-pub async fn list_for_user(pool: &PgPool, user_id: Uuid, site_id: Option<Uuid>) -> Result<Vec<Post>> {
+pub async fn list_for_user(
+    pool: &PgPool,
+    user_id: Uuid,
+    site_id: Option<Uuid>,
+) -> Result<Vec<Post>> {
     Ok(sqlx::query_as::<_, Post>(
         r#"SELECT p.*
            FROM posts p

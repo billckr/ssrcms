@@ -40,8 +40,17 @@ pub fn caddy_block_exists(caddyfile: &str, hostname: &str) -> bool {
 /// Caddy file_server can't do that resolution, so `/theme/*` must fall
 /// through to `reverse_proxy` -> Axum, not be handled here. See
 /// deployment/Caddyfile.template for the same rule.
-pub fn build_caddy_block(hostname: &str, port: u16, uploads_dir: &str, tls_internal: bool) -> String {
-    let tls_line = if tls_internal { "    tls internal\n\n" } else { "" };
+pub fn build_caddy_block(
+    hostname: &str,
+    port: u16,
+    uploads_dir: &str,
+    tls_internal: bool,
+) -> String {
+    let tls_line = if tls_internal {
+        "    tls internal\n\n"
+    } else {
+        ""
+    };
     format!(
         r#"{hostname} {{
 {tls_line}    # Serve uploads directly — bypass Axum — but ONLY the bare-filename shape
@@ -86,9 +95,9 @@ pub fn build_caddy_block(hostname: &str, port: u16, uploads_dir: &str, tls_inter
         format json
     }}
 }}"#,
-        hostname    = hostname,
-        tls_line    = tls_line,
-        port        = port,
+        hostname = hostname,
+        tls_line = tls_line,
+        port = port,
         uploads_dir = uploads_dir,
     )
 }
@@ -113,11 +122,17 @@ pub fn strip_caddy_block(caddyfile: &str, hostname: &str) -> String {
     let begin = format!("# >>> SynapCMS managed block: {hostname} >>>");
     let end = format!("# <<< SynapCMS managed block: {hostname} <<<");
 
-    let Some(start_idx) = caddyfile.find(&begin) else { return caddyfile.to_string(); };
-    let Some(end_rel) = caddyfile[start_idx..].find(&end) else { return caddyfile.to_string(); };
+    let Some(start_idx) = caddyfile.find(&begin) else {
+        return caddyfile.to_string();
+    };
+    let Some(end_rel) = caddyfile[start_idx..].find(&end) else {
+        return caddyfile.to_string();
+    };
     let end_idx = start_idx + end_rel + end.len();
 
-    let after = caddyfile[end_idx..].strip_prefix('\n').unwrap_or(&caddyfile[end_idx..]);
+    let after = caddyfile[end_idx..]
+        .strip_prefix('\n')
+        .unwrap_or(&caddyfile[end_idx..]);
     format!("{}{}", &caddyfile[..start_idx], after)
 }
 
@@ -162,8 +177,10 @@ mod tests {
 
     #[test]
     fn strip_only_removes_the_matching_hostname() {
-        let block_a = wrap_managed_block("a.com", &build_caddy_block("a.com", 3000, "uploads", false));
-        let block_b = wrap_managed_block("b.com", &build_caddy_block("b.com", 3000, "uploads", false));
+        let block_a =
+            wrap_managed_block("a.com", &build_caddy_block("a.com", 3000, "uploads", false));
+        let block_b =
+            wrap_managed_block("b.com", &build_caddy_block("b.com", 3000, "uploads", false));
         let content = format!("{}\n{}\n", block_a, block_b);
 
         let stripped = strip_caddy_block(&content, "a.com");

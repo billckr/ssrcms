@@ -151,19 +151,13 @@ pub enum AdminAuthError {
 impl IntoResponse for AdminAuthError {
     fn into_response(self) -> Response {
         match self {
-            AdminAuthError::NotAuthenticated => {
-                Redirect::to("/admin/login").into_response()
-            }
-            AdminAuthError::Forbidden => {
-                (StatusCode::FORBIDDEN, "Forbidden").into_response()
-            }
+            AdminAuthError::NotAuthenticated => Redirect::to("/admin/login").into_response(),
+            AdminAuthError::Forbidden => (StatusCode::FORBIDDEN, "Forbidden").into_response(),
             AdminAuthError::Internal(e) => {
                 tracing::error!("admin auth error: {}", e);
                 (StatusCode::INTERNAL_SERVER_ERROR, "Internal Server Error").into_response()
             }
-            AdminAuthError::RolePickRequired => {
-                Redirect::to("/admin/pick-role").into_response()
-            }
+            AdminAuthError::RolePickRequired => Redirect::to("/admin/pick-role").into_response(),
         }
     }
 }
@@ -179,7 +173,11 @@ async fn resolve_user_and_site(
     let session = parts
         .extensions
         .get::<Session>()
-        .ok_or_else(|| AdminAuthError::Internal("session not found in extensions — is SessionManagerLayer installed?".into()))?
+        .ok_or_else(|| {
+            AdminAuthError::Internal(
+                "session not found in extensions — is SessionManagerLayer installed?".into(),
+            )
+        })?
         .clone();
 
     // Read the user ID from the session.
@@ -198,7 +196,9 @@ async fn resolve_user_and_site(
         .await
         .map_err(|e| AdminAuthError::Internal(format!("session login-time error: {e}")))?;
     if login_at
-        .map(|at| chrono::Utc::now().timestamp().saturating_sub(at) > ADMIN_ABSOLUTE_SESSION_SECONDS)
+        .map(|at| {
+            chrono::Utc::now().timestamp().saturating_sub(at) > ADMIN_ABSOLUTE_SESSION_SECONDS
+        })
         .unwrap_or(true)
     {
         let _ = session.flush().await;
@@ -309,7 +309,9 @@ async fn resolve_user_and_site(
         };
 
         if let Some(id) = resolved {
-            let _ = session.insert(SESSION_CURRENT_SITE_KEY, id.to_string()).await;
+            let _ = session
+                .insert(SESSION_CURRENT_SITE_KEY, id.to_string())
+                .await;
         }
         resolved
     } else {
@@ -341,16 +343,27 @@ pub struct PickRoleUser {
 impl FromRequestParts<AppState> for PickRoleUser {
     type Rejection = AdminAuthError;
 
-    async fn from_request_parts(parts: &mut Parts, state: &AppState) -> Result<Self, Self::Rejection> {
-        let (user, is_global_admin, site_id, _session) = resolve_user_and_site(parts, state).await?;
-        Ok(PickRoleUser { user, is_global_admin, site_id })
+    async fn from_request_parts(
+        parts: &mut Parts,
+        state: &AppState,
+    ) -> Result<Self, Self::Rejection> {
+        let (user, is_global_admin, site_id, _session) =
+            resolve_user_and_site(parts, state).await?;
+        Ok(PickRoleUser {
+            user,
+            is_global_admin,
+            site_id,
+        })
     }
 }
 
 impl FromRequestParts<AppState> for AdminUser {
     type Rejection = AdminAuthError;
 
-    async fn from_request_parts(parts: &mut Parts, state: &AppState) -> Result<Self, Self::Rejection> {
+    async fn from_request_parts(
+        parts: &mut Parts,
+        state: &AppState,
+    ) -> Result<Self, Self::Rejection> {
         let (user, is_global_admin, site_id, session) = resolve_user_and_site(parts, state).await?;
         let user_id = user.id;
 
@@ -359,9 +372,10 @@ impl FromRequestParts<AppState> for AdminUser {
             // Global admin always has full admin role on any site.
             Some(crate::models::site_user::SiteRole::Admin)
         } else if let Some(sid) = site_id {
-            let roles = crate::models::site_user::list_roles_for_user_and_site(&state.db, sid, user_id)
-                .await
-                .unwrap_or_default();
+            let roles =
+                crate::models::site_user::list_roles_for_user_and_site(&state.db, sid, user_id)
+                    .await
+                    .unwrap_or_default();
             match roles.len() {
                 // No site_users row at all — legacy fallback: try the user's global
                 // role as a site role (works for editor/author; site_admin/super_admin
@@ -375,7 +389,10 @@ impl FromRequestParts<AppState> for AdminUser {
                     // be revoked after being pinned).
                     let pinned: Option<String> =
                         session.get(SESSION_CURRENT_ROLE_KEY).await.unwrap_or(None);
-                    match pinned.as_deref().and_then(crate::models::site_user::SiteRole::from_str) {
+                    match pinned
+                        .as_deref()
+                        .and_then(crate::models::site_user::SiteRole::from_str)
+                    {
                         Some(r) if roles.contains(&r) => Some(r),
                         _ => return Err(AdminAuthError::RolePickRequired),
                     }
@@ -389,7 +406,10 @@ impl FromRequestParts<AppState> for AdminUser {
         // boundary prevents a staff identity that also has a subscriber row on
         // another tenant from entering that tenant's admin area.
         if !is_global_admin
-            && matches!(site_role, None | Some(crate::models::site_user::SiteRole::Subscriber))
+            && matches!(
+                site_role,
+                None | Some(crate::models::site_user::SiteRole::Subscriber)
+            )
         {
             return Err(AdminAuthError::Forbidden);
         }
@@ -398,16 +418,14 @@ impl FromRequestParts<AppState> for AdminUser {
         // than their own default/home site.  Using default_site_id (not owner_user_id)
         // because a super_admin typically creates every client site themselves, so
         // they technically "own" all of them — but they're still visiting as admin.
-        let is_is_impersonating = is_global_admin
-            && site_id.is_some()
-            && site_id != user.default_site_id;
+        let is_is_impersonating =
+            is_global_admin && site_id.is_some() && site_id != user.default_site_id;
 
         // System settings are only accessible to super_admin on their default/home site.
         // Uses the same default_site_id as the visiting badge so both stay in sync
         // when the super_admin changes their default site.
-        let is_on_default_site = is_global_admin
-            && user.default_site_id.is_some()
-            && site_id == user.default_site_id;
+        let is_on_default_site =
+            is_global_admin && user.default_site_id.is_some() && site_id == user.default_site_id;
 
         // A site's own branding controls are only available on top-level sites
         // (no parent) — a site created by a site_admin while logged into
@@ -420,18 +438,34 @@ impl FromRequestParts<AppState> for AdminUser {
             .map(|(site, _)| site.parent_site_id.is_none())
             .unwrap_or(true);
 
-        let caps = AdminCaps::from_roles(&user.role, site_role, is_is_impersonating, is_on_default_site, is_top_level_site);
+        let caps = AdminCaps::from_roles(
+            &user.role,
+            site_role,
+            is_is_impersonating,
+            is_on_default_site,
+            is_top_level_site,
+        );
 
         let can_self_publish = if site_role == Some(crate::models::site_user::SiteRole::Author) {
             match site_id {
-                Some(sid) => crate::models::site_user::get_can_self_publish(&state.db, sid, user_id).await.unwrap_or(false),
+                Some(sid) => {
+                    crate::models::site_user::get_can_self_publish(&state.db, sid, user_id)
+                        .await
+                        .unwrap_or(false)
+                }
                 None => false,
             }
         } else {
             false
         };
 
-        Ok(AdminUser { user, site_id, site_role, can_self_publish, caps })
+        Ok(AdminUser {
+            user,
+            site_id,
+            site_role,
+            can_self_publish,
+            caps,
+        })
     }
 }
 
@@ -442,7 +476,8 @@ mod tests {
 
     #[test]
     fn subscriber_has_no_admin_capabilities() {
-        let caps = AdminCaps::from_roles("subscriber", Some(SiteRole::Subscriber), false, false, true);
+        let caps =
+            AdminCaps::from_roles("subscriber", Some(SiteRole::Subscriber), false, false, true);
         assert!(!caps.can_manage_content);
         assert!(!caps.can_manage_users);
         assert!(!caps.can_manage_sites);

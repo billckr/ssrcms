@@ -16,15 +16,17 @@ use synaptic_core::db;
 use synaptic_core::models::post::{self, CreatePost, PostContext, PostStatus, PostType};
 use synaptic_core::models::user::{self, CreateUser, UserRole};
 use synaptic_core::plugins::HookRegistry;
-use synaptic_core::templates::TemplateEngine;
 use synaptic_core::templates::context::{
     ContextBuilder, NavContext, RequestContext, SessionContext, SiteContext,
 };
+use synaptic_core::templates::TemplateEngine;
 
 async fn test_pool() -> sqlx::PgPool {
-    let url = std::env::var("DATABASE_URL")
-        .expect("DATABASE_URL must be set to run integration tests");
-    db::connect(&url).await.expect("failed to connect to test database")
+    let url =
+        std::env::var("DATABASE_URL").expect("DATABASE_URL must be set to run integration tests");
+    db::connect(&url)
+        .await
+        .expect("failed to connect to test database")
 }
 
 fn uid() -> String {
@@ -38,35 +40,41 @@ async fn test_single_post_renders_html() {
     let id = uid();
 
     // ── Create test user and post ──────────────────────────────────────────────
-    let author = user::create(&pool, &CreateUser {
-        username: format!("e2euser_{id}"),
-        email: format!("e2e_{id}@example.com"),
-        display_name: format!("E2E Author {id}"),
-        password: "E2ePass!123".to_string(),
-        role: UserRole::Author,
-    })
+    let author = user::create(
+        &pool,
+        &CreateUser {
+            username: format!("e2euser_{id}"),
+            email: format!("e2e_{id}@example.com"),
+            display_name: format!("E2E Author {id}"),
+            password: "E2ePass!123".to_string(),
+            role: UserRole::Author,
+        },
+    )
     .await
     .expect("failed to create test user");
 
-    let p = post::create(&pool, &CreatePost {
-        site_id: None,
-        title: format!("E2E Test Post {id}"),
-        slug: Some(format!("e2e-test-post-{id}")),
-        content: format!("<p>E2E content for post {id}.</p>"),
-        content_format: Some("html".to_string()),
-        excerpt: None,
-        status: PostStatus::Published,
-        post_type: PostType::Post,
-        author_id: author.id,
-        featured_image_id: None,
-        published_at: Some(chrono::Utc::now()),
-        template: None,
-        post_password_hash: None,
-        comments_enabled: false,
-        parent_id: None,
-        sources: Vec::new(),
-        sources_public: false,
-    })
+    let p = post::create(
+        &pool,
+        &CreatePost {
+            site_id: None,
+            title: format!("E2E Test Post {id}"),
+            slug: Some(format!("e2e-test-post-{id}")),
+            content: format!("<p>E2E content for post {id}.</p>"),
+            content_format: Some("html".to_string()),
+            excerpt: None,
+            status: PostStatus::Published,
+            post_type: PostType::Post,
+            author_id: author.id,
+            featured_image_id: None,
+            published_at: Some(chrono::Utc::now()),
+            template: None,
+            post_password_hash: None,
+            comments_enabled: false,
+            parent_id: None,
+            sources: Vec::new(),
+            sources_public: false,
+        },
+    )
     .await
     .expect("failed to create test post");
 
@@ -75,14 +83,14 @@ async fn test_single_post_renders_html() {
     let post_ctx = PostContext::build(
         &p,
         &author,
-        vec![],       // categories
-        vec![],       // tags
-        None,         // featured_image
+        vec![],         // categories
+        vec![],         // tags
+        None,           // featured_image
         HashMap::new(), // meta
-        0,            // comment_count
+        0,              // comment_count
         base_url,
-        None,         // page_path
-        vec![],       // breadcrumbs
+        None,          // page_path
+        vec![],        // breadcrumbs
         "/%postname%", // permalink_structure
     );
 

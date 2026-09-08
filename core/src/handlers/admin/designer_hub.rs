@@ -15,7 +15,11 @@ use crate::models::{form_def, poll_def};
 use admin::pages::form_designer::{forms_list_fragment, FormRow};
 use admin::pages::poll_designer::{polls_list_fragment, PollRow};
 
-pub async fn list(State(state): State<AppState>, admin: AdminUser, Query(_params): Query<HashMap<String, String>>) -> Response {
+pub async fn list(
+    State(state): State<AppState>,
+    admin: AdminUser,
+    Query(_params): Query<HashMap<String, String>>,
+) -> Response {
     if !admin.caps.can_manage_forms {
         return (axum::http::StatusCode::FORBIDDEN, "Forbidden").into_response();
     }
@@ -26,29 +30,45 @@ pub async fn list(State(state): State<AppState>, admin: AdminUser, Query(_params
     let cs = state.site_hostname(admin.site_id);
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
 
-    let forms = form_def::list_for_site(&state.db, site_id).await.unwrap_or_default();
+    let forms = form_def::list_for_site(&state.db, site_id)
+        .await
+        .unwrap_or_default();
     let blocked = crate::models::form_submission::blocked_names(&state.db, site_id).await;
-    let form_rows: Vec<FormRow> = forms.into_iter().map(|f| FormRow {
-        id: f.id.to_string(),
-        blocked: blocked.contains(&f.name),
-        name: f.name,
-        slug: f.slug,
-        field_count: f.fields.len(),
-        updated_at: f.updated_at.format("%Y-%m-%d %H:%M UTC").to_string(),
-    }).collect();
+    let form_rows: Vec<FormRow> = forms
+        .into_iter()
+        .map(|f| FormRow {
+            id: f.id.to_string(),
+            blocked: blocked.contains(&f.name),
+            name: f.name,
+            slug: f.slug,
+            field_count: f.fields.len(),
+            updated_at: f.updated_at.format("%Y-%m-%d %H:%M UTC").to_string(),
+        })
+        .collect();
 
-    let polls = poll_def::list_for_site(&state.db, site_id).await.unwrap_or_default();
-    let poll_rows: Vec<PollRow> = polls.into_iter().map(|p| PollRow {
-        id: p.id.to_string(),
-        name: p.name,
-        slug: p.slug,
-        option_count: p.options.len(),
-        total_votes: p.total_votes,
-        updated_at: p.updated_at.format("%Y-%m-%d %H:%M UTC").to_string(),
-    }).collect();
+    let polls = poll_def::list_for_site(&state.db, site_id)
+        .await
+        .unwrap_or_default();
+    let poll_rows: Vec<PollRow> = polls
+        .into_iter()
+        .map(|p| PollRow {
+            id: p.id.to_string(),
+            name: p.name,
+            slug: p.slug,
+            option_count: p.options.len(),
+            total_votes: p.total_votes,
+            updated_at: p.updated_at.format("%Y-%m-%d %H:%M UTC").to_string(),
+        })
+        .collect();
 
     let forms_fragment = forms_list_fragment(&form_rows, 1, 1, "", "", "");
     let polls_fragment = polls_list_fragment(&poll_rows, "");
 
-    Html(admin::pages::designer_hub::render(&forms_fragment, &polls_fragment, &ctx, None)).into_response()
+    Html(admin::pages::designer_hub::render(
+        &forms_fragment,
+        &polls_fragment,
+        &ctx,
+        None,
+    ))
+    .into_response()
 }

@@ -35,7 +35,11 @@ pub fn render(
     // Each tab supplies its own controls on this same row (search, New
     // Form, etc.) — same layout convention as /admin/pages: tabs and
     // controls side by side, not controls stacked below the tab bar.
-    let controls = if is_forms { forms_tab_controls() } else { String::new() };
+    let controls = if is_forms {
+        forms_tab_controls()
+    } else {
+        String::new()
+    };
 
     let filter_chip = match form_filter {
         Some((_, name)) if is_forms => format!(
@@ -138,7 +142,11 @@ fn integer_y_axis(values: &[f32]) -> (f32, usize) {
 /// dashboard's charts.
 fn responsive_svg(svg: String, w: u32, h: u32) -> String {
     let vb = format!(r#"viewBox="0 0 {w} {h}""#);
-    let svg = svg.replacen(&format!(r#"width="{w}""#), &format!(r#"width="100%" {vb}"#), 1);
+    let svg = svg.replacen(
+        &format!(r#"width="{w}""#),
+        &format!(r#"width="100%" {vb}"#),
+        1,
+    );
     svg.replacen(&format!(r#" height="{h}""#), "", 1)
 }
 
@@ -147,12 +155,25 @@ fn responsive_svg(svg: String, w: u32, h: u32) -> String {
 /// `search_qs` is the `&search=...` suffix (already URL-encoded, empty when
 /// there's no active search) appended to each sort link so sorting doesn't
 /// clear an in-progress search.
-pub fn render_analytics_table(data: &FormAnalyticsData, sort: &str, dir: &str, search_qs: &str) -> String {
+pub fn render_analytics_table(
+    data: &FormAnalyticsData,
+    sort: &str,
+    dir: &str,
+    search_qs: &str,
+) -> String {
     let asc = dir != "desc";
     let sort_th = |label: &str, key: &str| -> String {
         let is_active = sort == key;
         let next_dir = if is_active && asc { "desc" } else { "asc" };
-        let arrow = if is_active { if asc { " \u{25B2}" } else { " \u{25BC}" } } else { "" };
+        let arrow = if is_active {
+            if asc {
+                " \u{25B2}"
+            } else {
+                " \u{25BC}"
+            }
+        } else {
+            ""
+        };
         format!(
             r#"<th><a href="?sort={key}&dir={next_dir}{search_qs}" style="color:inherit;text-decoration:none;white-space:nowrap">{label}{arrow}</a></th>"#
         )
@@ -207,10 +228,21 @@ pub fn render_analytics_table(data: &FormAnalyticsData, sort: &str, dir: &str, s
 /// a recent-sends table. Reads straight from `mail_log`, scoped to this form.
 /// `sort`/`dir` reflect the current sort (rows are pre-filtered/sorted by the
 /// caller) and are only used here to render the column headers' state/links.
-pub fn render_analytics(data: &FormAnalyticsData, active_tab: &str, sort: &str, dir: &str, search: &str, ctx: &PageContext) -> String {
+pub fn render_analytics(
+    data: &FormAnalyticsData,
+    active_tab: &str,
+    sort: &str,
+    dir: &str,
+    search: &str,
+    ctx: &PageContext,
+) -> String {
     let is_results = active_tab == "results";
     let is_submissions = active_tab == "submissions";
-    let stats_active = if is_results || is_submissions { "" } else { " active" };
+    let stats_active = if is_results || is_submissions {
+        ""
+    } else {
+        " active"
+    };
     let results_active = if is_results { " active" } else { "" };
     let submissions_active = if is_submissions { " active" } else { "" };
     let id = html_escape(&data.id);
@@ -221,17 +253,27 @@ pub fn render_analytics(data: &FormAnalyticsData, active_tab: &str, sort: &str, 
   <a href="/admin/analytics/form/{id}?tab=results" class="page-tab{results_active}">Delivery Results</a>
   <a href="/admin/analytics/form/{id}?tab=submissions" class="page-tab{submissions_active}">Submissions</a>
 </div>"#,
-        id = id, stats_active = stats_active, results_active = results_active, submissions_active = submissions_active,
+        id = id,
+        stats_active = stats_active,
+        results_active = results_active,
+        submissions_active = submissions_active,
     );
 
     // Same layout convention as elsewhere: tab bar and controls (search,
     // export, delete) sit on one row (see pages::analytics::render for the
     // tabs list, and forms_tab_controls).
-    let search_toggle = crate::pill_search_toggle("analytics-search", "Search sends&hellip;", search);
+    let search_toggle =
+        crate::pill_search_toggle("analytics-search", "Search sends&hellip;", search);
     let controls = if is_results {
-        format!(r#"<div class="icon-pill" style="align-self:flex-end;margin-top:0">{search_toggle}</div>"#, search_toggle = search_toggle)
+        format!(
+            r#"<div class="icon-pill" style="align-self:flex-end;margin-top:0">{search_toggle}</div>"#,
+            search_toggle = search_toggle
+        )
     } else if is_submissions {
-        let has_submissions = data.submissions.as_ref().is_some_and(|s| !s.rows.is_empty());
+        let has_submissions = data
+            .submissions
+            .as_ref()
+            .is_some_and(|s| !s.rows.is_empty());
         crate::pages::forms::render_submissions_controls(&data.form_slug, has_submissions)
     } else {
         String::new()
@@ -242,16 +284,30 @@ pub fn render_analytics(data: &FormAnalyticsData, active_tab: &str, sort: &str, 
             Some(sub) => {
                 let pagination_base = format!("/admin/analytics/form/{id}?tab=submissions");
                 crate::pages::forms::render_submissions_body(
-                    &data.form_slug, &sub.rows, &sub.columns, sub.page, sub.total_pages, &pagination_base, "&",
+                    &data.form_slug,
+                    &sub.rows,
+                    &sub.columns,
+                    sub.page,
+                    sub.total_pages,
+                    &pagination_base,
+                    "&",
                 )
             }
             None => String::new(),
         }
     } else if is_results {
-        let search_qs = if search.is_empty() { String::new() } else { format!("&search={}", html_escape(search)) };
+        let search_qs = if search.is_empty() {
+            String::new()
+        } else {
+            format!("&search={}", html_escape(search))
+        };
         let table_html = render_analytics_table(data, sort, dir, &search_qs);
-        let fetch_prefix = format!("/admin/analytics/form/{}?tab=results&partial=1&sort={}&dir={}", data.id, sort, dir);
-        let live_search = crate::live_search_script("analytics-search", "analytics-table", &fetch_prefix);
+        let fetch_prefix = format!(
+            "/admin/analytics/form/{}?tab=results&partial=1&sort={}&dir={}",
+            data.id, sort, dir
+        );
+        let live_search =
+            crate::live_search_script("analytics-search", "analytics-table", &fetch_prefix);
         format!(
             r#"<div id="analytics-table">{table_html}</div>
 {live_search}
@@ -318,5 +374,11 @@ pub fn render_analytics(data: &FormAnalyticsData, active_tab: &str, sort: &str, 
         tab_body = tab_body,
     );
 
-    admin_page(&format!("Analytics - {}", html_escape(&data.form_name)), "/admin/analytics", None, &content, ctx)
+    admin_page(
+        &format!("Analytics - {}", html_escape(&data.form_name)),
+        "/admin/analytics",
+        None,
+        &content,
+        ctx,
+    )
 }

@@ -153,10 +153,20 @@ fn current_username() -> String {
 
 // ── Preflight (existing-install detection) ──────────────────────────────────
 
-struct DevProcessFinding { pid: u32 }
-struct SystemdFinding { service_name: String }
-struct CaddyForeignFinding { domain: String }
-struct DbFinding { site_count: i64, user_count: i64, sites: Vec<(String, String)> }
+struct DevProcessFinding {
+    pid: u32,
+}
+struct SystemdFinding {
+    service_name: String,
+}
+struct CaddyForeignFinding {
+    domain: String,
+}
+struct DbFinding {
+    site_count: i64,
+    user_count: i64,
+    sites: Vec<(String, String)>,
+}
 
 #[derive(Default)]
 struct PreflightFindings {
@@ -168,8 +178,10 @@ struct PreflightFindings {
 
 impl PreflightFindings {
     fn is_clean(&self) -> bool {
-        self.dev_process.is_none() && self.systemd_active.is_none()
-            && self.caddy_foreign.is_none() && self.db_data.is_none()
+        self.dev_process.is_none()
+            && self.systemd_active.is_none()
+            && self.caddy_foreign.is_none()
+            && self.db_data.is_none()
     }
 }
 
@@ -183,8 +195,12 @@ fn preflight_system(domain: &str, install_dir: &str) -> PreflightFindings {
         systemd_active: {
             let active = std::process::Command::new("systemctl")
                 .args(["is-active", "--quiet", "synapcms"])
-                .status().map(|s| s.success()).unwrap_or(false);
-            active.then(|| SystemdFinding { service_name: "synapcms".to_string() })
+                .status()
+                .map(|s| s.success())
+                .unwrap_or(false);
+            active.then(|| SystemdFinding {
+                service_name: "synapcms".to_string(),
+            })
         },
         caddy_foreign: caddy_foreign_block(domain),
         db_data: None,
@@ -213,7 +229,9 @@ fn caddy_foreign_block(domain: &str) -> Option<CaddyForeignFinding> {
             if !header.is_empty() {
                 let is_match = header.split(',').map(|s| s.trim()).any(|a| a == domain);
                 if is_match {
-                    return Some(CaddyForeignFinding { domain: domain.to_string() });
+                    return Some(CaddyForeignFinding {
+                        domain: domain.to_string(),
+                    });
                 }
             }
         }
@@ -227,16 +245,26 @@ fn caddy_foreign_block(domain: &str) -> Option<CaddyForeignFinding> {
 /// (never one about to be freshly bootstrapped). Read-only: counts only.
 async fn preflight_db(pool: &sqlx::PgPool) -> Option<DbFinding> {
     let site_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM sites")
-        .fetch_one(pool).await.unwrap_or(0);
+        .fetch_one(pool)
+        .await
+        .unwrap_or(0);
     let user_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM users")
-        .fetch_one(pool).await.unwrap_or(0);
+        .fetch_one(pool)
+        .await
+        .unwrap_or(0);
     if site_count == 0 && user_count == 0 {
         return None;
     }
-    let sites: Vec<(String, String)> = sqlx::query_as(
-        "SELECT id::text, hostname FROM sites ORDER BY created_at"
-    ).fetch_all(pool).await.unwrap_or_default();
-    Some(DbFinding { site_count, user_count, sites })
+    let sites: Vec<(String, String)> =
+        sqlx::query_as("SELECT id::text, hostname FROM sites ORDER BY created_at")
+            .fetch_all(pool)
+            .await
+            .unwrap_or_default();
+    Some(DbFinding {
+        site_count,
+        user_count,
+        sites,
+    })
 }
 
 /// Print the consolidated "what was found" report shared by the three-way
@@ -244,19 +272,31 @@ async fn preflight_db(pool: &sqlx::PgPool) -> Option<DbFinding> {
 fn print_findings(findings: &PreflightFindings) {
     println!("\n── Existing Install Detected ────────────────────────────");
     if let Some(p) = &findings.dev_process {
-        println!("  [process]   synap-app-managed server is running (PID {})", p.pid);
+        println!(
+            "  [process]   synap-app-managed server is running (PID {})",
+            p.pid
+        );
     }
     if let Some(s) = &findings.systemd_active {
         println!("  [systemd]   service '{}' is active", s.service_name);
     }
     if let Some(c) = &findings.caddy_foreign {
-        println!("  [caddy]     /etc/caddy/Caddyfile already has an unrelated block for '{}'", c.domain);
+        println!(
+            "  [caddy]     /etc/caddy/Caddyfile already has an unrelated block for '{}'",
+            c.domain
+        );
     }
     if let Some(d) = &findings.db_data {
         if d.sites.is_empty() {
-            println!("  [database]  {} site(s), {} user(s) already exist", d.site_count, d.user_count);
+            println!(
+                "  [database]  {} site(s), {} user(s) already exist",
+                d.site_count, d.user_count
+            );
         } else {
-            println!("  [database]  {} site(s), {} user(s) already exist:", d.site_count, d.user_count);
+            println!(
+                "  [database]  {} site(s), {} user(s) already exist:",
+                d.site_count, d.user_count
+            );
             for (id, hostname) in &d.sites {
                 println!("                - {} ({})", hostname, id);
             }
@@ -265,7 +305,11 @@ fn print_findings(findings: &PreflightFindings) {
     println!();
 }
 
-enum ConflictChoice { Fresh, Coexist, Bail }
+enum ConflictChoice {
+    Fresh,
+    Coexist,
+    Bail,
+}
 
 /// Present the consolidated findings and get an explicit Fresh/Coexist/Bail
 /// choice. Never defaults to anything destructive — the user must actively
@@ -303,9 +347,17 @@ fn resolve_conflict_interactive(findings: &PreflightFindings) -> anyhow::Result<
         .items(&items)
         .interact()?;
     Ok(if coexist_possible {
-        match idx { 0 => ConflictChoice::Fresh, 1 => ConflictChoice::Coexist, _ => ConflictChoice::Bail }
+        match idx {
+            0 => ConflictChoice::Fresh,
+            1 => ConflictChoice::Coexist,
+            _ => ConflictChoice::Bail,
+        }
     } else {
-        if idx == 0 { ConflictChoice::Fresh } else { ConflictChoice::Bail }
+        if idx == 0 {
+            ConflictChoice::Fresh
+        } else {
+            ConflictChoice::Bail
+        }
     })
 }
 
@@ -313,7 +365,10 @@ fn resolve_conflict_interactive(findings: &PreflightFindings) -> anyhow::Result<
 /// must already be declared via `--on-conflict`, defaulting to `bail` for
 /// safety. `coexist` additionally requires no foreign Caddy block, since
 /// there's no one to ask about that here either.
-fn resolve_conflict_non_interactive(findings: &PreflightFindings, on_conflict: OnConflict) -> anyhow::Result<ConflictChoice> {
+fn resolve_conflict_non_interactive(
+    findings: &PreflightFindings,
+    on_conflict: OnConflict,
+) -> anyhow::Result<ConflictChoice> {
     print_findings(findings);
     match on_conflict {
         OnConflict::Bail => anyhow::bail!(
@@ -448,16 +503,21 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
         if dir_path.exists() {
             match std::fs::metadata(dir_path) {
                 Ok(meta) => {
-                    let dir_uid  = meta.uid();
-                    let my_uid   = current_uid();
+                    let dir_uid = meta.uid();
+                    let my_uid = current_uid();
                     if dir_uid != my_uid {
-                        eprintln!("Error: {} is not owned by the current user ({}).",
-                            install_dir, service_user);
+                        eprintln!(
+                            "Error: {} is not owned by the current user ({}).",
+                            install_dir, service_user
+                        );
                         eprintln!("  Directory owner uid : {}", dir_uid);
                         eprintln!("  Your uid            : {}", my_uid);
                         eprintln!();
                         eprintln!("Fix ownership before installing:");
-                        eprintln!("  sudo chown -R {}:{} {}", service_user, service_user, install_dir);
+                        eprintln!(
+                            "  sudo chown -R {}:{} {}",
+                            service_user, service_user, install_dir
+                        );
                         anyhow::bail!("Installation cancelled — fix directory ownership first.");
                     }
                 }
@@ -477,17 +537,25 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
     // only source) or install_dir/.env (covers a dev machine where the URL
     // lives only in a project .env, not the shell environment). If found,
     // never offer/require bootstrap — just use it (or let it be edited).
-    let existing_db_url = std::env::var("DATABASE_URL").ok()
-        .or_else(|| read_env_key(&std::path::Path::new(&install_dir).join(".env"), "DATABASE_URL"));
+    let existing_db_url = std::env::var("DATABASE_URL").ok().or_else(|| {
+        read_env_key(
+            &std::path::Path::new(&install_dir).join(".env"),
+            "DATABASE_URL",
+        )
+    });
 
     let database_url: String = if ni {
         match (existing_db_url, args.bootstrap_db) {
             (Some(url), _) => url,
-            (None, true) => bootstrap_local_db(&args.db_user, &args.db_name, args.db_password.clone())?,
-            (None, false) => return Err(anyhow::anyhow!(
-                "DATABASE_URL env var is required in --non-interactive mode \
+            (None, true) => {
+                bootstrap_local_db(&args.db_user, &args.db_name, args.db_password.clone())?
+            }
+            (None, false) => {
+                return Err(anyhow::anyhow!(
+                    "DATABASE_URL env var is required in --non-interactive mode \
                  (or pass --bootstrap-db to create a local database)."
-            )),
+                ))
+            }
         }
     } else if let Some(url) = existing_db_url {
         Input::new()
@@ -498,7 +566,7 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
         let want_bootstrap = Confirm::new()
             .with_prompt(
                 "No DATABASE_URL found. Create a local Postgres role/database now? \
-                 (requires sudo access to run commands as the 'postgres' user)"
+                 (requires sudo access to run commands as the 'postgres' user)",
             )
             .default(false)
             .interact()?;
@@ -538,7 +606,14 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
                 return Ok(());
             }
             ConflictChoice::Fresh => {
-                do_fresh(&findings, &database_url, &install_dir, ni, args.admin_password.clone()).await?;
+                do_fresh(
+                    &findings,
+                    &database_url,
+                    &install_dir,
+                    ni,
+                    args.admin_password.clone(),
+                )
+                .await?;
             }
             ConflictChoice::Coexist => {
                 auto_restart_systemd = findings.systemd_active.is_some();
@@ -550,7 +625,9 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
     println!("Connecting to database...");
 
     // SAFETY: single-threaded at this point in the installer; no other threads read env.
-    unsafe { std::env::set_var("DATABASE_URL", &database_url); }
+    unsafe {
+        std::env::set_var("DATABASE_URL", &database_url);
+    }
     let pool = super::connect_db().await?;
 
     println!("Running migrations...");
@@ -605,7 +682,9 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
         }
 
         let display_name: String = if ni {
-            args.admin_display_name.clone().unwrap_or_else(|| username.clone())
+            args.admin_display_name
+                .clone()
+                .unwrap_or_else(|| username.clone())
         } else {
             Input::new()
                 .with_prompt("Display name")
@@ -617,7 +696,8 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
         let password = if ni {
             match args.admin_password.clone() {
                 Some(pw) => {
-                    validate_password(&pw).map_err(|e| anyhow::anyhow!("Provided ADMIN_PASSWORD is invalid: {e}"))?;
+                    validate_password(&pw)
+                        .map_err(|e| anyhow::anyhow!("Provided ADMIN_PASSWORD is invalid: {e}"))?;
                     pw
                 }
                 None => {
@@ -676,7 +756,7 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
     sqlx::query(
         "INSERT INTO sites (id, hostname, owner_user_id, created_at, updated_at)
          VALUES ($1, $2, $3, NOW(), NOW())
-         ON CONFLICT (hostname) DO NOTHING"
+         ON CONFLICT (hostname) DO NOTHING",
     )
     .bind(Uuid::new_v4())
     .bind(&domain)
@@ -695,9 +775,9 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
         .map_err(|e| anyhow::anyhow!("Failed to look up site: {e}"))?;
 
     let derived_site_url = match port {
-        80  => format!("http://{domain}"),
+        80 => format!("http://{domain}"),
         443 => format!("https://{domain}"),
-        _   => format!("http://{domain}:{port}"),
+        _ => format!("http://{domain}:{port}"),
     };
     let site_url = if ni {
         args.site_url.clone().unwrap_or(derived_site_url)
@@ -706,7 +786,7 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
             .with_prompt(
                 "Public site URL (the address visitors actually use — if a reverse \
                  proxy like Caddy fronts this on 443, that's https://domain with NO \
-                 port, even though Axum itself listens on the port above)"
+                 port, even though Axum itself listens on the port above)",
             )
             .default(args.site_url.clone().unwrap_or(derived_site_url))
             .interact_text()?
@@ -716,19 +796,19 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
     // real copy to put there.
     let default_description = format!("{domain} — homepage.");
     let settings_defaults: &[(&str, &str)] = &[
-        ("site_name",        &domain),
+        ("site_name", &domain),
         ("site_description", &default_description),
-        ("site_url",         &site_url),
-        ("site_language",    "en-US"),
-        ("active_theme",     "default"),
-        ("posts_per_page",   "9"),
-        ("date_format",      "%B %-d, %Y"),
+        ("site_url", &site_url),
+        ("site_language", "en-US"),
+        ("active_theme", "default"),
+        ("posts_per_page", "9"),
+        ("date_format", "%B %-d, %Y"),
     ];
     for (key, value) in settings_defaults {
         sqlx::query(
             "INSERT INTO site_settings (site_id, key, value)
              VALUES ($1, $2, $3)
-             ON CONFLICT (site_id, key) WHERE site_id IS NOT NULL DO NOTHING"
+             ON CONFLICT (site_id, key) WHERE site_id IS NOT NULL DO NOTHING",
         )
         .bind(site_id)
         .bind(key)
@@ -750,13 +830,13 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
     })?;
 
     for (key, value) in &[
-        ("app_name",      app_name.as_str()),
-        ("timezone",      "UTC"),
+        ("app_name", app_name.as_str()),
+        ("timezone", "UTC"),
         ("max_upload_mb", "25"),
     ] {
         sqlx::query(
             "INSERT INTO app_settings (key, value) VALUES ($1, $2)
-             ON CONFLICT (key) DO NOTHING"
+             ON CONFLICT (key) DO NOTHING",
         )
         .bind(key)
         .bind(value)
@@ -767,13 +847,19 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
 
     // Create the site's data directories and seed the default theme.
     let site_themes_dst = std::path::Path::new(&install_dir)
-        .join("sites").join(site_id.to_string()).join("themes").join("default");
+        .join("sites")
+        .join(site_id.to_string())
+        .join("themes")
+        .join("default");
     let site_uploads_dst = std::path::Path::new(&install_dir)
-        .join("uploads").join(site_id.to_string());
+        .join("uploads")
+        .join(site_id.to_string());
     let _ = std::fs::create_dir_all(&site_uploads_dst);
 
     let theme_src = std::path::Path::new(&install_dir)
-        .join("themes").join("global").join("default");
+        .join("themes")
+        .join("global")
+        .join("default");
     if theme_src.is_dir() {
         match copy_dir_all(&theme_src, &site_themes_dst) {
             Ok(()) => {}
@@ -787,7 +873,8 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
         println!(
             "Note: themes/global/default/ not found at '{}'. \
              Copy it to sites/{}/themes/default/ after placing the themes directory.",
-            theme_src.display(), site_id
+            theme_src.display(),
+            site_id
         );
     }
 
@@ -807,8 +894,8 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
 
     // ── Deployment files ───────────────────────────────────────────────────
     let uploads_dir = format!("{}/uploads", install_dir);
-    let theme_dir   = format!("{}/themes", install_dir);
-    let output_dir  = std::path::Path::new(&args.output_dir);
+    let theme_dir = format!("{}/themes", install_dir);
+    let output_dir = std::path::Path::new(&args.output_dir);
 
     println!("\n── Deployment Files ─────────────────────────────────────");
 
@@ -842,17 +929,21 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
     let app_user: Option<String> = if let Some(u) = args.app_user {
         Some(u)
     } else if ni {
-        None  // non-interactive without --app-user: skip silently, print note later
+        None // non-interactive without --app-user: skip silently, print note later
     } else {
         let val: String = Input::new()
             .with_prompt(
                 "App system user for Caddy SSL permissions (e.g. www-data) \
-                 [leave blank to skip]"
+                 [leave blank to skip]",
             )
             .allow_empty(true)
             .interact_text()?;
         let trimmed = val.trim().to_string();
-        if trimmed.is_empty() { None } else { Some(trimmed) }
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed)
+        }
     };
 
     if let Some(ref user) = app_user {
@@ -891,7 +982,13 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
     write_env_key_if_absent(&env_path, "LOG_LEVEL", "info");
 
     if do_setup_service {
-        setup_local_service(&install_dir, output_dir, &domain, args.synapcms_bin.as_deref(), args.synap_bin.as_deref())?;
+        setup_local_service(
+            &install_dir,
+            output_dir,
+            &domain,
+            args.synapcms_bin.as_deref(),
+            args.synap_bin.as_deref(),
+        )?;
     }
 
     // ── Install Summary ────────────────────────────────────────────────────
@@ -938,7 +1035,7 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
     // In non-interactive mode the install script handles deployment — skip the manual steps.
     if !ni {
         let pid_file = std::path::Path::new(&install_dir).join(".synapcms.pid");
-        let app_sh   = std::path::Path::new(&install_dir).join("app.sh");
+        let app_sh = std::path::Path::new(&install_dir).join("app.sh");
 
         println!("\n── Next Steps ───────────────────────────────────────────");
 
@@ -984,17 +1081,25 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
             let generated_caddy = output_dir.join("Caddyfile");
 
             if live_unit_path.exists() {
-                let unit_matches = std::fs::read(&generated_unit).ok() == std::fs::read(live_unit_path).ok();
-                let caddy_matches = std::fs::read(&generated_caddy).ok() == std::fs::read(live_caddy_path).ok();
+                let unit_matches =
+                    std::fs::read(&generated_unit).ok() == std::fs::read(live_unit_path).ok();
+                let caddy_matches =
+                    std::fs::read(&generated_caddy).ok() == std::fs::read(live_caddy_path).ok();
 
                 if unit_matches && caddy_matches {
-                    println!("  systemd unit and Caddyfile already match what's live — nothing to copy.");
+                    println!(
+                        "  systemd unit and Caddyfile already match what's live — nothing to copy."
+                    );
                 } else {
                     println!("  This run changed the generated systemd unit and/or Caddyfile");
-                    println!("  (e.g. domain, port, or service user) — re-apply the changed one(s):");
+                    println!(
+                        "  (e.g. domain, port, or service user) — re-apply the changed one(s):"
+                    );
                     if !unit_matches {
-                        println!("    cp {} /etc/systemd/system/ && systemctl daemon-reload",
-                            generated_unit.display());
+                        println!(
+                            "    cp {} /etc/systemd/system/ && systemctl daemon-reload",
+                            generated_unit.display()
+                        );
                     }
                     if !caddy_matches {
                         println!("    cp {} /etc/caddy/Caddyfile && caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile",
@@ -1004,11 +1109,22 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
             } else {
                 // No unit installed yet — this really is a fresh systemd deployment.
                 println!("  1. Copy the binary and files to {}", install_dir);
-                println!("  2. Copy {} to /etc/systemd/system/", generated_unit.display());
-                println!("  3. Copy {} to /etc/caddy/Caddyfile (or include it)", generated_caddy.display());
+                println!(
+                    "  2. Copy {} to /etc/systemd/system/",
+                    generated_unit.display()
+                );
+                println!(
+                    "  3. Copy {} to /etc/caddy/Caddyfile (or include it)",
+                    generated_caddy.display()
+                );
                 println!("     Then run: sudo caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile");
-                println!("  4. Run:  sudo synap caddy setup --app-user {}", service_user);
-                println!("     Sets up Caddy write permissions + log directory for SSL provisioning.");
+                println!(
+                    "  4. Run:  sudo synap caddy setup --app-user {}",
+                    service_user
+                );
+                println!(
+                    "     Sets up Caddy write permissions + log directory for SSL provisioning."
+                );
                 println!("  5. Ensure {install_dir}/.env contains DATABASE_URL and SECRET_KEY");
                 println!("     (INSTALL_DIR has been written automatically)");
                 println!("  6. Run:  systemctl daemon-reload && systemctl enable --now synapcms");
@@ -1044,7 +1160,11 @@ where
 /// Create (idempotently) a local Postgres role + database via
 /// `sudo -u postgres psql`, mirroring install-vps.sh's do_db_bootstrap but
 /// run directly on this machine (no ssh). Returns the resulting DATABASE_URL.
-fn bootstrap_local_db(db_user: &str, db_name: &str, db_password: Option<String>) -> anyhow::Result<String> {
+fn bootstrap_local_db(
+    db_user: &str,
+    db_name: &str,
+    db_password: Option<String>,
+) -> anyhow::Result<String> {
     println!("\n── Local Database Bootstrap ─────────────────────────────");
     let password = db_password.unwrap_or_else(generate_db_password);
 
@@ -1104,7 +1224,9 @@ GRANT ALL PRIVILEGES ON DATABASE {db_name} TO {db_user};
         ),
     }
 
-    Ok(format!("postgres://{db_user}:{password}@localhost:5432/{db_name}"))
+    Ok(format!(
+        "postgres://{db_user}:{password}@localhost:5432/{db_name}"
+    ))
 }
 
 /// Generate a random hex password for a bootstrapped Postgres role.
@@ -1120,10 +1242,18 @@ fn generate_db_password() -> String {
 /// through copying files into /etc/.
 fn check_local_service_requirements() -> anyhow::Result<()> {
     let mut problems = Vec::new();
-    if std::process::Command::new("systemctl").arg("--version").output().is_err() {
+    if std::process::Command::new("systemctl")
+        .arg("--version")
+        .output()
+        .is_err()
+    {
         problems.push("systemctl not found on PATH — systemd is required".to_string());
     }
-    if std::process::Command::new("caddy").arg("version").output().is_err() {
+    if std::process::Command::new("caddy")
+        .arg("version")
+        .output()
+        .is_err()
+    {
         problems.push("caddy not found on PATH".to_string());
     }
     if !std::path::Path::new("/etc/systemd/system").is_dir() {
@@ -1144,12 +1274,16 @@ fn check_local_service_requirements() -> anyhow::Result<()> {
 fn resolve_binary(explicit: Option<&str>, name: &str) -> anyhow::Result<std::path::PathBuf> {
     if let Some(p) = explicit {
         let path = std::path::PathBuf::from(p);
-        if path.is_file() { return Ok(path); }
+        if path.is_file() {
+            return Ok(path);
+        }
         anyhow::bail!("--{name}-bin path '{p}' does not exist or is not a file");
     }
     for candidate in ["target/release", "target/debug"] {
         let path = std::path::PathBuf::from(candidate).join(name);
-        if path.is_file() { return Ok(path); }
+        if path.is_file() {
+            return Ok(path);
+        }
     }
     anyhow::bail!(
         "Could not find a built '{name}' binary (looked in target/release/{name} \
@@ -1183,9 +1317,14 @@ fn write_via_sudo_tee(live_path: &str, content: &str) -> anyhow::Result<()> {
         .stdout(std::process::Stdio::null())
         .spawn()
         .map_err(|e| anyhow::anyhow!("Failed to run `sudo tee {live_path}`: {e}"))?;
-    child.stdin.take().unwrap().write_all(content.as_bytes())
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(content.as_bytes())
         .map_err(|e| anyhow::anyhow!("Failed to write to `sudo tee {live_path}`: {e}"))?;
-    let status = child.wait()
+    let status = child
+        .wait()
         .map_err(|e| anyhow::anyhow!("Failed waiting on `sudo tee {live_path}`: {e}"))?;
     if !status.success() {
         anyhow::bail!("`sudo tee {live_path}` failed ({status})");
@@ -1213,7 +1352,11 @@ fn merge_caddyfile(live_path: &str, domain: &str, generated_block: &str) -> anyh
     let merged = if stripped.trim().is_empty() {
         generated_block.to_string()
     } else {
-        format!("{}\n\n{}\n", stripped.trim_end(), generated_block.trim_end())
+        format!(
+            "{}\n\n{}\n",
+            stripped.trim_end(),
+            generated_block.trim_end()
+        )
     };
     Ok(merged)
 }
@@ -1225,20 +1368,30 @@ fn merge_caddyfile(live_path: &str, domain: &str, generated_block: &str) -> anyh
 /// This machine may already be running a live Caddy/systemd setup fronting
 /// other sites — setup_local_service must never clobber that without a
 /// way back.
-fn backup_if_exists(live_path: &str, backup_dir: &std::path::Path, label: &str) -> anyhow::Result<Option<std::path::PathBuf>> {
+fn backup_if_exists(
+    live_path: &str,
+    backup_dir: &std::path::Path,
+    label: &str,
+) -> anyhow::Result<Option<std::path::PathBuf>> {
     if !std::path::Path::new(live_path).exists() {
         return Ok(None);
     }
-    std::fs::create_dir_all(backup_dir)
-        .map_err(|e| anyhow::anyhow!("Failed to create backup dir {}: {e}", backup_dir.display()))?;
+    std::fs::create_dir_all(backup_dir).map_err(|e| {
+        anyhow::anyhow!("Failed to create backup dir {}: {e}", backup_dir.display())
+    })?;
     let timestamp = chrono::Utc::now().format("%Y%m%d_%H%M%S");
     let backup_path = backup_dir.join(format!("{label}.bak.{timestamp}"));
-    let backup_path_str = backup_path.to_str()
+    let backup_path_str = backup_path
+        .to_str()
         .ok_or_else(|| anyhow::anyhow!("backup path is not valid UTF-8"))?;
     run_sudo(&["cp", live_path, backup_path_str])?;
     let user = current_username();
     let _ = run_sudo(&["chown", &format!("{user}:{user}"), backup_path_str]);
-    println!("  Backed up existing {} -> {}", live_path, backup_path.display());
+    println!(
+        "  Backed up existing {} -> {}",
+        live_path,
+        backup_path.display()
+    );
     Ok(Some(backup_path))
 }
 
@@ -1261,13 +1414,23 @@ fn setup_local_service(
     check_local_service_requirements()?;
 
     let synapcms_src = resolve_binary(synapcms_bin_arg, "synapcms")?;
-    let synap_src    = resolve_binary(synap_bin_arg, "synap")?;
+    let synap_src = resolve_binary(synap_bin_arg, "synap")?;
     let synapcms_dst = std::path::Path::new(install_dir).join("synapcms");
-    let synap_dst    = std::path::Path::new(install_dir).join("synap");
-    std::fs::copy(&synapcms_src, &synapcms_dst)
-        .map_err(|e| anyhow::anyhow!("Failed to copy {} -> {}: {e}", synapcms_src.display(), synapcms_dst.display()))?;
-    std::fs::copy(&synap_src, &synap_dst)
-        .map_err(|e| anyhow::anyhow!("Failed to copy {} -> {}: {e}", synap_src.display(), synap_dst.display()))?;
+    let synap_dst = std::path::Path::new(install_dir).join("synap");
+    std::fs::copy(&synapcms_src, &synapcms_dst).map_err(|e| {
+        anyhow::anyhow!(
+            "Failed to copy {} -> {}: {e}",
+            synapcms_src.display(),
+            synapcms_dst.display()
+        )
+    })?;
+    std::fs::copy(&synap_src, &synap_dst).map_err(|e| {
+        anyhow::anyhow!(
+            "Failed to copy {} -> {}: {e}",
+            synap_src.display(),
+            synap_dst.display()
+        )
+    })?;
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
@@ -1278,10 +1441,12 @@ fn setup_local_service(
     println!("  Installed binaries to {}/{{synapcms,synap}}", install_dir);
 
     let generated_caddy = output_dir.join("Caddyfile");
-    let generated_unit  = output_dir.join("synapcms.service");
-    let generated_caddy_str = generated_caddy.to_str()
+    let generated_unit = output_dir.join("synapcms.service");
+    let generated_caddy_str = generated_caddy
+        .to_str()
         .ok_or_else(|| anyhow::anyhow!("Caddyfile path is not valid UTF-8"))?;
-    let generated_unit_str = generated_unit.to_str()
+    let generated_unit_str = generated_unit
+        .to_str()
         .ok_or_else(|| anyhow::anyhow!("service file path is not valid UTF-8"))?;
 
     let backup_dir = std::path::Path::new(install_dir).join("backups");
@@ -1289,8 +1454,9 @@ fn setup_local_service(
 
     // Merge (not overwrite) — every other domain's block, SynapCMS-managed
     // or hand-written, is left untouched. See merge_caddyfile's doc comment.
-    let generated_block = std::fs::read_to_string(&generated_caddy)
-        .map_err(|e| anyhow::anyhow!("Failed to read generated Caddyfile at {generated_caddy_str}: {e}"))?;
+    let generated_block = std::fs::read_to_string(&generated_caddy).map_err(|e| {
+        anyhow::anyhow!("Failed to read generated Caddyfile at {generated_caddy_str}: {e}")
+    })?;
     let merged = merge_caddyfile("/etc/caddy/Caddyfile", domain, &generated_block)?;
     write_via_sudo_tee("/etc/caddy/Caddyfile", &merged)?;
     let caddy_active = std::process::Command::new("systemctl")
@@ -1304,10 +1470,18 @@ fn setup_local_service(
         run_sudo(&["systemctl", "enable", "--now", "caddy"])?;
     }
 
-    if let Some(b) = backup_if_exists("/etc/systemd/system/synapcms.service", &backup_dir, "synapcms.service")? {
+    if let Some(b) = backup_if_exists(
+        "/etc/systemd/system/synapcms.service",
+        &backup_dir,
+        "synapcms.service",
+    )? {
         backups_made.push(b);
     }
-    run_sudo(&["cp", generated_unit_str, "/etc/systemd/system/synapcms.service"])?;
+    run_sudo(&[
+        "cp",
+        generated_unit_str,
+        "/etc/systemd/system/synapcms.service",
+    ])?;
     run_sudo(&["systemctl", "daemon-reload"])?;
     run_sudo(&["systemctl", "enable", "--now", "synapcms"])?;
 
@@ -1315,7 +1489,11 @@ fn setup_local_service(
     if !backups_made.is_empty() {
         println!("\n  Pre-existing files were replaced. To roll back:");
         for b in &backups_made {
-            let target = if b.file_name().and_then(|n| n.to_str()).is_some_and(|n| n.starts_with("Caddyfile")) {
+            let target = if b
+                .file_name()
+                .and_then(|n| n.to_str())
+                .is_some_and(|n| n.starts_with("Caddyfile"))
+            {
                 "/etc/caddy/Caddyfile"
             } else {
                 "/etc/systemd/system/synapcms.service"
@@ -1334,11 +1512,11 @@ fn generate_password() -> String {
     use rand::Rng;
 
     let mut rng = rand::thread_rng();
-    let lower:   Vec<char> = ('a'..='z').collect();
-    let upper:   Vec<char> = ('A'..='Z').collect();
-    let digits:  Vec<char> = ('0'..='9').collect();
+    let lower: Vec<char> = ('a'..='z').collect();
+    let upper: Vec<char> = ('A'..='Z').collect();
+    let digits: Vec<char> = ('0'..='9').collect();
     // Exclude $ and ! — they get mangled in shell env vars and URL strings.
-    let symbols: &[char]   = &['@', '#', '%', '&'];
+    let symbols: &[char] = &['@', '#', '%', '&'];
 
     // Keep mixed character classes for generated-password entropy and
     // compatibility, even though the policy now permits passphrases.
@@ -1361,8 +1539,9 @@ fn write_caddyfile(
     uploads_dir: &str,
     theme_dir: &str,
 ) -> anyhow::Result<()> {
-    let template = find_template("deployment/Caddyfile.template")
-        .unwrap_or_else(|| include_str!("../../deployment_templates/Caddyfile.template").to_string());
+    let template = find_template("deployment/Caddyfile.template").unwrap_or_else(|| {
+        include_str!("../../deployment_templates/Caddyfile.template").to_string()
+    });
 
     let content = template
         .replace("{DOMAIN}", domain)
@@ -1377,7 +1556,11 @@ fn write_caddyfile(
     Ok(())
 }
 
-fn write_systemd_service(output_dir: &std::path::Path, install_dir: &str, service_user: &str) -> anyhow::Result<()> {
+fn write_systemd_service(
+    output_dir: &std::path::Path,
+    install_dir: &str,
+    service_user: &str,
+) -> anyhow::Result<()> {
     let template = find_template("deployment/synapcms.service")
         .unwrap_or_else(|| include_str!("../../deployment_templates/synapcms.service").to_string());
 
@@ -1436,7 +1619,10 @@ fn copy_dir_all(src: &std::path::Path, dst: &std::path::Path) -> std::io::Result
 }
 
 fn hash_password(password: &str) -> anyhow::Result<String> {
-    use argon2::{password_hash::{rand_core::OsRng, PasswordHasher, SaltString}, Argon2};
+    use argon2::{
+        password_hash::{rand_core::OsRng, PasswordHasher, SaltString},
+        Argon2,
+    };
     let salt = SaltString::generate(&mut OsRng);
     let argon2 = Argon2::default();
     argon2
@@ -1449,7 +1635,8 @@ fn hash_password(password: &str) -> anyhow::Result<String> {
 fn read_env_key(path: &std::path::Path, key: &str) -> Option<String> {
     let content = std::fs::read_to_string(path).ok()?;
     let prefix = format!("{}=", key);
-    content.lines()
+    content
+        .lines()
         .find(|l| l.starts_with(&prefix))
         .map(|l| l[prefix.len()..].to_string())
 }
@@ -1482,10 +1669,18 @@ fn write_env_key(path: &std::path::Path, key: &str, value: &str) {
     let prefix = format!("{}=", key);
 
     let updated: String = if existing.lines().any(|l| l.starts_with(&prefix)) {
-        existing.lines()
-            .map(|l| if l.starts_with(&prefix) { line.as_str() } else { l })
+        existing
+            .lines()
+            .map(|l| {
+                if l.starts_with(&prefix) {
+                    line.as_str()
+                } else {
+                    l
+                }
+            })
             .collect::<Vec<_>>()
-            .join("\n") + "\n"
+            .join("\n")
+            + "\n"
     } else {
         if existing.is_empty() {
             format!("{line}\n")
@@ -1500,7 +1695,10 @@ fn write_env_key(path: &std::path::Path, key: &str, value: &str) {
         println!(
             "Warning: could not write {}={} to {} ({}). \
              Add it manually.",
-            key, value, path.display(), e
+            key,
+            value,
+            path.display(),
+            e
         );
     }
 }

@@ -5,26 +5,65 @@
 /// `default_theme` is the site-wide fallback appearance ("light"/"dark"/"system")
 /// from Settings → General → Appearance.
 #[allow(clippy::too_many_arguments)]
-pub fn render(error: Option<&str>, default_theme: &str, site_name: &str, logo_url: Option<&str>) -> String {
-    render_with_action(error, None, "/admin/login", None, default_theme, site_name, logo_url)
+pub fn render(
+    error: Option<&str>,
+    default_theme: &str,
+    site_name: &str,
+    logo_url: Option<&str>,
+) -> String {
+    render_with_action(
+        error,
+        None,
+        "/admin/login",
+        None,
+        default_theme,
+        site_name,
+        logo_url,
+    )
 }
 
 /// Same form rendered for the public-facing /login page.
 /// `redirect` is an optional path to send the user to after a successful login.
 /// `flash` is an optional one-shot success message (e.g. after a password reset).
 #[allow(clippy::too_many_arguments)]
-pub fn render_public(error: Option<&str>, flash: Option<&str>, redirect: Option<&str>, default_theme: &str, site_name: &str, logo_url: Option<&str>) -> String {
-    render_with_action(error, flash, "/login", redirect, default_theme, site_name, logo_url)
+pub fn render_public(
+    error: Option<&str>,
+    flash: Option<&str>,
+    redirect: Option<&str>,
+    default_theme: &str,
+    site_name: &str,
+    logo_url: Option<&str>,
+) -> String {
+    render_with_action(
+        error,
+        flash,
+        "/login",
+        redirect,
+        default_theme,
+        site_name,
+        logo_url,
+    )
 }
 
 #[allow(clippy::too_many_arguments)]
-fn render_with_action(error: Option<&str>, flash: Option<&str>, action: &str, redirect: Option<&str>, default_theme: &str, site_name: &str, logo_url: Option<&str>) -> String {
+fn render_with_action(
+    error: Option<&str>,
+    flash: Option<&str>,
+    action: &str,
+    redirect: Option<&str>,
+    default_theme: &str,
+    site_name: &str,
+    logo_url: Option<&str>,
+) -> String {
     let error_html = match error {
         Some(msg) => format!(r#"<div class="error">{}</div>"#, crate::html_escape(msg)),
         None => String::new(),
     };
     let flash_html = match flash {
-        Some(msg) => format!(r#"<div class="flash success">{}</div>"#, crate::html_escape(msg)),
+        Some(msg) => format!(
+            r#"<div class="flash success">{}</div>"#,
+            crate::html_escape(msg)
+        ),
         None => String::new(),
     };
     let redirect_input = match redirect {
@@ -61,7 +100,10 @@ fn render_with_action(error: Option<&str>, flash: Option<&str>, action: &str, re
             crate::html_escape(url),
             crate::html_escape(site_name)
         ),
-        None => format!(r#"<h1 class="login-brand">{}</h1>"#, crate::html_escape(site_name)),
+        None => format!(
+            r#"<h1 class="login-brand">{}</h1>"#,
+            crate::html_escape(site_name)
+        ),
     };
 
     format!(
@@ -118,13 +160,13 @@ fn render_with_action(error: Option<&str>, flash: Option<&str>, action: &str, re
   </div>
 </body>
 </html>"#,
-        css              = crate::ADMIN_CSS,
-        error_html       = error_html,
-        flash_html       = flash_html,
-        redirect_input   = redirect_input,
-        action           = action,
+        css = crate::ADMIN_CSS,
+        error_html = error_html,
+        flash_html = flash_html,
+        redirect_input = redirect_input,
+        action = action,
         below_form_links = below_form_links,
-        default_theme    = default_theme,
-        brand_html       = brand_html,
+        default_theme = default_theme,
+        brand_html = brand_html,
     )
 }

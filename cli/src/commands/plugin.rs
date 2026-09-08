@@ -25,7 +25,10 @@ fn list() -> anyhow::Result<()> {
     let entries = std::fs::read_dir(plugins_dir)
         .map_err(|e| anyhow::anyhow!("Cannot read plugins dir: {e}"))?;
 
-    println!("\n{:<20} {:<10} {:<10} {}", "Name", "Version", "API", "Description");
+    println!(
+        "\n{:<20} {:<10} {:<10} {}",
+        "Name", "Version", "API", "Description"
+    );
     println!("{}", "-".repeat(70));
 
     for entry in entries.flatten() {
@@ -38,16 +41,32 @@ fn list() -> anyhow::Result<()> {
             .map_err(|e| anyhow::anyhow!("Cannot read {}: {e}", manifest_path.display()))?;
 
         // Parse just the fields we need from TOML without pulling in a full model
-        let table: toml::Value = content.parse()
+        let table: toml::Value = content
+            .parse()
             .map_err(|e| anyhow::anyhow!("Invalid TOML in {}: {e}", manifest_path.display()))?;
 
         let plugin = table.get("plugin").unwrap_or(&table);
-        let name        = plugin.get("name").and_then(|v| v.as_str()).unwrap_or("unknown");
-        let version     = plugin.get("version").and_then(|v| v.as_str()).unwrap_or("?");
-        let api_version = plugin.get("api_version").and_then(|v| v.as_str()).unwrap_or("?");
-        let description = plugin.get("description").and_then(|v| v.as_str()).unwrap_or("");
+        let name = plugin
+            .get("name")
+            .and_then(|v| v.as_str())
+            .unwrap_or("unknown");
+        let version = plugin
+            .get("version")
+            .and_then(|v| v.as_str())
+            .unwrap_or("?");
+        let api_version = plugin
+            .get("api_version")
+            .and_then(|v| v.as_str())
+            .unwrap_or("?");
+        let description = plugin
+            .get("description")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
 
-        println!("{:<20} {:<10} {:<10} {}", name, version, api_version, description);
+        println!(
+            "{:<20} {:<10} {:<10} {}",
+            name, version, api_version, description
+        );
         found = true;
     }
 

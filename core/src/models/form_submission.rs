@@ -1,7 +1,7 @@
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use uuid::Uuid;
-use chrono::{DateTime, Utc};
 
 use crate::errors::Result;
 
@@ -50,10 +50,11 @@ pub async fn create(pool: &PgPool, input: CreateFormSubmission) -> Result<FormSu
     // delete (see FormDef::total_submissions). Best-effort: a failure here
     // shouldn't fail the submission itself, which is already saved above.
     if let Some(id) = form_id {
-        if let Err(e) = sqlx::query("UPDATE forms SET total_submissions = total_submissions + 1 WHERE id = $1")
-            .bind(id)
-            .execute(pool)
-            .await
+        if let Err(e) =
+            sqlx::query("UPDATE forms SET total_submissions = total_submissions + 1 WHERE id = $1")
+                .bind(id)
+                .execute(pool)
+                .await
         {
             tracing::error!("form_submission::create: total_submissions increment failed: {e:?}");
         }
@@ -107,14 +108,17 @@ pub async fn count_for_form(pool: &PgPool, site_id: Uuid, form_name: &str) -> Re
 /// to derive the full column set (see `collect_columns`), so a submission
 /// on page 2 with a field no longer used on page 1 doesn't just vanish
 /// from the displayed columns because the paginated fetch never saw it.
-pub async fn list_all_data_for_form(pool: &PgPool, site_id: Uuid, form_name: &str) -> Result<Vec<serde_json::Value>> {
-    let rows: Vec<(serde_json::Value,)> = sqlx::query_as(
-        "SELECT data FROM form_submissions WHERE site_id = $1 AND form_name = $2",
-    )
-    .bind(site_id)
-    .bind(form_name)
-    .fetch_all(pool)
-    .await?;
+pub async fn list_all_data_for_form(
+    pool: &PgPool,
+    site_id: Uuid,
+    form_name: &str,
+) -> Result<Vec<serde_json::Value>> {
+    let rows: Vec<(serde_json::Value,)> =
+        sqlx::query_as("SELECT data FROM form_submissions WHERE site_id = $1 AND form_name = $2")
+            .bind(site_id)
+            .bind(form_name)
+            .fetch_all(pool)
+            .await?;
     Ok(rows.into_iter().map(|(d,)| d).collect())
 }
 
@@ -148,7 +152,11 @@ pub async fn list_submissions(
 /// an account). Deliberately best-effort: a form's email field could be
 /// named anything, so this is a text search over the whole JSON blob, not
 /// an exact key lookup — expect it to need a human glance, not blind trust.
-pub async fn find_by_email(pool: &PgPool, site_id: Uuid, email: &str) -> Result<Vec<FormSubmission>> {
+pub async fn find_by_email(
+    pool: &PgPool,
+    site_id: Uuid,
+    email: &str,
+) -> Result<Vec<FormSubmission>> {
     let rows = sqlx::query_as::<_, FormSubmission>(
         r#"SELECT * FROM form_submissions
            WHERE site_id = $1 AND data::text ILIKE $2
@@ -174,25 +182,21 @@ pub async fn delete_many(pool: &PgPool, site_id: Uuid, ids: &[Uuid]) -> Result<(
 
 /// Delete a single submission by ID, enforcing site ownership.
 pub async fn delete(pool: &PgPool, site_id: Uuid, id: Uuid) -> Result<()> {
-    sqlx::query(
-        "DELETE FROM form_submissions WHERE id = $1 AND site_id = $2",
-    )
-    .bind(id)
-    .bind(site_id)
-    .fetch_optional(pool)
-    .await?;
+    sqlx::query("DELETE FROM form_submissions WHERE id = $1 AND site_id = $2")
+        .bind(id)
+        .bind(site_id)
+        .fetch_optional(pool)
+        .await?;
     Ok(())
 }
 
 /// Delete all submissions for a named form on a site.
 pub async fn delete_all(pool: &PgPool, site_id: Uuid, form_name: &str) -> Result<()> {
-    sqlx::query(
-        "DELETE FROM form_submissions WHERE site_id = $1 AND form_name = $2",
-    )
-    .bind(site_id)
-    .bind(form_name)
-    .fetch_optional(pool)
-    .await?;
+    sqlx::query("DELETE FROM form_submissions WHERE site_id = $1 AND form_name = $2")
+        .bind(site_id)
+        .bind(form_name)
+        .fetch_optional(pool)
+        .await?;
     Ok(())
 }
 

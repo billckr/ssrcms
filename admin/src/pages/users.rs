@@ -4,12 +4,12 @@
 fn role_display(role: &str) -> &str {
     match role {
         "super_admin" => "Super Admin",
-        "site_admin"  => "Site Admin",
-        "admin"       => "Site Admin",
-        "editor"      => "Editor",
-        "author"      => "Author",
-        "subscriber"  => "Subscriber",
-        other         => other,
+        "site_admin" => "Site Admin",
+        "admin" => "Site Admin",
+        "editor" => "Editor",
+        "author" => "Author",
+        "subscriber" => "Subscriber",
+        other => other,
     }
 }
 
@@ -17,9 +17,9 @@ fn role_display(role: &str) -> &str {
 fn role_badge_class(role: &str) -> &str {
     match role {
         "super_admin" => "badge-super-admin",
-        "site_admin"  => "badge-site-admin",
-        "admin"       => "badge-site-admin",
-        _             => "",
+        "site_admin" => "badge-site-admin",
+        "admin" => "badge-site-admin",
+        _ => "",
     }
 }
 
@@ -319,30 +319,47 @@ fn build_sub_rows(subscribers: &[UserRow], current_user_id: &str) -> String {
 
 /// Build pagination controls for the users list.
 /// Preserves `search_qs`/`site_qs`/`sort_qs` (each already prefixed with `&`) across page nav.
-fn users_pagination(active_tab: &str, page: i64, total_pages: i64, search_qs: &str, site_qs: &str, sort_qs: &str) -> String {
+fn users_pagination(
+    active_tab: &str,
+    page: i64,
+    total_pages: i64,
+    search_qs: &str,
+    site_qs: &str,
+    sort_qs: &str,
+) -> String {
     if total_pages <= 1 {
         return String::new();
     }
     let base = format!("/admin/users?tab={}", active_tab);
     let qs = format!("{search_qs}{site_qs}{sort_qs}");
     let prev = if page > 1 {
-        format!(r#"<a href="{base}&page={}{qs}" class="page-btn">&laquo; Prev</a>"#, page - 1)
+        format!(
+            r#"<a href="{base}&page={}{qs}" class="page-btn">&laquo; Prev</a>"#,
+            page - 1
+        )
     } else {
         r#"<span class="page-btn page-btn-disabled">&laquo; Prev</span>"#.to_string()
     };
     let next = if page < total_pages {
-        format!(r#"<a href="{base}&page={}{qs}" class="page-btn">Next &raquo;</a>"#, page + 1)
+        format!(
+            r#"<a href="{base}&page={}{qs}" class="page-btn">Next &raquo;</a>"#,
+            page + 1
+        )
     } else {
         r#"<span class="page-btn page-btn-disabled">Next &raquo;</span>"#.to_string()
     };
     let start = (page - 3).max(1);
-    let end   = (page + 3).min(total_pages);
+    let end = (page + 3).min(total_pages);
     let mut nums = String::new();
     for p in start..=end {
         if p == page {
-            nums.push_str(&format!(r#"<span class="page-btn page-btn-active">{p}</span>"#));
+            nums.push_str(&format!(
+                r#"<span class="page-btn page-btn-active">{p}</span>"#
+            ));
         } else {
-            nums.push_str(&format!(r#"<a href="{base}&page={p}{qs}" class="page-btn">{p}</a>"#));
+            nums.push_str(&format!(
+                r#"<a href="{base}&page={p}{qs}" class="page-btn">{p}</a>"#
+            ));
         }
     }
     format!(r#"<div class="pagination">{prev}{nums}{next}</div>"#)
@@ -366,8 +383,20 @@ pub fn users_list_fragment(
     sort: &str,
     dir: &str,
 ) -> String {
-    let search_qs = if search.is_empty() { String::new() } else { format!("&search={}", crate::html_escape(search)) };
-    let sort_qs = if sort.is_empty() { String::new() } else { format!("&sort={}&dir={}", sort, if dir == "desc" { "desc" } else { "asc" }) };
+    let search_qs = if search.is_empty() {
+        String::new()
+    } else {
+        format!("&search={}", crate::html_escape(search))
+    };
+    let sort_qs = if sort.is_empty() {
+        String::new()
+    } else {
+        format!(
+            "&sort={}&dir={}",
+            sort,
+            if dir == "desc" { "desc" } else { "asc" }
+        )
+    };
     let pagination = users_pagination(active_tab, page, total_pages, &search_qs, "", &sort_qs);
 
     // Sortable column header: link toggles asc/desc for that column, preserving the
@@ -375,9 +404,17 @@ pub fn users_list_fragment(
     let sort_th = |label: &str, key: &str| -> String {
         let is_active = sort == key;
         let showing_asc = dir != "desc";
-        let next_dir = if is_active && showing_asc { "desc" } else { "asc" };
+        let next_dir = if is_active && showing_asc {
+            "desc"
+        } else {
+            "asc"
+        };
         let arrow = if is_active {
-            if showing_asc { " \u{25B2}" } else { " \u{25BC}" }
+            if showing_asc {
+                " \u{25B2}"
+            } else {
+                " \u{25BC}"
+            }
         } else {
             ""
         };
@@ -389,8 +426,15 @@ pub fn users_list_fragment(
     if active_tab != "subscribers" {
         let rows = build_staff_rows(staff, current_user_id, can_manage_access);
         let empty_msg = if staff.is_empty() {
-            let msg = if search.is_empty() { "No users yet." } else { "No users matched your search." };
-            format!(r#"<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:2rem">{}</td></tr>"#, msg)
+            let msg = if search.is_empty() {
+                "No users yet."
+            } else {
+                "No users matched your search."
+            };
+            format!(
+                r#"<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:2rem">{}</td></tr>"#,
+                msg
+            )
         } else {
             String::new()
         };
@@ -411,8 +455,15 @@ pub fn users_list_fragment(
     } else {
         let rows = build_sub_rows(subscribers, current_user_id);
         let empty_msg = if subscribers.is_empty() {
-            let msg = if search.is_empty() { "No subscribers yet." } else { "No subscribers matched your search." };
-            format!(r#"<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:2rem">{}</td></tr>"#, msg)
+            let msg = if search.is_empty() {
+                "No subscribers yet."
+            } else {
+                "No subscribers matched your search."
+            };
+            format!(
+                r#"<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:2rem">{}</td></tr>"#,
+                msg
+            )
         } else {
             String::new()
         };
@@ -455,16 +506,16 @@ pub fn render_list(
 
     // ── Tab bar ───────────────────────────────────────────────────────────────
     let staff_active = if !is_subscribers { " active" } else { "" };
-    let sub_active   = if  is_subscribers { " active" } else { "" };
+    let sub_active = if is_subscribers { " active" } else { "" };
     let tabs = format!(
         r#"<div class="page-tabs" style="margin-bottom:0">
   <a href="/admin/users?tab=site-users" class="page-tab{staff_active}">Site Users <span class="badge" style="margin-left:.35rem;font-size:.75rem;padding:.1rem .45rem">{staff_count}</span></a>
   <a href="/admin/users?tab=subscribers" class="page-tab{sub_active}">Subscribers <span class="badge" style="margin-left:.35rem;font-size:.75rem;padding:.1rem .45rem">{sub_count}</span></a>
 </div>"#,
         staff_active = staff_active,
-        sub_active   = sub_active,
-        staff_count  = staff_total,
-        sub_count    = sub_total,
+        sub_active = sub_active,
+        staff_count = staff_total,
+        sub_count = sub_total,
     );
 
     let _ = available_sites;
@@ -631,11 +682,33 @@ document.addEventListener('click', function(e) {
     } else {
         format!("&site={}", crate::html_escape(selected_site_id))
     };
-    let sort_qs = if sort.is_empty() { String::new() } else { format!("&sort={}&dir={}", sort, if dir == "desc" { "desc" } else { "asc" }) };
-    let fetch_prefix = format!("/admin/users?partial=1&tab={}{}{}", active_tab, site_qs, sort_qs);
+    let sort_qs = if sort.is_empty() {
+        String::new()
+    } else {
+        format!(
+            "&sort={}&dir={}",
+            sort,
+            if dir == "desc" { "desc" } else { "asc" }
+        )
+    };
+    let fetch_prefix = format!(
+        "/admin/users?partial=1&tab={}{}{}",
+        active_tab, site_qs, sort_qs
+    );
     let live_search = crate::live_search_script("user-search", "users-list", &fetch_prefix);
 
-    let fragment = users_list_fragment(staff, subscribers, current_user_id, can_manage_access, active_tab, search, page, total_pages, sort, dir);
+    let fragment = users_list_fragment(
+        staff,
+        subscribers,
+        current_user_id,
+        can_manage_access,
+        active_tab,
+        search,
+        page,
+        total_pages,
+        sort,
+        dir,
+    );
 
     let content = if !is_subscribers {
         format!(
@@ -761,22 +834,23 @@ pub fn render_editor(user: &UserEdit, flash: Option<&str>, ctx: &crate::PageCont
   <label>Role</label>
   <p style="margin:0;padding:0.4rem 0">Super Admin</p>
   <input type="hidden" name="role" value="super_admin">
-</div>"#.to_string()
+</div>"#
+                .to_string()
         } else {
             r#"<input type="hidden" name="role" value="super_admin">"#.to_string()
         }
     } else {
         let roles: &[(&str, &str)] = if ctx.is_global_admin {
             &[
-                ("admin",       "Site Admin"),
-                ("editor",      "Editor"),
-                ("author",      "Author"),
-                ("subscriber",  "Subscriber"),
+                ("admin", "Site Admin"),
+                ("editor", "Editor"),
+                ("author", "Author"),
+                ("subscriber", "Subscriber"),
             ]
         } else {
             &[
-                ("editor",     "Editor"),
-                ("author",     "Author"),
+                ("editor", "Editor"),
+                ("author", "Author"),
                 ("subscriber", "Subscriber"),
             ]
         };
@@ -786,14 +860,23 @@ pub fn render_editor(user: &UserEdit, flash: Option<&str>, ctx: &crate::PageCont
         } else {
             String::new()
         };
-        let role_options = roles.iter().map(|(value, label)| {
-            let selected = if !is_new && *value == user.role { " selected" } else { "" };
-            format!(r#"<option value="{value}"{selected}>{label}</option>"#)
-        }).collect::<Vec<_>>().join("");
+        let role_options = roles
+            .iter()
+            .map(|(value, label)| {
+                let selected = if !is_new && *value == user.role {
+                    " selected"
+                } else {
+                    ""
+                };
+                format!(r#"<option value="{value}"{selected}>{label}</option>"#)
+            })
+            .collect::<Vec<_>>()
+            .join("");
 
         if is_new {
             // New user: plain dropdown, no lock needed.
-            format!(r#"<div class="form-group" style="max-width:220px">
+            format!(
+                r#"<div class="form-group" style="max-width:220px">
   <label for="role">Role</label>
   <select id="role" name="role" required>{placeholder}{role_options}</select>
 </div>
@@ -820,14 +903,16 @@ pub fn render_editor(user: &UserEdit, flash: Option<&str>, ctx: &crate::PageCont
   roleSelect.addEventListener('change', sync);
   sync();
 }})();
-</script>"#)
+</script>"#
+            )
         } else {
             // Edit: role is read-only here. Site-scoped roles can only be changed
             // from /site-access, which shows exactly which site is affected and
             // warns before demoting a site's current admin/owner — this page has
             // no site picker, so an editable dropdown here was ambiguous about
             // which site's role it was actually changing.
-            format!(r#"<input type="hidden" name="role" value="{current_role}">"#,
+            format!(
+                r#"<input type="hidden" name="role" value="{current_role}">"#,
                 current_role = crate::html_escape(&user.role),
             )
         }
@@ -865,7 +950,10 @@ pub fn render_editor(user: &UserEdit, flash: Option<&str>, ctx: &crate::PageCont
     // that follows. That's what was causing the missing gap below this
     // section: the outer form was closing mid-page and the DOM after it was
     // being rebuilt without the expected margins.
-    let (suspend_toggle, suspend_form) = if !is_new && user.email != ctx.user_email && !user.is_protected {
+    let (suspend_toggle, suspend_form) = if !is_new
+        && user.email != ctx.user_email
+        && !user.is_protected
+    {
         let user_id = crate::html_escape(user.id.as_deref().unwrap_or(""));
         // Status reads as a single check-circle icon rather than a text
         // button — green (icon-btn-active-green, see admin.css) when active,
@@ -923,14 +1011,20 @@ pub fn render_editor(user: &UserEdit, flash: Option<&str>, ctx: &crate::PageCont
     // Site admin: only shown when they own 2+ sites (single-site admins auto-assign).
     // Both see the same UI; the dropdown is populated with their respective site list.
     let site_section = if is_new && (ctx.is_global_admin || !user.sites.is_empty()) {
-        let site_opts = user.sites.iter().map(|s| {
-            format!(
-                r#"<option value="{}">{}</option>"#,
-                crate::html_escape(&s.id),
-                crate::html_escape(&s.hostname),
-            )
-        }).collect::<Vec<_>>().join("\n");
-        format!(r#"
+        let site_opts = user
+            .sites
+            .iter()
+            .map(|s| {
+                format!(
+                    r#"<option value="{}">{}</option>"#,
+                    crate::html_escape(&s.id),
+                    crate::html_escape(&s.hostname),
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        format!(
+            r#"
 <div class="form-group" style="margin:0">
   <label>Site Assignment</label>
   <div style="display:flex;gap:1.5rem;margin:0.4rem 0 0.75rem;flex-wrap:wrap">
@@ -981,11 +1075,18 @@ function toggleSiteFields() {{
     let site_assignment_section = if site_section.is_empty() {
         String::new()
     } else {
-        format!(r#"<div class="card-boxed-section">{site_section}{save_btn}</div>"#, save_btn = save_btn)
+        format!(
+            r#"<div class="card-boxed-section">{site_section}{save_btn}</div>"#,
+            save_btn = save_btn
+        )
     };
 
     let role_section_new = if is_new {
-        let trailing_btn = if site_assignment_section.is_empty() { save_btn.as_str() } else { "" };
+        let trailing_btn = if site_assignment_section.is_empty() {
+            save_btn.as_str()
+        } else {
+            ""
+        };
         format!(
             r#"<div class="card-boxed-section">
       <div class="form-group" style="margin:0">
@@ -1309,21 +1410,21 @@ function toggleSiteFields() {{
 }}());
 </script>
 </div>"#,
-        form_title        = title,
-        header_back       = header_back,
-        action            = action,
-        username          = crate::html_escape(&user.username),
-        display_name      = crate::html_escape(&user.display_name),
-        email             = crate::html_escape(&user.email),
+        form_title = title,
+        header_back = header_back,
+        action = action,
+        username = crate::html_escape(&user.username),
+        display_name = crate::html_escape(&user.display_name),
+        email = crate::html_escape(&user.email),
         role_section_new = role_section_new,
         site_assignment_section = site_assignment_section,
         requirements_section = requirements_section,
-        suspend_toggle    = suspend_toggle,
-        suspend_form      = suspend_form,
-        password_hint     = password_hint,
-        is_new_js         = if is_new { "true" } else { "false" },
-        autofocus         = if is_new { " autofocus" } else { "" },
-        role_section      = role_section,
+        suspend_toggle = suspend_toggle,
+        suspend_form = suspend_form,
+        password_hint = password_hint,
+        is_new_js = if is_new { "true" } else { "false" },
+        autofocus = if is_new { " autofocus" } else { "" },
+        role_section = role_section,
     );
 
     let page_title = if is_new {
@@ -1598,8 +1699,8 @@ pub fn render_site_access(
   }}
 }})();
 </script>"#,
-            user_id              = crate::html_escape(&data.user_id),
-            site_opts            = site_options,
+            user_id = crate::html_escape(&data.user_id),
+            site_opts = site_options,
             site_admin_opt = if ctx.is_global_admin {
                 r#"<option value="site_admin">Site Admin</option>"#
             } else {
@@ -1624,18 +1725,12 @@ pub fn render_site_access(
     </div>
   </div>
 </div>"#,
-        rows     = assignment_rows,
+        rows = assignment_rows,
         add_form = add_form,
     );
 
     let page_title = format!("User Role - {}", crate::html_escape(&data.display_name));
-    crate::admin_page(
-        &page_title,
-        "/admin/users",
-        flash,
-        &content,
-        ctx,
-    )
+    crate::admin_page(&page_title, "/admin/users", flash, &content, ctx)
 }
 
 /// A form_submissions or mail_log row found while searching for a
@@ -1661,9 +1756,11 @@ pub struct ErasureReviewData {
 }
 
 fn render_erasure_match_rows(matches: &[ErasureMatch], checkbox_prefix: &str) -> String {
-    matches.iter().map(|m| {
-        format!(
-            r#"<tr>
+    matches
+        .iter()
+        .map(|m| {
+            format!(
+                r#"<tr>
               <td style="width:2rem;text-align:center">
                 <input type="checkbox" name="{prefix}_{site_id}_{id}" checked>
               </td>
@@ -1671,18 +1768,24 @@ fn render_erasure_match_rows(matches: &[ErasureMatch], checkbox_prefix: &str) ->
               <td>{label}</td>
               <td style="color:var(--muted);font-size:0.85rem">{detail}</td>
             </tr>"#,
-            prefix   = checkbox_prefix,
-            site_id  = crate::html_escape(&m.site_id),
-            id       = crate::html_escape(&m.id),
-            hostname = crate::html_escape(&m.hostname),
-            label    = crate::html_escape(&m.label),
-            detail   = crate::html_escape(&m.detail),
-        )
-    }).collect::<Vec<_>>().join("\n")
+                prefix = checkbox_prefix,
+                site_id = crate::html_escape(&m.site_id),
+                id = crate::html_escape(&m.id),
+                hostname = crate::html_escape(&m.hostname),
+                label = crate::html_escape(&m.label),
+                detail = crate::html_escape(&m.detail),
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 /// GDPR "Erase Personal Data" review/confirm page for one subscriber.
-pub fn render_erase_review(data: &ErasureReviewData, flash: Option<&str>, ctx: &crate::PageContext) -> String {
+pub fn render_erase_review(
+    data: &ErasureReviewData,
+    flash: Option<&str>,
+    ctx: &crate::PageContext,
+) -> String {
     let form_section = if data.form_matches.is_empty() {
         String::new()
     } else {
@@ -1747,12 +1850,12 @@ pub fn render_erase_review(data: &ErasureReviewData, flash: Option<&str>, ctx: &
     </form>
   </div>
 </div>"#,
-        display_name    = crate::html_escape(&data.display_name),
+        display_name = crate::html_escape(&data.display_name),
         display_name_js = data.display_name.replace('\'', "\\'"),
-        email           = crate::html_escape(&data.email),
-        user_id         = crate::html_escape(&data.user_id),
-        form_section    = form_section,
-        mail_section    = mail_section,
+        email = crate::html_escape(&data.email),
+        user_id = crate::html_escape(&data.user_id),
+        form_section = form_section,
+        mail_section = mail_section,
     );
 
     crate::admin_page("Erase Personal Data", "/admin/users", flash, &content, ctx)

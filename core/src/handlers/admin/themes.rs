@@ -6,7 +6,7 @@
 
 use axum::{
     body::Body,
-    extract::{Path, Query, State, Form},
+    extract::{Form, Path, Query, State},
     http::{header, StatusCode},
     response::{Html, IntoResponse, Redirect, Response},
 };
@@ -15,9 +15,9 @@ use std::fs;
 use std::path::{Path as FsPath, PathBuf};
 use uuid::Uuid;
 
-use crate::app_state::{AppState, set_site_setting};
+use crate::app_state::{set_site_setting, AppState};
 use crate::middleware::admin_auth::AdminUser;
-use admin::pages::themes::{ThemeInfo, render_with_flash};
+use admin::pages::themes::{render_with_flash, ThemeInfo};
 
 /// Required template files every valid theme must provide.
 pub(crate) const REQUIRED_TEMPLATES: &[&str] = &[
@@ -42,12 +42,18 @@ pub async fn list(
     Query(q): Query<AppearanceQuery>,
 ) -> impl IntoResponse {
     if !admin.caps.can_manage_themes {
-        return (StatusCode::FORBIDDEN, Html("<h1>403 Forbidden</h1>".to_string())).into_response();
+        return (
+            StatusCode::FORBIDDEN,
+            Html("<h1>403 Forbidden</h1>".to_string()),
+        )
+            .into_response();
     }
     let cs = state.site_hostname(admin.site_id);
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
     let filter = q.filter.as_deref().unwrap_or("my");
-    render_theme_list(&state, None, &ctx, admin.site_id, filter).await.into_response()
+    render_theme_list(&state, None, &ctx, admin.site_id, filter)
+        .await
+        .into_response()
 }
 
 // ── Activate ──────────────────────────────────────────────────────────────────
@@ -72,13 +78,23 @@ pub async fn activate(
 
     // Reject obviously invalid names before any filesystem access.
     if form.theme.contains("..") || form.theme.contains('/') || form.theme.contains('\\') {
-        return render_theme_list(&state, Some("Invalid theme name."), &ctx, admin.site_id, "my").await.into_response();
+        return render_theme_list(
+            &state,
+            Some("Invalid theme name."),
+            &ctx,
+            admin.site_id,
+            "my",
+        )
+        .await
+        .into_response();
     }
 
-    let sites_dir   = &state.config.sites_dir;
-    let global_dir  = FsPath::new(themes_dir).join("global");
+    let sites_dir = &state.config.sites_dir;
+    let global_dir = FsPath::new(themes_dir).join("global");
     let private_dir = FsPath::new(themes_dir).join("private");
-    let site_dir    = admin.site_id.map(|id| FsPath::new(sites_dir).join(id.to_string()).join("themes"));
+    let site_dir = admin
+        .site_id
+        .map(|id| FsPath::new(sites_dir).join(id.to_string()).join("themes"));
 
     // Resolve which directory the theme lives in.
     let theme_path = if global_dir.join(&form.theme).is_dir() {
@@ -91,19 +107,27 @@ pub async fn activate(
             sd.join(&form.theme)
         } else {
             tracing::warn!("theme activation failed: theme '{}' not found", form.theme);
-            return render_theme_list(&state, Some("Theme not found."), &ctx, admin.site_id, "my").await.into_response();
+            return render_theme_list(&state, Some("Theme not found."), &ctx, admin.site_id, "my")
+                .await
+                .into_response();
         }
     } else {
         tracing::warn!("theme activation failed: theme '{}' not found", form.theme);
-        return render_theme_list(&state, Some("Theme not found."), &ctx, admin.site_id, "my").await.into_response();
+        return render_theme_list(&state, Some("Theme not found."), &ctx, admin.site_id, "my")
+            .await
+            .into_response();
     };
 
     // Path traversal guard: theme must live within global/, private/, or sites/<id>/.
     let canonical_theme = match theme_path.canonicalize() {
         Ok(p) => p,
-        Err(_) => return render_theme_list(&state, Some("Theme not found."), &ctx, admin.site_id, "my").await.into_response(),
+        Err(_) => {
+            return render_theme_list(&state, Some("Theme not found."), &ctx, admin.site_id, "my")
+                .await
+                .into_response()
+        }
     };
-    let canonical_global  = global_dir.canonicalize().unwrap_or_default();
+    let canonical_global = global_dir.canonicalize().unwrap_or_default();
     let canonical_private = private_dir.canonicalize().unwrap_or_default();
     let canonical_site = site_dir
         .as_ref()
@@ -113,23 +137,31 @@ pub async fn activate(
         || (admin.caps.is_global_admin && canonical_theme.starts_with(&canonical_private))
         || canonical_theme.starts_with(&canonical_site);
     if !in_allowed_dir {
-        tracing::warn!("activate path traversal attempt: theme_name={:?}", form.theme);
-        return render_theme_list(&state, Some("Theme not found."), &ctx, admin.site_id, "my").await.into_response();
+        tracing::warn!(
+            "activate path traversal attempt: theme_name={:?}",
+            form.theme
+        );
+        return render_theme_list(&state, Some("Theme not found."), &ctx, admin.site_id, "my")
+            .await
+            .into_response();
     }
 
     let site_id = match admin.site_id {
         Some(id) => id,
         None => {
             tracing::warn!("theme activate: no site selected, cannot save per-site setting");
-            return render_theme_list(&state, Some("No site selected."), &ctx, admin.site_id, "my").await.into_response();
+            return render_theme_list(&state, Some("No site selected."), &ctx, admin.site_id, "my")
+                .await
+                .into_response();
         }
     };
 
     // Copy global or private themes to the site folder before activating so
     // the theme shows up in "My Themes" for both site_admin and super_admin.
     // Skip the copy if a site-scoped copy already exists.
-    let is_from_global  = canonical_theme.starts_with(&canonical_global);
-    let is_from_private = admin.caps.is_global_admin && canonical_theme.starts_with(&canonical_private);
+    let is_from_global = canonical_theme.starts_with(&canonical_global);
+    let is_from_private =
+        admin.caps.is_global_admin && canonical_theme.starts_with(&canonical_private);
     if is_from_global || is_from_private {
         let site_copy = FsPath::new(&state.config.sites_dir)
             .join(site_id.to_string())
@@ -139,14 +171,36 @@ pub async fn activate(
             let src = canonical_theme.clone();
             let dst = site_copy.clone();
             match tokio::task::spawn_blocking(move || copy_dir_all(&src, &dst)).await {
-                Ok(Ok(())) => tracing::info!("auto-copied theme '{}' to site {}", form.theme, site_id),
+                Ok(Ok(())) => {
+                    tracing::info!("auto-copied theme '{}' to site {}", form.theme, site_id)
+                }
                 Ok(Err(e)) => {
-                    tracing::error!("activate: failed to copy theme '{}' to site dir: {}", form.theme, e);
-                    return render_theme_list(&state, Some("Failed to copy theme to your site. Please try again."), &ctx, admin.site_id, "my").await.into_response();
+                    tracing::error!(
+                        "activate: failed to copy theme '{}' to site dir: {}",
+                        form.theme,
+                        e
+                    );
+                    return render_theme_list(
+                        &state,
+                        Some("Failed to copy theme to your site. Please try again."),
+                        &ctx,
+                        admin.site_id,
+                        "my",
+                    )
+                    .await
+                    .into_response();
                 }
                 Err(e) => {
                     tracing::error!("activate: copy task panicked: {:?}", e);
-                    return render_theme_list(&state, Some("Failed to copy theme to your site. Please try again."), &ctx, admin.site_id, "my").await.into_response();
+                    return render_theme_list(
+                        &state,
+                        Some("Failed to copy theme to your site. Please try again."),
+                        &ctx,
+                        admin.site_id,
+                        "my",
+                    )
+                    .await
+                    .into_response();
                 }
             }
         }
@@ -154,12 +208,28 @@ pub async fn activate(
 
     if let Err(e) = set_site_setting(&state.db, site_id, "active_theme", &form.theme).await {
         tracing::error!("failed to save active_theme to DB: {:?}", e);
-        return render_theme_list(&state, Some("Failed to activate theme. Please try again."), &ctx, admin.site_id, "my").await.into_response();
+        return render_theme_list(
+            &state,
+            Some("Failed to activate theme. Please try again."),
+            &ctx,
+            admin.site_id,
+            "my",
+        )
+        .await
+        .into_response();
     }
 
     if let Err(e) = state.templates.switch_theme(&form.theme) {
         tracing::error!("failed to switch theme to '{}': {:?}", form.theme, e);
-        return render_theme_list(&state, Some("Theme files could not be loaded. Please try again."), &ctx, admin.site_id, "my").await.into_response();
+        return render_theme_list(
+            &state,
+            Some("Theme files could not be loaded. Please try again."),
+            &ctx,
+            admin.site_id,
+            "my",
+        )
+        .await
+        .into_response();
     }
 
     *state.active_theme.write().unwrap() = form.theme.clone();
@@ -201,26 +271,42 @@ pub async fn delete(
     }
 
     // Reject obviously invalid names.
-    if form.theme.contains("..") || form.theme.contains('/') || form.theme.contains('\\') || form.theme.is_empty() {
+    if form.theme.contains("..")
+        || form.theme.contains('/')
+        || form.theme.contains('\\')
+        || form.theme.is_empty()
+    {
         err!("Invalid theme name.");
     }
 
     let themes_dir = &state.config.themes_dir;
-    let sites_dir  = &state.config.sites_dir;
-    let global_path  = FsPath::new(themes_dir).join("global").join(&form.theme);
+    let sites_dir = &state.config.sites_dir;
+    let global_path = FsPath::new(themes_dir).join("global").join(&form.theme);
     let private_path = FsPath::new(themes_dir).join("private").join(&form.theme);
-    let site_path    = admin.site_id
-        .map(|id| FsPath::new(sites_dir).join(id.to_string()).join("themes").join(&form.theme));
+    let site_path = admin.site_id.map(|id| {
+        FsPath::new(sites_dir)
+            .join(id.to_string())
+            .join("themes")
+            .join(&form.theme)
+    });
 
     // Determine where the theme lives using the explicit source hint from the form.
     // Falling back to filesystem discovery is a security risk — if source is
     // "site" but the global copy is found first, we'd delete the wrong directory.
     let (theme_path, theme_source) = match form.source.as_deref().unwrap_or("site") {
         "global" => {
-            if global_path.is_dir() { (global_path, "global") } else { err!("Theme not found."); }
+            if global_path.is_dir() {
+                (global_path, "global")
+            } else {
+                err!("Theme not found.");
+            }
         }
         "private" => {
-            if private_path.is_dir() { (private_path, "private") } else { err!("Theme not found."); }
+            if private_path.is_dir() {
+                (private_path, "private")
+            } else {
+                err!("Theme not found.");
+            }
         }
         _ => {
             // "site" — only look in the site-scoped folder.
@@ -280,7 +366,11 @@ pub async fn delete(
         },
         _ => {
             let sid = admin.site_id.unwrap();
-            match FsPath::new(&state.config.sites_dir).join(sid.to_string()).join("themes").canonicalize() {
+            match FsPath::new(&state.config.sites_dir)
+                .join(sid.to_string())
+                .join("themes")
+                .canonicalize()
+            {
                 Ok(p) => p,
                 Err(_) => err!("Theme not found."),
             }
@@ -303,10 +393,24 @@ pub async fn delete(
         err!("Failed to delete theme. Please try again.");
     }
 
-    tracing::info!("theme '{}' deleted by {}", form.theme, if admin.caps.is_global_admin { "super_admin" } else { "site_admin" });
-    render_theme_list(&state, Some(&format!("Theme '{}' deleted.", form.theme)), &ctx, admin.site_id, "my")
-        .await
-        .into_response()
+    tracing::info!(
+        "theme '{}' deleted by {}",
+        form.theme,
+        if admin.caps.is_global_admin {
+            "super_admin"
+        } else {
+            "site_admin"
+        }
+    );
+    render_theme_list(
+        &state,
+        Some(&format!("Theme '{}' deleted.", form.theme)),
+        &ctx,
+        admin.site_id,
+        "my",
+    )
+    .await
+    .into_response()
 }
 
 // ── Screenshot ─────────────────────────────────────────────────────────────────
@@ -316,10 +420,14 @@ pub async fn screenshot(
     admin: AdminUser,
     Path(theme_name): Path<String>,
 ) -> Response {
-    let themes_dir  = FsPath::new(&state.config.themes_dir);
-    let global_dir  = themes_dir.join("global");
+    let themes_dir = FsPath::new(&state.config.themes_dir);
+    let global_dir = themes_dir.join("global");
     let private_dir = themes_dir.join("private");
-    let site_dir    = admin.site_id.map(|id| FsPath::new(&state.config.sites_dir).join(id.to_string()).join("themes"));
+    let site_dir = admin.site_id.map(|id| {
+        FsPath::new(&state.config.sites_dir)
+            .join(id.to_string())
+            .join("themes")
+    });
 
     // Try global, then private (super_admin only), then site dir.
     let mut dirs_to_search: Vec<PathBuf> = vec![global_dir];
@@ -341,7 +449,10 @@ pub async fn screenshot(
             Err(_) => continue,
         };
         if !canonical_candidate.starts_with(&canonical_dir) {
-            tracing::warn!("screenshot path traversal attempt: theme_name={:?}", theme_name);
+            tracing::warn!(
+                "screenshot path traversal attempt: theme_name={:?}",
+                theme_name
+            );
             continue;
         }
         if let Ok(bytes) = fs::read(&canonical_candidate) {
@@ -362,7 +473,9 @@ pub(crate) fn url_encode_param(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     for b in s.bytes() {
         match b {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'/' => out.push(b as char),
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'/' => {
+                out.push(b as char)
+            }
             b => out.push_str(&format!("%{:02X}", b)),
         }
     }
@@ -415,9 +528,13 @@ pub(crate) async fn render_theme_list(
         String::new()
     };
 
-    let global_dir  = FsPath::new(themes_dir).join("global");
+    let global_dir = FsPath::new(themes_dir).join("global");
     let private_dir = FsPath::new(themes_dir).join("private");
-    let site_dir    = site_id.map(|id| FsPath::new(&state.config.sites_dir).join(id.to_string()).join("themes"));
+    let site_dir = site_id.map(|id| {
+        FsPath::new(&state.config.sites_dir)
+            .join(id.to_string())
+            .join("themes")
+    });
 
     let mut themes = Vec::new();
     scan_theme_dir(&global_dir, &active_theme_from_db, "global", &mut themes);
@@ -458,7 +575,9 @@ pub(crate) async fn render_theme_list(
     // renders correctly for super_admin and site_admin alike.
     if filter == "global" || filter == "private" {
         if let Some(sid) = site_id {
-            let site_dir = FsPath::new(&state.config.sites_dir).join(sid.to_string()).join("themes");
+            let site_dir = FsPath::new(&state.config.sites_dir)
+                .join(sid.to_string())
+                .join("themes");
             for theme in &mut themes {
                 theme.has_site_copy = site_dir.join(&theme.name).is_dir();
             }
@@ -470,7 +589,10 @@ pub(crate) async fn render_theme_list(
     if filter == "private" {
         for theme in &mut themes {
             if theme.source == "private" {
-                theme.has_global_copy = FsPath::new(themes_dir).join("global").join(&theme.name).is_dir();
+                theme.has_global_copy = FsPath::new(themes_dir)
+                    .join("global")
+                    .join(&theme.name)
+                    .is_dir();
             }
         }
     }
@@ -493,12 +615,21 @@ pub(crate) async fn render_theme_list(
     // super_admin extras: "global" = global only, "private" = private only.
     let mut themes: Vec<ThemeInfo> = if ctx.is_global_admin {
         match filter {
-            "global"  => themes.into_iter().filter(|t| t.source == "global").collect(),
-            "private" => themes.into_iter().filter(|t| t.source == "private").collect(),
+            "global" => themes
+                .into_iter()
+                .filter(|t| t.source == "global")
+                .collect(),
+            "private" => themes
+                .into_iter()
+                .filter(|t| t.source == "private")
+                .collect(),
             _ => themes.into_iter().filter(|t| t.source == "site").collect(),
         }
     } else if filter == "global" {
-        themes.into_iter().filter(|t| t.source == "global").collect()
+        themes
+            .into_iter()
+            .filter(|t| t.source == "global")
+            .collect()
     } else {
         themes.into_iter().filter(|t| t.source == "site").collect()
     };
@@ -515,7 +646,9 @@ pub(crate) async fn render_theme_list(
 /// Scan a theme directory and append found themes to `themes`.
 /// `source` is `"global"` or `"site"`.
 fn scan_theme_dir(dir: &FsPath, active_theme: &str, source: &str, themes: &mut Vec<ThemeInfo>) {
-    let Ok(entries) = fs::read_dir(dir) else { return; };
+    let Ok(entries) = fs::read_dir(dir) else {
+        return;
+    };
     for entry in entries.flatten() {
         let path = entry.path();
         if !path.is_dir() {
@@ -534,10 +667,26 @@ fn scan_theme_dir(dir: &FsPath, active_theme: &str, source: &str, themes: &mut V
                 if let Some(theme_section) = parsed.get("theme").and_then(|v| v.as_table()) {
                     // folder name is the key used everywhere (URLs, DB, activations).
                     // display_name is the human label from theme.toml — may differ in casing.
-                    let display_name = theme_section.get("name").and_then(|v| v.as_str()).unwrap_or(&dir_name).to_string();
-                    let version = theme_section.get("version").and_then(|v| v.as_str()).unwrap_or("unknown").to_string();
-                    let description = theme_section.get("description").and_then(|v| v.as_str()).unwrap_or("No description").to_string();
-                    let author = theme_section.get("author").and_then(|v| v.as_str()).unwrap_or("Unknown").to_string();
+                    let display_name = theme_section
+                        .get("name")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or(&dir_name)
+                        .to_string();
+                    let version = theme_section
+                        .get("version")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("unknown")
+                        .to_string();
+                    let description = theme_section
+                        .get("description")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("No description")
+                        .to_string();
+                    let author = theme_section
+                        .get("author")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("Unknown")
+                        .to_string();
                     let has_screenshot = path.join("screenshot.png").exists();
                     themes.push(ThemeInfo {
                         name: dir_name.clone(),
@@ -548,11 +697,11 @@ fn scan_theme_dir(dir: &FsPath, active_theme: &str, source: &str, themes: &mut V
                         active: dir_name == active_theme,
                         has_screenshot,
                         source: source.to_string(),
-                        can_delete: false,         // computed after scanning in render_theme_list
-                        in_use_by: 0,              // computed after scanning in render_theme_list
-                        has_site_copy: false,      // computed below for global/private filter view
+                        can_delete: false, // computed after scanning in render_theme_list
+                        in_use_by: 0,      // computed after scanning in render_theme_list
+                        has_site_copy: false, // computed below for global/private filter view
                         is_private_origin: source == "private", // also set for site copies below
-                        has_global_copy: false,    // computed below for private filter view
+                        has_global_copy: false, // computed below for private filter view
                     });
                 }
             }

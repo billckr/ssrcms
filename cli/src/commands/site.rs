@@ -117,15 +117,34 @@ pub enum MaintenanceState {
 
 pub async fn run(action: SiteAction) -> anyhow::Result<()> {
     match action {
-        SiteAction::Create { hostname, install_dir, database_url } => create(hostname, install_dir, database_url).await,
-        SiteAction::List   { database_url } => list(database_url).await,
+        SiteAction::Create {
+            hostname,
+            install_dir,
+            database_url,
+        } => create(hostname, install_dir, database_url).await,
+        SiteAction::List { database_url } => list(database_url).await,
         SiteAction::Delete { id, database_url } => delete(id, database_url).await,
-        SiteAction::Rename { id, hostname, caddyfile, install_dir, database_url } =>
-            rename(id, hostname, caddyfile, install_dir, database_url).await,
+        SiteAction::Rename {
+            id,
+            hostname,
+            caddyfile,
+            install_dir,
+            database_url,
+        } => rename(id, hostname, caddyfile, install_dir, database_url).await,
         SiteAction::Maintenance { state } => match state {
-            MaintenanceState::On     { hostname, message, database_url } => maintenance_on(hostname, message, database_url).await,
-            MaintenanceState::Off    { hostname, database_url } => maintenance_off(hostname, database_url).await,
-            MaintenanceState::Status { hostname, database_url } => maintenance_status(hostname, database_url).await,
+            MaintenanceState::On {
+                hostname,
+                message,
+                database_url,
+            } => maintenance_on(hostname, message, database_url).await,
+            MaintenanceState::Off {
+                hostname,
+                database_url,
+            } => maintenance_off(hostname, database_url).await,
+            MaintenanceState::Status {
+                hostname,
+                database_url,
+            } => maintenance_status(hostname, database_url).await,
         },
     }
 }
@@ -141,24 +160,34 @@ async fn resolve_site(pool: &PgPool, hostname: Option<String>) -> anyhow::Result
             .ok_or_else(|| anyhow::anyhow!("No site found with hostname '{h}'"))?;
         Ok((id, h))
     } else {
-        let rows: Vec<(Uuid, String)> = sqlx::query_as("SELECT id, hostname FROM sites ORDER BY created_at")
-            .fetch_all(pool)
-            .await?;
+        let rows: Vec<(Uuid, String)> =
+            sqlx::query_as("SELECT id, hostname FROM sites ORDER BY created_at")
+                .fetch_all(pool)
+                .await?;
         match rows.len() {
             0 => anyhow::bail!("No sites found."),
             1 => Ok(rows.into_iter().next().unwrap()),
             _ => {
-                let list = rows.into_iter().map(|(_, h)| h).collect::<Vec<_>>().join(", ");
+                let list = rows
+                    .into_iter()
+                    .map(|(_, h)| h)
+                    .collect::<Vec<_>>()
+                    .join(", ");
                 anyhow::bail!("Multiple sites found — specify --hostname. Available: {list}")
             }
         }
     }
 }
 
-async fn set_site_setting(pool: &PgPool, site_id: Uuid, key: &str, value: &str) -> anyhow::Result<()> {
+async fn set_site_setting(
+    pool: &PgPool,
+    site_id: Uuid,
+    key: &str,
+    value: &str,
+) -> anyhow::Result<()> {
     sqlx::query(
         "INSERT INTO site_settings (site_id, key, value) VALUES ($1, $2, $3)
-         ON CONFLICT (site_id, key) WHERE site_id IS NOT NULL DO UPDATE SET value = EXCLUDED.value"
+         ON CONFLICT (site_id, key) WHERE site_id IS NOT NULL DO UPDATE SET value = EXCLUDED.value",
     )
     .bind(site_id)
     .bind(key)
@@ -179,10 +208,16 @@ async fn get_site_setting(pool: &PgPool, site_id: Uuid, key: &str) -> Option<Str
         .flatten()
 }
 
-async fn maintenance_on(hostname: Option<String>, message: Option<String>, database_url: Option<String>) -> anyhow::Result<()> {
+async fn maintenance_on(
+    hostname: Option<String>,
+    message: Option<String>,
+    database_url: Option<String>,
+) -> anyhow::Result<()> {
     if let Some(url) = database_url {
         #[allow(unused_unsafe)]
-        unsafe { std::env::set_var("DATABASE_URL", url); }
+        unsafe {
+            std::env::set_var("DATABASE_URL", url);
+        }
     }
     let pool = super::connect_db().await?;
     let (site_id, hostname) = resolve_site(&pool, hostname).await?;
@@ -203,10 +238,15 @@ async fn maintenance_on(hostname: Option<String>, message: Option<String>, datab
     Ok(())
 }
 
-async fn maintenance_off(hostname: Option<String>, database_url: Option<String>) -> anyhow::Result<()> {
+async fn maintenance_off(
+    hostname: Option<String>,
+    database_url: Option<String>,
+) -> anyhow::Result<()> {
     if let Some(url) = database_url {
         #[allow(unused_unsafe)]
-        unsafe { std::env::set_var("DATABASE_URL", url); }
+        unsafe {
+            std::env::set_var("DATABASE_URL", url);
+        }
     }
     let pool = super::connect_db().await?;
     let (site_id, hostname) = resolve_site(&pool, hostname).await?;
@@ -217,53 +257,67 @@ async fn maintenance_off(hostname: Option<String>, database_url: Option<String>)
     Ok(())
 }
 
-async fn maintenance_status(hostname: Option<String>, database_url: Option<String>) -> anyhow::Result<()> {
+async fn maintenance_status(
+    hostname: Option<String>,
+    database_url: Option<String>,
+) -> anyhow::Result<()> {
     if let Some(url) = database_url {
         #[allow(unused_unsafe)]
-        unsafe { std::env::set_var("DATABASE_URL", url); }
+        unsafe {
+            std::env::set_var("DATABASE_URL", url);
+        }
     }
     let pool = super::connect_db().await?;
     let (site_id, hostname) = resolve_site(&pool, hostname).await?;
 
-    let mode = get_site_setting(&pool, site_id, "maintenance_mode").await.unwrap_or_else(|| "false".to_string());
+    let mode = get_site_setting(&pool, site_id, "maintenance_mode")
+        .await
+        .unwrap_or_else(|| "false".to_string());
     let message = get_site_setting(&pool, site_id, "maintenance_message").await;
 
     println!("Site: {hostname}");
-    println!("Maintenance mode: {}", if mode == "true" { "ON" } else { "OFF" });
+    println!(
+        "Maintenance mode: {}",
+        if mode == "true" { "ON" } else { "OFF" }
+    );
     if let Some(m) = message {
         println!("Message: {m}");
     }
     Ok(())
 }
 
-async fn create(hostname: String, install_dir: Option<String>, database_url: Option<String>) -> anyhow::Result<()> {
+async fn create(
+    hostname: String,
+    install_dir: Option<String>,
+    database_url: Option<String>,
+) -> anyhow::Result<()> {
     if let Some(url) = database_url {
         // SAFETY: CLI runs single-threaded during arg parsing; safe to mutate env here.
         #[allow(unused_unsafe)]
-        unsafe { std::env::set_var("DATABASE_URL", url); }
+        unsafe {
+            std::env::set_var("DATABASE_URL", url);
+        }
     }
     let pool = super::connect_db().await?;
     let hostname = hostname.trim().to_lowercase();
 
-    let site_id: Uuid = sqlx::query_scalar(
-        "INSERT INTO sites (hostname) VALUES ($1) RETURNING id"
-    )
-    .bind(&hostname)
-    .fetch_one(&pool)
-    .await
-    .map_err(|e| {
-        if e.to_string().contains("duplicate") || e.to_string().contains("unique") {
-            anyhow::anyhow!("A site with hostname '{}' already exists.", hostname)
-        } else {
-            anyhow::anyhow!("Failed to create site: {e}")
-        }
-    })?;
+    let site_id: Uuid = sqlx::query_scalar("INSERT INTO sites (hostname) VALUES ($1) RETURNING id")
+        .bind(&hostname)
+        .fetch_one(&pool)
+        .await
+        .map_err(|e| {
+            if e.to_string().contains("duplicate") || e.to_string().contains("unique") {
+                anyhow::anyhow!("A site with hostname '{}' already exists.", hostname)
+            } else {
+                anyhow::anyhow!("Failed to create site: {e}")
+            }
+        })?;
 
     println!("Created site '{}' with id {}", hostname, site_id);
 
     // Auto-assign the protected super_admin as owner.
     let owner: Option<Uuid> = sqlx::query_scalar(
-        "SELECT id FROM users WHERE is_protected = TRUE AND deleted_at IS NULL LIMIT 1"
+        "SELECT id FROM users WHERE is_protected = TRUE AND deleted_at IS NULL LIMIT 1",
     )
     .fetch_optional(&pool)
     .await
@@ -271,14 +325,12 @@ async fn create(hostname: String, install_dir: Option<String>, database_url: Opt
     .flatten();
 
     if let Some(owner_id) = owner {
-        sqlx::query(
-            "UPDATE sites SET owner_user_id = $1 WHERE id = $2 AND owner_user_id IS NULL"
-        )
-        .bind(owner_id)
-        .bind(site_id)
-        .execute(&pool)
-        .await
-        .map_err(|e| anyhow::anyhow!("Failed to set site owner: {e}"))?;
+        sqlx::query("UPDATE sites SET owner_user_id = $1 WHERE id = $2 AND owner_user_id IS NULL")
+            .bind(owner_id)
+            .bind(site_id)
+            .execute(&pool)
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to set site owner: {e}"))?;
         println!("Site owner set to protected super_admin ({}).", owner_id);
         // Set the owner's default_site_id if not already set.
         sqlx::query(
@@ -291,15 +343,22 @@ async fn create(hostname: String, install_dir: Option<String>, database_url: Opt
         .map_err(|e| anyhow::anyhow!("Failed to set default site: {e}"))?;
     } else {
         println!("No protected super_admin found — owner_user_id left NULL.");
-        println!("Backfill with: UPDATE sites SET owner_user_id = '<user-uuid>' WHERE id = '{}'", site_id);
+        println!(
+            "Backfill with: UPDATE sites SET owner_user_id = '<user-uuid>' WHERE id = '{}'",
+            site_id
+        );
     }
 
     // Create the site's directories and seed the default theme.
     if let Some(ref base) = install_dir {
         let site_themes_dst = std::path::Path::new(base)
-            .join("sites").join(site_id.to_string()).join("themes").join("default");
+            .join("sites")
+            .join(site_id.to_string())
+            .join("themes")
+            .join("default");
         let site_uploads_dst = std::path::Path::new(base)
-            .join("uploads").join(site_id.to_string());
+            .join("uploads")
+            .join(site_id.to_string());
 
         if let Err(e) = std::fs::create_dir_all(&site_uploads_dst) {
             println!("Warning: could not create uploads/{}: {}", site_id, e);
@@ -311,12 +370,18 @@ async fn create(hostname: String, install_dir: Option<String>, database_url: Opt
         let sym_path = std::path::Path::new(base).join("uploads").join(&hostname);
         if !sym_path.exists() {
             match std::os::unix::fs::symlink(&site_uploads_dst, &sym_path) {
-                Ok(()) => println!("Created symlink uploads/{} -> uploads/{}/", hostname, site_id),
+                Ok(()) => println!(
+                    "Created symlink uploads/{} -> uploads/{}/",
+                    hostname, site_id
+                ),
                 Err(e) => println!("Warning: could not create upload symlink: {}", e),
             }
         }
 
-        let theme_src = std::path::Path::new(base).join("themes").join("global").join("default");
+        let theme_src = std::path::Path::new(base)
+            .join("themes")
+            .join("global")
+            .join("default");
         if theme_src.is_dir() {
             match copy_dir_all(&theme_src, &site_themes_dst) {
                 Ok(()) => println!("Default theme seeded to sites/{}/themes/default/", site_id),
@@ -366,43 +431,50 @@ async fn rename(
 ) -> anyhow::Result<()> {
     if let Some(url) = database_url {
         #[allow(unused_unsafe)]
-        unsafe { std::env::set_var("DATABASE_URL", url); }
+        unsafe {
+            std::env::set_var("DATABASE_URL", url);
+        }
     }
     let pool = super::connect_db().await?;
 
-    let id: Uuid = id_str.parse()
+    let id: Uuid = id_str
+        .parse()
         .map_err(|_| anyhow::anyhow!("'{}' is not a valid UUID.", id_str))?;
 
     // Fetch current hostname.
-    let old_hostname: Option<String> = sqlx::query_scalar(
-        "SELECT hostname FROM sites WHERE id = $1"
-    )
-    .bind(id)
-    .fetch_optional(&pool)
-    .await
-    .map_err(|e| anyhow::anyhow!("DB error: {e}"))?;
+    let old_hostname: Option<String> =
+        sqlx::query_scalar("SELECT hostname FROM sites WHERE id = $1")
+            .bind(id)
+            .fetch_optional(&pool)
+            .await
+            .map_err(|e| anyhow::anyhow!("DB error: {e}"))?;
 
-    let old_hostname = old_hostname
-        .ok_or_else(|| anyhow::anyhow!("No site with id '{}' found.", id))?;
+    let old_hostname =
+        old_hostname.ok_or_else(|| anyhow::anyhow!("No site with id '{}' found.", id))?;
 
     let new_hostname = new_hostname.trim().to_lowercase();
     if old_hostname == new_hostname {
-        println!("Site '{}' already uses that hostname — nothing to do.", old_hostname);
+        println!(
+            "Site '{}' already uses that hostname — nothing to do.",
+            old_hostname
+        );
         return Ok(());
     }
 
     // Check the new hostname isn't already taken by another site.
-    let conflict: Option<Uuid> = sqlx::query_scalar(
-        "SELECT id FROM sites WHERE hostname = $1"
-    )
-    .bind(&new_hostname)
-    .fetch_optional(&pool)
-    .await
-    .map_err(|e| anyhow::anyhow!("DB error: {e}"))?;
+    let conflict: Option<Uuid> = sqlx::query_scalar("SELECT id FROM sites WHERE hostname = $1")
+        .bind(&new_hostname)
+        .fetch_optional(&pool)
+        .await
+        .map_err(|e| anyhow::anyhow!("DB error: {e}"))?;
 
     if let Some(other) = conflict {
         if other != id {
-            anyhow::bail!("Hostname '{}' is already used by another site ({}).", new_hostname, other);
+            anyhow::bail!(
+                "Hostname '{}' is already used by another site ({}).",
+                new_hostname,
+                other
+            );
         }
     }
 
@@ -416,7 +488,10 @@ async fn rename(
     println!("    • sites.hostname");
     println!("    • site_settings site_url");
     println!("    • site_settings site_name (only if still set to the default hostname value)");
-    println!("    • posts.content — /uploads/{} → /uploads/{}", old_hostname, new_hostname);
+    println!(
+        "    • posts.content — /uploads/{} → /uploads/{}",
+        old_hostname, new_hostname
+    );
     println!("    • Caddyfile block header: {}", caddyfile);
     if let Some(ref dir) = install_dir {
         println!("    • uploads/ symlink in: {}/uploads/", dir);
@@ -447,21 +522,19 @@ async fn rename(
 
     // 2. Update site_settings site_url.
     let new_url = format!("http://{}", new_hostname);
-    sqlx::query(
-        "UPDATE site_settings SET value = $1 WHERE site_id = $2 AND key = 'site_url'"
-    )
-    .bind(&new_url)
-    .bind(id)
-    .execute(&pool)
-    .await
-    .map_err(|e| anyhow::anyhow!("Failed to update site_url: {e}"))?;
+    sqlx::query("UPDATE site_settings SET value = $1 WHERE site_id = $2 AND key = 'site_url'")
+        .bind(&new_url)
+        .bind(id)
+        .execute(&pool)
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to update site_url: {e}"))?;
     println!("  ✓ Updated site_settings site_url to {}", new_url);
 
     // 2b. Update site_settings site_name, but only if it still matches the old
     // hostname (i.e. it was never customized away from the auto-seeded default).
     let updated_name = sqlx::query(
         "UPDATE site_settings SET value = $1 \
-         WHERE site_id = $2 AND key = 'site_name' AND value = $3"
+         WHERE site_id = $2 AND key = 'site_name' AND value = $3",
     )
     .bind(&new_hostname)
     .bind(id)
@@ -481,7 +554,7 @@ async fn rename(
     let new_prefix = format!("/uploads/{}/", new_hostname);
     let updated_posts = sqlx::query(
         "UPDATE posts SET content = REPLACE(content, $1, $2) \
-         WHERE site_id = $3 AND content LIKE '%' || $1 || '%'"
+         WHERE site_id = $3 AND content LIKE '%' || $1 || '%'",
     )
     .bind(&old_prefix)
     .bind(&new_prefix)
@@ -491,7 +564,10 @@ async fn rename(
     .map(|r| r.rows_affected())
     .unwrap_or(0);
     if updated_posts > 0 {
-        println!("  ✓ Updated {} post(s) with embedded upload URLs", updated_posts);
+        println!(
+            "  ✓ Updated {} post(s) with embedded upload URLs",
+            updated_posts
+        );
     } else {
         println!("  ✓ No embedded upload URLs to update in posts");
     }
@@ -502,7 +578,14 @@ async fn rename(
             println!("  ✓ Updated Caddyfile: {} → {}", old_hostname, new_hostname);
             // Reload Caddy.
             let reload = std::process::Command::new("sudo")
-                .args(["caddy", "reload", "--config", &caddyfile, "--adapter", "caddyfile"])
+                .args([
+                    "caddy",
+                    "reload",
+                    "--config",
+                    &caddyfile,
+                    "--adapter",
+                    "caddyfile",
+                ])
                 .status();
             match reload {
                 Ok(s) if s.success() => println!("  ✓ Caddy reloaded"),
@@ -516,7 +599,10 @@ async fn rename(
         ),
         Err(e) => {
             println!("  Warning: could not update Caddyfile: {}", e);
-            println!("    Manually replace '{}' with '{}' in {}", old_hostname, new_hostname, caddyfile);
+            println!(
+                "    Manually replace '{}' with '{}' in {}",
+                old_hostname, new_hostname, caddyfile
+            );
         }
     }
 
@@ -525,7 +611,7 @@ async fn rename(
         let uploads = std::path::Path::new(dir).join("uploads");
         let old_sym = uploads.join(&old_hostname);
         let new_sym = uploads.join(&new_hostname);
-        let target  = uploads.join(id.to_string());
+        let target = uploads.join(id.to_string());
 
         if old_sym.is_symlink() {
             if let Err(e) = std::fs::remove_file(&old_sym) {
@@ -537,7 +623,13 @@ async fn rename(
                 Ok(()) => println!("  ✓ Symlink: uploads/{} -> uploads/{}/", new_hostname, id),
                 Err(e) => {
                     println!("  Warning: could not create new symlink: {}", e);
-                    println!("    Manually: ln -s {}/{} {}/{}", uploads.display(), id, uploads.display(), new_hostname);
+                    println!(
+                        "    Manually: ln -s {}/{} {}/{}",
+                        uploads.display(),
+                        id,
+                        uploads.display(),
+                        new_hostname
+                    );
                 }
             }
         }
@@ -550,7 +642,10 @@ async fn rename(
     println!("Rename complete. Restart SynapCMS to apply the new hostname.");
     println!();
     println!("Note: hostname text manually typed into post body content was not");
-    println!("automatically updated. Review posts for any references to '{}'.", old_hostname);
+    println!(
+        "automatically updated. Review posts for any references to '{}'.",
+        old_hostname
+    );
 
     Ok(())
 }
@@ -572,7 +667,9 @@ async fn list(database_url: Option<String>) -> anyhow::Result<()> {
     if let Some(url) = database_url {
         // SAFETY: CLI runs single-threaded during arg parsing; safe to mutate env here.
         #[allow(unused_unsafe)]
-        unsafe { std::env::set_var("DATABASE_URL", url); }
+        unsafe {
+            std::env::set_var("DATABASE_URL", url);
+        }
     }
     let pool = super::connect_db().await?;
 
@@ -605,26 +702,30 @@ async fn delete(id_str: String, database_url: Option<String>) -> anyhow::Result<
     if let Some(url) = database_url {
         // SAFETY: CLI runs single-threaded during arg parsing; safe to mutate env here.
         #[allow(unused_unsafe)]
-        unsafe { std::env::set_var("DATABASE_URL", url); }
+        unsafe {
+            std::env::set_var("DATABASE_URL", url);
+        }
     }
     let pool = super::connect_db().await?;
 
-    let id: Uuid = id_str.parse()
+    let id: Uuid = id_str
+        .parse()
         .map_err(|_| anyhow::anyhow!("'{}' is not a valid UUID.", id_str))?;
 
     // Confirm the site exists.
-    let hostname: Option<String> = sqlx::query_scalar(
-        "SELECT hostname FROM sites WHERE id = $1"
-    )
-    .bind(id)
-    .fetch_optional(&pool)
-    .await
-    .map_err(|e| anyhow::anyhow!("DB error: {e}"))?;
+    let hostname: Option<String> = sqlx::query_scalar("SELECT hostname FROM sites WHERE id = $1")
+        .bind(id)
+        .fetch_optional(&pool)
+        .await
+        .map_err(|e| anyhow::anyhow!("DB error: {e}"))?;
 
     let hostname = hostname.ok_or_else(|| anyhow::anyhow!("No site with id '{}' found.", id))?;
 
     // Prompt for confirmation.
-    print!("Delete site '{}' ({}) and ALL its content? [y/N] ", hostname, id);
+    print!(
+        "Delete site '{}' ({}) and ALL its content? [y/N] ",
+        hostname, id
+    );
     use std::io::Write as _;
     std::io::stdout().flush().ok();
     let mut input = String::new();

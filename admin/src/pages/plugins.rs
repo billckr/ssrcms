@@ -31,7 +31,7 @@ pub fn render_with_flash(
 
 fn render_content(plugins: &[PluginCard], filter: &str) -> String {
     // ── Toolbar ───────────────────────────────────────────────────────────────
-    let sel_my     = if filter == "my"     { " selected" } else { "" };
+    let sel_my = if filter == "my" { " selected" } else { "" };
     let sel_global = if filter == "global" { " selected" } else { "" };
 
     let toolbar = format!(
@@ -56,7 +56,11 @@ fn render_content(plugins: &[PluginCard], filter: &str) -> String {
         };
         format!(r#"<div class="empty-state"><p>{}</p></div>"#, msg)
     } else {
-        plugins.iter().map(|p| render_card(p, filter)).collect::<Vec<_>>().join("\n")
+        plugins
+            .iter()
+            .map(|p| render_card(p, filter))
+            .collect::<Vec<_>>()
+            .join("\n")
     };
 
     // ── Upload section ────────────────────────────────────────────────────────
@@ -83,7 +87,7 @@ fn render_content(plugins: &[PluginCard], filter: &str) -> String {
 fn render_card(p: &PluginCard, filter: &str) -> String {
     let type_badge = match p.plugin_type.as_str() {
         "wasm" => r#"<span class="badge badge-blue">WASM</span>"#,
-        _      => r#"<span class="badge badge-green">Tera</span>"#,
+        _ => r#"<span class="badge badge-green">Tera</span>"#,
     };
 
     let status_badge = if filter == "my" && p.is_active {
@@ -95,11 +99,21 @@ fn render_card(p: &PluginCard, filter: &str) -> String {
     let hooks_html = if p.hooks.is_empty() {
         String::new()
     } else {
-        let items: String = p.hooks.iter()
-            .map(|h| format!(r#"<code class="hook-chip">{}</code>"#, crate::html_escape(h)))
+        let items: String = p
+            .hooks
+            .iter()
+            .map(|h| {
+                format!(
+                    r#"<code class="hook-chip">{}</code>"#,
+                    crate::html_escape(h)
+                )
+            })
             .collect::<Vec<_>>()
             .join(", ");
-        format!(r#"<p class="muted" style="font-size:0.8em;margin-top:0.35rem;">Hooks: {}</p>"#, items)
+        format!(
+            r#"<p class="muted" style="font-size:0.8em;margin-top:0.35rem;">Hooks: {}</p>"#,
+            items
+        )
     };
 
     let actions = if filter == "global" {
@@ -147,7 +161,7 @@ fn render_card(p: &PluginCard, filter: &str) -> String {
                         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
                     </button>
                 </form>"#,
-                name     = crate::html_escape(&p.name),
+                name = crate::html_escape(&p.name),
                 name_esc = crate::html_escape(&p.name),
             )
         };
@@ -170,13 +184,13 @@ fn render_card(p: &PluginCard, filter: &str) -> String {
   <p class="plugin-author muted" style="font-size:0.85em;margin-top:0.1rem;">by {author}</p>
   {hooks}
 </div>"#,
-        name         = crate::html_escape(&p.name),
-        version      = crate::html_escape(&p.version),
-        type_badge   = type_badge,
+        name = crate::html_escape(&p.name),
+        version = crate::html_escape(&p.version),
+        type_badge = type_badge,
         status_badge = status_badge,
-        actions      = actions,
-        desc         = crate::html_escape(&p.description),
-        author       = crate::html_escape(&p.author),
-        hooks        = hooks_html,
+        actions = actions,
+        desc = crate::html_escape(&p.description),
+        author = crate::html_escape(&p.author),
+        hooks = hooks_html,
     )
 }

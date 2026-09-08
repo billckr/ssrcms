@@ -12,9 +12,13 @@ use uuid::Uuid;
 
 use crate::app_state::AppState;
 use crate::middleware::admin_auth::AdminUser;
-use crate::models::poll_def::{self, CreatePollDef, PollOption, PollSettings, UpdatePollDef, VoteProtection};
+use crate::models::poll_def::{
+    self, CreatePollDef, PollOption, PollSettings, UpdatePollDef, VoteProtection,
+};
 
-use admin::pages::poll_designer::{polls_list_fragment, render_editor, PollEditData, PollOptionRow, PollRow};
+use admin::pages::poll_designer::{
+    polls_list_fragment, render_editor, PollEditData, PollOptionRow, PollRow,
+};
 
 fn require_forms_cap(admin: &AdminUser) -> Result<(), Response> {
     if !admin.caps.can_manage_forms {
@@ -25,28 +29,44 @@ fn require_forms_cap(admin: &AdminUser) -> Result<(), Response> {
 }
 
 fn require_site_id(admin: &AdminUser) -> Result<Uuid, Response> {
-    admin.site_id.ok_or_else(|| (StatusCode::BAD_REQUEST, "No site selected.").into_response())
+    admin
+        .site_id
+        .ok_or_else(|| (StatusCode::BAD_REQUEST, "No site selected.").into_response())
 }
 
 // ── list (partial, for the Designer hub's live search) ─────────────────────
 
-pub async fn list(State(state): State<AppState>, admin: AdminUser, Query(params): Query<HashMap<String, String>>) -> Response {
-    if let Err(e) = require_forms_cap(&admin) { return e; }
-    let site_id = match require_site_id(&admin) { Ok(id) => id, Err(e) => return e };
+pub async fn list(
+    State(state): State<AppState>,
+    admin: AdminUser,
+    Query(params): Query<HashMap<String, String>>,
+) -> Response {
+    if let Err(e) = require_forms_cap(&admin) {
+        return e;
+    }
+    let site_id = match require_site_id(&admin) {
+        Ok(id) => id,
+        Err(e) => return e,
+    };
 
     if !params.contains_key("partial") {
         return Redirect::to("/admin/designer?tab=polls").into_response();
     }
 
-    let polls = poll_def::list_for_site(&state.db, site_id).await.unwrap_or_default();
-    let rows: Vec<PollRow> = polls.into_iter().map(|p| PollRow {
-        id: p.id.to_string(),
-        name: p.name,
-        slug: p.slug,
-        option_count: p.options.len(),
-        total_votes: p.total_votes,
-        updated_at: p.updated_at.format("%Y-%m-%d %H:%M UTC").to_string(),
-    }).collect();
+    let polls = poll_def::list_for_site(&state.db, site_id)
+        .await
+        .unwrap_or_default();
+    let rows: Vec<PollRow> = polls
+        .into_iter()
+        .map(|p| PollRow {
+            id: p.id.to_string(),
+            name: p.name,
+            slug: p.slug,
+            option_count: p.options.len(),
+            total_votes: p.total_votes,
+            updated_at: p.updated_at.format("%Y-%m-%d %H:%M UTC").to_string(),
+        })
+        .collect();
 
     let search = params.get("search").map(|s| s.trim()).unwrap_or("");
     Html(polls_list_fragment(&rows, search)).into_response()
@@ -55,8 +75,12 @@ pub async fn list(State(state): State<AppState>, admin: AdminUser, Query(params)
 // ── new / edit ───────────────────────────────────────────────────────────────
 
 pub async fn new_poll(State(state): State<AppState>, admin: AdminUser) -> Response {
-    if let Err(e) = require_forms_cap(&admin) { return e; }
-    if let Err(e) = require_site_id(&admin) { return e; }
+    if let Err(e) = require_forms_cap(&admin) {
+        return e;
+    }
+    if let Err(e) = require_site_id(&admin) {
+        return e;
+    }
 
     let cs = state.site_hostname(admin.site_id);
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
@@ -64,9 +88,18 @@ pub async fn new_poll(State(state): State<AppState>, admin: AdminUser) -> Respon
     Html(render_editor(&PollEditData::default(), &ctx, None)).into_response()
 }
 
-pub async fn edit_poll(State(state): State<AppState>, admin: AdminUser, Path(id): Path<Uuid>) -> Response {
-    if let Err(e) = require_forms_cap(&admin) { return e; }
-    let site_id = match require_site_id(&admin) { Ok(id) => id, Err(e) => return e };
+pub async fn edit_poll(
+    State(state): State<AppState>,
+    admin: AdminUser,
+    Path(id): Path<Uuid>,
+) -> Response {
+    if let Err(e) = require_forms_cap(&admin) {
+        return e;
+    }
+    let site_id = match require_site_id(&admin) {
+        Ok(id) => id,
+        Err(e) => return e,
+    };
 
     let cs = state.site_hostname(admin.site_id);
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
@@ -79,7 +112,14 @@ pub async fn edit_poll(State(state): State<AppState>, admin: AdminUser, Path(id)
         id: Some(poll.id.to_string()),
         name: poll.name,
         question: poll.question,
-        options: poll.options.into_iter().map(|o| PollOptionRow { key: o.key, label: o.label }).collect(),
+        options: poll
+            .options
+            .into_iter()
+            .map(|o| PollOptionRow {
+                key: o.key,
+                label: o.label,
+            })
+            .collect(),
         success_message: poll.settings.success_message,
         button_label: poll.settings.button_label,
         vote_protection: poll.settings.vote_protection.as_str().to_string(),
@@ -111,7 +151,10 @@ fn parse_options(raw: &str) -> Vec<PollOption> {
     serde_json::from_str::<Vec<RawOption>>(raw)
         .unwrap_or_default()
         .into_iter()
-        .map(|o| PollOption { key: o.key, label: o.label })
+        .map(|o| PollOption {
+            key: o.key,
+            label: o.label,
+        })
         .collect()
 }
 
@@ -160,8 +203,13 @@ pub async fn create(
     admin: AdminUser,
     axum::Form(form): axum::Form<SavePollForm>,
 ) -> Response {
-    if let Err(e) = require_forms_cap(&admin) { return e; }
-    let site_id = match require_site_id(&admin) { Ok(id) => id, Err(e) => return e };
+    if let Err(e) = require_forms_cap(&admin) {
+        return e;
+    }
+    let site_id = match require_site_id(&admin) {
+        Ok(id) => id,
+        Err(e) => return e,
+    };
 
     let options = parse_options(&form.options_json);
     let settings = settings_from_form(&form);
@@ -173,7 +221,13 @@ pub async fn create(
             id: None,
             name: form.name,
             question: form.question,
-            options: options.into_iter().map(|o| PollOptionRow { key: o.key, label: o.label }).collect(),
+            options: options
+                .into_iter()
+                .map(|o| PollOptionRow {
+                    key: o.key,
+                    label: o.label,
+                })
+                .collect(),
             success_message: settings.success_message,
             button_label: settings.button_label,
             vote_protection: settings.vote_protection.as_str().to_string(),
@@ -181,7 +235,18 @@ pub async fn create(
         return Html(render_editor(&data, &ctx, Some(&msg))).into_response();
     }
 
-    if let Err(e) = poll_def::create(&state.db, CreatePollDef { site_id, name: form.name, question: form.question, options, settings }).await {
+    if let Err(e) = poll_def::create(
+        &state.db,
+        CreatePollDef {
+            site_id,
+            name: form.name,
+            question: form.question,
+            options,
+            settings,
+        },
+    )
+    .await
+    {
         tracing::error!("poll_designer::create failed: {e}");
     }
     Redirect::to("/admin/designer?tab=polls").into_response()
@@ -193,8 +258,13 @@ pub async fn update(
     Path(id): Path<Uuid>,
     axum::Form(form): axum::Form<SavePollForm>,
 ) -> Response {
-    if let Err(e) = require_forms_cap(&admin) { return e; }
-    let site_id = match require_site_id(&admin) { Ok(id) => id, Err(e) => return e };
+    if let Err(e) = require_forms_cap(&admin) {
+        return e;
+    }
+    let site_id = match require_site_id(&admin) {
+        Ok(id) => id,
+        Err(e) => return e,
+    };
 
     let options = parse_options(&form.options_json);
     let settings = settings_from_form(&form);
@@ -206,7 +276,13 @@ pub async fn update(
             id: Some(id.to_string()),
             name: form.name,
             question: form.question,
-            options: options.into_iter().map(|o| PollOptionRow { key: o.key, label: o.label }).collect(),
+            options: options
+                .into_iter()
+                .map(|o| PollOptionRow {
+                    key: o.key,
+                    label: o.label,
+                })
+                .collect(),
             success_message: settings.success_message,
             button_label: settings.button_label,
             vote_protection: settings.vote_protection.as_str().to_string(),
@@ -214,16 +290,37 @@ pub async fn update(
         return Html(render_editor(&data, &ctx, Some(&msg))).into_response();
     }
 
-    if let Err(e) = poll_def::update(&state.db, site_id, id, UpdatePollDef { name: form.name, question: form.question, options, settings }).await {
+    if let Err(e) = poll_def::update(
+        &state.db,
+        site_id,
+        id,
+        UpdatePollDef {
+            name: form.name,
+            question: form.question,
+            options,
+            settings,
+        },
+    )
+    .await
+    {
         tracing::error!("poll_designer::update failed: {e}");
     }
 
     Redirect::to(&format!("/admin/designer/polls/{id}")).into_response()
 }
 
-pub async fn delete(State(state): State<AppState>, admin: AdminUser, Path(id): Path<Uuid>) -> Response {
-    if let Err(e) = require_forms_cap(&admin) { return e; }
-    let site_id = match require_site_id(&admin) { Ok(id) => id, Err(e) => return e };
+pub async fn delete(
+    State(state): State<AppState>,
+    admin: AdminUser,
+    Path(id): Path<Uuid>,
+) -> Response {
+    if let Err(e) = require_forms_cap(&admin) {
+        return e;
+    }
+    let site_id = match require_site_id(&admin) {
+        Ok(id) => id,
+        Err(e) => return e,
+    };
 
     if let Err(e) = poll_def::delete(&state.db, site_id, id).await {
         tracing::error!("poll_designer::delete failed: {e}");

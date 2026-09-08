@@ -107,7 +107,11 @@ fn integer_y_axis(values: &[f32]) -> (f32, usize) {
 fn responsive_svg(svg: String, w: u32, h: u32) -> String {
     let vb = format!(r#"viewBox="0 0 {w} {h}""#);
     // Replace `width="W"` → `width="100%" viewBox="0 0 W H"`
-    let svg = svg.replacen(&format!(r#"width="{w}""#), &format!(r#"width="100%" {vb}"#), 1);
+    let svg = svg.replacen(
+        &format!(r#"width="{w}""#),
+        &format!(r#"width="100%" {vb}"#),
+        1,
+    );
     // Remove the explicit height so CSS controls it via `height: auto`
     svg.replacen(&format!(r#" height="{h}""#), "", 1)
 }
@@ -132,13 +136,16 @@ fn year_select(
     let options: String = if available.is_empty() {
         format!("<option value=\"{selected}\" selected>{selected}</option>")
     } else {
-        available.iter().map(|&y| {
-            if y == selected {
-                format!("<option value=\"{y}\" selected>{y}</option>")
-            } else {
-                format!("<option value=\"{y}\">{y}</option>")
-            }
-        }).collect()
+        available
+            .iter()
+            .map(|&y| {
+                if y == selected {
+                    format!("<option value=\"{y}\" selected>{y}</option>")
+                } else {
+                    format!("<option value=\"{y}\">{y}</option>")
+                }
+            })
+            .collect()
     };
     // Only emit hidden inputs for params that the <select> itself does NOT control,
     // to avoid duplicate query string fields on submit.
@@ -263,9 +270,7 @@ fn recent_posts_widget(
 /// Renders the "Quick Tools" widget: a short list of shortcuts to create new
 /// content, scoped to what the current role is allowed to create.
 fn quick_tools_widget(ctx: &crate::PageContext) -> String {
-    let mut items = vec![
-        r#"<a href="/admin/posts/new">New Post</a>"#.to_string(),
-    ];
+    let mut items = vec![r#"<a href="/admin/posts/new">New Post</a>"#.to_string()];
     if ctx.can_manage_pages {
         items.push(r#"<a href="/admin/pages/new">New Page</a>"#.to_string());
     }
@@ -376,7 +381,7 @@ pub fn render(data: &DashboardData, flash: Option<&str>, ctx: &crate::PageContex
     let mut widget_bodies: HashMap<&'static str, String> = HashMap::new();
 
     if is_author {
-        let y  = data.selected_year;
+        let y = data.selected_year;
         let vy = data.selected_views_year;
         let pr = &data.chart_range;
         let vr = &data.views_range;
@@ -391,7 +396,10 @@ pub fn render(data: &DashboardData, flash: Option<&str>, ctx: &crate::PageContex
                 use charts_rs::{BarChart, Color, Series};
                 let (y_max, y_splits) = integer_y_axis(&data.author_chart_values);
                 let mut chart = BarChart::new(
-                    vec![Series::new("Published".to_string(), data.author_chart_values.clone())],
+                    vec![Series::new(
+                        "Published".to_string(),
+                        data.author_chart_values.clone(),
+                    )],
                     data.author_chart_labels.clone(),
                 );
                 chart.background_color = Color::transparent();
@@ -416,7 +424,10 @@ pub fn render(data: &DashboardData, flash: Option<&str>, ctx: &crate::PageContex
                 use charts_rs::{BarChart, Color, Series};
                 let (y_max, y_splits) = integer_y_axis(&data.author_views_values);
                 let mut chart = BarChart::new(
-                    vec![Series::new("Views".to_string(), data.author_views_values.clone())],
+                    vec![Series::new(
+                        "Views".to_string(),
+                        data.author_views_values.clone(),
+                    )],
                     data.author_views_labels.clone(),
                 );
                 chart.background_color = Color::transparent();
@@ -434,25 +445,27 @@ pub fn render(data: &DashboardData, flash: Option<&str>, ctx: &crate::PageContex
         // ── Tab active classes ────────────────────────────────────────────────
         let (paw, pam, pay) = match pr.as_str() {
             "month" => ("btn", "btn btn-primary", "btn"),
-            "year"  => ("btn", "btn", "btn btn-primary"),
-            _       => ("btn btn-primary", "btn", "btn"),
+            "year" => ("btn", "btn", "btn btn-primary"),
+            _ => ("btn btn-primary", "btn", "btn"),
         };
         let (vaw, vam, vay) = match vr.as_str() {
             "month" => ("btn", "btn btn-primary", "btn"),
-            "year"  => ("btn", "btn", "btn btn-primary"),
-            _       => ("btn btn-primary", "btn", "btn"),
+            "year" => ("btn", "btn", "btn btn-primary"),
+            _ => ("btn btn-primary", "btn", "btn"),
         };
 
         // ── Year selects (hidden on "year" tab since it spans all time) ───────
-        let posts_year_sel = year_select(
-            "year", y, &data.available_years,
-            pr, vr, y, vy,
-            true, pr,
-        );
+        let posts_year_sel = year_select("year", y, &data.available_years, pr, vr, y, vy, true, pr);
         let views_year_sel = year_select(
-            "views_year", vy, &data.available_views_years,
-            pr, vr, y, vy,
-            true, vr,
+            "views_year",
+            vy,
+            &data.available_views_years,
+            pr,
+            vr,
+            y,
+            vy,
+            true,
+            vr,
         );
 
         widget_bodies.insert("posts_chart", format!(
@@ -528,22 +541,46 @@ pub fn render(data: &DashboardData, flash: Option<&str>, ctx: &crate::PageContex
         ));
     }
 
-    widget_bodies.insert("one", recent_posts_widget(
-        &data.recent_drafts, "Drafts", "No drafts.",
-        SecondColumn::Author, true,
-    ));
-    widget_bodies.insert("two", recent_posts_widget(
-        &data.recent_published, "Published", "No published posts.",
-        SecondColumn::Author, true,
-    ));
-    widget_bodies.insert("three", recent_posts_widget(
-        &data.recent_pending, "Pending Review", "No posts pending review.",
-        SecondColumn::Author, true,
-    ));
-    widget_bodies.insert("four", recent_posts_widget(
-        &data.upcoming_scheduled, "Scheduled", "No posts scheduled.",
-        SecondColumn::ScheduledTime, true,
-    ));
+    widget_bodies.insert(
+        "one",
+        recent_posts_widget(
+            &data.recent_drafts,
+            "Drafts",
+            "No drafts.",
+            SecondColumn::Author,
+            true,
+        ),
+    );
+    widget_bodies.insert(
+        "two",
+        recent_posts_widget(
+            &data.recent_published,
+            "Published",
+            "No published posts.",
+            SecondColumn::Author,
+            true,
+        ),
+    );
+    widget_bodies.insert(
+        "three",
+        recent_posts_widget(
+            &data.recent_pending,
+            "Pending Review",
+            "No posts pending review.",
+            SecondColumn::Author,
+            true,
+        ),
+    );
+    widget_bodies.insert(
+        "four",
+        recent_posts_widget(
+            &data.upcoming_scheduled,
+            "Scheduled",
+            "No posts scheduled.",
+            SecondColumn::ScheduledTime,
+            true,
+        ),
+    );
 
     // Sites/Users/Subscribers widget — same data and links as the top stat panel's
     // last three cells, only shown to roles that can manage sites (super_admin,
@@ -589,8 +626,15 @@ pub fn render(data: &DashboardData, flash: Option<&str>, ctx: &crate::PageContex
         })
     };
 
-    let welcome_panel = if data.show_welcome_panel { welcome_panel_html(data.total_posts_ever) } else { String::new() };
-    let content = format!("{welcome_panel}{}", widgets_section(&data.widget_layout, &default_layout, &widget_bodies));
+    let welcome_panel = if data.show_welcome_panel {
+        welcome_panel_html(data.total_posts_ever)
+    } else {
+        String::new()
+    };
+    let content = format!(
+        "{welcome_panel}{}",
+        widgets_section(&data.widget_layout, &default_layout, &widget_bodies)
+    );
 
     crate::admin_page("Dashboard", "/admin", flash, &content, ctx)
 }
@@ -604,20 +648,32 @@ fn widgets_section(
     bodies: &HashMap<&'static str, String>,
 ) -> String {
     // Start from the saved layout, or the default if the user has none yet.
-    let mut layout = layout.as_ref().cloned().unwrap_or_else(|| default_layout.clone());
+    let mut layout = layout
+        .as_ref()
+        .cloned()
+        .unwrap_or_else(|| default_layout.clone());
 
     // Any real widget (e.g. a newly-added one) that isn't referenced anywhere in
     // the saved layout gets prepended to the left column, so it doesn't just
     // vanish for users who saved a layout before it existed.
     let already_placed: std::collections::HashSet<String> = ["left", "middle", "right"]
         .iter()
-        .flat_map(|col| layout.get(col).and_then(|v| v.as_array()).into_iter().flatten())
+        .flat_map(|col| {
+            layout
+                .get(col)
+                .and_then(|v| v.as_array())
+                .into_iter()
+                .flatten()
+        })
         .filter_map(|v| v.as_str().map(|s| s.to_string()))
         .collect();
     // Sorted for a deterministic order — `bodies` is a HashMap, whose iteration
     // order is randomized per-instance, which would otherwise reshuffle these
     // unplaced widgets on every page load.
-    let mut unplaced_ids: Vec<&&str> = bodies.keys().filter(|id| !already_placed.contains(**id)).collect();
+    let mut unplaced_ids: Vec<&&str> = bodies
+        .keys()
+        .filter(|id| !already_placed.contains(**id))
+        .collect();
     unplaced_ids.sort();
     for id in unplaced_ids {
         if let Some(left) = layout.get_mut("left").and_then(|v| v.as_array_mut()) {
@@ -639,7 +695,9 @@ fn widgets_section(
         ("stats", "Overview"),
         ("posts_chart", "Published Posts"),
         ("post_views", "Post Views"),
-    ].into_iter().collect();
+    ]
+    .into_iter()
+    .collect();
 
     let col_html = |col: &str| -> String {
         layout.get(col)

@@ -15,14 +15,23 @@ pub async fn settings(
     Query(params): Query<HashMap<String, String>>,
 ) -> impl IntoResponse {
     if !admin.caps.can_manage_settings {
-        return (StatusCode::FORBIDDEN, Html("<h1>403 Forbidden</h1>".to_string())).into_response();
+        return (
+            StatusCode::FORBIDDEN,
+            Html("<h1>403 Forbidden</h1>".to_string()),
+        )
+            .into_response();
     }
     let flash = params.get("flash").map(|s| s.as_str());
     let cs = state.site_hostname(admin.site_id);
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
     let (app_name, timezone, max_upload_mb, default_theme) = {
         let s = state.app_settings.read().unwrap();
-        (s.app_name.clone(), s.timezone.clone(), s.max_upload_mb.max(0) as u64, s.default_theme.clone())
+        (
+            s.app_name.clone(),
+            s.timezone.clone(),
+            s.max_upload_mb.max(0) as u64,
+            s.default_theme.clone(),
+        )
     };
     let sites: Vec<(uuid::Uuid, String)> = crate::models::site::list(&state.db)
         .await
@@ -35,7 +44,17 @@ pub async fn settings(
         .default_site_id
         .and_then(|id| sites.iter().find(|(sid, _)| *sid == id))
         .map(|(_, hostname)| hostname.clone());
-    Html(admin::pages::settings::render(flash, &app_name, &timezone, max_upload_mb, &default_theme, &sites, default_site_hostname.as_deref(), &ctx)).into_response()
+    Html(admin::pages::settings::render(
+        flash,
+        &app_name,
+        &timezone,
+        max_upload_mb,
+        &default_theme,
+        &sites,
+        default_site_hostname.as_deref(),
+        &ctx,
+    ))
+    .into_response()
 }
 
 pub async fn save_settings(
@@ -65,7 +84,11 @@ pub async fn save_settings(
         }
 
         let flash = error.as_deref().unwrap_or("General settings saved.");
-        return Redirect::to(&format!("/admin/settings?flash={}", flash.replace(' ', "+"))).into_response();
+        return Redirect::to(&format!(
+            "/admin/settings?flash={}",
+            flash.replace(' ', "+")
+        ))
+        .into_response();
     }
 
     if tab == "localisation" {
@@ -84,11 +107,18 @@ pub async fn save_settings(
         }
 
         let flash = error.as_deref().unwrap_or("Localisation settings saved.");
-        return Redirect::to(&format!("/admin/settings?flash={}", flash.replace(' ', "+"))).into_response();
+        return Redirect::to(&format!(
+            "/admin/settings?flash={}",
+            flash.replace(' ', "+")
+        ))
+        .into_response();
     }
 
     if tab == "appearance" {
-        let default_theme = form.get("default_theme").map(|s| s.trim()).unwrap_or("system");
+        let default_theme = form
+            .get("default_theme")
+            .map(|s| s.trim())
+            .unwrap_or("system");
 
         let flash = if matches!(default_theme, "light" | "dark" | "system") {
             match set_app_setting(&state.db, "default_theme", default_theme).await {
@@ -106,11 +136,17 @@ pub async fn save_settings(
         } else {
             "Invalid theme selection."
         };
-        return Redirect::to(&format!("/admin/settings?flash={}", flash.replace(' ', "+"))).into_response();
+        return Redirect::to(&format!(
+            "/admin/settings?flash={}",
+            flash.replace(' ', "+")
+        ))
+        .into_response();
     }
 
     if tab == "uploads" {
-        let max_upload_mb: Option<i64> = form.get("max_upload_mb").and_then(|s| s.trim().parse().ok());
+        let max_upload_mb: Option<i64> = form
+            .get("max_upload_mb")
+            .and_then(|s| s.trim().parse().ok());
 
         let flash = match max_upload_mb {
             Some(mb) if mb >= 1 && mb <= 1000 => {
@@ -129,7 +165,11 @@ pub async fn save_settings(
             }
             _ => "Max upload size must be between 1 and 1000 MB.",
         };
-        return Redirect::to(&format!("/admin/settings?flash={}", flash.replace(' ', "+"))).into_response();
+        return Redirect::to(&format!(
+            "/admin/settings?flash={}",
+            flash.replace(' ', "+")
+        ))
+        .into_response();
     }
 
     if tab == "welcome_panel" {
@@ -140,7 +180,11 @@ pub async fn save_settings(
                 "Failed to reset the Welcome panel. Please try again."
             }
         };
-        return Redirect::to(&format!("/admin/settings?flash={}", flash.replace(' ', "+"))).into_response();
+        return Redirect::to(&format!(
+            "/admin/settings?flash={}",
+            flash.replace(' ', "+")
+        ))
+        .into_response();
     }
 
     Redirect::to("/admin/settings").into_response()

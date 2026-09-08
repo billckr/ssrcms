@@ -48,15 +48,15 @@ use quick_xml::reader::Reader;
 use regex_lite::Regex;
 use uuid::Uuid;
 
+use super::media_store::{store_and_create, StoreInput};
+use super::sanitize_media_text;
+use super::sites::require_site_manager;
 use crate::app_state::{AppState, WpImportCredential, WpImportPhase, WpImportProgress};
 use crate::middleware::admin_auth::AdminUser;
 use crate::models::post::{CreatePost, PostStatus, PostType, UpdatePost};
 use crate::models::site_user::{self, SiteRole};
 use crate::models::taxonomy::{CreateTaxonomy, Taxonomy, TaxonomyType};
 use crate::models::user::{self, CreateUser, UserRole};
-use super::media_store::{store_and_create, StoreInput};
-use super::sanitize_media_text;
-use super::sites::require_site_manager;
 
 /// Postmeta keys that are purely WP-internal bookkeeping with no meaning in
 /// Synap — skipped rather than copied into `post_meta` as clutter.
@@ -181,13 +181,37 @@ fn parse_wxr(xml: &str) -> (Vec<WxrItem>, HashMap<String, String>) {
             }
             Ok(Event::Text(e)) => {
                 let text = e.unescape().map(|c| c.into_owned()).unwrap_or_default();
-                assign_text(in_item, in_author, in_postmeta, in_category, &cur_tag, &text,
-                    &mut item, &mut author_login, &mut author_email, &mut meta_key, &mut meta_value, &mut pending_category);
+                assign_text(
+                    in_item,
+                    in_author,
+                    in_postmeta,
+                    in_category,
+                    &cur_tag,
+                    &text,
+                    &mut item,
+                    &mut author_login,
+                    &mut author_email,
+                    &mut meta_key,
+                    &mut meta_value,
+                    &mut pending_category,
+                );
             }
             Ok(Event::CData(e)) => {
                 let text = String::from_utf8_lossy(&e.into_inner()).into_owned();
-                assign_text(in_item, in_author, in_postmeta, in_category, &cur_tag, &text,
-                    &mut item, &mut author_login, &mut author_email, &mut meta_key, &mut meta_value, &mut pending_category);
+                assign_text(
+                    in_item,
+                    in_author,
+                    in_postmeta,
+                    in_category,
+                    &cur_tag,
+                    &text,
+                    &mut item,
+                    &mut author_login,
+                    &mut author_email,
+                    &mut meta_key,
+                    &mut meta_value,
+                    &mut pending_category,
+                );
             }
             Ok(Event::End(e)) => {
                 let name = e.name().as_ref().to_vec();
@@ -281,13 +305,14 @@ fn assign_text(
 /// sites configured otherwise, since WXR doesn't carry the site's timezone
 /// offset outside the gmt fields.
 fn parse_wp_datetime(post_date: &str, post_date_gmt: &str) -> Option<DateTime<Utc>> {
-    let candidate = if !post_date_gmt.trim().is_empty() && post_date_gmt.trim() != "0000-00-00 00:00:00" {
-        post_date_gmt.trim()
-    } else if !post_date.trim().is_empty() && post_date.trim() != "0000-00-00 00:00:00" {
-        post_date.trim()
-    } else {
-        return None;
-    };
+    let candidate =
+        if !post_date_gmt.trim().is_empty() && post_date_gmt.trim() != "0000-00-00 00:00:00" {
+            post_date_gmt.trim()
+        } else if !post_date.trim().is_empty() && post_date.trim() != "0000-00-00 00:00:00" {
+            post_date.trim()
+        } else {
+            return None;
+        };
     NaiveDateTime::parse_from_str(candidate, "%Y-%m-%d %H:%M:%S")
         .ok()
         .map(|ndt| ndt.and_utc())
@@ -337,7 +362,9 @@ impl ZipMediaIndex {
             return None;
         }
 
-        let suffix_matches: Vec<&(Vec<String>, Vec<u8>)> = self.entries.iter()
+        let suffix_matches: Vec<&(Vec<String>, Vec<u8>)> = self
+            .entries
+            .iter()
             .filter(|(comp, _)| {
                 comp.len() >= wanted.len() && comp[comp.len() - wanted.len()..] == wanted[..]
             })
@@ -353,7 +380,9 @@ impl ZipMediaIndex {
         }
 
         let filename = wanted.last()?;
-        let filename_matches: Vec<&(Vec<String>, Vec<u8>)> = self.entries.iter()
+        let filename_matches: Vec<&(Vec<String>, Vec<u8>)> = self
+            .entries
+            .iter()
             .filter(|(comp, _)| comp.last().map(|c| c == filename).unwrap_or(false))
             .collect();
         if let [only] = filename_matches.as_slice() {
@@ -409,17 +438,23 @@ fn build_zip_media_index(zip_bytes: &[u8]) -> Result<ZipMediaIndex, String> {
     let mut entries = Vec::new();
     let mut total_bytes = 0u64;
     for i in 0..archive.len() {
-        let mut entry = archive.by_index(i)
+        let mut entry = archive
+            .by_index(i)
             .map_err(|e| format!("failed to read zip entry: {e}"))?;
         if entry.is_dir() {
             continue;
         }
         let name = entry.name().to_string();
-        if name.starts_with("__MACOSX/") || name.rsplit('/').next().is_some_and(|f| f.starts_with('.')) {
+        if name.starts_with("__MACOSX/")
+            || name.rsplit('/').next().is_some_and(|f| f.starts_with('.'))
+        {
             continue;
         }
         if total_bytes >= MAX_ZIP_TOTAL_BYTES {
-            tracing::warn!("media zip: aggregate size cap ({} bytes) reached, skipping remaining entries", MAX_ZIP_TOTAL_BYTES);
+            tracing::warn!(
+                "media zip: aggregate size cap ({} bytes) reached, skipping remaining entries",
+                MAX_ZIP_TOTAL_BYTES
+            );
             break;
         }
 
@@ -427,16 +462,23 @@ fn build_zip_media_index(zip_bytes: &[u8]) -> Result<ZipMediaIndex, String> {
         // cap" apart from "would have kept going" without ever buffering
         // more than MAX_ZIP_ENTRY_BYTES + 1.
         let mut buf = Vec::new();
-        entry.by_ref().take(MAX_ZIP_ENTRY_BYTES + 1)
+        entry
+            .by_ref()
+            .take(MAX_ZIP_ENTRY_BYTES + 1)
             .read_to_end(&mut buf)
             .map_err(|e| format!("failed to read zip entry '{name}': {e}"))?;
         if buf.len() as u64 > MAX_ZIP_ENTRY_BYTES {
-            tracing::warn!("media zip: entry '{}' exceeds the {}-byte cap, skipped", name, MAX_ZIP_ENTRY_BYTES);
+            tracing::warn!(
+                "media zip: entry '{}' exceeds the {}-byte cap, skipped",
+                name,
+                MAX_ZIP_ENTRY_BYTES
+            );
             continue;
         }
 
         total_bytes += buf.len() as u64;
-        let components: Vec<String> = name.to_lowercase()
+        let components: Vec<String> = name
+            .to_lowercase()
             .split('/')
             .filter(|c| !c.is_empty())
             .map(|c| c.to_string())
@@ -503,7 +545,8 @@ fn parse_year_month(post_date: &str) -> Option<String> {
 /// live" link — a real per-site `base_url` setting if one's configured,
 /// otherwise `http://{hostname}`.
 fn site_base_url(state: &AppState, site_id: Uuid) -> String {
-    state.get_site_by_id(site_id)
+    state
+        .get_site_by_id(site_id)
         .map(|(site, settings)| {
             if settings.base_url != "http://localhost:3000" {
                 settings.base_url
@@ -518,7 +561,12 @@ fn site_base_url(state: &AppState, site_id: Uuid) -> String {
 /// this process's lifetime. Doesn't distinguish "never run" from "state was
 /// lost on restart" — both just mean no polling data exists yet.
 fn read_progress(state: &AppState, site_id: Uuid) -> Option<WpImportProgress> {
-    state.wp_import_progress.read().unwrap().get(&site_id).cloned()
+    state
+        .wp_import_progress
+        .read()
+        .unwrap()
+        .get(&site_id)
+        .cloned()
 }
 
 fn write_progress(state: &AppState, site_id: Uuid, f: impl FnOnce(&mut WpImportProgress)) {
@@ -537,15 +585,29 @@ pub async fn status(
 ) -> impl IntoResponse {
     let site = match crate::models::site::get_by_id(&state.db, site_id).await {
         Ok(s) => s,
-        Err(_) => return (axum::http::StatusCode::NOT_FOUND, axum::Json(serde_json::json!({"error": "Site not found."}))).into_response(),
+        Err(_) => {
+            return (
+                axum::http::StatusCode::NOT_FOUND,
+                axum::Json(serde_json::json!({"error": "Site not found."})),
+            )
+                .into_response()
+        }
     };
     if !require_site_manager(&state, &admin, &site).await {
-        return (axum::http::StatusCode::FORBIDDEN, axum::Json(serde_json::json!({"error": "Forbidden."}))).into_response();
+        return (
+            axum::http::StatusCode::FORBIDDEN,
+            axum::Json(serde_json::json!({"error": "Forbidden."})),
+        )
+            .into_response();
     }
 
     match read_progress(&state, site_id) {
         Some(progress) => axum::Json(progress).into_response(),
-        None => (axum::http::StatusCode::NOT_FOUND, axum::Json(serde_json::json!({"error": "No import has been started for this site."}))).into_response(),
+        None => (
+            axum::http::StatusCode::NOT_FOUND,
+            axum::Json(serde_json::json!({"error": "No import has been started for this site."})),
+        )
+            .into_response(),
     }
 }
 
@@ -563,15 +625,31 @@ pub async fn import(
 ) -> impl IntoResponse {
     let site = match crate::models::site::get_by_id(&state.db, site_id).await {
         Ok(s) => s,
-        Err(_) => return (axum::http::StatusCode::NOT_FOUND, axum::Json(serde_json::json!({"error": "Site not found."}))).into_response(),
+        Err(_) => {
+            return (
+                axum::http::StatusCode::NOT_FOUND,
+                axum::Json(serde_json::json!({"error": "Site not found."})),
+            )
+                .into_response()
+        }
     };
     if !require_site_manager(&state, &admin, &site).await {
-        return (axum::http::StatusCode::FORBIDDEN, axum::Json(serde_json::json!({"error": "Forbidden."}))).into_response();
+        return (
+            axum::http::StatusCode::FORBIDDEN,
+            axum::Json(serde_json::json!({"error": "Forbidden."})),
+        )
+            .into_response();
     }
 
     if let Some(existing) = read_progress(&state, site_id) {
         if !matches!(existing.phase, WpImportPhase::Done | WpImportPhase::Error) {
-            return (axum::http::StatusCode::CONFLICT, axum::Json(serde_json::json!({"error": "An import is already running for this site."}))).into_response();
+            return (
+                axum::http::StatusCode::CONFLICT,
+                axum::Json(
+                    serde_json::json!({"error": "An import is already running for this site."}),
+                ),
+            )
+                .into_response();
         }
     }
 
@@ -581,14 +659,23 @@ pub async fn import(
         match field.name().unwrap_or("") {
             "wxr_file" => xml_bytes = field.bytes().await.ok().map(|b| b.to_vec()),
             "media_zip" => {
-                zip_bytes = field.bytes().await.ok().map(|b| b.to_vec()).filter(|b| !b.is_empty());
+                zip_bytes = field
+                    .bytes()
+                    .await
+                    .ok()
+                    .map(|b| b.to_vec())
+                    .filter(|b| !b.is_empty());
             }
             _ => {}
         }
     }
 
     let Some(xml_bytes) = xml_bytes else {
-        return (axum::http::StatusCode::BAD_REQUEST, axum::Json(serde_json::json!({"error": "No file uploaded."}))).into_response();
+        return (
+            axum::http::StatusCode::BAD_REQUEST,
+            axum::Json(serde_json::json!({"error": "No file uploaded."})),
+        )
+            .into_response();
     };
 
     let xml = String::from_utf8_lossy(&xml_bytes).into_owned();
@@ -596,19 +683,30 @@ pub async fn import(
 
     if items.is_empty() {
         tracing::warn!("WP import (site {}): 0 items parsed from a {}-byte export — likely not a WXR file, or an empty one", site_id, xml_bytes.len());
-        return (axum::http::StatusCode::BAD_REQUEST, axum::Json(serde_json::json!({"error": "No content found in that export file."}))).into_response();
+        return (
+            axum::http::StatusCode::BAD_REQUEST,
+            axum::Json(serde_json::json!({"error": "No content found in that export file."})),
+        )
+            .into_response();
     }
 
     tracing::info!(
         "WP import (site {}) starting: {} items parsed ({} authors listed) from a {}-byte export",
-        site_id, items.len(), authors.len(), xml_bytes.len(),
+        site_id,
+        items.len(),
+        authors.len(),
+        xml_bytes.len(),
     );
     {
         let mut type_counts: HashMap<&str, usize> = HashMap::new();
         for item in &items {
             *type_counts.entry(item.post_type.as_str()).or_insert(0) += 1;
         }
-        tracing::info!("WP import (site {}): item post_types breakdown: {:?}", site_id, type_counts);
+        tracing::info!(
+            "WP import (site {}): item post_types breakdown: {:?}",
+            site_id,
+            type_counts
+        );
     }
 
     // Optional local fallback for attachment bytes, for when the old WP site
@@ -618,7 +716,11 @@ pub async fn import(
     let zip_index = match &zip_bytes {
         Some(bytes) => match build_zip_media_index(bytes) {
             Ok(idx) => {
-                tracing::info!("WP import (site {}): media zip uploaded, {} file(s) indexed", site_id, idx.entries.len());
+                tracing::info!(
+                    "WP import (site {}): media zip uploaded, {} file(s) indexed",
+                    site_id,
+                    idx.entries.len()
+                );
                 Some(idx)
             }
             Err(e) => {
@@ -630,19 +732,25 @@ pub async fn import(
     };
 
     let media_total = items.iter().filter(|i| i.post_type == "attachment").count();
-    let content_total = items.iter().filter(|i| i.post_type == "post" || i.post_type == "page").count();
-    state.wp_import_progress.write().unwrap().insert(site_id, WpImportProgress {
-        phase: WpImportPhase::Media,
-        media_total,
-        media_done: 0,
-        content_total,
-        content_done: 0,
-        message: None,
-        credentials: Vec::new(),
-        new_author_count: 0,
-        granted_author_access: 0,
-        error: None,
-    });
+    let content_total = items
+        .iter()
+        .filter(|i| i.post_type == "post" || i.post_type == "page")
+        .count();
+    state.wp_import_progress.write().unwrap().insert(
+        site_id,
+        WpImportProgress {
+            phase: WpImportPhase::Media,
+            media_total,
+            media_done: 0,
+            content_total,
+            content_done: 0,
+            message: None,
+            credentials: Vec::new(),
+            new_author_count: 0,
+            granted_author_access: 0,
+            error: None,
+        },
+    );
 
     let admin_user_id = admin.user.id;
     let bg_state = state.clone();
@@ -702,10 +810,23 @@ async fn run_import(
                 continue;
             }
             Ok(None) => {}
-            Err(e) => tracing::warn!("wp_import_media_map lookup failed for {}: {:?}", item.attachment_url, e),
+            Err(e) => tracing::warn!(
+                "wp_import_media_map lookup failed for {}: {:?}",
+                item.attachment_url,
+                e
+            ),
         }
 
-        match import_attachment(&state, &client, site_id, admin_user_id, item, zip_index.as_ref()).await {
+        match import_attachment(
+            &state,
+            &client,
+            site_id,
+            admin_user_id,
+            item,
+            zip_index.as_ref(),
+        )
+        .await
+        {
             Ok((media_id, from_zip)) => {
                 media_ok += 1;
                 if from_zip {
@@ -734,7 +855,8 @@ async fn run_import(
     let (exact_rewrite, fuzzy_rewrite) = build_rewrite_maps(&state, &media_map, &base_url).await;
 
     // ── Pass 1.5: authors — match or create ──────────────────────────────
-    let (author_map, new_author_creds, granted_author_access) = ensure_author_accounts(&state, site_id, admin_user_id, &authors).await;
+    let (author_map, new_author_creds, granted_author_access) =
+        ensure_author_accounts(&state, site_id, admin_user_id, &authors).await;
 
     write_progress(&state, site_id, |p| p.phase = WpImportPhase::Content);
 
@@ -769,8 +891,24 @@ async fn run_import(
             }
             continue;
         }
-        match import_post(&state, site_id, admin_user_id, item, &author_map, &attachment_id_to_url, &media_map, &exact_rewrite, &fuzzy_rewrite).await {
-            Ok(ImportedPost { post_id, author_matched, skipped_status }) => {
+        match import_post(
+            &state,
+            site_id,
+            admin_user_id,
+            item,
+            &author_map,
+            &attachment_id_to_url,
+            &media_map,
+            &exact_rewrite,
+            &fuzzy_rewrite,
+        )
+        .await
+        {
+            Ok(ImportedPost {
+                post_id,
+                author_matched,
+                skipped_status,
+            }) => {
                 if skipped_status {
                     posts_skipped_status += 1;
                     tracing::info!(
@@ -795,7 +933,11 @@ async fn run_import(
             }
             Err(e) => {
                 posts_failed += 1;
-                tracing::warn!("WP post import failed for wp_post_id={}: {}", item.wp_post_id, e);
+                tracing::warn!(
+                    "WP post import failed for wp_post_id={}: {}",
+                    item.wp_post_id,
+                    e
+                );
             }
         }
         write_progress(&state, site_id, |p| p.content_done += 1);
@@ -807,12 +949,22 @@ async fn run_import(
         match post_id_map.get(&old_parent_id) {
             Some(&new_parent_id) => {
                 let update = UpdatePost {
-                    title: None, slug: None, content: None, content_format: None, excerpt: None,
-                    status: None, featured_image_id: None, clear_featured_image: false,
-                    published_at: None, template: None, clear_post_password: false,
-                    new_post_password_hash: None, comments_enabled: None,
+                    title: None,
+                    slug: None,
+                    content: None,
+                    content_format: None,
+                    excerpt: None,
+                    status: None,
+                    featured_image_id: None,
+                    clear_featured_image: false,
+                    published_at: None,
+                    template: None,
+                    clear_post_password: false,
+                    new_post_password_hash: None,
+                    comments_enabled: None,
                     parent_id: Some(Some(new_parent_id)),
-                    sources: None, sources_public: None,
+                    sources: None,
+                    sources_public: None,
                 };
                 if let Err(e) = crate::models::post::update(&state.db, post_id, &update).await {
                     tracing::warn!("failed to set parent on imported post {}: {:?}", post_id, e);
@@ -863,7 +1015,8 @@ async fn run_import(
             total_failed,
         )
     };
-    let credentials: Vec<WpImportCredential> = new_author_creds.into_iter()
+    let credentials: Vec<WpImportCredential> = new_author_creds
+        .into_iter()
         .map(|(username, password)| WpImportCredential { username, password })
         .collect();
     let new_author_count = credentials.len();
@@ -926,11 +1079,18 @@ pub async fn credentials_csv(
 
     (
         [
-            (axum::http::header::CONTENT_TYPE, "text/csv; charset=utf-8".to_string()),
-            (axum::http::header::CONTENT_DISPOSITION, "attachment; filename=\"wp-import-credentials.csv\"".to_string()),
+            (
+                axum::http::header::CONTENT_TYPE,
+                "text/csv; charset=utf-8".to_string(),
+            ),
+            (
+                axum::http::header::CONTENT_DISPOSITION,
+                "attachment; filename=\"wp-import-credentials.csv\"".to_string(),
+            ),
         ],
         csv,
-    ).into_response()
+    )
+        .into_response()
 }
 
 /// Ensures every WP author referenced in the export has a Synap user:
@@ -970,13 +1130,32 @@ async fn ensure_author_accounts(
             // existing author's self-publish flag back to false.
             match site_user::has_any_role(&state.db, site_id, existing.id).await {
                 Ok(false) => {
-                    match site_user::add(&state.db, site_id, existing.id, SiteRole::Author, Some(admin_user_id), false).await {
+                    match site_user::add(
+                        &state.db,
+                        site_id,
+                        existing.id,
+                        SiteRole::Author,
+                        Some(admin_user_id),
+                        false,
+                    )
+                    .await
+                    {
                         Ok(_) => granted_access += 1,
-                        Err(e) => tracing::warn!("failed to grant site access to matched author {} <{}>: {:?}", login, email, e),
+                        Err(e) => tracing::warn!(
+                            "failed to grant site access to matched author {} <{}>: {:?}",
+                            login,
+                            email,
+                            e
+                        ),
                     }
                 }
                 Ok(true) => {}
-                Err(e) => tracing::warn!("failed to check existing site access for matched author {} <{}>: {:?}", login, email, e),
+                Err(e) => tracing::warn!(
+                    "failed to check existing site access for matched author {} <{}>: {:?}",
+                    login,
+                    email,
+                    e
+                ),
             }
             continue;
         }
@@ -986,19 +1165,41 @@ async fn ensure_author_accounts(
         let create = CreateUser {
             username: username.clone(),
             email: email.to_string(),
-            display_name: if login.trim().is_empty() { username.clone() } else { login.trim().to_string() },
+            display_name: if login.trim().is_empty() {
+                username.clone()
+            } else {
+                login.trim().to_string()
+            },
             password: password.clone(),
             role: UserRole::Author,
         };
         match user::create(&state.db, &create).await {
             Ok(new_user) => {
-                if let Err(e) = site_user::add(&state.db, site_id, new_user.id, SiteRole::Author, Some(admin_user_id), false).await {
-                    tracing::warn!("failed to grant site access to imported author {}: {:?}", username, e);
+                if let Err(e) = site_user::add(
+                    &state.db,
+                    site_id,
+                    new_user.id,
+                    SiteRole::Author,
+                    Some(admin_user_id),
+                    false,
+                )
+                .await
+                {
+                    tracing::warn!(
+                        "failed to grant site access to imported author {}: {:?}",
+                        username,
+                        e
+                    );
                 }
                 login_to_id.insert(login.clone(), new_user.id);
                 created.push((username, password));
             }
-            Err(e) => tracing::warn!("failed to create account for WP author '{}' <{}>: {:?}", login, email, e),
+            Err(e) => tracing::warn!(
+                "failed to create account for WP author '{}' <{}>: {:?}",
+                login,
+                email,
+                e
+            ),
         }
     }
 
@@ -1011,24 +1212,41 @@ async fn ensure_author_accounts(
 /// string on collision (WP logins can't be trusted to be unique against
 /// Synap's existing users, or even valid Synap usernames at all).
 async fn unique_import_username(state: &AppState, login: &str) -> String {
-    let mut base: String = login.trim().to_lowercase()
+    let mut base: String = login
+        .trim()
+        .to_lowercase()
         .chars()
-        .map(|c| if c.is_ascii_lowercase() || c.is_ascii_digit() { c } else { '-' })
+        .map(|c| {
+            if c.is_ascii_lowercase() || c.is_ascii_digit() {
+                c
+            } else {
+                '-'
+            }
+        })
         .collect();
-    while base.starts_with('-') { base.remove(0); }
-    while base.ends_with('-') { base.pop(); }
+    while base.starts_with('-') {
+        base.remove(0);
+    }
+    while base.ends_with('-') {
+        base.pop();
+    }
     if base.is_empty() {
         base = "wpauthor".to_string();
     }
     if base.len() > 15 {
         base.truncate(15);
-        while base.ends_with('-') { base.pop(); }
+        while base.ends_with('-') {
+            base.pop();
+        }
     }
     while base.len() < 5 {
         base.push('0');
     }
 
-    if user::get_by_username_include_inactive(&state.db, &base).await.is_err() {
+    if user::get_by_username_include_inactive(&state.db, &base)
+        .await
+        .is_err()
+    {
         return base;
     }
     for _ in 0..25 {
@@ -1037,10 +1255,15 @@ async fn unique_import_username(state: &AppState, login: &str) -> String {
         let mut trimmed = base.clone();
         if trimmed.len() > max_base_len {
             trimmed.truncate(max_base_len);
-            while trimmed.ends_with('-') { trimmed.pop(); }
+            while trimmed.ends_with('-') {
+                trimmed.pop();
+            }
         }
         let candidate = format!("{trimmed}-{suffix}");
-        if user::get_by_username_include_inactive(&state.db, &candidate).await.is_err() {
+        if user::get_by_username_include_inactive(&state.db, &candidate)
+            .await
+            .is_err()
+        {
             return candidate;
         }
     }
@@ -1052,7 +1275,9 @@ fn rand_suffix(n: usize) -> String {
     use rand::{Rng, SeedableRng};
     let chars: &[u8] = b"abcdefghijklmnopqrstuvwxyz0123456789";
     let mut rng = StdRng::from_entropy();
-    (0..n).map(|_| chars[rng.gen_range(0..chars.len())] as char).collect()
+    (0..n)
+        .map(|_| chars[rng.gen_range(0..chars.len())] as char)
+        .collect()
 }
 
 /// Rejects any IP that isn't routable on the public internet — loopback,
@@ -1115,11 +1340,15 @@ fn is_link_local_v6(v6: &std::net::Ipv6Addr) -> bool {
 /// fallback (`ZipMediaIndex`) is the supported way to import media from a
 /// site like that anyway.
 async fn is_safe_import_url(url_str: &str) -> bool {
-    let Ok(parsed) = reqwest::Url::parse(url_str) else { return false };
+    let Ok(parsed) = reqwest::Url::parse(url_str) else {
+        return false;
+    };
     if parsed.scheme() != "http" && parsed.scheme() != "https" {
         return false;
     }
-    let Some(host) = parsed.host_str().map(|h| h.to_string()) else { return false };
+    let Some(host) = parsed.host_str().map(|h| h.to_string()) else {
+        return false;
+    };
 
     if let Ok(ip) = host.parse::<std::net::IpAddr>() {
         return is_public_ip(&ip);
@@ -1153,26 +1382,43 @@ async fn import_attachment(
     item: &WxrItem,
     zip_index: Option<&ZipMediaIndex>,
 ) -> Result<(Uuid, bool), String> {
-    let (bytes, mime, from_zip) = if let Some(local) = zip_index.and_then(|idx| idx.find(&item.attachment_url)) {
-        let filename_guess = item.attachment_url.rsplit('/').next().unwrap_or("attachment");
-        (local.to_vec(), guess_mime_from_extension(filename_guess), true)
-    } else {
-        if !is_safe_import_url(&item.attachment_url).await {
-            return Err("refused: URL does not resolve to a public address".to_string());
-        }
-        let resp = client.get(&item.attachment_url).send().await.map_err(|e| format!("fetch failed: {e}"))?;
-        if !resp.status().is_success() {
-            return Err(format!("fetch failed: HTTP {}", resp.status()));
-        }
-        let mime = resp
-            .headers()
-            .get(reqwest::header::CONTENT_TYPE)
-            .and_then(|v| v.to_str().ok())
-            .map(|s| s.split(';').next().unwrap_or(s).trim().to_string())
-            .unwrap_or_else(|| "application/octet-stream".to_string());
-        let bytes = resp.bytes().await.map_err(|e| format!("read body failed: {e}"))?.to_vec();
-        (bytes, mime, false)
-    };
+    let (bytes, mime, from_zip) =
+        if let Some(local) = zip_index.and_then(|idx| idx.find(&item.attachment_url)) {
+            let filename_guess = item
+                .attachment_url
+                .rsplit('/')
+                .next()
+                .unwrap_or("attachment");
+            (
+                local.to_vec(),
+                guess_mime_from_extension(filename_guess),
+                true,
+            )
+        } else {
+            if !is_safe_import_url(&item.attachment_url).await {
+                return Err("refused: URL does not resolve to a public address".to_string());
+            }
+            let resp = client
+                .get(&item.attachment_url)
+                .send()
+                .await
+                .map_err(|e| format!("fetch failed: {e}"))?;
+            if !resp.status().is_success() {
+                return Err(format!("fetch failed: HTTP {}", resp.status()));
+            }
+            let mime = resp
+                .headers()
+                .get(reqwest::header::CONTENT_TYPE)
+                .and_then(|v| v.to_str().ok())
+                .map(|s| s.split(';').next().unwrap_or(s).trim().to_string())
+                .unwrap_or_else(|| "application/octet-stream".to_string());
+            let bytes = resp
+                .bytes()
+                .await
+                .map_err(|e| format!("read body failed: {e}"))?
+                .to_vec();
+            (bytes, mime, false)
+        };
 
     let filename = item
         .attachment_url
@@ -1181,11 +1427,17 @@ async fn import_attachment(
         .filter(|s| !s.is_empty())
         .map(percent_decode)
         .unwrap_or_else(|| "attachment".to_string());
-    let alt_text = item.postmeta.iter()
+    let alt_text = item
+        .postmeta
+        .iter()
         .find(|(k, _)| k == "_wp_attachment_image_alt")
         .map(|(_, v)| v.as_str())
         .unwrap_or("");
-    let title = if item.title.trim().is_empty() { filename.clone() } else { item.title.clone() };
+    let title = if item.title.trim().is_empty() {
+        filename.clone()
+    } else {
+        item.title.clone()
+    };
 
     let folder_name = parse_year_month(&item.post_date).unwrap_or_else(|| "unsorted".to_string());
     let folder = crate::models::media_folder::get_or_create(&state.db, site_id, &folder_name)
@@ -1206,8 +1458,14 @@ async fn import_attachment(
         .await
         .map_err(|e| format!("store failed: {e}"))?;
 
-    if let Err(e) = crate::models::wp_import::record(&state.db, site_id, &item.attachment_url, media.id).await {
-        tracing::warn!("failed to record wp_import_media_map for {}: {:?}", item.attachment_url, e);
+    if let Err(e) =
+        crate::models::wp_import::record(&state.db, site_id, &item.attachment_url, media.id).await
+    {
+        tracing::warn!(
+            "failed to record wp_import_media_map for {}: {:?}",
+            item.attachment_url,
+            e
+        );
     }
 
     Ok((media.id, from_zip))
@@ -1219,19 +1477,26 @@ async fn import_attachment(
 /// "sunset-photo-300x200.jpg" → "sunset-photo.jpg"), since WP post content
 /// almost always references a specific resized variant rather than the
 /// original file Synap actually imported.
-async fn build_rewrite_maps(state: &AppState, media_map: &HashMap<String, Uuid>, base_url: &str) -> (HashMap<String, String>, HashMap<String, String>) {
+async fn build_rewrite_maps(
+    state: &AppState,
+    media_map: &HashMap<String, Uuid>,
+    base_url: &str,
+) -> (HashMap<String, String>, HashMap<String, String>) {
     let ids: Vec<Uuid> = media_map.values().copied().collect();
-    let media_rows = crate::models::media::get_by_ids(&state.db, &ids).await.unwrap_or_default();
-    let url_by_id: HashMap<Uuid, String> = media_rows.iter()
-        .map(|m| (m.id, m.url(base_url)))
-        .collect();
+    let media_rows = crate::models::media::get_by_ids(&state.db, &ids)
+        .await
+        .unwrap_or_default();
+    let url_by_id: HashMap<Uuid, String> =
+        media_rows.iter().map(|m| (m.id, m.url(base_url))).collect();
 
     let size_suffix = Regex::new(r"-\d+x\d+(\.\w+)$").unwrap();
 
     let mut exact = HashMap::new();
     let mut fuzzy = HashMap::new();
     for (old_url, media_id) in media_map {
-        let Some(new_url) = url_by_id.get(media_id) else { continue };
+        let Some(new_url) = url_by_id.get(media_id) else {
+            continue;
+        };
         exact.insert(old_url.clone(), new_url.clone());
         let stripped = size_suffix.replace(old_url, "$1").into_owned();
         fuzzy.entry(stripped).or_insert_with(|| new_url.clone());
@@ -1243,22 +1508,28 @@ async fn build_rewrite_maps(state: &AppState, media_map: &HashMap<String, Uuid>,
 /// equivalent. Exact matches first, then the size-suffix-stripped fuzzy
 /// match; anything neither table covers (an external image, or an
 /// attachment that failed to import) is left untouched.
-fn rewrite_content_urls(content: &str, exact: &HashMap<String, String>, fuzzy: &HashMap<String, String>) -> String {
+fn rewrite_content_urls(
+    content: &str,
+    exact: &HashMap<String, String>,
+    fuzzy: &HashMap<String, String>,
+) -> String {
     let size_suffix = Regex::new(r"-\d+x\d+(\.\w+)$").unwrap();
     let src_re = Regex::new(r#"(src|href)="([^"]+)""#).unwrap();
 
-    src_re.replace_all(content, |caps: &regex_lite::Captures| {
-        let attr = &caps[1];
-        let url = &caps[2];
-        if let Some(new_url) = exact.get(url) {
-            return format!(r#"{attr}="{new_url}""#);
-        }
-        let stripped = size_suffix.replace(url, "$1").into_owned();
-        if let Some(new_url) = fuzzy.get(&stripped) {
-            return format!(r#"{attr}="{new_url}""#);
-        }
-        caps[0].to_string()
-    }).into_owned()
+    src_re
+        .replace_all(content, |caps: &regex_lite::Captures| {
+            let attr = &caps[1];
+            let url = &caps[2];
+            if let Some(new_url) = exact.get(url) {
+                return format!(r#"{attr}="{new_url}""#);
+            }
+            let stripped = size_suffix.replace(url, "$1").into_owned();
+            if let Some(new_url) = fuzzy.get(&stripped) {
+                return format!(r#"{attr}="{new_url}""#);
+            }
+            caps[0].to_string()
+        })
+        .into_owned()
 }
 
 struct ImportedPost {
@@ -1267,28 +1538,49 @@ struct ImportedPost {
     skipped_status: bool,
 }
 
-async fn get_or_create_term(state: &AppState, site_id: Uuid, taxonomy: TaxonomyType, slug: &str, name: &str) -> Result<Taxonomy, String> {
-    match crate::models::taxonomy::get_by_slug(&state.db, Some(site_id), slug, taxonomy.clone()).await {
+async fn get_or_create_term(
+    state: &AppState,
+    site_id: Uuid,
+    taxonomy: TaxonomyType,
+    slug: &str,
+    name: &str,
+) -> Result<Taxonomy, String> {
+    match crate::models::taxonomy::get_by_slug(&state.db, Some(site_id), slug, taxonomy.clone())
+        .await
+    {
         Ok(t) => Ok(t),
-        Err(_) => {
-            crate::models::taxonomy::create(&state.db, &CreateTaxonomy {
+        Err(_) => crate::models::taxonomy::create(
+            &state.db,
+            &CreateTaxonomy {
                 site_id: Some(site_id),
                 name: name.to_string(),
                 slug: slug.to_string(),
                 taxonomy,
                 description: None,
-            }).await.map_err(|e| format!("taxonomy create failed: {e}"))
-        }
+            },
+        )
+        .await
+        .map_err(|e| format!("taxonomy create failed: {e}")),
     }
 }
 
 /// Creates the post row with a unique slug, retrying with a numeric suffix
 /// on a slug collision (agencies migrating real client sites will have
 /// collisions — WP's own auto-uniquify does the same "-2", "-3" thing).
-async fn create_post_unique_slug(state: &AppState, mut create: CreatePost) -> Result<crate::models::post::Post, String> {
-    let base_slug = create.slug.clone().unwrap_or_else(|| crate::utils::slugify::slugify(&create.title));
+async fn create_post_unique_slug(
+    state: &AppState,
+    mut create: CreatePost,
+) -> Result<crate::models::post::Post, String> {
+    let base_slug = create
+        .slug
+        .clone()
+        .unwrap_or_else(|| crate::utils::slugify::slugify(&create.title));
     for attempt in 0..25 {
-        create.slug = Some(if attempt == 0 { base_slug.clone() } else { format!("{}-{}", base_slug, attempt + 1) });
+        create.slug = Some(if attempt == 0 {
+            base_slug.clone()
+        } else {
+            format!("{}-{}", base_slug, attempt + 1)
+        });
         match crate::models::post::create(&state.db, &create).await {
             Ok(post) => return Ok(post),
             Err(e) => {
@@ -1326,11 +1618,19 @@ async fn import_post(
         // trash / auto-draft / inherit (attachments' own status) / anything
         // unrecognized: not real content, skip.
         _ => {
-            return Ok(ImportedPost { post_id: Uuid::nil(), author_matched: true, skipped_status: true });
+            return Ok(ImportedPost {
+                post_id: Uuid::nil(),
+                author_matched: true,
+                skipped_status: true,
+            });
         }
     };
 
-    let post_type = if item.post_type == "page" { PostType::Page } else { PostType::Post };
+    let post_type = if item.post_type == "page" {
+        PostType::Page
+    } else {
+        PostType::Post
+    };
     let published_at = parse_wp_datetime(&item.post_date, &item.post_date_gmt);
 
     // Author: dc:creator (a WP login) → the Synap user id resolved by
@@ -1340,11 +1640,16 @@ async fn import_post(
     let mut author_matched = true;
     let author_id = match author_map.get(&item.creator) {
         Some(&id) => id,
-        None => { author_matched = false; admin_user_id }
+        None => {
+            author_matched = false;
+            admin_user_id
+        }
     };
 
     // Featured image via _thumbnail_id → attachment's old URL → media_id.
-    let featured_image_id = item.postmeta.iter()
+    let featured_image_id = item
+        .postmeta
+        .iter()
         .find(|(k, _)| k == "_thumbnail_id")
         .and_then(|(_, v)| attachment_id_to_url.get(v.trim()))
         .and_then(|url| media_map.get(url))
@@ -1355,11 +1660,23 @@ async fn import_post(
 
     let create = CreatePost {
         site_id: Some(site_id),
-        title: if item.title.trim().is_empty() { "(untitled)".to_string() } else { item.title.clone() },
-        slug: if item.slug.trim().is_empty() { None } else { Some(item.slug.clone()) },
+        title: if item.title.trim().is_empty() {
+            "(untitled)".to_string()
+        } else {
+            item.title.clone()
+        },
+        slug: if item.slug.trim().is_empty() {
+            None
+        } else {
+            Some(item.slug.clone())
+        },
         content,
         content_format: None,
-        excerpt: if item.excerpt.trim().is_empty() { None } else { Some(item.excerpt.clone()) },
+        excerpt: if item.excerpt.trim().is_empty() {
+            None
+        } else {
+            Some(item.excerpt.clone())
+        },
         status: status.clone(),
         post_type,
         author_id,
@@ -1378,9 +1695,10 @@ async fn import_post(
     // WXR item became last time instead of creating a duplicate. The slug is
     // deliberately left untouched on update — it's a public URL, not
     // something a re-import should ever shift out from under existing links.
-    let existing_post_id = crate::models::wp_import::find_post(&state.db, site_id, &item.wp_post_id)
-        .await
-        .unwrap_or(None);
+    let existing_post_id =
+        crate::models::wp_import::find_post(&state.db, site_id, &item.wp_post_id)
+            .await
+            .unwrap_or(None);
 
     let post_id = match existing_post_id {
         Some(post_id) => {
@@ -1413,8 +1731,15 @@ async fn import_post(
         }
         None => {
             let post = create_post_unique_slug(state, create).await?;
-            if let Err(e) = crate::models::wp_import::record_post(&state.db, site_id, &item.wp_post_id, post.id).await {
-                tracing::warn!("failed to record wp_import_post_map for wp_post_id={}: {:?}", item.wp_post_id, e);
+            if let Err(e) =
+                crate::models::wp_import::record_post(&state.db, site_id, &item.wp_post_id, post.id)
+                    .await
+            {
+                tracing::warn!(
+                    "failed to record wp_import_post_map for wp_post_id={}: {:?}",
+                    item.wp_post_id,
+                    e
+                );
             }
             post.id
         }
@@ -1430,14 +1755,30 @@ async fn import_post(
             "post_tag" => TaxonomyType::Tag,
             _ => continue,
         };
-        let slug = if cat.nicename.trim().is_empty() { crate::utils::slugify::slugify(&cat.name) } else { cat.nicename.clone() };
+        let slug = if cat.nicename.trim().is_empty() {
+            crate::utils::slugify::slugify(&cat.name)
+        } else {
+            cat.nicename.clone()
+        };
         match get_or_create_term(state, site_id, taxonomy, &slug, &cat.name).await {
             Ok(term) => {
-                if let Err(e) = crate::models::taxonomy::attach_to_post(&state.db, post_id, term.id).await {
-                    tracing::warn!("failed to attach taxonomy '{}' to imported post {}: {:?}", cat.name, post_id, e);
+                if let Err(e) =
+                    crate::models::taxonomy::attach_to_post(&state.db, post_id, term.id).await
+                {
+                    tracing::warn!(
+                        "failed to attach taxonomy '{}' to imported post {}: {:?}",
+                        cat.name,
+                        post_id,
+                        e
+                    );
                 }
             }
-            Err(e) => tracing::warn!("failed to resolve taxonomy '{}' for imported post {}: {}", cat.name, post_id, e),
+            Err(e) => tracing::warn!(
+                "failed to resolve taxonomy '{}' for imported post {}: {}",
+                cat.name,
+                post_id,
+                e
+            ),
         }
     }
 
@@ -1448,11 +1789,20 @@ async fn import_post(
             continue;
         }
         if let Err(e) = crate::models::post::set_meta(&state.db, post_id, key, value).await {
-            tracing::warn!("failed to set postmeta '{}' on imported post {}: {:?}", key, post_id, e);
+            tracing::warn!(
+                "failed to set postmeta '{}' on imported post {}: {:?}",
+                key,
+                post_id,
+                e
+            );
         }
     }
 
-    Ok(ImportedPost { post_id, author_matched, skipped_status: false })
+    Ok(ImportedPost {
+        post_id,
+        author_matched,
+        skipped_status: false,
+    })
 }
 
 #[cfg(test)]
@@ -1511,7 +1861,10 @@ mod tests {
     fn parses_items_and_authors() {
         let (items, authors) = parse_wxr(SAMPLE_WXR);
         assert_eq!(items.len(), 3);
-        assert_eq!(authors.get("jsmith").map(|s| s.as_str()), Some("jsmith@example.com"));
+        assert_eq!(
+            authors.get("jsmith").map(|s| s.as_str()),
+            Some("jsmith@example.com")
+        );
     }
 
     #[test]
@@ -1528,9 +1881,17 @@ mod tests {
         assert_eq!(post.categories[0].domain, "category");
         assert_eq!(post.categories[0].nicename, "news");
         assert_eq!(post.categories[1].domain, "post_tag");
-        let thumb = post.postmeta.iter().find(|(k, _)| k == "_thumbnail_id").unwrap();
+        let thumb = post
+            .postmeta
+            .iter()
+            .find(|(k, _)| k == "_thumbnail_id")
+            .unwrap();
         assert_eq!(thumb.1, "55");
-        let desc = post.postmeta.iter().find(|(k, _)| k == "_yoast_wpseo_metadesc").unwrap();
+        let desc = post
+            .postmeta
+            .iter()
+            .find(|(k, _)| k == "_yoast_wpseo_metadesc")
+            .unwrap();
         assert_eq!(desc.1, "A great description");
     }
 
@@ -1577,7 +1938,10 @@ mod tests {
 
     #[test]
     fn parse_year_month_rejects_malformed_dates() {
-        assert_eq!(parse_year_month("2024-03-15 09:30:00"), Some("2024-03".to_string()));
+        assert_eq!(
+            parse_year_month("2024-03-15 09:30:00"),
+            Some("2024-03".to_string())
+        );
         assert_eq!(parse_year_month(""), None);
         assert_eq!(parse_year_month("bogus"), None);
     }
@@ -1585,7 +1949,9 @@ mod tests {
     #[test]
     fn wp_upload_path_components_extracts_year_month_filename() {
         assert_eq!(
-            wp_upload_path_components("https://old-site.example/wp-content/uploads/2024/03/Sunset%20Photo.jpg"),
+            wp_upload_path_components(
+                "https://old-site.example/wp-content/uploads/2024/03/Sunset%20Photo.jpg"
+            ),
             vec!["2024", "03", "sunset photo.jpg"],
         );
         // No wp-content/uploads marker (e.g. rewritten through a CDN) — falls
@@ -1601,7 +1967,14 @@ mod tests {
         let index = ZipMediaIndex {
             entries: vec![
                 (
-                    vec!["wordpress".into(), "wp-content".into(), "uploads".into(), "2024".into(), "03".into(), "sunset-photo.jpg".into()],
+                    vec![
+                        "wordpress".into(),
+                        "wp-content".into(),
+                        "uploads".into(),
+                        "2024".into(),
+                        "03".into(),
+                        "sunset-photo.jpg".into(),
+                    ],
                     b"deep-nested-bytes".to_vec(),
                 ),
                 (
@@ -1610,7 +1983,8 @@ mod tests {
                 ),
             ],
         };
-        let found = index.find("https://old-site.example/wp-content/uploads/2024/03/sunset-photo.jpg");
+        let found =
+            index.find("https://old-site.example/wp-content/uploads/2024/03/sunset-photo.jpg");
         assert_eq!(found, Some(b"deep-nested-bytes".as_slice()));
     }
 
@@ -1621,7 +1995,8 @@ mod tests {
         let index = ZipMediaIndex {
             entries: vec![(vec!["sunset-photo.jpg".into()], b"flat-bytes".to_vec())],
         };
-        let found = index.find("https://old-site.example/wp-content/uploads/2024/03/sunset-photo.jpg");
+        let found =
+            index.find("https://old-site.example/wp-content/uploads/2024/03/sunset-photo.jpg");
         assert_eq!(found, Some(b"flat-bytes".as_slice()));
     }
 
@@ -1629,8 +2004,14 @@ mod tests {
     fn zip_media_index_refuses_ambiguous_filename_fallback() {
         let index = ZipMediaIndex {
             entries: vec![
-                (vec!["2024".into(), "03".into(), "photo.jpg".into()], b"march".to_vec()),
-                (vec!["2024".into(), "05".into(), "photo.jpg".into()], b"may".to_vec()),
+                (
+                    vec!["2024".into(), "03".into(), "photo.jpg".into()],
+                    b"march".to_vec(),
+                ),
+                (
+                    vec!["2024".into(), "05".into(), "photo.jpg".into()],
+                    b"may".to_vec(),
+                ),
             ],
         };
         // Neither entry's year/month tail matches "2024/07", and the
@@ -1645,34 +2026,48 @@ mod tests {
         assert_eq!(guess_mime_from_extension("photo.JPG"), "image/jpeg");
         assert_eq!(guess_mime_from_extension("photo.png"), "image/png");
         assert_eq!(guess_mime_from_extension("clip.mp4"), "video/mp4");
-        assert_eq!(guess_mime_from_extension("mystery.xyz"), "application/octet-stream");
+        assert_eq!(
+            guess_mime_from_extension("mystery.xyz"),
+            "application/octet-stream"
+        );
     }
 
     #[test]
     fn is_public_ip_rejects_internal_ranges() {
         let internal = [
-            "127.0.0.1",      // loopback
-            "10.0.0.5",       // RFC1918
-            "172.16.0.1",     // RFC1918
-            "192.168.1.1",    // RFC1918
-            "169.254.169.254", // link-local — cloud metadata endpoint
-            "100.64.0.1",     // CGNAT
-            "0.0.0.0",        // unspecified
-            "::1",            // IPv6 loopback
-            "fc00::1",        // IPv6 unique local
-            "fe80::1",        // IPv6 link-local
+            "127.0.0.1",        // loopback
+            "10.0.0.5",         // RFC1918
+            "172.16.0.1",       // RFC1918
+            "192.168.1.1",      // RFC1918
+            "169.254.169.254",  // link-local — cloud metadata endpoint
+            "100.64.0.1",       // CGNAT
+            "0.0.0.0",          // unspecified
+            "::1",              // IPv6 loopback
+            "fc00::1",          // IPv6 unique local
+            "fe80::1",          // IPv6 link-local
             "::ffff:127.0.0.1", // IPv4-mapped IPv6 loopback
         ];
         for ip in internal {
-            assert!(!is_public_ip(&ip.parse().unwrap()), "{ip} should be rejected");
+            assert!(
+                !is_public_ip(&ip.parse().unwrap()),
+                "{ip} should be rejected"
+            );
         }
     }
 
     #[test]
     fn is_public_ip_accepts_public_ranges() {
-        let public = ["8.8.8.8", "1.1.1.1", "93.184.216.34", "2606:4700:4700::1111"];
+        let public = [
+            "8.8.8.8",
+            "1.1.1.1",
+            "93.184.216.34",
+            "2606:4700:4700::1111",
+        ];
         for ip in public {
-            assert!(is_public_ip(&ip.parse().unwrap()), "{ip} should be accepted");
+            assert!(
+                is_public_ip(&ip.parse().unwrap()),
+                "{ip} should be accepted"
+            );
         }
     }
 

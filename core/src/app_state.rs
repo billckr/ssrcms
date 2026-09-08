@@ -83,12 +83,11 @@ impl Default for SiteSettings {
 impl SiteSettings {
     /// Load settings for a specific site from the database.
     pub async fn load(pool: &PgPool, site_id: Uuid) -> anyhow::Result<Self> {
-        let rows: Vec<(String, String)> = sqlx::query_as(
-            "SELECT key, value FROM site_settings WHERE site_id = $1",
-        )
-        .bind(site_id)
-        .fetch_all(pool)
-        .await?;
+        let rows: Vec<(String, String)> =
+            sqlx::query_as("SELECT key, value FROM site_settings WHERE site_id = $1")
+                .bind(site_id)
+                .fetch_all(pool)
+                .await?;
 
         let mut map: HashMap<String, String> = rows.into_iter().collect();
         Ok(SiteSettings {
@@ -96,9 +95,15 @@ impl SiteSettings {
             site_description: map
                 .remove("site_description")
                 .unwrap_or_else(|| "Fast by default, secure by design".into()),
-            base_url: map.remove("site_url").unwrap_or_else(|| "http://localhost:3000".into()),
-            language: map.remove("site_language").unwrap_or_else(|| "en-US".into()),
-            active_theme: map.remove("active_theme").unwrap_or_else(|| "default".into()),
+            base_url: map
+                .remove("site_url")
+                .unwrap_or_else(|| "http://localhost:3000".into()),
+            language: map
+                .remove("site_language")
+                .unwrap_or_else(|| "en-US".into()),
+            active_theme: map
+                .remove("active_theme")
+                .unwrap_or_else(|| "default".into()),
             posts_per_page: map
                 .remove("posts_per_page")
                 .and_then(|v: String| v.parse().ok())
@@ -125,12 +130,11 @@ impl SiteSettings {
         // After migration 0010, legacy rows may have site_id IS NULL.
         // Before migration 0010, there is no site_id column at all.
         // Either way, fetch all rows and use the first batch found.
-        let rows: Vec<(String, String)> = sqlx::query_as(
-            "SELECT key, value FROM site_settings WHERE site_id IS NULL",
-        )
-        .fetch_all(pool)
-        .await
-        .unwrap_or_default();
+        let rows: Vec<(String, String)> =
+            sqlx::query_as("SELECT key, value FROM site_settings WHERE site_id IS NULL")
+                .fetch_all(pool)
+                .await
+                .unwrap_or_default();
 
         let mut map: HashMap<String, String> = rows.into_iter().collect();
         Ok(SiteSettings {
@@ -138,9 +142,15 @@ impl SiteSettings {
             site_description: map
                 .remove("site_description")
                 .unwrap_or_else(|| "Fast by default, secure by design".into()),
-            base_url: map.remove("site_url").unwrap_or_else(|| "http://localhost:3000".into()),
-            language: map.remove("site_language").unwrap_or_else(|| "en-US".into()),
-            active_theme: map.remove("active_theme").unwrap_or_else(|| "default".into()),
+            base_url: map
+                .remove("site_url")
+                .unwrap_or_else(|| "http://localhost:3000".into()),
+            language: map
+                .remove("site_language")
+                .unwrap_or_else(|| "en-US".into()),
+            active_theme: map
+                .remove("active_theme")
+                .unwrap_or_else(|| "default".into()),
             posts_per_page: map
                 .remove("posts_per_page")
                 .and_then(|v: String| v.parse().ok())
@@ -193,12 +203,10 @@ impl AppSettings {
     /// yet) from `MAX_UPLOAD_MB` in `.env`/`synaptic.toml`; once a row exists the
     /// DB value is authoritative and `.env` is no longer consulted.
     pub async fn load(pool: &PgPool, default_max_upload_mb: i64) -> anyhow::Result<Self> {
-        let rows: Vec<(String, String)> = sqlx::query_as(
-            "SELECT key, value FROM app_settings",
-        )
-        .fetch_all(pool)
-        .await
-        .unwrap_or_default();
+        let rows: Vec<(String, String)> = sqlx::query_as("SELECT key, value FROM app_settings")
+            .fetch_all(pool)
+            .await
+            .unwrap_or_default();
 
         let mut map: HashMap<String, String> = rows.into_iter().collect();
         Ok(AppSettings {
@@ -217,11 +225,7 @@ impl AppSettings {
 }
 
 /// Upsert a key-value pair in the app_settings table.
-pub async fn set_app_setting(
-    pool: &PgPool,
-    key: &str,
-    value: &str,
-) -> crate::errors::Result<()> {
+pub async fn set_app_setting(pool: &PgPool, key: &str, value: &str) -> crate::errors::Result<()> {
     sqlx::query(
         "INSERT INTO app_settings (key, value) VALUES ($1, $2)
          ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value",
@@ -255,11 +259,7 @@ pub async fn set_site_setting(
 }
 
 /// Fetch a single key-value pair from the site_settings table for a specific site.
-pub async fn get_site_setting(
-    pool: &PgPool,
-    site_id: Uuid,
-    key: &str,
-) -> Option<String> {
+pub async fn get_site_setting(pool: &PgPool, site_id: Uuid, key: &str) -> Option<String> {
     sqlx::query_scalar("SELECT value FROM site_settings WHERE site_id = $1 AND key = $2")
         .bind(site_id)
         .bind(key)
@@ -416,7 +416,8 @@ pub fn detect_admin_logo() -> Option<String> {
     const CANDIDATES: &[&str] = &["logo.svg", "logo.png", "logo.webp"];
     CANDIDATES.iter().find_map(|name| {
         let path = std::path::Path::new("admin/static/branding").join(name);
-        path.is_file().then(|| format!("/admin/static/branding/{name}"))
+        path.is_file()
+            .then(|| format!("/admin/static/branding/{name}"))
     })
 }
 
@@ -431,7 +432,8 @@ pub fn detect_site_admin_logo(site_id: Uuid) -> Option<String> {
     let dir = std::path::Path::new("admin/static/branding").join(site_id.to_string());
     CANDIDATES.iter().find_map(|name| {
         let path = dir.join(name);
-        path.is_file().then(|| format!("/admin/static/branding/{site_id}/{name}"))
+        path.is_file()
+            .then(|| format!("/admin/static/branding/{site_id}/{name}"))
     })
 }
 

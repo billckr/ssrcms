@@ -38,7 +38,11 @@ fn remove_existing_logo_files() {
     }
 }
 
-pub async fn upload_logo(State(state): State<AppState>, admin: AdminUser, mut multipart: Multipart) -> impl IntoResponse {
+pub async fn upload_logo(
+    State(state): State<AppState>,
+    admin: AdminUser,
+    mut multipart: Multipart,
+) -> impl IntoResponse {
     if !admin.caps.can_manage_settings {
         return (StatusCode::FORBIDDEN, "Forbidden").into_response();
     }
@@ -52,7 +56,8 @@ pub async fn upload_logo(State(state): State<AppState>, admin: AdminUser, mut mu
                 Ok(b) => bytes = Some(b.to_vec()),
                 Err(e) => {
                     tracing::error!("failed to read logo upload field: {:?}", e);
-                    return redirect_with_flash("Failed to read uploaded file. Please try again.").into_response();
+                    return redirect_with_flash("Failed to read uploaded file. Please try again.")
+                        .into_response();
                 }
             }
         }
@@ -70,13 +75,19 @@ pub async fn upload_logo(State(state): State<AppState>, admin: AdminUser, mut mu
 
     let ext = match detect_logo_format(filename.as_deref().unwrap_or(""), &bytes) {
         Some(ext) => ext,
-        None => return redirect_with_flash("Unsupported file type. Upload an SVG, PNG, or WebP image.").into_response(),
+        None => {
+            return redirect_with_flash("Unsupported file type. Upload an SVG, PNG, or WebP image.")
+                .into_response()
+        }
     };
 
     if ext == "svg" {
         if let Err(reason) = validate_svg_safety(&bytes) {
             tracing::warn!("logo upload rejected — {}", reason);
-            return redirect_with_flash("That SVG couldn't be accepted — it contains scripting or unsafe content.").into_response();
+            return redirect_with_flash(
+                "That SVG couldn't be accepted — it contains scripting or unsafe content.",
+            )
+            .into_response();
         }
     }
 

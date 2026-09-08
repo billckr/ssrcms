@@ -41,19 +41,23 @@ pub async fn find(pool: &PgPool, site_id: Uuid, old_url: &str) -> Result<Option<
 /// post-content importer to rewrite `<img>` references in bulk without a
 /// query per attachment.
 pub async fn map_for_site(pool: &PgPool, site_id: Uuid) -> Result<HashMap<String, Uuid>> {
-    let rows: Vec<(String, Uuid)> = sqlx::query_as(
-        "SELECT old_url, media_id FROM wp_import_media_map WHERE site_id = $1",
-    )
-    .bind(site_id)
-    .fetch_all(pool)
-    .await?;
+    let rows: Vec<(String, Uuid)> =
+        sqlx::query_as("SELECT old_url, media_id FROM wp_import_media_map WHERE site_id = $1")
+            .bind(site_id)
+            .fetch_all(pool)
+            .await?;
     Ok(rows.into_iter().collect())
 }
 
 /// Records which Synap post a WXR item (by its `wp:post_id`) became, so a
 /// later re-run of the same export updates that post instead of creating a
 /// duplicate. See `find_post`.
-pub async fn record_post(pool: &PgPool, site_id: Uuid, wp_post_id: &str, post_id: Uuid) -> Result<()> {
+pub async fn record_post(
+    pool: &PgPool,
+    site_id: Uuid,
+    wp_post_id: &str,
+    post_id: Uuid,
+) -> Result<()> {
     sqlx::query(
         "INSERT INTO wp_import_post_map (site_id, wp_post_id, post_id) VALUES ($1, $2, $3) \
          ON CONFLICT (site_id, wp_post_id) DO UPDATE SET post_id = EXCLUDED.post_id",

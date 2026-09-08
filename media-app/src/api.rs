@@ -37,12 +37,19 @@ pub async fn create_folder(name: &str) -> Result<(), String> {
         .send()
         .await
         .map_err(|e| e.to_string())?;
-    if resp.ok() { Ok(()) } else { Err(format!("server returned {}", resp.status())) }
+    if resp.ok() {
+        Ok(())
+    } else {
+        Err(format!("server returned {}", resp.status()))
+    }
 }
 
 /// POST /admin/media/folders/{id}/delete.
 pub async fn delete_folder(id: &str, delete_media: bool) -> Result<(), String> {
-    let body = format!("delete_media={}", if delete_media { "true" } else { "false" });
+    let body = format!(
+        "delete_media={}",
+        if delete_media { "true" } else { "false" }
+    );
     let resp = gloo_net::http::Request::post(&format!("/admin/media/folders/{id}/delete"))
         .header("Content-Type", "application/x-www-form-urlencoded")
         .body(body)
@@ -50,7 +57,11 @@ pub async fn delete_folder(id: &str, delete_media: bool) -> Result<(), String> {
         .send()
         .await
         .map_err(|e| e.to_string())?;
-    if resp.ok() { Ok(()) } else { Err(format!("server returned {}", resp.status())) }
+    if resp.ok() {
+        Ok(())
+    } else {
+        Err(format!("server returned {}", resp.status()))
+    }
 }
 
 /// Minimal x-www-form-urlencoded value encoder — folder names are already

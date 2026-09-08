@@ -15,8 +15,9 @@ use sqlx::postgres::PgPoolOptions;
 
 /// Connect to the database using DATABASE_URL from the environment.
 pub async fn connect_db() -> anyhow::Result<sqlx::PgPool> {
-    let url = std::env::var("DATABASE_URL")
-        .map_err(|_| anyhow::anyhow!("DATABASE_URL not set. Pass it as an env var or create a .env file."))?;
+    let url = std::env::var("DATABASE_URL").map_err(|_| {
+        anyhow::anyhow!("DATABASE_URL not set. Pass it as an env var or create a .env file.")
+    })?;
     let pool = PgPoolOptions::new()
         .max_connections(2)
         .connect(&url)
@@ -38,7 +39,7 @@ pub async fn verify_super_admin_password(
     supplied: Option<String>,
 ) -> anyhow::Result<()> {
     let row: Option<(String,)> = sqlx::query_as(
-        "SELECT password_hash FROM users WHERE is_protected = TRUE AND deleted_at IS NULL LIMIT 1"
+        "SELECT password_hash FROM users WHERE is_protected = TRUE AND deleted_at IS NULL LIMIT 1",
     )
     .fetch_optional(pool)
     .await

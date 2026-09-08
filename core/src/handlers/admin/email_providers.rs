@@ -61,7 +61,11 @@ fn config_from_form(form: &ProviderForm) -> Result<ProviderConfig, &'static str>
             })
         }
         "smtp" => {
-            let port: u16 = form.smtp_port.trim().parse().map_err(|_| "Enter a valid port number.")?;
+            let port: u16 = form
+                .smtp_port
+                .trim()
+                .parse()
+                .map_err(|_| "Enter a valid port number.")?;
             if form.smtp_host.trim().is_empty() {
                 return Err("Enter a host.");
             }
@@ -70,11 +74,16 @@ fn config_from_form(form: &ProviderForm) -> Result<ProviderConfig, &'static str>
                 port,
                 username: form.smtp_username.trim().to_string(),
                 password: form.smtp_password.trim().to_string(),
-                tls_mode: if form.smtp_tls_mode.trim().is_empty() { "starttls".to_string() } else { form.smtp_tls_mode.trim().to_string() },
+                tls_mode: if form.smtp_tls_mode.trim().is_empty() {
+                    "starttls".to_string()
+                } else {
+                    form.smtp_tls_mode.trim().to_string()
+                },
             })
         }
         "sendgrid" => {
-            if form.sendgrid_api_key.trim().is_empty() || form.sendgrid_from_email.trim().is_empty() {
+            if form.sendgrid_api_key.trim().is_empty() || form.sendgrid_from_email.trim().is_empty()
+            {
                 return Err("Enter both an API key and a from address.");
             }
             Ok(ProviderConfig::SendGrid {
@@ -83,12 +92,18 @@ fn config_from_form(form: &ProviderForm) -> Result<ProviderConfig, &'static str>
             })
         }
         "postmark" => {
-            if form.postmark_server_token.trim().is_empty() || form.postmark_from_email.trim().is_empty() {
+            if form.postmark_server_token.trim().is_empty()
+                || form.postmark_from_email.trim().is_empty()
+            {
                 return Err("Enter both a server token and a from address.");
             }
             Ok(ProviderConfig::Postmark {
                 server_token: form.postmark_server_token.trim().to_string(),
-                message_stream: if form.postmark_message_stream.trim().is_empty() { "outbound".to_string() } else { form.postmark_message_stream.trim().to_string() },
+                message_stream: if form.postmark_message_stream.trim().is_empty() {
+                    "outbound".to_string()
+                } else {
+                    form.postmark_message_stream.trim().to_string()
+                },
                 from_email: form.postmark_from_email.trim().to_string(),
             })
         }
@@ -98,7 +113,10 @@ fn config_from_form(form: &ProviderForm) -> Result<ProviderConfig, &'static str>
 
 fn flash_redirect(site_id: Uuid, msg: &str) -> Redirect {
     let msg = crate::handlers::admin::themes::url_encode_param(msg);
-    Redirect::to(&format!("/admin/sites/{}/settings?flash={}&tab=email", site_id, msg))
+    Redirect::to(&format!(
+        "/admin/sites/{}/settings?flash={}&tab=email",
+        site_id, msg
+    ))
 }
 
 /// POST /admin/sites/{id}/email-providers — add a new provider.
@@ -120,10 +138,16 @@ pub async fn create(
         return flash_redirect(id, "Enter a label for this provider.").into_response();
     }
     match email_provider::label_exists_for_site(&state.db, id, form.label.trim(), None).await {
-        Ok(true) => return flash_redirect(id, "A provider with that label already exists.").into_response(),
+        Ok(true) => {
+            return flash_redirect(id, "A provider with that label already exists.").into_response()
+        }
         Ok(false) => {}
         Err(e) => {
-            tracing::error!("failed to check email provider label uniqueness for site {}: {:?}", id, e);
+            tracing::error!(
+                "failed to check email provider label uniqueness for site {}: {:?}",
+                id,
+                e
+            );
             return flash_redirect(id, "Failed to save provider.").into_response();
         }
     }
@@ -132,12 +156,24 @@ pub async fn create(
         Err(msg) => return flash_redirect(id, msg).into_response(),
     };
 
-    if let Err(e) = email_provider::create(&state.db, id, form.label.trim(), &config, &state.config.secret_key).await {
+    if let Err(e) = email_provider::create(
+        &state.db,
+        id,
+        form.label.trim(),
+        &config,
+        &state.config.secret_key,
+    )
+    .await
+    {
         tracing::error!("failed to create email provider for site {}: {:?}", id, e);
         return flash_redirect(id, "Failed to save provider.").into_response();
     }
 
-    Redirect::to(&format!("/admin/sites/{}/settings?flash=Provider added. Send a test email to verify it.&tab=email", id)).into_response()
+    Redirect::to(&format!(
+        "/admin/sites/{}/settings?flash=Provider added. Send a test email to verify it.&tab=email",
+        id
+    ))
+    .into_response()
 }
 
 /// POST /admin/sites/{id}/email-providers/{provider_id} — update an
@@ -163,11 +199,19 @@ pub async fn update(
     if form.label.trim().is_empty() {
         return flash_redirect(id, "Enter a label for this provider.").into_response();
     }
-    match email_provider::label_exists_for_site(&state.db, id, form.label.trim(), Some(provider_id)).await {
-        Ok(true) => return flash_redirect(id, "A provider with that label already exists.").into_response(),
+    match email_provider::label_exists_for_site(&state.db, id, form.label.trim(), Some(provider_id))
+        .await
+    {
+        Ok(true) => {
+            return flash_redirect(id, "A provider with that label already exists.").into_response()
+        }
         Ok(false) => {}
         Err(e) => {
-            tracing::error!("failed to check email provider label uniqueness for site {}: {:?}", id, e);
+            tracing::error!(
+                "failed to check email provider label uniqueness for site {}: {:?}",
+                id,
+                e
+            );
             return flash_redirect(id, "Failed to save provider.").into_response();
         }
     }
@@ -204,7 +248,11 @@ pub async fn delete(
         tracing::error!("failed to delete email provider {}: {:?}", provider_id, e);
     }
 
-    Redirect::to(&format!("/admin/sites/{}/settings?flash=Provider deleted.&tab=email", id)).into_response()
+    Redirect::to(&format!(
+        "/admin/sites/{}/settings?flash=Provider deleted.&tab=email",
+        id
+    ))
+    .into_response()
 }
 
 /// POST /admin/sites/{id}/email-providers/{provider_id}/test — send a test
@@ -234,7 +282,11 @@ pub async fn test(
     match crate::mail::send_test_email(&config, &admin.user.email).await {
         Ok(()) => {
             if let Err(e) = email_provider::mark_verified(&state.db, provider_id).await {
-                tracing::error!("failed to mark email provider {} verified: {:?}", provider_id, e);
+                tracing::error!(
+                    "failed to mark email provider {} verified: {:?}",
+                    provider_id,
+                    e
+                );
             }
             Redirect::to(&format!("/admin/sites/{}/settings?flash=Test email sent to {} — provider verified.&tab=email", id, admin.user.email)).into_response()
         }

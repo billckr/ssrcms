@@ -23,12 +23,18 @@ fn pagination(base: &str, page: i64, total_pages: i64) -> String {
         return String::new();
     }
     let prev = if page > 1 {
-        format!(r#"<a href="{base}?page={}" class="page-btn">&laquo; Prev</a>"#, page - 1)
+        format!(
+            r#"<a href="{base}?page={}" class="page-btn">&laquo; Prev</a>"#,
+            page - 1
+        )
     } else {
         r#"<span class="page-btn page-btn-disabled">&laquo; Prev</span>"#.to_string()
     };
     let next = if page < total_pages {
-        format!(r#"<a href="{base}?page={}" class="page-btn">Next &raquo;</a>"#, page + 1)
+        format!(
+            r#"<a href="{base}?page={}" class="page-btn">Next &raquo;</a>"#,
+            page + 1
+        )
     } else {
         r#"<span class="page-btn page-btn-disabled">Next &raquo;</span>"#.to_string()
     };
@@ -37,9 +43,13 @@ fn pagination(base: &str, page: i64, total_pages: i64) -> String {
     let mut nums = String::new();
     for p in start..=end {
         if p == page {
-            nums.push_str(&format!(r#"<span class="page-btn page-btn-active">{p}</span>"#));
+            nums.push_str(&format!(
+                r#"<span class="page-btn page-btn-active">{p}</span>"#
+            ));
         } else {
-            nums.push_str(&format!(r#"<a href="{base}?page={p}" class="page-btn">{p}</a>"#));
+            nums.push_str(&format!(
+                r#"<a href="{base}?page={p}" class="page-btn">{p}</a>"#
+            ));
         }
     }
     format!(r#"<div class="pagination">{prev}{nums}{next}</div>"#)
@@ -71,12 +81,22 @@ pub fn render_results(
     let vote_rows = if votes.is_empty() {
         r#"<tr><td colspan="3" style="text-align:center;color:var(--muted)">No votes yet.</td></tr>"#.to_string()
     } else {
-        votes.iter().map(|v| format!(
-            r#"<tr><td>{option}</td><td>{ip}</td><td>{when}</td></tr>"#,
-            option = html_escape(&v.option_label),
-            ip = if v.ip_address.is_empty() { "—".to_string() } else { html_escape(&v.ip_address) },
-            when = html_escape(&v.voted_at),
-        )).collect::<Vec<_>>().join("\n")
+        votes
+            .iter()
+            .map(|v| {
+                format!(
+                    r#"<tr><td>{option}</td><td>{ip}</td><td>{when}</td></tr>"#,
+                    option = html_escape(&v.option_label),
+                    ip = if v.ip_address.is_empty() {
+                        "—".to_string()
+                    } else {
+                        html_escape(&v.ip_address)
+                    },
+                    when = html_escape(&v.voted_at),
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
     };
 
     let content = format!(
@@ -110,7 +130,11 @@ pub fn render_results(
         total_votes = total_votes,
         poll_id = html_escape(poll_id),
         vote_rows = vote_rows,
-        pagination = pagination(&format!("/admin/designer/polls/{}/results", html_escape(poll_id)), page, total_pages),
+        pagination = pagination(
+            &format!("/admin/designer/polls/{}/results", html_escape(poll_id)),
+            page,
+            total_pages
+        ),
     );
 
     let title = format!("Poll: {poll_name}");

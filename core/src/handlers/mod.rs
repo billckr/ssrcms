@@ -4,11 +4,11 @@ pub mod archive;
 pub mod auth;
 pub mod comment;
 pub mod form;
-pub mod poll;
 pub mod home;
 pub mod metrics;
 pub mod page;
 pub mod plugin_route;
+pub mod poll;
 pub mod post;
 pub mod post_unlock;
 pub mod recover;
@@ -48,7 +48,10 @@ pub(super) async fn resolve_session(state: &AppState, session: &Session) -> Sess
             }
         }
     }
-    SessionContext { is_logged_in: false, user: None }
+    SessionContext {
+        is_logged_in: false,
+        user: None,
+    }
 }
 
 /// Resolve this site's active theme's customizer layout options (see
@@ -65,7 +68,9 @@ pub(super) async fn resolve_session(state: &AppState, session: &Session) -> Sess
 /// gets empty maps; never an error.
 pub(super) async fn insert_theme_options(ctx: &mut tera::Context, state: &AppState, site_id: Uuid) {
     let theme_name = state.active_theme_for_site(Some(site_id));
-    let theme_dir = state.templates.resolve_theme_dir_for_site(&theme_name, Some(site_id));
+    let theme_dir = state
+        .templates
+        .resolve_theme_dir_for_site(&theme_name, Some(site_id));
     let theme_options = crate::models::theme_options::build_theme_options_context(
         &state.db,
         theme_dir.as_deref(),
@@ -114,8 +119,12 @@ pub(super) async fn insert_theme_options(ctx: &mut tera::Context, state: &AppSta
 /// cannot see. Never redirects; a false result just means "no preview access",
 /// falling through to the normal published-only lookup.
 pub(super) async fn can_preview_site(state: &AppState, headers: &HeaderMap, site_id: Uuid) -> bool {
-    let Some(user_id) = admin_user_id_from_cookie(state, headers).await else { return false };
-    let Ok(user) = crate::models::user::get_by_id(&state.db, user_id).await else { return false };
+    let Some(user_id) = admin_user_id_from_cookie(state, headers).await else {
+        return false;
+    };
+    let Ok(user) = crate::models::user::get_by_id(&state.db, user_id).await else {
+        return false;
+    };
 
     match user.role.as_str() {
         "super_admin" => true,
@@ -145,13 +154,20 @@ async fn admin_user_id_from_cookie(state: &AppState, headers: &HeaderMap) -> Opt
     let cookie_header = headers.get(axum::http::header::COOKIE)?.to_str().ok()?;
     let session_id_str = cookie_header.split(';').find_map(|part| {
         let part = part.trim();
-        part.strip_prefix(ADMIN_SESSION_COOKIE_NAME)?.strip_prefix('=')
+        part.strip_prefix(ADMIN_SESSION_COOKIE_NAME)?
+            .strip_prefix('=')
     })?;
     let session_id: tower_sessions::session::Id = session_id_str.parse().ok()?;
 
-    let store = std::sync::Arc::new(tower_sessions_sqlx_store::PostgresStore::new(state.db.clone()));
+    let store = std::sync::Arc::new(tower_sessions_sqlx_store::PostgresStore::new(
+        state.db.clone(),
+    ));
     let admin_session = Session::new(Some(session_id), store, None);
 
-    let user_id_str: String = admin_session.get(SESSION_USER_ID_KEY).await.ok().flatten()?;
+    let user_id_str: String = admin_session
+        .get(SESSION_USER_ID_KEY)
+        .await
+        .ok()
+        .flatten()?;
     user_id_str.parse().ok()
 }

@@ -72,7 +72,9 @@ fn detect_mode() -> anyhow::Result<Mode> {
     if Path::new("synapcms").is_file() {
         return Ok(Mode::ProdInstall);
     }
-    let cwd = std::env::current_dir().map(|p| p.display().to_string()).unwrap_or_default();
+    let cwd = std::env::current_dir()
+        .map(|p| p.display().to_string())
+        .unwrap_or_default();
     anyhow::bail!(
         "synap app must be run from either the project root of a dev checkout (expected to \
          find Cargo.toml, core/, and cli/) or a production install directory (expected to \
@@ -106,7 +108,11 @@ fn port() -> String {
 }
 
 fn read_pid_in(dir: &Path) -> Option<u32> {
-    fs::read_to_string(pid_file_in(dir)).ok()?.trim().parse().ok()
+    fs::read_to_string(pid_file_in(dir))
+        .ok()?
+        .trim()
+        .parse()
+        .ok()
 }
 
 fn is_alive(pid: u32) -> bool {
@@ -159,9 +165,13 @@ fn free_port() {
         .unwrap_or(false);
     if systemd_active {
         println!("Stopping systemd synapcms service...");
-        let _ = Command::new("systemctl").args(["stop", "synapcms"]).status();
+        let _ = Command::new("systemctl")
+            .args(["stop", "synapcms"])
+            .status();
     }
-    let _ = Command::new("fuser").args(["-k", &format!("{port}/tcp")]).status();
+    let _ = Command::new("fuser")
+        .args(["-k", &format!("{port}/tcp")])
+        .status();
     std::thread::sleep(Duration::from_secs(1));
 }
 
@@ -174,7 +184,9 @@ fn check_caddy() {
     if !active {
         println!("WARNING: Caddy is not running.");
         println!("  Sites will be unreachable on port 80/443 until Caddy is restored.");
-        println!("  Fix:   sudo chown -R caddy:caddy /var/log/caddy && sudo systemctl restart caddy");
+        println!(
+            "  Fix:   sudo chown -R caddy:caddy /var/log/caddy && sudo systemctl restart caddy"
+        );
         println!("  Check: sudo journalctl -u caddy -n 30");
     }
 }
@@ -184,9 +196,11 @@ async fn check_postgres() -> anyhow::Result<()> {
         println!("WARNING: DATABASE_URL not set — skipping PostgreSQL connectivity check.");
         return Ok(());
     }
-    super::connect_db()
-        .await
-        .map_err(|e| anyhow::anyhow!("PostgreSQL is not reachable: {e}\nStart PostgreSQL before starting the server."))?;
+    super::connect_db().await.map_err(|e| {
+        anyhow::anyhow!(
+            "PostgreSQL is not reachable: {e}\nStart PostgreSQL before starting the server."
+        )
+    })?;
     println!("PostgreSQL is reachable.");
     Ok(())
 }
@@ -195,7 +209,9 @@ async fn check_postgres() -> anyhow::Result<()> {
 /// messages (e.g. "Interactive authentication required", permission denied when not root) are
 /// already clear, so there's no value in re-wrapping them.
 fn systemctl(action: &str) -> anyhow::Result<()> {
-    let status = Command::new("systemctl").args([action, "synapcms"]).status()?;
+    let status = Command::new("systemctl")
+        .args([action, "synapcms"])
+        .status()?;
     if !status.success() {
         anyhow::bail!("systemctl {action} synapcms failed (exit {status}).");
     }
@@ -211,7 +227,11 @@ fn systemctl_main_pid() -> Option<u32> {
         return None;
     }
     let pid: u32 = String::from_utf8_lossy(&out.stdout).trim().parse().ok()?;
-    if pid == 0 { None } else { Some(pid) } // MainPID is 0 when the unit isn't running
+    if pid == 0 {
+        None
+    } else {
+        Some(pid)
+    } // MainPID is 0 when the unit isn't running
 }
 
 async fn cmd_start_prod() -> anyhow::Result<()> {
@@ -226,7 +246,9 @@ async fn cmd_start_prod() -> anyhow::Result<()> {
     std::thread::sleep(Duration::from_secs(1));
     match systemctl_main_pid() {
         Some(pid) => println!("Started (PID {pid}) — listening on port {}", port()),
-        None => println!("Started, but systemd doesn't report it as running yet — check 'synap app status'."),
+        None => println!(
+            "Started, but systemd doesn't report it as running yet — check 'synap app status'."
+        ),
     }
     Ok(())
 }
@@ -249,7 +271,9 @@ async fn cmd_restart_prod() -> anyhow::Result<()> {
     std::thread::sleep(Duration::from_secs(1));
     match systemctl_main_pid() {
         Some(pid) => println!("Started (PID {pid}) — listening on port {}", port()),
-        None => println!("Restarted, but systemd doesn't report it as running yet — check 'synap app status'."),
+        None => println!(
+            "Restarted, but systemd doesn't report it as running yet — check 'synap app status'."
+        ),
     }
     Ok(())
 }
@@ -264,7 +288,9 @@ fn cmd_status_prod() {
 
 fn cmd_logs_prod() -> anyhow::Result<()> {
     println!("Tailing journalctl -u synapcms (Ctrl+C to exit)...");
-    Command::new("journalctl").args(["-u", "synapcms", "-n", "50", "-f"]).status()?;
+    Command::new("journalctl")
+        .args(["-u", "synapcms", "-n", "50", "-f"])
+        .status()?;
     Ok(())
 }
 
@@ -278,7 +304,10 @@ async fn cmd_start(release: bool) -> anyhow::Result<()> {
 
     let binary = binary_path(release);
     if !binary.exists() {
-        println!("Binary not found — building ({})...", if release { "release" } else { "debug" });
+        println!(
+            "Binary not found — building ({})...",
+            if release { "release" } else { "debug" }
+        );
         let mut cmd = Command::new("cargo");
         cmd.arg("build").arg("--bin").arg("synapcms");
         if release {
@@ -305,17 +334,16 @@ async fn cmd_start(release: bool) -> anyhow::Result<()> {
     check_caddy();
     println!("Starting SynapCMS...");
 
-    let log = fs::OpenOptions::new().create(true).append(true).open(log_file())?;
+    let log = fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(log_file())?;
     let log_err = log.try_clone()?;
 
     // nohup execs into the target binary in place, so its PID is the actual server PID —
     // matching what `nohup "$BINARY" & ; echo $!` captures in app.sh.
     let mut child = Command::new("nohup")
-        .arg(
-            binary
-                .canonicalize()
-                .unwrap_or(binary.clone()),
-        )
+        .arg(binary.canonicalize().unwrap_or(binary.clone()))
         .stdin(Stdio::null())
         .stdout(log)
         .stderr(log_err)
@@ -355,7 +383,10 @@ async fn cmd_start(release: bool) -> anyhow::Result<()> {
 /// before the port is truly free, which this function knows nothing about).
 pub(crate) fn stop_in(dir: &Path) -> anyhow::Result<()> {
     let Some(pid) = running_pid_in(dir) else {
-        println!("  (no synap-app-managed process running under {})", dir.display());
+        println!(
+            "  (no synap-app-managed process running under {})",
+            dir.display()
+        );
         let _ = fs::remove_file(pid_file_in(dir));
         return Ok(());
     };
@@ -408,7 +439,10 @@ fn cmd_status() {
 fn cmd_logs() -> anyhow::Result<()> {
     let log = log_file();
     if !log.exists() {
-        anyhow::bail!("No log file found at {} — has the server been started yet?", log.display());
+        anyhow::bail!(
+            "No log file found at {} — has the server been started yet?",
+            log.display()
+        );
     }
     println!("Tailing {} (Ctrl+C to exit)...", log.display());
     Command::new("tail").args(["-f"]).arg(&log).status()?;

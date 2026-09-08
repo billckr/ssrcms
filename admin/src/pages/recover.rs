@@ -7,7 +7,8 @@ pub fn render_request(error: Option<&str>, sent: bool, default_theme: &str) -> S
         r#"<p style="color:var(--muted);margin-top:.5rem">
       If that email address has an account, we&rsquo;ve sent a link to reset
       the password. The link expires in 1 hour.
-    </p>"#.to_string()
+    </p>"#
+            .to_string()
     } else {
         let error_html = match error {
             Some(msg) => format!(r#"<div class="error">{}</div>"#, crate::html_escape(msg)),
@@ -83,7 +84,8 @@ pub fn render_reset(token: &str, valid: bool, error: Option<&str>, default_theme
         r#"<p style="color:var(--muted);margin-top:.5rem">
       This recovery link is invalid or has expired.
     </p>
-    <p style="margin-top:1rem"><a href="/recover">Request a new one</a></p>"#.to_string()
+    <p style="margin-top:1rem"><a href="/recover">Request a new one</a></p>"#
+            .to_string()
     } else {
         let error_html = match error {
             Some(msg) => format!(r#"<div class="error">{}</div>"#, crate::html_escape(msg)),

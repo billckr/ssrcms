@@ -3,11 +3,7 @@ mod commands;
 use clap::{CommandFactory, FromArgMatches, Parser, Subcommand};
 
 #[derive(Parser)]
-#[command(
-    name = "synap",
-    about = "SynapCMS — installer & manager",
-    version
-)]
+#[command(name = "synap", about = "SynapCMS — installer & manager", version)]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
@@ -119,7 +115,9 @@ async fn main() -> anyhow::Result<()> {
     let mut command = Cli::command();
     command.build();
     let matches = command
-        .mut_subcommand("help", |cmd| cmd.about("Get help with commands subcommands"))
+        .mut_subcommand("help", |cmd| {
+            cmd.about("Get help with commands subcommands")
+        })
         .get_matches();
     let cli = Cli::from_arg_matches(&matches)?;
 
@@ -157,16 +155,22 @@ mod tests {
     /// surviving `setup`/`teardown` subcommands must still parse correctly.
     #[test]
     fn caddy_setup_and_teardown_still_parse() {
-        let cli = Cli::try_parse_from(["synap", "caddy", "setup", "--app-user", "www-data"]).unwrap();
+        let cli =
+            Cli::try_parse_from(["synap", "caddy", "setup", "--app-user", "www-data"]).unwrap();
         assert!(matches!(
             cli.command,
-            Commands::Caddy { action: commands::caddy::CaddyAction::Setup { .. } }
+            Commands::Caddy {
+                action: commands::caddy::CaddyAction::Setup { .. }
+            }
         ));
 
-        let cli = Cli::try_parse_from(["synap", "caddy", "teardown", "--app-user", "www-data"]).unwrap();
+        let cli =
+            Cli::try_parse_from(["synap", "caddy", "teardown", "--app-user", "www-data"]).unwrap();
         assert!(matches!(
             cli.command,
-            Commands::Caddy { action: commands::caddy::CaddyAction::Teardown { .. } }
+            Commands::Caddy {
+                action: commands::caddy::CaddyAction::Teardown { .. }
+            }
         ));
     }
 
@@ -174,7 +178,16 @@ mod tests {
     /// path) — fails loudly if it's ever reintroduced without deliberate intent.
     #[test]
     fn caddy_provision_local_was_removed() {
-        let result = Cli::try_parse_from(["synap", "caddy", "provision-local", "--hostname", "test.test"]);
-        assert!(result.is_err(), "'provision-local' should no longer be a valid subcommand");
+        let result = Cli::try_parse_from([
+            "synap",
+            "caddy",
+            "provision-local",
+            "--hostname",
+            "test.test",
+        ]);
+        assert!(
+            result.is_err(),
+            "'provision-local' should no longer be a valid subcommand"
+        );
     }
 }

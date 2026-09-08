@@ -16,7 +16,10 @@ use crate::app_state::{set_site_setting, AppState};
 use crate::middleware::admin_auth::AdminUser;
 
 fn redirect_with_flash(msg: &str) -> Redirect {
-    Redirect::to(&format!("/admin/site-settings?flash={}", msg.replace(' ', "+")))
+    Redirect::to(&format!(
+        "/admin/site-settings?flash={}",
+        msg.replace(' ', "+")
+    ))
 }
 
 pub async fn view(
@@ -25,10 +28,18 @@ pub async fn view(
     Query(params): Query<HashMap<String, String>>,
 ) -> impl IntoResponse {
     if !admin.caps.can_manage_site_settings {
-        return (StatusCode::FORBIDDEN, Html("<h1>403 Forbidden</h1>".to_string())).into_response();
+        return (
+            StatusCode::FORBIDDEN,
+            Html("<h1>403 Forbidden</h1>".to_string()),
+        )
+            .into_response();
     }
     let Some(site_id) = admin.site_id else {
-        return (StatusCode::FORBIDDEN, Html("<h1>403 Forbidden</h1>".to_string())).into_response();
+        return (
+            StatusCode::FORBIDDEN,
+            Html("<h1>403 Forbidden</h1>".to_string()),
+        )
+            .into_response();
     };
     let flash = params.get("flash").map(|s| s.as_str());
     let cs = state.site_hostname(Some(site_id));
@@ -38,7 +49,13 @@ pub async fn view(
         .and_then(|(_, settings)| settings.admin_brand_name)
         .unwrap_or_default();
     let has_site_logo = crate::app_state::detect_site_admin_logo(site_id).is_some();
-    Html(admin::pages::site_settings::render(flash, &brand_name, has_site_logo, &ctx)).into_response()
+    Html(admin::pages::site_settings::render(
+        flash,
+        &brand_name,
+        has_site_logo,
+        &ctx,
+    ))
+    .into_response()
 }
 
 pub async fn save_general(
@@ -57,7 +74,11 @@ pub async fn save_general(
 
     let mut error: Option<String> = None;
     if let Err(e) = set_site_setting(&state.db, site_id, "admin_brand_name", brand_name).await {
-        tracing::error!("failed to save admin_brand_name for site {}: {}", site_id, e);
+        tracing::error!(
+            "failed to save admin_brand_name for site {}: {}",
+            site_id,
+            e
+        );
         error = Some("Failed to save settings. Please try again.".to_string());
     }
 
@@ -68,7 +89,11 @@ pub async fn save_general(
     }
 
     let flash = error.as_deref().unwrap_or("General settings saved.");
-    Redirect::to(&format!("/admin/site-settings?flash={}", flash.replace(' ', "+"))).into_response()
+    Redirect::to(&format!(
+        "/admin/site-settings?flash={}",
+        flash.replace(' ', "+")
+    ))
+    .into_response()
 }
 
 fn branding_dir(site_id: uuid::Uuid) -> std::path::PathBuf {
@@ -83,7 +108,11 @@ fn remove_existing_site_logo_files(site_id: uuid::Uuid) {
         let path = dir.join(name);
         if path.is_file() {
             if let Err(e) = std::fs::remove_file(&path) {
-                tracing::warn!("failed to remove old site logo file '{}': {}", path.display(), e);
+                tracing::warn!(
+                    "failed to remove old site logo file '{}': {}",
+                    path.display(),
+                    e
+                );
             }
         }
     }
@@ -106,7 +135,8 @@ pub async fn upload_logo(admin: AdminUser, mut multipart: Multipart) -> impl Int
                 Ok(b) => bytes = Some(b.to_vec()),
                 Err(e) => {
                     tracing::error!("failed to read site logo upload field: {:?}", e);
-                    return redirect_with_flash("Failed to read uploaded file. Please try again.").into_response();
+                    return redirect_with_flash("Failed to read uploaded file. Please try again.")
+                        .into_response();
                 }
             }
         }
@@ -122,15 +152,24 @@ pub async fn upload_logo(admin: AdminUser, mut multipart: Multipart) -> impl Int
         return redirect_with_flash("Logo file too large. Maximum size is 2 MB.").into_response();
     }
 
-    let ext = match super::logo_upload::detect_logo_format(filename.as_deref().unwrap_or(""), &bytes) {
-        Some(ext) => ext,
-        None => return redirect_with_flash("Unsupported file type. Upload an SVG, PNG, or WebP image.").into_response(),
-    };
+    let ext =
+        match super::logo_upload::detect_logo_format(filename.as_deref().unwrap_or(""), &bytes) {
+            Some(ext) => ext,
+            None => {
+                return redirect_with_flash(
+                    "Unsupported file type. Upload an SVG, PNG, or WebP image.",
+                )
+                .into_response()
+            }
+        };
 
     if ext == "svg" {
         if let Err(reason) = super::logo_upload::validate_svg_safety(&bytes) {
             tracing::warn!("site logo upload rejected — {}", reason);
-            return redirect_with_flash("That SVG couldn't be accepted — it contains scripting or unsafe content.").into_response();
+            return redirect_with_flash(
+                "That SVG couldn't be accepted — it contains scripting or unsafe content.",
+            )
+            .into_response();
         }
     }
 

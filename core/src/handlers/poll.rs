@@ -49,7 +49,10 @@ fn redirect_back(headers: &HeaderMap, param: &str, slug: &str) -> Redirect {
         .and_then(|v| v.to_str().ok())
         .unwrap_or("/");
     let base = referer.split('?').next().unwrap_or(referer);
-    Redirect::to(&format!("{base}?{param}={}", crate::handlers::admin::themes::url_encode_param(slug)))
+    Redirect::to(&format!(
+        "{base}?{param}={}",
+        crate::handlers::admin::themes::url_encode_param(slug)
+    ))
 }
 
 #[derive(serde::Deserialize)]
@@ -79,22 +82,42 @@ pub async fn submit(
     }
 
     let ip = client_ip(&headers, peer_addr);
-    let existing_token = jar.get(&cookie_name(poll.id)).map(|c| c.value().to_string());
-    let voter_token = existing_token.clone().unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+    let existing_token = jar
+        .get(&cookie_name(poll.id))
+        .map(|c| c.value().to_string());
+    let voter_token = existing_token
+        .clone()
+        .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
 
-    let already = poll_vote::has_voted(&state.db, poll.id, &voter_token, ip.as_deref(), poll.settings.vote_protection).await;
+    let already = poll_vote::has_voted(
+        &state.db,
+        poll.id,
+        &voter_token,
+        ip.as_deref(),
+        poll.settings.vote_protection,
+    )
+    .await;
 
     let redirect = if already {
         redirect_back(&headers, "already_voted", &slug)
     } else {
-        let inserted = poll_vote::record_vote(&state.db, RecordVote {
-            poll_id: poll.id,
-            site_id: current_site.site.id,
-            option_key: &form.option,
-            voter_token: &voter_token,
-            ip_address: ip.as_deref(),
-        }).await.unwrap_or(false);
-        redirect_back(&headers, if inserted { "voted" } else { "already_voted" }, &slug)
+        let inserted = poll_vote::record_vote(
+            &state.db,
+            RecordVote {
+                poll_id: poll.id,
+                site_id: current_site.site.id,
+                option_key: &form.option,
+                voter_token: &voter_token,
+                ip_address: ip.as_deref(),
+            },
+        )
+        .await
+        .unwrap_or(false);
+        redirect_back(
+            &headers,
+            if inserted { "voted" } else { "already_voted" },
+            &slug,
+        )
     };
 
     // Always (re-)set the cookie, even on an already-voted redirect, so a
@@ -136,14 +159,25 @@ pub async fn results(
     Path(slug): Path<String>,
 ) -> impl IntoResponse {
     let Ok(Some(poll)) = poll_def::get_by_slug(&state.db, current_site.site.id, &slug).await else {
-        return Json(ResultsJson { total: 0, options: Vec::new() });
+        return Json(ResultsJson {
+            total: 0,
+            options: Vec::new(),
+        });
     };
-    let tally: HashMap<String, i64> = poll_vote::tally(&state.db, poll.id).await.unwrap_or_default().into_iter().collect();
-    let options: Vec<ResultOptionJson> = poll.options.iter().map(|o| ResultOptionJson {
-        key: o.key.clone(),
-        label: o.label.clone(),
-        votes: tally.get(&o.key).copied().unwrap_or(0),
-    }).collect();
+    let tally: HashMap<String, i64> = poll_vote::tally(&state.db, poll.id)
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .collect();
+    let options: Vec<ResultOptionJson> = poll
+        .options
+        .iter()
+        .map(|o| ResultOptionJson {
+            key: o.key.clone(),
+            label: o.label.clone(),
+            votes: tally.get(&o.key).copied().unwrap_or(0),
+        })
+        .collect();
     let total = options.iter().map(|o| o.votes).sum();
     Json(ResultsJson { total, options })
 }

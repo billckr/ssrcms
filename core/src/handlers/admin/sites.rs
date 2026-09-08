@@ -5,11 +5,16 @@ const DEFAULT_MAINTENANCE_MESSAGE: &str =
 
 /// Owner, site_admin/admin role, or global admin — the bar for managing a
 /// site's own settings (config, maintenance mode, email providers).
-pub(crate) async fn require_site_manager(state: &AppState, admin: &AdminUser, site: &crate::models::site::Site, ) -> bool {
+pub(crate) async fn require_site_manager(
+    state: &AppState,
+    admin: &AdminUser,
+    site: &crate::models::site::Site,
+) -> bool {
     let is_owner = site.owner_user_id == Some(admin.user.id);
-    let roles = crate::models::site_user::list_roles_for_user_and_site(&state.db, site.id, admin.user.id)
-        .await
-        .unwrap_or_default();
+    let roles =
+        crate::models::site_user::list_roles_for_user_and_site(&state.db, site.id, admin.user.id)
+            .await
+            .unwrap_or_default();
     let has_role = roles.contains(&crate::models::site_user::SiteRole::Admin);
     admin.caps.is_global_admin || is_owner || has_role
 }
@@ -19,13 +24,23 @@ pub(crate) async fn require_site_manager(state: &AppState, admin: &AdminUser, si
 /// TLD must be at least 2 alphabetic characters.
 fn is_valid_hostname(h: &str) -> bool {
     let parts: Vec<&str> = h.split('.').collect();
-    if parts.len() < 2 { return false; }
+    if parts.len() < 2 {
+        return false;
+    }
     let tld = parts.last().unwrap();
-    if tld.len() < 2 || !tld.chars().all(|c| c.is_ascii_alphabetic()) { return false; }
+    if tld.len() < 2 || !tld.chars().all(|c| c.is_ascii_alphabetic()) {
+        return false;
+    }
     for label in &parts[..parts.len() - 1] {
-        if label.is_empty() { return false; }
-        if !label.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') { return false; }
-        if label.starts_with('-') || label.ends_with('-') { return false; }
+        if label.is_empty() {
+            return false;
+        }
+        if !label.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
+            return false;
+        }
+        if label.starts_with('-') || label.ends_with('-') {
+            return false;
+        }
     }
     true
 }
@@ -35,15 +50,17 @@ use axum::{
     response::{Html, IntoResponse, Redirect},
     Form,
 };
-use std::collections::HashMap;
 use serde::Deserialize;
+use std::collections::HashMap;
 use uuid::Uuid;
 
-use std::path::Path as FsPath;
 use crate::app_state::AppState;
-use crate::middleware::admin_auth::{AdminUser, SESSION_CURRENT_ROLE_KEY, SESSION_CURRENT_SITE_KEY};
 use crate::handlers::admin::themes::copy_dir_all;
+use crate::middleware::admin_auth::{
+    AdminUser, SESSION_CURRENT_ROLE_KEY, SESSION_CURRENT_SITE_KEY,
+};
 use admin::pages::sites::{SiteRow, SiteSettingsData};
+use std::path::Path as FsPath;
 use tower_sessions::Session;
 
 /// GET /admin/sites — list sites.
@@ -62,17 +79,20 @@ pub async fn list(
     let can_create = admin.caps.can_manage_sites;
 
     // Read the Caddyfile once to determine SSL status for each site.
-    let caddyfile_content = std::fs::read_to_string(&state.config.caddyfile_path).unwrap_or_default();
+    let caddyfile_content =
+        std::fs::read_to_string(&state.config.caddyfile_path).unwrap_or_default();
 
     // Build site list with per-row manage flag.
     let mut rows: Vec<SiteRow> = Vec::new();
 
     if admin.caps.is_global_admin && !admin.caps.is_impersonating {
         // True super admin view — see all sites.
-        let sites = crate::models::site::list(&state.db).await.unwrap_or_else(|e| {
-            tracing::warn!("failed to list sites: {:?}", e);
-            vec![]
-        });
+        let sites = crate::models::site::list(&state.db)
+            .await
+            .unwrap_or_else(|e| {
+                tracing::warn!("failed to list sites: {:?}", e);
+                vec![]
+            });
 
         // Collect the set of site IDs that are the default_site_id of their
         // non-super_admin owner — these get the "primary domain" badge.
@@ -90,7 +110,14 @@ pub async fn list(
         .collect();
 
         for s in &sites {
-            let (admin_email, user_count, subscriber_count, post_count, page_count, maintenance_mode) = tokio::join!(
+            let (
+                admin_email,
+                user_count,
+                subscriber_count,
+                post_count,
+                page_count,
+                maintenance_mode,
+            ) = tokio::join!(
                 crate::models::site::admin_email(&state.db, s.id),
                 crate::models::site::user_count(&state.db, s.id),
                 crate::models::site::subscriber_count(&state.db, s.id),
@@ -147,7 +174,14 @@ pub async fn list(
         };
 
         for s in &sites {
-            let (admin_email, user_count, subscriber_count, post_count, page_count, maintenance_mode) = tokio::join!(
+            let (
+                admin_email,
+                user_count,
+                subscriber_count,
+                post_count,
+                page_count,
+                maintenance_mode,
+            ) = tokio::join!(
                 crate::models::site::admin_email(&state.db, s.id),
                 crate::models::site::user_count(&state.db, s.id),
                 crate::models::site::subscriber_count(&state.db, s.id),
@@ -174,14 +208,22 @@ pub async fn list(
         // Non-global-admin: the current site plus any other sites where they
         // hold the 'admin' role. Editor/author roles on other sites stay
         // confined to that site's own login.
-        let site_roles = crate::models::site_user::list_for_user_scoped(&state.db, admin.user.id, admin.site_id)
-            .await
-            .unwrap_or_else(|e| {
-                tracing::warn!("failed to list sites for user {}: {:?}", admin.user.id, e);
-                vec![]
-            });
+        let site_roles =
+            crate::models::site_user::list_for_user_scoped(&state.db, admin.user.id, admin.site_id)
+                .await
+                .unwrap_or_else(|e| {
+                    tracing::warn!("failed to list sites for user {}: {:?}", admin.user.id, e);
+                    vec![]
+                });
         for (s, site_role) in &site_roles {
-            let (admin_email, user_count, subscriber_count, post_count, page_count, maintenance_mode) = tokio::join!(
+            let (
+                admin_email,
+                user_count,
+                subscriber_count,
+                post_count,
+                page_count,
+                maintenance_mode,
+            ) = tokio::join!(
                 crate::models::site::admin_email(&state.db, s.id),
                 crate::models::site::user_count(&state.db, s.id),
                 crate::models::site::subscriber_count(&state.db, s.id),
@@ -220,7 +262,11 @@ pub async fn list(
         let needle = search.to_lowercase();
         rows.retain(|r| {
             r.hostname.to_lowercase().contains(&needle)
-                || r.admin_email.as_deref().unwrap_or("").to_lowercase().contains(&needle)
+                || r.admin_email
+                    .as_deref()
+                    .unwrap_or("")
+                    .to_lowercase()
+                    .contains(&needle)
         });
     }
 
@@ -229,7 +275,7 @@ pub async fn list(
     match sort {
         "admin" => rows.sort_by_key(|r| r.admin_email.as_deref().unwrap_or("").to_lowercase()),
         "users" => rows.sort_by_key(|r| r.user_count),
-        "subs"  => rows.sort_by_key(|r| r.subscriber_count),
+        "subs" => rows.sort_by_key(|r| r.subscriber_count),
         "posts" => rows.sort_by_key(|r| r.post_count),
         "pages" => rows.sort_by_key(|r| r.page_count),
         "hostname" => rows.sort_by_key(|r| r.hostname.to_lowercase()),
@@ -242,7 +288,11 @@ pub async fn list(
     const PER_PAGE: i64 = 20;
     let total = rows.len() as i64;
     let total_pages = ((total + PER_PAGE - 1) / PER_PAGE).max(1);
-    let page = params.get("page").and_then(|p| p.parse::<i64>().ok()).unwrap_or(1).clamp(1, total_pages);
+    let page = params
+        .get("page")
+        .and_then(|p| p.parse::<i64>().ok())
+        .unwrap_or(1)
+        .clamp(1, total_pages);
     let start = ((page - 1) * PER_PAGE) as usize;
     let end = (start + PER_PAGE as usize).min(rows.len());
     let page_rows = rows.get(start..end).unwrap_or(&[]);
@@ -250,17 +300,38 @@ pub async fn list(
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
 
     if params.contains_key("partial") {
-        return Html(admin::pages::sites::sites_list_fragment(page_rows, page, total_pages, search, sort, dir, &ctx));
+        return Html(admin::pages::sites::sites_list_fragment(
+            page_rows,
+            page,
+            total_pages,
+            search,
+            sort,
+            dir,
+            &ctx,
+        ));
     }
 
-    Html(admin::pages::sites::render_list(page_rows, flash, can_create, page, total_pages, search, sort, dir, &ctx))
+    Html(admin::pages::sites::render_list(
+        page_rows,
+        flash,
+        can_create,
+        page,
+        total_pages,
+        search,
+        sort,
+        dir,
+        &ctx,
+    ))
 }
 
 /// Assignable users for the site-owner dropdown on the new-site form: the
 /// acting admin themselves (as "You", pinned first) plus every site_admin-role
 /// user, since only site_admin accounts (or the super_admin creating them)
 /// can own a site. Editors, authors, and subscribers are never site owners.
-async fn fetch_assignable_users(state: &AppState, current_user_id: Uuid) -> Vec<admin::pages::sites::UserOption> {
+async fn fetch_assignable_users(
+    state: &AppState,
+    current_user_id: Uuid,
+) -> Vec<admin::pages::sites::UserOption> {
     let mut opts = vec![admin::pages::sites::UserOption {
         id: current_user_id.to_string(),
         label: "You".to_string(),
@@ -281,10 +352,7 @@ async fn fetch_assignable_users(state: &AppState, current_user_id: Uuid) -> Vec<
 
 /// GET /admin/sites/new — new site form.
 /// Available to super_admin and site_admin roles.
-pub async fn new_site(
-    State(state): State<AppState>,
-    admin: AdminUser,
-) -> Html<String> {
+pub async fn new_site(State(state): State<AppState>, admin: AdminUser) -> Html<String> {
     if !admin.caps.can_manage_sites {
         return Html("<h1>403 Forbidden</h1>".to_string());
     }
@@ -313,10 +381,18 @@ pub struct NewSiteForm {
 /// Rebuild the new-site form's prefill data after a validation failure, so the
 /// admin doesn't have to retype the hostname or re-enter the new-user fields
 /// (password excluded — never echo it back).
-async fn rebuild_new_site_data(state: &AppState, admin: &AdminUser, form: &NewSiteForm, hostname: &str) -> admin::pages::sites::NewSiteData {
+async fn rebuild_new_site_data(
+    state: &AppState,
+    admin: &AdminUser,
+    form: &NewSiteForm,
+    hostname: &str,
+) -> admin::pages::sites::NewSiteData {
     admin::pages::sites::NewSiteData {
         hostname: hostname.to_string(),
-        user_assignment: form.user_assignment.clone().unwrap_or_else(|| "existing".to_string()),
+        user_assignment: form
+            .user_assignment
+            .clone()
+            .unwrap_or_else(|| "existing".to_string()),
         existing_user_id: form.existing_user_id.clone().unwrap_or_default(),
         new_username: form.new_username.clone().unwrap_or_default(),
         new_email: form.new_email.clone().unwrap_or_default(),
@@ -341,7 +417,12 @@ pub async fn create(
     let hostname = form.hostname.trim().to_lowercase();
     if hostname.is_empty() {
         let data = rebuild_new_site_data(&state, &admin, &form, &hostname).await;
-        return Html(admin::pages::sites::render_new(&data, Some("Hostname cannot be empty."), &ctx)).into_response();
+        return Html(admin::pages::sites::render_new(
+            &data,
+            Some("Hostname cannot be empty."),
+            &ctx,
+        ))
+        .into_response();
     }
     if !is_valid_hostname(&hostname) {
         let data = rebuild_new_site_data(&state, &admin, &form, &hostname).await;
@@ -349,7 +430,8 @@ pub async fn create(
             &data,
             Some("Must be a valid domain (e.g. example.com, my-site.com, sub.example.com)."),
             &ctx,
-        )).into_response();
+        ))
+        .into_response();
     }
 
     // Resolve who owns/admins the new site. A site admin (non-global) is
@@ -372,72 +454,117 @@ pub async fn create(
     let owner_id: Uuid = if !admin.caps.is_global_admin {
         admin.user.id
     } else {
-    match form.user_assignment.as_deref() {
-        Some("existing") => {
-            let Some(uid) = form.existing_user_id.as_deref().and_then(|s| s.parse::<Uuid>().ok()) else {
-                let data = rebuild_new_site_data(&state, &admin, &form, &hostname).await;
-                return Html(admin::pages::sites::render_new(&data, Some("Please select a user."), &ctx)).into_response();
-            };
-            // "You" (the acting admin) is always a valid choice, even for a
-            // super_admin who wouldn't otherwise show up in the site_admin list.
-            let valid = uid == admin.user.id || matches!(
-                crate::models::user::get_by_id(&state.db, uid).await,
-                Ok(u) if u.role == "site_admin"
-            );
-            if !valid {
-                let data = rebuild_new_site_data(&state, &admin, &form, &hostname).await;
-                return Html(admin::pages::sites::render_new(&data, Some("Selected user not found."), &ctx)).into_response();
+        match form.user_assignment.as_deref() {
+            Some("existing") => {
+                let Some(uid) = form
+                    .existing_user_id
+                    .as_deref()
+                    .and_then(|s| s.parse::<Uuid>().ok())
+                else {
+                    let data = rebuild_new_site_data(&state, &admin, &form, &hostname).await;
+                    return Html(admin::pages::sites::render_new(
+                        &data,
+                        Some("Please select a user."),
+                        &ctx,
+                    ))
+                    .into_response();
+                };
+                // "You" (the acting admin) is always a valid choice, even for a
+                // super_admin who wouldn't otherwise show up in the site_admin list.
+                let valid = uid == admin.user.id
+                    || matches!(
+                        crate::models::user::get_by_id(&state.db, uid).await,
+                        Ok(u) if u.role == "site_admin"
+                    );
+                if !valid {
+                    let data = rebuild_new_site_data(&state, &admin, &form, &hostname).await;
+                    return Html(admin::pages::sites::render_new(
+                        &data,
+                        Some("Selected user not found."),
+                        &ctx,
+                    ))
+                    .into_response();
+                }
+                uid
             }
-            uid
-        }
-        Some("new") => {
-            let username = form.new_username.clone().unwrap_or_default().trim().to_lowercase();
-            let email = form.new_email.clone().unwrap_or_default().trim().to_lowercase();
-            let display_name = form.new_display_name.clone().unwrap_or_default().trim().to_string();
-            let password = form.new_password.clone().unwrap_or_default();
+            Some("new") => {
+                let username = form
+                    .new_username
+                    .clone()
+                    .unwrap_or_default()
+                    .trim()
+                    .to_lowercase();
+                let email = form
+                    .new_email
+                    .clone()
+                    .unwrap_or_default()
+                    .trim()
+                    .to_lowercase();
+                let display_name = form
+                    .new_display_name
+                    .clone()
+                    .unwrap_or_default()
+                    .trim()
+                    .to_string();
+                let password = form.new_password.clone().unwrap_or_default();
 
-            if let Err(msg) = crate::models::user::validate_username(&username) {
+                if let Err(msg) = crate::models::user::validate_username(&username) {
+                    let data = rebuild_new_site_data(&state, &admin, &form, &hostname).await;
+                    return Html(admin::pages::sites::render_new(&data, Some(msg), &ctx))
+                        .into_response();
+                }
+                if email.is_empty() {
+                    let data = rebuild_new_site_data(&state, &admin, &form, &hostname).await;
+                    return Html(admin::pages::sites::render_new(
+                        &data,
+                        Some("Email cannot be empty."),
+                        &ctx,
+                    ))
+                    .into_response();
+                }
+                if let Err(msg) = crate::models::user::validate_password(&password) {
+                    let data = rebuild_new_site_data(&state, &admin, &form, &hostname).await;
+                    return Html(admin::pages::sites::render_new(&data, Some(msg), &ctx))
+                        .into_response();
+                }
+
+                let create_user = crate::models::user::CreateUser {
+                    username: username.clone(),
+                    display_name: if display_name.is_empty() {
+                        username.clone()
+                    } else {
+                        display_name
+                    },
+                    email,
+                    password,
+                    role: crate::models::user::UserRole::SiteAdmin,
+                };
+                match crate::models::user::create(&state.db, &create_user).await {
+                    Ok(new_user) => new_user.id,
+                    Err(e) => {
+                        let msg = if e.to_string().contains("duplicate")
+                            || e.to_string().contains("unique")
+                        {
+                            "A user with that username or email already exists.".to_string()
+                        } else {
+                            format!("Failed to create user: {e}")
+                        };
+                        let data = rebuild_new_site_data(&state, &admin, &form, &hostname).await;
+                        return Html(admin::pages::sites::render_new(&data, Some(&msg), &ctx))
+                            .into_response();
+                    }
+                }
+            }
+            _ => {
                 let data = rebuild_new_site_data(&state, &admin, &form, &hostname).await;
                 return Html(admin::pages::sites::render_new(
                     &data,
-                    Some(msg),
+                    Some("Please select a site admin."),
                     &ctx,
-                )).into_response();
-            }
-            if email.is_empty() {
-                let data = rebuild_new_site_data(&state, &admin, &form, &hostname).await;
-                return Html(admin::pages::sites::render_new(&data, Some("Email cannot be empty."), &ctx)).into_response();
-            }
-            if let Err(msg) = crate::models::user::validate_password(&password) {
-                let data = rebuild_new_site_data(&state, &admin, &form, &hostname).await;
-                return Html(admin::pages::sites::render_new(&data, Some(msg), &ctx)).into_response();
-            }
-
-            let create_user = crate::models::user::CreateUser {
-                username: username.clone(),
-                display_name: if display_name.is_empty() { username.clone() } else { display_name },
-                email,
-                password,
-                role: crate::models::user::UserRole::SiteAdmin,
-            };
-            match crate::models::user::create(&state.db, &create_user).await {
-                Ok(new_user) => new_user.id,
-                Err(e) => {
-                    let msg = if e.to_string().contains("duplicate") || e.to_string().contains("unique") {
-                        "A user with that username or email already exists.".to_string()
-                    } else {
-                        format!("Failed to create user: {e}")
-                    };
-                    let data = rebuild_new_site_data(&state, &admin, &form, &hostname).await;
-                    return Html(admin::pages::sites::render_new(&data, Some(&msg), &ctx)).into_response();
-                }
+                ))
+                .into_response();
             }
         }
-        _ => {
-            let data = rebuild_new_site_data(&state, &admin, &form, &hostname).await;
-            return Html(admin::pages::sites::render_new(&data, Some("Please select a site admin."), &ctx)).into_response();
-        }
-    }
     };
 
     // A site admin creating a site is always creating it "underneath" the
@@ -445,9 +572,18 @@ pub async fn create(
     // non-top-level site (no System Settings, inherits branding — see
     // Site::parent_site_id's doc comment). A global admin's sites are always
     // top-level, regardless of which site they happened to be viewing.
-    let parent_site_id = if admin.caps.is_global_admin { None } else { admin.site_id };
-    let result = crate::models::site::create_with_defaults(&state.db, &hostname, Some(owner_id), parent_site_id)
-        .await;
+    let parent_site_id = if admin.caps.is_global_admin {
+        None
+    } else {
+        admin.site_id
+    };
+    let result = crate::models::site::create_with_defaults(
+        &state.db,
+        &hostname,
+        Some(owner_id),
+        parent_site_id,
+    )
+    .await;
 
     match result {
         Ok(site) => {
@@ -458,14 +594,23 @@ pub async fn create(
                 hostname = %hostname,
                 "site created",
             );
-            super::audit(&state, &admin, "site.created", "site", Some(site.id), &hostname, Some(site.id)).await;
+            super::audit(
+                &state,
+                &admin,
+                "site.created",
+                "site",
+                Some(site.id),
+                &hostname,
+                Some(site.id),
+            )
+            .await;
 
             // Seed the new site's directories and copy the default theme so it
             // appears immediately in the site admin's "My Themes" view.
-            let themes_dir   = state.config.themes_dir.clone();
-            let sites_dir    = state.config.sites_dir.clone();
-            let uploads_dir  = state.config.uploads_dir.clone();
-            let site_id      = site.id;
+            let themes_dir = state.config.themes_dir.clone();
+            let sites_dir = state.config.sites_dir.clone();
+            let uploads_dir = state.config.uploads_dir.clone();
+            let site_id = site.id;
             let site_hostname = hostname.clone();
             tokio::task::spawn_blocking(move || {
                 // Create sites/{uuid}/themes/ and uploads/{uuid}/ directories.
@@ -533,12 +678,18 @@ pub async fn switch(
                 .unwrap_or(false)
         };
         if allowed {
-            let _ = session.insert(SESSION_CURRENT_SITE_KEY, uuid.to_string()).await;
+            let _ = session
+                .insert(SESSION_CURRENT_SITE_KEY, uuid.to_string())
+                .await;
             // A different site can have a completely different role set for the
             // same user — any pinned role must not carry over.
             let _ = session.remove::<String>(SESSION_CURRENT_ROLE_KEY).await;
         } else {
-            tracing::warn!("site_admin {} attempted to switch to unauthorised site {}", admin.user.id, uuid);
+            tracing::warn!(
+                "site_admin {} attempted to switch to unauthorised site {}",
+                admin.user.id,
+                uuid
+            );
         }
     }
     Redirect::to("/admin")
@@ -554,11 +705,14 @@ pub async fn go_home(
     axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
 ) -> impl IntoResponse {
     if let Some(default_site_id) = admin.user.default_site_id {
-        let _ = session.insert(SESSION_CURRENT_SITE_KEY, default_site_id.to_string()).await;
+        let _ = session
+            .insert(SESSION_CURRENT_SITE_KEY, default_site_id.to_string())
+            .await;
         let _ = session.remove::<String>(SESSION_CURRENT_ROLE_KEY).await;
     }
     // Only allow relative paths starting with /admin to prevent open-redirect.
-    let next = params.get("next")
+    let next = params
+        .get("next")
         .filter(|p| p.starts_with("/admin"))
         .map(|p| p.as_str())
         .unwrap_or("/admin");
@@ -582,26 +736,38 @@ pub async fn site_settings(
         return (axum::http::StatusCode::FORBIDDEN, "Forbidden").into_response();
     }
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
-    let cfg = state.get_site_by_id(id)
+    let cfg = state
+        .get_site_by_id(id)
         .map(|(_, s)| s)
         .unwrap_or_else(|| (*state.settings).clone());
-    let admin_email_placeholder = crate::models::site::admin_email(&state.db, id).await
+    let admin_email_placeholder = crate::models::site::admin_email(&state.db, id)
+        .await
         .ok()
         .flatten()
         .unwrap_or_default();
     let maintenance_mode = crate::app_state::get_site_setting(&state.db, id, "maintenance_mode")
         .await
-        .as_deref() == Some("true");
-    let maintenance_message = crate::app_state::get_site_setting(&state.db, id, "maintenance_message")
+        .as_deref()
+        == Some("true");
+    let maintenance_message =
+        crate::app_state::get_site_setting(&state.db, id, "maintenance_message")
+            .await
+            .unwrap_or_else(|| DEFAULT_MAINTENANCE_MESSAGE.to_string());
+    let providers = crate::models::email_provider::list_for_site(&state.db, id)
         .await
-        .unwrap_or_else(|| DEFAULT_MAINTENANCE_MESSAGE.to_string());
-    let providers = crate::models::email_provider::list_for_site(&state.db, id).await.unwrap_or_default()
+        .unwrap_or_default()
         .into_iter()
         .map(|p| {
-            let config = crate::models::email_provider::decrypt_config(&state.config.secret_key, &p);
+            let config =
+                crate::models::email_provider::decrypt_config(&state.config.secret_key, &p);
             let hint = config.as_ref().map(|c| c.display_hint());
             let field_placeholders = config
-                .map(|c| c.field_placeholders().into_iter().map(|(k, v)| (k.to_string(), v)).collect())
+                .map(|c| {
+                    c.field_placeholders()
+                        .into_iter()
+                        .map(|(k, v)| (k.to_string(), v))
+                        .collect()
+                })
                 .unwrap_or_default();
             admin::pages::sites::EmailProviderSummary {
                 id: p.id.to_string(),
@@ -669,7 +835,16 @@ pub async fn delete(
         // gone by this point, so a per-site audit view scoped by site_id
         // could never surface its own deletion event anyway; this still
         // shows up in the global admin's unfiltered view via target_id.
-        super::audit(&state, &admin, "site.deleted", "site", Some(id), &site.hostname, None).await;
+        super::audit(
+            &state,
+            &admin,
+            "site.deleted",
+            "site",
+            Some(id),
+            &site.hostname,
+            None,
+        )
+        .await;
         // Remove the site's data directory (themes + uploads) so no orphaned dirs accumulate.
         let site_data_dir = std::path::Path::new(&state.config.sites_dir).join(id.to_string());
         if site_data_dir.exists() {
@@ -683,7 +858,11 @@ pub async fn delete(
         let sym_path = std::path::Path::new(&state.config.uploads_dir).join(&site.hostname);
         if sym_path.is_symlink() {
             if let Err(e) = std::fs::remove_file(&sym_path) {
-                tracing::warn!("failed to remove upload symlink for '{}': {:?}", site.hostname, e);
+                tracing::warn!(
+                    "failed to remove upload symlink for '{}': {:?}",
+                    site.hostname,
+                    e
+                );
             }
         }
         // Also remove the site's upload subdirectory under uploads/{uuid}/.
@@ -720,11 +899,19 @@ pub async fn delete(
                     if let Err(e) = std::fs::write(caddyfile_path, &stripped) {
                         tracing::warn!(
                             "failed to write {} after removing Caddy block for '{}': {:?}",
-                            caddyfile_path, site.hostname, e
+                            caddyfile_path,
+                            site.hostname,
+                            e
                         );
                     } else {
                         match std::process::Command::new("/usr/bin/caddy")
-                            .args(["reload", "--config", caddyfile_path, "--adapter", "caddyfile"])
+                            .args([
+                                "reload",
+                                "--config",
+                                caddyfile_path,
+                                "--adapter",
+                                "caddyfile",
+                            ])
                             .output()
                         {
                             Ok(out) if out.status.success() => {
@@ -732,11 +919,13 @@ pub async fn delete(
                             }
                             Ok(out) => tracing::warn!(
                                 "caddy reload failed after removing block for '{}': {}",
-                                site.hostname, String::from_utf8_lossy(&out.stderr)
+                                site.hostname,
+                                String::from_utf8_lossy(&out.stderr)
                             ),
                             Err(e) => tracing::warn!(
                                 "failed to run caddy reload after removing block for '{}': {:?}",
-                                site.hostname, e
+                                site.hostname,
+                                e
                             ),
                         }
                     }
@@ -744,7 +933,9 @@ pub async fn delete(
             }
             Err(e) => tracing::warn!(
                 "failed to read {} while cleaning up Caddy block for '{}': {:?}",
-                caddyfile_path, site.hostname, e
+                caddyfile_path,
+                site.hostname,
+                e
             ),
         }
         if let Err(e) = state.reload_site_cache().await {
@@ -788,15 +979,19 @@ pub async fn save_site_config(
     // handlers::page::try_post_permalink) — required, and must be the final
     // token so the "last segment = slug" resolution rule always holds.
     let permalink_structure = form.permalink_structure.trim();
-    let valid_permalink = permalink_structure.ends_with("%postname%")
-        || permalink_structure.ends_with("%postname%/");
+    let valid_permalink =
+        permalink_structure.ends_with("%postname%") || permalink_structure.ends_with("%postname%/");
     if !valid_permalink {
         return Redirect::to(&format!(
             "/admin/sites/{id}/settings?flash=Permalink+structure+must+end+with+%25postname%25&tab=general"
         )).into_response();
     }
 
-    let allow_registration = if form.allow_registration.is_some() { "true" } else { "false" };
+    let allow_registration = if form.allow_registration.is_some() {
+        "true"
+    } else {
+        "false"
+    };
     let settings = [
         ("site_name", form.site_name.as_str()),
         ("site_description", form.site_description.as_str()),
@@ -808,11 +1003,17 @@ pub async fn save_site_config(
     ];
     for (key, value) in &settings {
         if let Err(e) = crate::app_state::set_site_setting(&state.db, id, key, value).await {
-            tracing::error!("failed to save site config '{}' for site {}: {:?}", key, id, e);
+            tracing::error!(
+                "failed to save site config '{}' for site {}: {:?}",
+                key,
+                id,
+                e
+            );
         }
     }
     let ppp = form.posts_per_page.to_string();
-    if let Err(e) = crate::app_state::set_site_setting(&state.db, id, "posts_per_page", &ppp).await {
+    if let Err(e) = crate::app_state::set_site_setting(&state.db, id, "posts_per_page", &ppp).await
+    {
         tracing::error!("failed to save posts_per_page for site {}: {:?}", id, e);
     }
 
@@ -820,7 +1021,11 @@ pub async fn save_site_config(
         tracing::warn!("site cache reload failed after site config save: {:?}", e);
     }
 
-    Redirect::to(&format!("/admin/sites/{}/settings?flash=Saved.&tab=general", id)).into_response()
+    Redirect::to(&format!(
+        "/admin/sites/{}/settings?flash=Saved.&tab=general",
+        id
+    ))
+    .into_response()
 }
 
 /// POST /admin/sites/{id}/maintenance — toggle maintenance mode for a site.
@@ -841,19 +1046,39 @@ pub async fn save_maintenance(
     }
 
     let enabled = form.contains_key("maintenance_mode");
-    let trimmed = form.get("maintenance_message").map(|s| s.trim()).filter(|s| !s.is_empty())
+    let trimmed = form
+        .get("maintenance_message")
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
         .unwrap_or(DEFAULT_MAINTENANCE_MESSAGE);
     let message: String = trimmed.chars().take(250).collect();
     let message = message.as_str();
 
-    if let Err(e) = crate::app_state::set_site_setting(&state.db, id, "maintenance_mode", if enabled { "true" } else { "false" }).await {
+    if let Err(e) = crate::app_state::set_site_setting(
+        &state.db,
+        id,
+        "maintenance_mode",
+        if enabled { "true" } else { "false" },
+    )
+    .await
+    {
         tracing::error!("failed to save maintenance_mode for site {}: {:?}", id, e);
     }
-    if let Err(e) = crate::app_state::set_site_setting(&state.db, id, "maintenance_message", message).await {
-        tracing::error!("failed to save maintenance_message for site {}: {:?}", id, e);
+    if let Err(e) =
+        crate::app_state::set_site_setting(&state.db, id, "maintenance_message", message).await
+    {
+        tracing::error!(
+            "failed to save maintenance_message for site {}: {:?}",
+            id,
+            e
+        );
     }
 
-    Redirect::to(&format!("/admin/sites/{}/settings?flash=Saved.&tab=maintenance", id)).into_response()
+    Redirect::to(&format!(
+        "/admin/sites/{}/settings?flash=Saved.&tab=maintenance",
+        id
+    ))
+    .into_response()
 }
 
 /// POST /admin/sites/{id}/provision-ssl
@@ -870,18 +1095,19 @@ pub async fn provision_ssl(
     }
 
     let site = match crate::models::site::get_by_id(&state.db, id).await {
-        Ok(s)  => s,
+        Ok(s) => s,
         Err(_) => return Redirect::to("/admin/sites?flash=Site+not+found").into_response(),
     };
 
     let caddyfile_path = &state.config.caddyfile_path;
-    let hostname       = &site.hostname;
+    let hostname = &site.hostname;
 
     let existing = match std::fs::read_to_string(caddyfile_path) {
-        Ok(c)  => c,
+        Ok(c) => c,
         Err(e) => {
             tracing::error!("provision_ssl: cannot read {}: {:?}", caddyfile_path, e);
-            return Redirect::to("/admin/sites?flash=Cannot+read+SSL+configuration").into_response();
+            return Redirect::to("/admin/sites?flash=Cannot+read+SSL+configuration")
+                .into_response();
         }
     };
 
@@ -915,8 +1141,10 @@ pub async fn provision_ssl(
     let result = std::process::Command::new("/usr/bin/caddy")
         .args([
             "reload",
-            "--config", caddyfile_path,
-            "--adapter", "caddyfile",
+            "--config",
+            caddyfile_path,
+            "--adapter",
+            "caddyfile",
         ])
         .output();
 
@@ -927,11 +1155,13 @@ pub async fn provision_ssl(
         Ok(out) => {
             let stderr = String::from_utf8_lossy(&out.stderr);
             tracing::error!("provision_ssl: caddy reload failed: {}", stderr);
-            return Redirect::to("/admin/sites?flash=Failed+to+enable+SSL%3A+check+server+logs").into_response();
+            return Redirect::to("/admin/sites?flash=Failed+to+enable+SSL%3A+check+server+logs")
+                .into_response();
         }
         Err(e) => {
             tracing::error!("provision_ssl: cannot run caddy reload: {:?}", e);
-            return Redirect::to("/admin/sites?flash=Failed+to+enable+SSL%3A+check+server+logs").into_response();
+            return Redirect::to("/admin/sites?flash=Failed+to+enable+SSL%3A+check+server+logs")
+                .into_response();
         }
     }
 

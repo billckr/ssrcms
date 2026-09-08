@@ -31,26 +31,35 @@ pub struct TypeCounts {
 
 /// Classify a mime type into a broad category used for the type filter.
 fn media_type_key(mime: &str) -> &'static str {
-    if mime.starts_with("image/") { "image" }
-    else if mime.starts_with("video/") { "video" }
-    else if mime.starts_with("audio/") { "audio" }
-    else { "document" }
+    if mime.starts_with("image/") {
+        "image"
+    } else if mime.starts_with("video/") {
+        "video"
+    } else if mime.starts_with("audio/") {
+        "audio"
+    } else {
+        "document"
+    }
 }
 
 fn type_color(key: &str) -> &'static str {
     match key {
-        "image"    => "#10b981",
-        "video"    => "#f59e0b",
-        "audio"    => "#8b5cf6",
+        "image" => "#10b981",
+        "video" => "#f59e0b",
+        "audio" => "#8b5cf6",
         "document" => "#64748b",
-        _          => "#64748b",
+        _ => "#64748b",
     }
 }
 
 fn format_bytes(b: i64) -> String {
-    if b < 1024 { format!("{} B", b) }
-    else if b < 1024 * 1024 { format!("{:.1} KB", b as f64 / 1024.0) }
-    else { format!("{:.1} MB", b as f64 / (1024.0 * 1024.0)) }
+    if b < 1024 {
+        format!("{} B", b)
+    } else if b < 1024 * 1024 {
+        format!("{:.1} KB", b as f64 / 1024.0)
+    } else {
+        format!("{:.1} MB", b as f64 / (1024.0 * 1024.0))
+    }
 }
 
 pub fn render_list(
@@ -74,8 +83,8 @@ pub fn render_list(
     let count_image = type_counts.image;
     let count_video = type_counts.video;
     let count_audio = type_counts.audio;
-    let count_doc   = type_counts.document;
-    let count_all   = type_counts.all;
+    let count_doc = type_counts.document;
+    let count_all = type_counts.all;
 
     // ── Grid items ───────────────────────────────────────────────────────────
     let grid_items: String = items.iter().enumerate().map(|(i, m)| {
@@ -191,18 +200,26 @@ pub fn render_list(
 
     // ── Folders JSON (for bulk "Move to" in JS) ──────────────────────────────
     let folders_json: String = {
-        let parts: Vec<String> = folders.iter().map(|f| {
-            format!(r##"{{"id":"{id}","name":"{name}"}}"##,
-                id   = html_escape(&f.id),
-                name = html_escape(&f.name),
-            )
-        }).collect();
+        let parts: Vec<String> = folders
+            .iter()
+            .map(|f| {
+                format!(
+                    r##"{{"id":"{id}","name":"{name}"}}"##,
+                    id = html_escape(&f.id),
+                    name = html_escape(&f.name),
+                )
+            })
+            .collect();
         format!("[{}]", parts.join(","))
     };
 
     // ── Folder dropdown options ──────────────────────────────────────────────
     let folder_items_html: String = {
-        let all_selected = if active_folder.is_none() { " selected" } else { "" };
+        let all_selected = if active_folder.is_none() {
+            " selected"
+        } else {
+            ""
+        };
         let mut opts = format!(
             r##"<option value=""{sel}>All Media</option>"##,
             sel = all_selected,
@@ -210,12 +227,16 @@ pub fn render_list(
         let mut sorted: Vec<&FolderItem> = folders.iter().collect();
         sorted.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
         for f in &sorted {
-            let sel = if active_folder == Some(f.id.as_str()) { " selected" } else { "" };
+            let sel = if active_folder == Some(f.id.as_str()) {
+                " selected"
+            } else {
+                ""
+            };
             opts.push_str(&format!(
                 r##"<option value="{id}"{sel}>{name}</option>"##,
-                id   = html_escape(&f.id),
+                id = html_escape(&f.id),
                 name = html_escape(&f.name),
-                sel  = sel,
+                sel = sel,
             ));
         }
         opts
@@ -223,23 +244,53 @@ pub fn render_list(
 
     // ── URL param helpers ────────────────────────────────────────────────────
     // frame_qs preserves the current mode across internal navigation.
-    let frame_qs = if select_mode { "&picker=1" } else if picker_mode { "&browser=1" } else { "" };
-    let frame_base = if select_mode { "/admin/media?picker=1" } else if picker_mode { "/admin/media?browser=1" } else { "/admin/media" };
-    let folder_qs      = active_folder.map(|f| format!("&folder_id={}", f)).unwrap_or_default();
-    let type_all_url   = if let Some(f) = active_folder {
+    let frame_qs = if select_mode {
+        "&picker=1"
+    } else if picker_mode {
+        "&browser=1"
+    } else {
+        ""
+    };
+    let frame_base = if select_mode {
+        "/admin/media?picker=1"
+    } else if picker_mode {
+        "/admin/media?browser=1"
+    } else {
+        "/admin/media"
+    };
+    let folder_qs = active_folder
+        .map(|f| format!("&folder_id={}", f))
+        .unwrap_or_default();
+    let type_all_url = if let Some(f) = active_folder {
         format!("/admin/media?folder_id={}{}", f, frame_qs)
     } else {
         frame_base.to_string()
     };
-    let type_image_url = format!("/admin/media?type=image{}{}",    folder_qs, frame_qs);
-    let type_video_url = format!("/admin/media?type=video{}{}",    folder_qs, frame_qs);
-    let type_audio_url = format!("/admin/media?type=audio{}{}",    folder_qs, frame_qs);
-    let type_doc_url   = format!("/admin/media?type=document{}{}", folder_qs, frame_qs);
-    let type_all_active   = if active_type.is_none()             { "active" } else { "" };
-    let type_image_active = if active_type == Some("image")    { "active" } else { "" };
-    let type_video_active = if active_type == Some("video")    { "active" } else { "" };
-    let type_audio_active = if active_type == Some("audio")    { "active" } else { "" };
-    let type_doc_active   = if active_type == Some("document") { "active" } else { "" };
+    let type_image_url = format!("/admin/media?type=image{}{}", folder_qs, frame_qs);
+    let type_video_url = format!("/admin/media?type=video{}{}", folder_qs, frame_qs);
+    let type_audio_url = format!("/admin/media?type=audio{}{}", folder_qs, frame_qs);
+    let type_doc_url = format!("/admin/media?type=document{}{}", folder_qs, frame_qs);
+    let type_all_active = if active_type.is_none() { "active" } else { "" };
+    let type_image_active = if active_type == Some("image") {
+        "active"
+    } else {
+        ""
+    };
+    let type_video_active = if active_type == Some("video") {
+        "active"
+    } else {
+        ""
+    };
+    let type_audio_active = if active_type == Some("audio") {
+        "active"
+    } else {
+        ""
+    };
+    let type_doc_active = if active_type == Some("document") {
+        "active"
+    } else {
+        ""
+    };
     let folder_onchange = format!(
         "if(this.value)window.location='/admin/media?folder_id='+this.value+'{}';else window.location='{}'",
         if let Some(t) = active_type { format!("&type={}{}", t, frame_qs) } else { frame_qs.to_string() },
@@ -250,11 +301,22 @@ pub fn render_list(
         },
     );
     let mut pager_parts: Vec<String> = Vec::new();
-    if let Some(t) = active_type   { pager_parts.push(format!("type={}", t)); }
-    if let Some(f) = active_folder { pager_parts.push(format!("folder_id={}", f)); }
-    if select_mode      { pager_parts.push("picker=1".to_string()); }
-    else if picker_mode { pager_parts.push("browser=1".to_string()); }
-    let pager_suffix = if pager_parts.is_empty() { String::new() } else { format!("&{}", pager_parts.join("&")) };
+    if let Some(t) = active_type {
+        pager_parts.push(format!("type={}", t));
+    }
+    if let Some(f) = active_folder {
+        pager_parts.push(format!("folder_id={}", f));
+    }
+    if select_mode {
+        pager_parts.push("picker=1".to_string());
+    } else if picker_mode {
+        pager_parts.push("browser=1".to_string());
+    }
+    let pager_suffix = if pager_parts.is_empty() {
+        String::new()
+    } else {
+        format!("&{}", pager_parts.join("&"))
+    };
 
     // ── Pagination ───────────────────────────────────────────────────────────
     let total_pages = ((total as f64) / (page_size as f64)).ceil() as i64;
@@ -267,37 +329,54 @@ pub fn render_list(
         if page > 1 {
             p.push_str(&format!(
                 r##"<a href="/admin/media?page={}{}" class="page-btn">&lsaquo; Prev</a>"##,
-                page - 1, pager_suffix
+                page - 1,
+                pager_suffix
             ));
         } else {
             p.push_str(r##"<span class="page-btn page-btn-disabled">&lsaquo; Prev</span>"##);
         }
         // Page numbers (show at most 7 around current)
         let start = (page - 3).max(1);
-        let end   = (page + 3).min(total_pages);
+        let end = (page + 3).min(total_pages);
         if start > 1 {
-            p.push_str(&format!(r##"<a href="/admin/media?page=1{}" class="page-btn">1</a>"##, pager_suffix));
-            if start > 2 { p.push_str(r##"<span class="page-btn" style="pointer-events:none;color:var(--muted)">…</span>"##); }
+            p.push_str(&format!(
+                r##"<a href="/admin/media?page=1{}" class="page-btn">1</a>"##,
+                pager_suffix
+            ));
+            if start > 2 {
+                p.push_str(r##"<span class="page-btn" style="pointer-events:none;color:var(--muted)">…</span>"##);
+            }
         }
         for n in start..=end {
             if n == page {
-                p.push_str(&format!(r##"<span class="page-btn page-btn-active">{}</span>"##, n));
+                p.push_str(&format!(
+                    r##"<span class="page-btn page-btn-active">{}</span>"##,
+                    n
+                ));
             } else {
                 p.push_str(&format!(
                     r##"<a href="/admin/media?page={n}{ps}" class="page-btn">{n}</a>"##,
-                    n = n, ps = pager_suffix
+                    n = n,
+                    ps = pager_suffix
                 ));
             }
         }
         if end < total_pages {
-            if end < total_pages - 1 { p.push_str(r##"<span class="page-btn" style="pointer-events:none;color:var(--muted)">…</span>"##); }
-            p.push_str(&format!(r##"<a href="/admin/media?page={tp}{ps}" class="page-btn">{tp}</a>"##, tp = total_pages, ps = pager_suffix));
+            if end < total_pages - 1 {
+                p.push_str(r##"<span class="page-btn" style="pointer-events:none;color:var(--muted)">…</span>"##);
+            }
+            p.push_str(&format!(
+                r##"<a href="/admin/media?page={tp}{ps}" class="page-btn">{tp}</a>"##,
+                tp = total_pages,
+                ps = pager_suffix
+            ));
         }
         // Next
         if page < total_pages {
             p.push_str(&format!(
                 r##"<a href="/admin/media?page={}{}" class="page-btn">Next &rsaquo;</a>"##,
-                page + 1, pager_suffix
+                page + 1,
+                pager_suffix
             ));
         } else {
             p.push_str(r##"<span class="page-btn page-btn-disabled">Next &rsaquo;</span>"##);
@@ -305,9 +384,13 @@ pub fn render_list(
         p
     };
 
-    let showing_from = if total == 0 { 0 } else { (page - 1) * page_size + 1 };
-    let showing_to   = (page * page_size).min(total);
-    let footer_info  = format!("Showing {}–{} of {} files", showing_from, showing_to, total);
+    let showing_from = if total == 0 {
+        0
+    } else {
+        (page - 1) * page_size + 1
+    };
+    let showing_to = (page * page_size).min(total);
+    let footer_info = format!("Showing {}–{} of {} files", showing_from, showing_to, total);
 
     // ── Page title ───────────────────────────────────────────────────────────
     let page_title = "Media Library".to_string();
@@ -349,12 +432,16 @@ pub fn render_list(
       alt:   alt.trim(),
       title: title.trim()
     }, '*');
-  };"#.to_string()
+  };"#
+        .to_string()
     } else {
         String::new()
     };
     let folder_hidden = if let Some(fid) = active_folder {
-        format!(r##"<input type="hidden" name="folder_id" value="{}">"##, html_escape(fid))
+        format!(
+            r##"<input type="hidden" name="folder_id" value="{}">"##,
+            html_escape(fid)
+        )
     } else {
         String::new()
     };
@@ -398,7 +485,8 @@ pub fn render_list(
         String::new()
     };
 
-    let content = format!(r##"
+    let content = format!(
+        r##"
 {flash}
 <style>
 /* ── Force sidebar-collapsed layout on this page only ────────────────── */
@@ -1351,39 +1439,39 @@ body.sidebar-open .admin-sidebar {{
   }});
 </script>
 "##,
-        flash         = flash_html,
+        flash = flash_html,
         toolbar_title = toolbar_title,
         toolbar_close = toolbar_close,
-        search_pill   = search_pill,
+        search_pill = search_pill,
         pill_search_init = pill_search_init,
-        redirect_url  = redirect_url,
+        redirect_url = redirect_url,
         folder_hidden = folder_hidden,
-        count_all    = count_all,
-        count_image  = count_image,
-        count_video  = count_video,
-        count_audio  = count_audio,
-        count_doc    = count_doc,
+        count_all = count_all,
+        count_image = count_image,
+        count_video = count_video,
+        count_audio = count_audio,
+        count_doc = count_doc,
         delete_folder_btn = delete_folder_btn_html,
         folder_items = folder_items_html,
         folder_onchange = folder_onchange,
-        type_all_url  = type_all_url,
+        type_all_url = type_all_url,
         type_image_url = type_image_url,
         type_video_url = type_video_url,
         type_audio_url = type_audio_url,
-        type_doc_url   = type_doc_url,
-        type_all_active   = type_all_active,
+        type_doc_url = type_doc_url,
+        type_all_active = type_all_active,
         type_image_active = type_image_active,
         type_video_active = type_video_active,
         type_audio_active = type_audio_active,
-        type_doc_active   = type_doc_active,
-        grid_items   = grid_items,
-        list_rows    = list_rows,
-        items_json   = items_json,
+        type_doc_active = type_doc_active,
+        grid_items = grid_items,
+        list_rows = list_rows,
+        items_json = items_json,
         folders_json = folders_json,
-        footer_info  = footer_info,
-        pagination   = pagination_html,
-        detail_actions       = detail_actions_html,
-        picker_js    = picker_js,
+        footer_info = footer_info,
+        pagination = pagination_html,
+        detail_actions = detail_actions_html,
+        picker_js = picker_js,
     );
 
     if picker_mode {

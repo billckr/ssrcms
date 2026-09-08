@@ -40,8 +40,14 @@ pub enum CaddyAction {
 
 pub async fn run(action: CaddyAction) -> anyhow::Result<()> {
     match action {
-        CaddyAction::Setup { app_user, caddyfile } => setup(&app_user, &caddyfile),
-        CaddyAction::Teardown { app_user, caddyfile } => teardown(&app_user, &caddyfile),
+        CaddyAction::Setup {
+            app_user,
+            caddyfile,
+        } => setup(&app_user, &caddyfile),
+        CaddyAction::Teardown {
+            app_user,
+            caddyfile,
+        } => teardown(&app_user, &caddyfile),
     }
 }
 
@@ -63,7 +69,8 @@ fn setup(app_user: &str, caddyfile_path: &str) -> anyhow::Result<()> {
         anyhow::bail!(
             "usermod -aG caddy {} failed (exit {}). \
              Ensure the 'caddy' group exists and you are running as root.",
-            app_user, status
+            app_user,
+            status
         );
     }
 
@@ -72,7 +79,10 @@ fn setup(app_user: &str, caddyfile_path: &str) -> anyhow::Result<()> {
     //    to `caddy` — chmod g+w alone is a no-op for this user if the file's
     //    existing group is something else (e.g. `root`, which is what some
     //    distros' Caddy packages ship by default).
-    println!("  Setting {} group to 'caddy' and making it group-writable...", caddyfile_path);
+    println!(
+        "  Setting {} group to 'caddy' and making it group-writable...",
+        caddyfile_path
+    );
     let status = Command::new("chgrp")
         .args(["caddy", caddyfile_path])
         .status()
@@ -80,7 +90,8 @@ fn setup(app_user: &str, caddyfile_path: &str) -> anyhow::Result<()> {
     if !status.success() {
         anyhow::bail!(
             "chgrp caddy {} failed (exit {}). Does the file exist?",
-            caddyfile_path, status
+            caddyfile_path,
+            status
         );
     }
     let status = Command::new("chmod")
@@ -90,14 +101,18 @@ fn setup(app_user: &str, caddyfile_path: &str) -> anyhow::Result<()> {
     if !status.success() {
         anyhow::bail!(
             "chmod g+w {} failed (exit {}). Does the file exist?",
-            caddyfile_path, status
+            caddyfile_path,
+            status
         );
     }
 
     // 3. Ensure /var/log/caddy/ exists and is owned by caddy:caddy so that
     //    Caddy can create per-site log files without permission errors.
     let log_dir = "/var/log/caddy";
-    println!("  Ensuring {} exists with caddy:caddy ownership...", log_dir);
+    println!(
+        "  Ensuring {} exists with caddy:caddy ownership...",
+        log_dir
+    );
     std::fs::create_dir_all(log_dir)
         .map_err(|e| anyhow::anyhow!("Failed to create {}: {e}", log_dir))?;
     let status = Command::new("chown")
@@ -127,9 +142,11 @@ fn teardown(app_user: &str, caddyfile_path: &str) -> anyhow::Result<()> {
     // 1. Remove the sudoers drop-in.
     println!("  Removing {}...", SUDOERS_FILE);
     match std::fs::remove_file(SUDOERS_FILE) {
-        Ok(())                                                   => println!("  Removed {}.", SUDOERS_FILE),
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound      => println!("  {} not found — skipped.", SUDOERS_FILE),
-        Err(e)                                                   => anyhow::bail!("Failed to remove {}: {e}", SUDOERS_FILE),
+        Ok(()) => println!("  Removed {}.", SUDOERS_FILE),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            println!("  {} not found — skipped.", SUDOERS_FILE)
+        }
+        Err(e) => anyhow::bail!("Failed to remove {}: {e}", SUDOERS_FILE),
     }
 
     // 2. Restore Caddyfile to 640 (group-readable only, not writable).

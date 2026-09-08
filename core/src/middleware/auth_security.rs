@@ -6,15 +6,18 @@
 
 use axum::http::HeaderMap;
 use once_cell::sync::Lazy;
-use std::{collections::HashMap, sync::Mutex, time::{Duration, Instant}};
+use std::{
+    collections::HashMap,
+    sync::Mutex,
+    time::{Duration, Instant},
+};
 
 #[derive(Default)]
 struct Bucket {
     attempts: Vec<Instant>,
 }
 
-static ATTEMPTS: Lazy<Mutex<HashMap<String, Bucket>>> =
-    Lazy::new(|| Mutex::new(HashMap::new()));
+static ATTEMPTS: Lazy<Mutex<HashMap<String, Bucket>>> = Lazy::new(|| Mutex::new(HashMap::new()));
 
 fn client_ip(headers: &HeaderMap) -> &str {
     headers
@@ -27,10 +30,14 @@ fn client_ip(headers: &HeaderMap) -> &str {
 }
 
 fn consume(key: String, limit: usize, window: Duration, now: Instant) -> bool {
-    let mut buckets = ATTEMPTS.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+    let mut buckets = ATTEMPTS
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     if buckets.len() >= 10_000 {
         buckets.retain(|_, bucket| {
-            bucket.attempts.retain(|at| now.duration_since(*at) < window);
+            bucket
+                .attempts
+                .retain(|at| now.duration_since(*at) < window);
             !bucket.attempts.is_empty()
         });
         // Bound memory even during a distributed identifier-flood attack.
@@ -39,7 +46,9 @@ fn consume(key: String, limit: usize, window: Duration, now: Instant) -> bool {
         }
     }
     let bucket = buckets.entry(key).or_default();
-    bucket.attempts.retain(|at| now.duration_since(*at) < window);
+    bucket
+        .attempts
+        .retain(|at| now.duration_since(*at) < window);
     if bucket.attempts.len() >= limit {
         return false;
     }

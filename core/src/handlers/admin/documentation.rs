@@ -2,29 +2,39 @@
 
 use axum::{
     extract::State,
-    response::{Html, IntoResponse},
     http::StatusCode,
+    response::{Html, IntoResponse},
 };
 
 use crate::app_state::AppState;
 use crate::middleware::admin_auth::AdminUser;
-use admin::pages::documentation::{DocEntry, render_list};
+use admin::pages::documentation::{render_list, DocEntry};
 
-pub async fn list(
-    State(state): State<AppState>,
-    admin: AdminUser,
-) -> impl IntoResponse {
+pub async fn list(State(state): State<AppState>, admin: AdminUser) -> impl IntoResponse {
     // Only super admins can view docs.
     if !admin.caps.is_global_admin {
-        return (StatusCode::FORBIDDEN, Html("<h1>403 Forbidden</h1>".to_string())).into_response();
+        return (
+            StatusCode::FORBIDDEN,
+            Html("<h1>403 Forbidden</h1>".to_string()),
+        )
+            .into_response();
     }
 
     let cs = state.site_hostname(admin.site_id);
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
 
-    let rows: Result<Vec<(String, String, String, Option<String>, Option<String>, Option<String>)>, _> =
-        sqlx::query_as(
-            r#"SELECT slug, title, content,
+    let rows: Result<
+        Vec<(
+            String,
+            String,
+            String,
+            Option<String>,
+            Option<String>,
+            Option<String>,
+        )>,
+        _,
+    > = sqlx::query_as(
+        r#"SELECT slug, title, content,
                       to_char(last_updated AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI UTC'),
                       updated_by,
                       grp
@@ -32,22 +42,24 @@ pub async fn list(
                ORDER BY
                  CASE grp WHEN 'system' THEN 0 WHEN 'feature' THEN 1 ELSE 2 END,
                  title ASC"#,
-        )
-        .fetch_all(&state.db)
-        .await;
+    )
+    .fetch_all(&state.db)
+    .await;
 
     match rows {
         Ok(rows) => {
             let entries: Vec<DocEntry> = rows
                 .into_iter()
-                .map(|(slug, title, content, last_updated, updated_by, grp)| DocEntry {
-                    slug,
-                    title,
-                    content,
-                    last_updated: last_updated.unwrap_or_default(),
-                    updated_by,
-                    grp: grp.unwrap_or_else(|| "feature".to_string()),
-                })
+                .map(
+                    |(slug, title, content, last_updated, updated_by, grp)| DocEntry {
+                        slug,
+                        title,
+                        content,
+                        last_updated: last_updated.unwrap_or_default(),
+                        updated_by,
+                        grp: grp.unwrap_or_else(|| "feature".to_string()),
+                    },
+                )
                 .collect();
             Html(render_list(&entries, None, &ctx)).into_response()
         }

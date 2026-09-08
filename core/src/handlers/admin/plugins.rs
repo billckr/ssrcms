@@ -1,12 +1,12 @@
 //! Admin plugin management handlers.
 //! Mirrors the themes.rs pattern: install, upload, activate, deactivate, delete.
 
+use axum::extract::Form;
 use axum::{
     extract::{Multipart, Query, State},
     http::StatusCode,
     response::{Html, IntoResponse, Redirect},
 };
-use axum::extract::Form;
 use serde::Deserialize;
 use std::fs;
 use std::io::Read as IoRead;
@@ -16,7 +16,7 @@ use crate::app_state::AppState;
 use crate::middleware::admin_auth::AdminUser;
 use crate::models::site_plugin;
 use crate::plugins::manifest::PluginManifest;
-use admin::pages::plugins::{PluginCard, render_with_flash};
+use admin::pages::plugins::{render_with_flash, PluginCard};
 
 // ── Query params ──────────────────────────────────────────────────────────────
 
@@ -34,14 +34,25 @@ pub async fn list(
     Query(q): Query<PluginsQuery>,
 ) -> impl IntoResponse {
     if !admin.caps.can_manage_plugins {
-        return (StatusCode::FORBIDDEN, Html("<h1>403 Forbidden</h1>".to_string())).into_response();
+        return (
+            StatusCode::FORBIDDEN,
+            Html("<h1>403 Forbidden</h1>".to_string()),
+        )
+            .into_response();
     }
     let cs = state.site_hostname(admin.site_id);
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
     let filter = q.filter.as_deref().unwrap_or("my");
-    render_plugins_list(&state, None, &ctx, admin.site_id, filter, admin.caps.is_global_admin)
-        .await
-        .into_response()
+    render_plugins_list(
+        &state,
+        None,
+        &ctx,
+        admin.site_id,
+        filter,
+        admin.caps.is_global_admin,
+    )
+    .await
+    .into_response()
 }
 
 // ── Install (copy global → site) ──────────────────────────────────────────────
@@ -64,14 +75,25 @@ pub async fn install(
 
     macro_rules! err {
         ($msg:expr) => {
-            return render_plugins_list(&state, Some($msg), &ctx, admin.site_id, "global", admin.caps.is_global_admin)
-                .await
-                .into_response()
+            return render_plugins_list(
+                &state,
+                Some($msg),
+                &ctx,
+                admin.site_id,
+                "global",
+                admin.caps.is_global_admin,
+            )
+            .await
+            .into_response()
         };
     }
 
     // Validate plugin name.
-    if form.plugin_name.contains("..") || form.plugin_name.contains('/') || form.plugin_name.contains('\\') || form.plugin_name.is_empty() {
+    if form.plugin_name.contains("..")
+        || form.plugin_name.contains('/')
+        || form.plugin_name.contains('\\')
+        || form.plugin_name.is_empty()
+    {
         err!("Invalid plugin name.");
     }
 
@@ -81,7 +103,9 @@ pub async fn install(
     };
 
     let plugins_dir = &state.config.plugins_dir;
-    let global_src = FsPath::new(plugins_dir).join("global").join(&form.plugin_name);
+    let global_src = FsPath::new(plugins_dir)
+        .join("global")
+        .join(&form.plugin_name);
 
     if !global_src.is_dir() {
         err!("Plugin not found in global library.");
@@ -97,7 +121,10 @@ pub async fn install(
         Err(_) => err!("Plugin not found."),
     };
     if !canonical_src.starts_with(&canonical_global) {
-        tracing::warn!("install plugin path traversal attempt: {:?}", form.plugin_name);
+        tracing::warn!(
+            "install plugin path traversal attempt: {:?}",
+            form.plugin_name
+        );
         err!("Invalid plugin name.");
     }
 
@@ -111,7 +138,11 @@ pub async fn install(
         let src = canonical_src.clone();
         let dst = site_dest.clone();
         match tokio::task::spawn_blocking(move || copy_dir_all(&src, &dst)).await {
-            Ok(Ok(())) => tracing::info!("installed plugin '{}' to site {}", form.plugin_name, site_id),
+            Ok(Ok(())) => tracing::info!(
+                "installed plugin '{}' to site {}",
+                form.plugin_name,
+                site_id
+            ),
             Ok(Err(e)) => {
                 tracing::error!("install plugin: copy failed: {}", e);
                 err!("Failed to copy plugin files. Please try again.");
@@ -155,16 +186,33 @@ pub async fn upload(
             match field.bytes().await {
                 Ok(b) if b.len() <= max_bytes => zip_bytes = Some(b.to_vec()),
                 Ok(_) => {
-                    let msg = format!("Upload too large. Maximum is {} MB.", state.config.max_upload_mb);
-                    return render_plugins_list(&state, Some(&msg), &ctx, admin.site_id, "my", admin.caps.is_global_admin)
-                        .await
-                        .into_response();
+                    let msg = format!(
+                        "Upload too large. Maximum is {} MB.",
+                        state.config.max_upload_mb
+                    );
+                    return render_plugins_list(
+                        &state,
+                        Some(&msg),
+                        &ctx,
+                        admin.site_id,
+                        "my",
+                        admin.caps.is_global_admin,
+                    )
+                    .await
+                    .into_response();
                 }
                 Err(e) => {
                     tracing::error!("plugin upload: read field error: {:?}", e);
-                    return render_plugins_list(&state, Some("Failed to read uploaded file."), &ctx, admin.site_id, "my", admin.caps.is_global_admin)
-                        .await
-                        .into_response();
+                    return render_plugins_list(
+                        &state,
+                        Some("Failed to read uploaded file."),
+                        &ctx,
+                        admin.site_id,
+                        "my",
+                        admin.caps.is_global_admin,
+                    )
+                    .await
+                    .into_response();
                 }
             }
         }
@@ -172,16 +220,34 @@ pub async fn upload(
 
     let zip_bytes = match zip_bytes {
         Some(b) => b,
-        None => return render_plugins_list(&state, Some("No file received."), &ctx, admin.site_id, "my", admin.caps.is_global_admin)
+        None => {
+            return render_plugins_list(
+                &state,
+                Some("No file received."),
+                &ctx,
+                admin.site_id,
+                "my",
+                admin.caps.is_global_admin,
+            )
             .await
-            .into_response(),
+            .into_response()
+        }
     };
 
     let site_id = match admin.site_id {
         Some(id) => id,
-        None => return render_plugins_list(&state, Some("No site selected."), &ctx, admin.site_id, "my", admin.caps.is_global_admin)
+        None => {
+            return render_plugins_list(
+                &state,
+                Some("No site selected."),
+                &ctx,
+                admin.site_id,
+                "my",
+                admin.caps.is_global_admin,
+            )
             .await
-            .into_response(),
+            .into_response()
+        }
     };
 
     let plugins_dir = state.config.plugins_dir.clone();
@@ -189,24 +255,37 @@ pub async fn upload(
 
     if let Err(e) = std::fs::create_dir_all(&target_dir) {
         tracing::error!("plugin upload: create dir failed: {}", e);
-        return render_plugins_list(&state, Some("Failed to prepare plugin directory."), &ctx, admin.site_id, "my", admin.caps.is_global_admin)
-            .await
-            .into_response();
+        return render_plugins_list(
+            &state,
+            Some("Failed to prepare plugin directory."),
+            &ctx,
+            admin.site_id,
+            "my",
+            admin.caps.is_global_admin,
+        )
+        .await
+        .into_response();
     }
 
-    let result = tokio::task::spawn_blocking(move || {
-        extract_and_install_plugin(&zip_bytes, &target_dir)
-    })
-    .await;
+    let result =
+        tokio::task::spawn_blocking(move || extract_and_install_plugin(&zip_bytes, &target_dir))
+            .await;
 
     match result {
         Ok(Ok(plugin_name)) => {
             // Record in DB (idempotent).
             if let Err(e) = site_plugin::install(&state.db, site_id, &plugin_name).await {
                 tracing::error!("plugin upload: DB insert failed: {:?}", e);
-                return render_plugins_list(&state, Some("Plugin installed but could not be recorded."), &ctx, admin.site_id, "my", admin.caps.is_global_admin)
-                    .await
-                    .into_response();
+                return render_plugins_list(
+                    &state,
+                    Some("Plugin installed but could not be recorded."),
+                    &ctx,
+                    admin.site_id,
+                    "my",
+                    admin.caps.is_global_admin,
+                )
+                .await
+                .into_response();
             }
 
             // Register plugin templates in the Tera engine.
@@ -216,22 +295,47 @@ pub async fn upload(
                 .join(&plugin_name);
             register_plugin_templates(&plugin_dir, &state.templates);
 
-            tracing::info!("plugin '{}' uploaded and installed for site {}", plugin_name, site_id);
-            render_plugins_list(&state, Some(&format!("Plugin '{}' installed.", plugin_name)), &ctx, admin.site_id, "my", admin.caps.is_global_admin)
-                .await
-                .into_response()
+            tracing::info!(
+                "plugin '{}' uploaded and installed for site {}",
+                plugin_name,
+                site_id
+            );
+            render_plugins_list(
+                &state,
+                Some(&format!("Plugin '{}' installed.", plugin_name)),
+                &ctx,
+                admin.site_id,
+                "my",
+                admin.caps.is_global_admin,
+            )
+            .await
+            .into_response()
         }
         Ok(Err(msg)) => {
             tracing::warn!("plugin upload rejected: {}", msg);
-            render_plugins_list(&state, Some(&msg), &ctx, admin.site_id, "my", admin.caps.is_global_admin)
-                .await
-                .into_response()
+            render_plugins_list(
+                &state,
+                Some(&msg),
+                &ctx,
+                admin.site_id,
+                "my",
+                admin.caps.is_global_admin,
+            )
+            .await
+            .into_response()
         }
         Err(e) => {
             tracing::error!("plugin upload task panicked: {:?}", e);
-            render_plugins_list(&state, Some("Installation failed. Please try again."), &ctx, admin.site_id, "my", admin.caps.is_global_admin)
-                .await
-                .into_response()
+            render_plugins_list(
+                &state,
+                Some("Installation failed. Please try again."),
+                &ctx,
+                admin.site_id,
+                "my",
+                admin.caps.is_global_admin,
+            )
+            .await
+            .into_response()
         }
     }
 }
@@ -256,16 +360,32 @@ pub async fn activate(
 
     let site_id = match admin.site_id {
         Some(id) => id,
-        None => return render_plugins_list(&state, Some("No site selected."), &ctx, admin.site_id, "my", admin.caps.is_global_admin)
+        None => {
+            return render_plugins_list(
+                &state,
+                Some("No site selected."),
+                &ctx,
+                admin.site_id,
+                "my",
+                admin.caps.is_global_admin,
+            )
             .await
-            .into_response(),
+            .into_response()
+        }
     };
 
     if let Err(e) = site_plugin::activate(&state.db, site_id, &form.plugin_name).await {
         tracing::error!("activate plugin '{}': {:?}", form.plugin_name, e);
-        return render_plugins_list(&state, Some("Failed to activate plugin."), &ctx, admin.site_id, "my", admin.caps.is_global_admin)
-            .await
-            .into_response();
+        return render_plugins_list(
+            &state,
+            Some("Failed to activate plugin."),
+            &ctx,
+            admin.site_id,
+            "my",
+            admin.caps.is_global_admin,
+        )
+        .await
+        .into_response();
     }
 
     Redirect::to("/admin/plugins?filter=my").into_response()
@@ -286,16 +406,32 @@ pub async fn deactivate(
 
     let site_id = match admin.site_id {
         Some(id) => id,
-        None => return render_plugins_list(&state, Some("No site selected."), &ctx, admin.site_id, "my", admin.caps.is_global_admin)
+        None => {
+            return render_plugins_list(
+                &state,
+                Some("No site selected."),
+                &ctx,
+                admin.site_id,
+                "my",
+                admin.caps.is_global_admin,
+            )
             .await
-            .into_response(),
+            .into_response()
+        }
     };
 
     if let Err(e) = site_plugin::deactivate(&state.db, site_id, &form.plugin_name).await {
         tracing::error!("deactivate plugin '{}': {:?}", form.plugin_name, e);
-        return render_plugins_list(&state, Some("Failed to deactivate plugin."), &ctx, admin.site_id, "my", admin.caps.is_global_admin)
-            .await
-            .into_response();
+        return render_plugins_list(
+            &state,
+            Some("Failed to deactivate plugin."),
+            &ctx,
+            admin.site_id,
+            "my",
+            admin.caps.is_global_admin,
+        )
+        .await
+        .into_response();
     }
 
     Redirect::to("/admin/plugins?filter=my").into_response()
@@ -316,13 +452,24 @@ pub async fn delete(
 
     macro_rules! err {
         ($msg:expr) => {
-            return render_plugins_list(&state, Some($msg), &ctx, admin.site_id, "my", admin.caps.is_global_admin)
-                .await
-                .into_response()
+            return render_plugins_list(
+                &state,
+                Some($msg),
+                &ctx,
+                admin.site_id,
+                "my",
+                admin.caps.is_global_admin,
+            )
+            .await
+            .into_response()
         };
     }
 
-    if form.plugin_name.contains("..") || form.plugin_name.contains('/') || form.plugin_name.contains('\\') || form.plugin_name.is_empty() {
+    if form.plugin_name.contains("..")
+        || form.plugin_name.contains('/')
+        || form.plugin_name.contains('\\')
+        || form.plugin_name.is_empty()
+    {
         err!("Invalid plugin name.");
     }
 
@@ -369,10 +516,21 @@ pub async fn delete(
         tracing::error!("delete plugin '{}': DB error: {:?}", form.plugin_name, e);
     }
 
-    tracing::info!("plugin '{}' deleted from site {}", form.plugin_name, site_id);
-    render_plugins_list(&state, Some(&format!("Plugin '{}' deleted.", form.plugin_name)), &ctx, admin.site_id, "my", admin.caps.is_global_admin)
-        .await
-        .into_response()
+    tracing::info!(
+        "plugin '{}' deleted from site {}",
+        form.plugin_name,
+        site_id
+    );
+    render_plugins_list(
+        &state,
+        Some(&format!("Plugin '{}' deleted.", form.plugin_name)),
+        &ctx,
+        admin.site_id,
+        "my",
+        admin.caps.is_global_admin,
+    )
+    .await
+    .into_response()
 }
 
 // ── Shared render helper ──────────────────────────────────────────────────────
@@ -404,10 +562,7 @@ async fn render_plugins_list(
             let mut cards = Vec::new();
             let global_dir = FsPath::new(plugins_dir).join("global");
             if let Ok(entries) = fs::read_dir(&global_dir) {
-                let mut names: Vec<_> = entries
-                    .flatten()
-                    .filter(|e| e.path().is_dir())
-                    .collect();
+                let mut names: Vec<_> = entries.flatten().filter(|e| e.path().is_dir()).collect();
                 names.sort_by_key(|e| e.file_name());
                 for entry in names {
                     let plugin_dir = entry.path();
@@ -429,7 +584,14 @@ async fn render_plugins_list(
                     }
                 }
             }
-            Html(render_with_flash(&cards, flash, ctx, "global", is_global_admin)).into_response()
+            Html(render_with_flash(
+                &cards,
+                flash,
+                ctx,
+                "global",
+                is_global_admin,
+            ))
+            .into_response()
         }
         _ => {
             // "my" — show plugins installed for this site with active state.
@@ -444,14 +606,10 @@ async fn render_plugins_list(
 
             let mut cards = Vec::new();
             if let Some(sid) = site_id {
-                let site_dir = FsPath::new(plugins_dir)
-                    .join("sites")
-                    .join(sid.to_string());
+                let site_dir = FsPath::new(plugins_dir).join("sites").join(sid.to_string());
                 if let Ok(entries) = fs::read_dir(&site_dir) {
-                    let mut names: Vec<_> = entries
-                        .flatten()
-                        .filter(|e| e.path().is_dir())
-                        .collect();
+                    let mut names: Vec<_> =
+                        entries.flatten().filter(|e| e.path().is_dir()).collect();
                     names.sort_by_key(|e| e.file_name());
                     for entry in names {
                         let plugin_dir = entry.path();
@@ -461,7 +619,8 @@ async fn render_plugins_list(
                             let is_active = installed_records
                                 .iter()
                                 .any(|r| r.plugin_name == name && r.active);
-                            let mut hook_names: Vec<String> = manifest.hooks.keys().cloned().collect();
+                            let mut hook_names: Vec<String> =
+                                manifest.hooks.keys().cloned().collect();
                             hook_names.sort();
                             cards.push(PluginCard {
                                 name: name.clone(),
@@ -502,7 +661,11 @@ fn register_plugin_templates(plugin_dir: &FsPath, templates: &crate::templates::
                     Err(_) => continue,
                 };
                 if let Err(e) = templates.add_raw_template(&template_name, &source) {
-                    tracing::warn!("could not register plugin template '{}': {}", template_name, e);
+                    tracing::warn!(
+                        "could not register plugin template '{}': {}",
+                        template_name,
+                        e
+                    );
                 }
             }
         }
@@ -527,7 +690,8 @@ fn extract_and_install_plugin(zip_bytes: &[u8], target_dir: &str) -> Result<Stri
     let tmp_path = tmp_dir.clone();
 
     for i in 0..archive.len() {
-        let mut entry = archive.by_index(i)
+        let mut entry = archive
+            .by_index(i)
             .map_err(|e| format!("Failed to read zip entry: {}", e))?;
         let raw_name = entry.name().to_string();
         let relative = if prefix.is_empty() {
@@ -538,7 +702,9 @@ fn extract_and_install_plugin(zip_bytes: &[u8], target_dir: &str) -> Result<Stri
                 None => continue,
             }
         };
-        if relative.is_empty() { continue; }
+        if relative.is_empty() {
+            continue;
+        }
         if relative.contains("..") || relative.starts_with('/') || relative.starts_with('\\') {
             return Err("Zip contains invalid paths.".to_string());
         }
@@ -550,7 +716,9 @@ fn extract_and_install_plugin(zip_bytes: &[u8], target_dir: &str) -> Result<Stri
                 fs::create_dir_all(parent).map_err(|e| format!("Failed to create dir: {}", e))?;
             }
             let mut buf = Vec::new();
-            entry.read_to_end(&mut buf).map_err(|e| format!("Failed to read entry: {}", e))?;
+            entry
+                .read_to_end(&mut buf)
+                .map_err(|e| format!("Failed to read entry: {}", e))?;
             fs::write(&dest, &buf).map_err(|e| format!("Failed to write file: {}", e))?;
         }
     }
@@ -559,8 +727,8 @@ fn extract_and_install_plugin(zip_bytes: &[u8], target_dir: &str) -> Result<Stri
     let toml_path = PathBuf::from(&tmp_path).join("plugin.toml");
     let toml_content = fs::read_to_string(&toml_path)
         .map_err(|_| "plugin.toml not found. Is this a valid SynapCMS plugin?".to_string())?;
-    let parsed: toml::Table = toml::from_str(&toml_content)
-        .map_err(|_| "plugin.toml is not valid TOML.".to_string())?;
+    let parsed: toml::Table =
+        toml::from_str(&toml_content).map_err(|_| "plugin.toml is not valid TOML.".to_string())?;
 
     let plugin_name = parsed
         .get("plugin")
@@ -570,7 +738,11 @@ fn extract_and_install_plugin(zip_bytes: &[u8], target_dir: &str) -> Result<Stri
         .ok_or("plugin.toml is missing [plugin] name field.".to_string())?
         .to_string();
 
-    if plugin_name.is_empty() || plugin_name.contains('/') || plugin_name.contains('\\') || plugin_name.contains("..") {
+    if plugin_name.is_empty()
+        || plugin_name.contains('/')
+        || plugin_name.contains('\\')
+        || plugin_name.contains("..")
+    {
         return Err("plugin.toml contains an invalid plugin name.".to_string());
     }
 
@@ -599,7 +771,10 @@ fn extract_and_install_plugin(zip_bytes: &[u8], target_dir: &str) -> Result<Stri
             }
             other => {
                 let _ = fs::remove_dir_all(&tmp_path);
-                return Err(format!("Unknown plugin type '{}'. Expected 'tera' or 'wasm'.", other));
+                return Err(format!(
+                    "Unknown plugin type '{}'. Expected 'tera' or 'wasm'.",
+                    other
+                ));
             }
         }
     }
@@ -607,17 +782,22 @@ fn extract_and_install_plugin(zip_bytes: &[u8], target_dir: &str) -> Result<Stri
     // Move to final location.
     let final_path = PathBuf::from(target_dir).join(&plugin_name);
     if final_path.exists() {
-        fs::remove_dir_all(&final_path).map_err(|e| format!("Failed to replace existing plugin: {}", e))?;
+        fs::remove_dir_all(&final_path)
+            .map_err(|e| format!("Failed to replace existing plugin: {}", e))?;
     }
     fs::rename(&tmp_path, &final_path).map_err(|e| format!("Failed to install plugin: {}", e))?;
 
     Ok(plugin_name)
 }
 
-fn find_plugin_prefix(archive: &mut zip::ZipArchive<std::io::Cursor<&[u8]>>) -> Result<String, String> {
+fn find_plugin_prefix(
+    archive: &mut zip::ZipArchive<std::io::Cursor<&[u8]>>,
+) -> Result<String, String> {
     let mut nested: Option<String> = None;
     for i in 0..archive.len() {
-        let entry = archive.by_index(i).map_err(|e| format!("Failed to read zip: {}", e))?;
+        let entry = archive
+            .by_index(i)
+            .map_err(|e| format!("Failed to read zip: {}", e))?;
         let name = entry.name().to_string();
         if name == "plugin.toml" {
             return Ok(String::new());
@@ -639,7 +819,8 @@ fn tempdir_in(dir: &str) -> Result<String, String> {
     let tmp_name = format!(".plugin_upload_tmp_{}", ts);
     let tmp_path = PathBuf::from(dir).join(&tmp_name);
     fs::create_dir_all(&tmp_path).map_err(|e| format!("Failed to create temp directory: {}", e))?;
-    tmp_path.to_str()
+    tmp_path
+        .to_str()
         .map(|s| s.to_string())
         .ok_or("Temp path is not valid UTF-8.".to_string())
 }

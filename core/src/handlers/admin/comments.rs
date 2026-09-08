@@ -36,6 +36,10 @@ pub async fn delete(
         tracing::warn!("failed to delete comment {}: {:?}", id, e);
     }
 
-    let destination = if form.redirect.is_empty() { "/admin".to_string() } else { form.redirect };
+    let destination = if form.redirect.is_empty() {
+        "/admin".to_string()
+    } else {
+        form.redirect
+    };
     Redirect::to(&destination).into_response()
 }

@@ -49,11 +49,24 @@ pub async fn subscribe_form(
 ) -> Response {
     let default_theme = state.app_settings.read().unwrap().default_theme.clone();
     if q.subscribed.as_deref() == Some("1") {
-        Html(admin::pages::subscribe::render_success(&site.settings.site_name, &default_theme)).into_response()
+        Html(admin::pages::subscribe::render_success(
+            &site.settings.site_name,
+            &default_theme,
+        ))
+        .into_response()
     } else if !site.settings.allow_registration {
-        Html(admin::pages::subscribe::render_closed(&site.settings.site_name, &default_theme)).into_response()
+        Html(admin::pages::subscribe::render_closed(
+            &site.settings.site_name,
+            &default_theme,
+        ))
+        .into_response()
     } else {
-        Html(admin::pages::subscribe::render(None, &site.settings.site_name, &default_theme)).into_response()
+        Html(admin::pages::subscribe::render(
+            None,
+            &site.settings.site_name,
+            &default_theme,
+        ))
+        .into_response()
     }
 }
 
@@ -70,21 +83,39 @@ pub async fn subscribe_post(
 
     let normalized_email = crate::models::user::normalize_email(&form.email);
     if normalized_email.len() > 254 {
-        return Html(admin::pages::subscribe::render(Some("A valid email address is required."), &site_name, &default_theme)).into_response();
+        return Html(admin::pages::subscribe::render(
+            Some("A valid email address is required."),
+            &site_name,
+            &default_theme,
+        ))
+        .into_response();
     }
     if !crate::middleware::auth_security::allow("subscribe", &headers, &normalized_email) {
-        return (axum::http::StatusCode::TOO_MANY_REQUESTS, "Too many registration attempts. Please try again later.").into_response();
+        return (
+            axum::http::StatusCode::TOO_MANY_REQUESTS,
+            "Too many registration attempts. Please try again later.",
+        )
+            .into_response();
     }
 
     // Re-checked here, not just on the GET form — a direct POST (bypassing
     // the UI) must not be able to create an account when registration is off.
     if !site.settings.allow_registration {
-        return Html(admin::pages::subscribe::render_closed(&site_name, &default_theme)).into_response();
+        return Html(admin::pages::subscribe::render_closed(
+            &site_name,
+            &default_theme,
+        ))
+        .into_response();
     }
 
     macro_rules! err {
         ($msg:expr) => {
-            return Html(admin::pages::subscribe::render(Some($msg), &site_name, &default_theme)).into_response()
+            return Html(admin::pages::subscribe::render(
+                Some($msg),
+                &site_name,
+                &default_theme,
+            ))
+            .into_response()
         };
     }
 
@@ -116,7 +147,12 @@ pub async fn subscribe_post(
         err!("Passwords do not match.");
     }
     if let Err(msg) = crate::models::user::validate_password(&form.password) {
-        return Html(admin::pages::subscribe::render(Some(msg), &site_name, &default_theme)).into_response();
+        return Html(admin::pages::subscribe::render(
+            Some(msg),
+            &site_name,
+            &default_theme,
+        ))
+        .into_response();
     }
 
     // ── Email already exists? ─────────────────────────────────────────────────
@@ -222,7 +258,8 @@ async fn generate_username(pool: &sqlx::PgPool, site_id: Uuid, display_name: &st
         let mut candidate: String = base.chars().take(keep).collect();
         candidate = candidate.trim_end_matches('-').to_string();
         candidate.push_str(&suffix);
-        if validate_username(&candidate).is_ok() && !username_taken(pool, site_id, &candidate).await {
+        if validate_username(&candidate).is_ok() && !username_taken(pool, site_id, &candidate).await
+        {
             return candidate;
         }
     }

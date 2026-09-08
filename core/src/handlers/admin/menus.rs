@@ -48,13 +48,12 @@ pub async fn list(
 
     let mut rows = Vec::with_capacity(menus.len());
     for m in &menus {
-        let item_count: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM nav_menu_items WHERE menu_id = $1",
-        )
-        .bind(m.id)
-        .fetch_one(&state.db)
-        .await
-        .unwrap_or(0);
+        let item_count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM nav_menu_items WHERE menu_id = $1")
+                .bind(m.id)
+                .fetch_one(&state.db)
+                .await
+                .unwrap_or(0);
 
         rows.push(MenuRow {
             id: m.id.to_string(),
@@ -69,7 +68,10 @@ pub async fn list(
         _ => None,
     };
 
-    Html(admin::pages::menus::render_list(&rows, &q.sort, &q.dir, &ctx, flash)).into_response()
+    Html(admin::pages::menus::render_list(
+        &rows, &q.sort, &q.dir, &ctx, flash,
+    ))
+    .into_response()
 }
 
 // ── Create ────────────────────────────────────────────────────────────────────
@@ -96,12 +98,14 @@ pub async fn create(
     let Some(name) = clean_text(&form.name, 1, 100) else {
         return Redirect::to("/admin/menus").into_response();
     };
-    let location = if form.location.is_empty() { None } else { Some(form.location.as_str()) };
+    let location = if form.location.is_empty() {
+        None
+    } else {
+        Some(form.location.as_str())
+    };
 
     match nav_menu::create(&state.db, site_id, &name, location).await {
-        Ok(menu) => {
-            Redirect::to(&format!("/admin/menus/{}", menu.id)).into_response()
-        }
+        Ok(menu) => Redirect::to(&format!("/admin/menus/{}", menu.id)).into_response(),
         Err(e) if is_unique_violation(&e) => {
             Redirect::to("/admin/menus?error=duplicate_name").into_response()
         }
@@ -143,7 +147,9 @@ pub async fn edit(
         return Redirect::to("/admin/menus").into_response();
     }
 
-    let items = nav_menu::items_for_menu(&state.db, id).await.unwrap_or_default();
+    let items = nav_menu::items_for_menu(&state.db, id)
+        .await
+        .unwrap_or_default();
     let pages = load_pages_for_site(&state, admin.site_id).await;
 
     // Resolve page titles for items
@@ -166,7 +172,10 @@ pub async fn edit(
         },
     };
 
-    Html(admin::pages::menus::render_edit(&menu_edit, &item_rows, &pages, &ctx, flash)).into_response()
+    Html(admin::pages::menus::render_edit(
+        &menu_edit, &item_rows, &pages, &ctx, flash,
+    ))
+    .into_response()
 }
 
 // ── Update ────────────────────────────────────────────────────────────────────
@@ -201,11 +210,16 @@ pub async fn update(
     let Some(name) = clean_text(&form.name, 1, 100) else {
         return Redirect::to(&format!("/admin/menus/{}", id)).into_response();
     };
-    let location = if form.location.is_empty() { None } else { Some(form.location.as_str()) };
+    let location = if form.location.is_empty() {
+        None
+    } else {
+        Some(form.location.as_str())
+    };
 
     if let Err(e) = nav_menu::update(&state.db, id, &name, location).await {
         if is_unique_violation(&e) {
-            return Redirect::to(&format!("/admin/menus/{}?error=duplicate_name", id)).into_response();
+            return Redirect::to(&format!("/admin/menus/{}?error=duplicate_name", id))
+                .into_response();
         }
         tracing::error!("update menu {} error: {:?}", id, e);
     }
@@ -291,9 +305,10 @@ pub async fn add_item(
     let target = clean_target(&form.target);
 
     if let Err(e) = nav_menu::create_item(
-        &state.db, id, parent_id, sort_order,
-        &label, url, page_id, target,
-    ).await {
+        &state.db, id, parent_id, sort_order, &label, url, page_id, target,
+    )
+    .await
+    {
         tracing::error!("add nav item error: {:?}", e);
     }
 
@@ -347,9 +362,10 @@ pub async fn edit_item(
     let target = clean_target(&form.target);
 
     if let Err(e) = nav_menu::update_item(
-        &state.db, item_id, parent_id, sort_order,
-        &label, url, page_id, target,
-    ).await {
+        &state.db, item_id, parent_id, sort_order, &label, url, page_id, target,
+    )
+    .await
+    {
         tracing::error!("edit nav item {} error: {:?}", item_id, e);
     }
 
@@ -435,7 +451,9 @@ fn is_unique_violation(err: &crate::errors::AppError) -> bool {
 /// Trim and cap a text field. Returns `None` when the result is empty.
 fn clean_text(s: &str, min_len: usize, max_len: usize) -> Option<String> {
     let s = s.trim();
-    if s.chars().count() < min_len { return None; }
+    if s.chars().count() < min_len {
+        return None;
+    }
     Some(s.chars().take(max_len).collect())
 }
 
@@ -460,18 +478,25 @@ fn has_valid_host(rest: &str) -> bool {
 /// Returns `None` for empty (or invalid) input, meaning "no custom URL".
 fn clean_url(s: &str) -> Option<String> {
     let s = s.trim();
-    if s.is_empty() { return None; }
+    if s.is_empty() {
+        return None;
+    }
     let lower = s.to_ascii_lowercase();
     let valid = if lower.starts_with('/') {
         true
-    } else if let Some(rest) = lower.strip_prefix("http://").or_else(|| lower.strip_prefix("https://")) {
+    } else if let Some(rest) = lower
+        .strip_prefix("http://")
+        .or_else(|| lower.strip_prefix("https://"))
+    {
         has_valid_host(rest)
     } else if let Some(rest) = lower.strip_prefix("mailto:") {
         !rest.is_empty()
     } else {
         false
     };
-    if !valid { return None; }
+    if !valid {
+        return None;
+    }
     Some(s.chars().take(500).collect())
 }
 
@@ -482,7 +507,11 @@ fn clean_sort_order(s: &str) -> i32 {
 
 /// Only allow the two valid target values.
 fn clean_target(s: &str) -> &str {
-    if s == "_blank" { "_blank" } else { "_self" }
+    if s == "_blank" {
+        "_blank"
+    } else {
+        "_self"
+    }
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -496,29 +525,31 @@ async fn load_pages_for_site(state: &AppState, site_id: Option<Uuid>) -> Vec<(Uu
         .collect()
 }
 
-fn build_item_rows(
-    items: &[nav_menu::NavMenuItem],
-    pages: &[(Uuid, String)],
-) -> Vec<MenuItemRow> {
-    let page_map: std::collections::HashMap<Uuid, &str> = pages.iter()
+fn build_item_rows(items: &[nav_menu::NavMenuItem], pages: &[(Uuid, String)]) -> Vec<MenuItemRow> {
+    let page_map: std::collections::HashMap<Uuid, &str> = pages
+        .iter()
         .map(|(id, title)| (*id, title.as_str()))
         .collect();
 
-    items.iter().map(|i| {
-        let page_title = i.page_id
-            .and_then(|pid| page_map.get(&pid).copied())
-            .map(|s| s.to_string());
+    items
+        .iter()
+        .map(|i| {
+            let page_title = i
+                .page_id
+                .and_then(|pid| page_map.get(&pid).copied())
+                .map(|s| s.to_string());
 
-        MenuItemRow {
-            id: i.id.to_string(),
-            menu_id: i.menu_id.to_string(),
-            parent_id: i.parent_id.map(|id| id.to_string()),
-            sort_order: i.sort_order,
-            label: i.label.clone(),
-            url: i.url.clone(),
-            page_id: i.page_id.map(|id| id.to_string()),
-            page_title,
-            target: i.target.clone(),
-        }
-    }).collect()
+            MenuItemRow {
+                id: i.id.to_string(),
+                menu_id: i.menu_id.to_string(),
+                parent_id: i.parent_id.map(|id| id.to_string()),
+                sort_order: i.sort_order,
+                label: i.label.clone(),
+                url: i.url.clone(),
+                page_id: i.page_id.map(|id| id.to_string()),
+                page_title,
+                target: i.target.clone(),
+            }
+        })
+        .collect()
 }

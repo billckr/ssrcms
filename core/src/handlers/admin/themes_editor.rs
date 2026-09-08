@@ -4,7 +4,7 @@
 //! handlers and the library-wide operations (upload, create, get, publish).
 
 use axum::{
-    extract::{Path, Query, State, Form},
+    extract::{Form, Path, Query, State},
     http::StatusCode,
     response::{Html, IntoResponse, Redirect, Response},
 };
@@ -48,7 +48,11 @@ fn parse_color_defs(parsed: &toml::Table) -> Vec<ColorDef> {
         .iter()
         .filter_map(|(key, def)| {
             let def = def.as_table()?;
-            let label = def.get("label").and_then(|v| v.as_str()).unwrap_or(key).to_string();
+            let label = def
+                .get("label")
+                .and_then(|v| v.as_str())
+                .unwrap_or(key)
+                .to_string();
             // Colors default to their own "Colors" card, distinct from
             // DEFAULT_GROUP ("Layout Options", used by bool/order options) —
             // a theme that declares no explicit group for either kind still
@@ -58,7 +62,11 @@ fn parse_color_defs(parsed: &toml::Table) -> Vec<ColorDef> {
                 .and_then(|v| v.as_str())
                 .unwrap_or("Colors")
                 .to_string();
-            Some(ColorDef { key: key.clone(), label, group })
+            Some(ColorDef {
+                key: key.clone(),
+                label,
+                group,
+            })
         })
         .collect()
 }
@@ -87,20 +95,41 @@ async fn build_customizer(
 
     let theme_section = parsed.get("theme").and_then(|v| v.as_table());
     let manifest = admin::pages::themes::ThemeManifestInfo {
-        name: theme_section.and_then(|t| t.get("name")).and_then(|v| v.as_str()).unwrap_or("Unknown").to_string(),
-        version: theme_section.and_then(|t| t.get("version")).and_then(|v| v.as_str()).unwrap_or("unknown").to_string(),
-        description: theme_section.and_then(|t| t.get("description")).and_then(|v| v.as_str()).unwrap_or("").to_string(),
-        author: theme_section.and_then(|t| t.get("author")).and_then(|v| v.as_str()).unwrap_or("Unknown").to_string(),
+        name: theme_section
+            .and_then(|t| t.get("name"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("Unknown")
+            .to_string(),
+        version: theme_section
+            .and_then(|t| t.get("version"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("unknown")
+            .to_string(),
+        description: theme_section
+            .and_then(|t| t.get("description"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string(),
+        author: theme_section
+            .and_then(|t| t.get("author"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("Unknown")
+            .to_string(),
     };
 
     let css = fs::read_to_string(theme_dir.join("static/css/style.css")).unwrap_or_default();
     let root_re = regex_lite::Regex::new(r":root\s*\{([^}]*)\}").unwrap();
-    let root_block = root_re.captures(&css).map(|c| c[1].to_string()).unwrap_or_default();
+    let root_block = root_re
+        .captures(&css)
+        .map(|c| c[1].to_string())
+        .unwrap_or_default();
 
     let colors = parse_color_defs(&parsed)
         .into_iter()
         .map(|def| {
-            let var_re = regex_lite::Regex::new(&format!(r"--{}\s*:\s*(#[0-9a-fA-F]{{3,8}})\s*;", def.key)).unwrap();
+            let var_re =
+                regex_lite::Regex::new(&format!(r"--{}\s*:\s*(#[0-9a-fA-F]{{3,8}})\s*;", def.key))
+                    .unwrap();
             let value = var_re.captures(&root_block).map(|c| c[1].to_string());
             (def.key, def.label, def.group, value)
         })
@@ -146,7 +175,16 @@ async fn build_customizer(
         crate::models::theme_options::resolve_choices(pool, theme_dir, sid, theme_name)
             .await
             .into_iter()
-            .map(|(def, value)| (def.key, def.label, def.group, def.choices, value, def.placement))
+            .map(|(def, value)| {
+                (
+                    def.key,
+                    def.label,
+                    def.group,
+                    def.choices,
+                    value,
+                    def.placement,
+                )
+            })
             .collect()
     } else {
         Vec::new()
@@ -168,8 +206,20 @@ async fn build_customizer(
             .into_iter()
             .map(|(def, value)| {
                 let default_preview = def.default_preview.clone().unwrap_or_default();
-                let preview_url = if !value.is_empty() { value.clone() } else { default_preview.clone() };
-                (def.key, def.label, def.group, value, preview_url, default_preview, def.placement)
+                let preview_url = if !value.is_empty() {
+                    value.clone()
+                } else {
+                    default_preview.clone()
+                };
+                (
+                    def.key,
+                    def.label,
+                    def.group,
+                    value,
+                    preview_url,
+                    default_preview,
+                    def.placement,
+                )
             })
             .collect()
     } else {
@@ -184,7 +234,17 @@ async fn build_customizer(
         Default::default()
     };
 
-    Some(admin::pages::themes::CustomizerData { manifest, colors, options, order_options, choices, texts, images, has_color_backup, overridden_option_keys })
+    Some(admin::pages::themes::CustomizerData {
+        manifest,
+        colors,
+        options,
+        order_options,
+        choices,
+        texts,
+        images,
+        has_color_backup,
+        overridden_option_keys,
+    })
 }
 
 #[derive(Deserialize)]
@@ -207,36 +267,57 @@ pub async fn new_file(
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
 
     let source = form.source.as_deref().unwrap_or("site");
-    let Some(theme_dir) = resolve_theme_dir_by_source(&state.config.themes_dir, &state.config.sites_dir, &theme, Some(source), admin.site_id) else {
+    let Some(theme_dir) = resolve_theme_dir_by_source(
+        &state.config.themes_dir,
+        &state.config.sites_dir,
+        &theme,
+        Some(source),
+        admin.site_id,
+    ) else {
         return render_theme_list(&state, Some("Theme not found."), &ctx, admin.site_id, "my")
-            .await.into_response();
+            .await
+            .into_response();
     };
 
     // Helper: re-render editor with a flash error.
     let customizer = build_customizer(&state.db, &theme_dir, admin.site_id, &theme).await;
     let editor_err = |msg: &'static str| {
         let files = walk_theme_files(&theme_dir);
-        let editor_files: Vec<admin::pages::themes::EditorFile> = files.iter().map(|f| {
-            admin::pages::themes::EditorFile {
+        let editor_files: Vec<admin::pages::themes::EditorFile> = files
+            .iter()
+            .map(|f| admin::pages::themes::EditorFile {
                 rel_path: f.clone(),
                 is_selected: false,
                 has_backup: bak_path_for(&theme_dir.join(f)).exists(),
                 edited_at: None,
-            }
-        }).collect();
+            })
+            .collect();
         Html(admin::pages::themes::render_theme_editor(
-            &theme, &editor_files, None, "", false, Some(msg), &ctx, false, source, customizer.as_ref(),
-        )).into_response()
+            &theme,
+            &editor_files,
+            None,
+            "",
+            false,
+            Some(msg),
+            &ctx,
+            false,
+            source,
+            customizer.as_ref(),
+        ))
+        .into_response()
     };
 
-    if !admin.caps.is_global_admin && (is_in_global_dir(&theme_dir, &state.config.themes_dir) || is_in_private_dir(&theme_dir, &state.config.themes_dir)) {
+    if !admin.caps.is_global_admin
+        && (is_in_global_dir(&theme_dir, &state.config.themes_dir)
+            || is_in_private_dir(&theme_dir, &state.config.themes_dir))
+    {
         return editor_err("Global themes cannot be modified. Copy this theme to your site first.");
     }
 
     // name = bare name the user typed (e.g. "partials/header" or "custom")
     // ext  = dropdown selection: ".html", ".css", ".js", or ".xml"
     let name = form.filename.trim().to_string();
-    let ext  = form.ext.trim().to_string();
+    let ext = form.ext.trim().to_string();
 
     if name.is_empty() || name.len() > 96 {
         return editor_err("Filename must be 1–96 characters.");
@@ -248,10 +329,10 @@ pub async fn new_file(
     // Map extension → subdirectory and initial file content.
     let (subdir, initial_content): (&str, &[u8]) = match ext.as_str() {
         ".html" => ("templates", b"{# New template #}\n"),
-        ".css"  => ("static",    b"/* styles */\n"),
-        ".js"   => ("static",    b"/* scripts */\n"),
-        ".xml"  => ("templates", b"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"),
-        _       => return editor_err("Invalid file type. Choose .html, .css, .js, or .xml."),
+        ".css" => ("static", b"/* styles */\n"),
+        ".js" => ("static", b"/* scripts */\n"),
+        ".xml" => ("templates", b"<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"),
+        _ => return editor_err("Invalid file type. Choose .html, .css, .js, or .xml."),
     };
 
     // Full relative path from theme root, e.g. "templates/partials/header.html"
@@ -287,7 +368,8 @@ pub async fn new_file(
         url_encode_param(&theme),
         source,
         url_encode_param(&rel),
-    )).into_response()
+    ))
+    .into_response()
 }
 
 // ── Theme file editor ────────────────────────────────────────────────────────
@@ -355,7 +437,11 @@ fn resolve_theme_dir_by_source(
     source: Option<&str>,
     site_id: Option<Uuid>,
 ) -> Option<PathBuf> {
-    if theme_name.is_empty() || theme_name.contains("..") || theme_name.contains('/') || theme_name.contains('\\') {
+    if theme_name.is_empty()
+        || theme_name.contains("..")
+        || theme_name.contains('/')
+        || theme_name.contains('\\')
+    {
         return None;
     }
     let dir = match source.unwrap_or("site") {
@@ -365,15 +451,26 @@ fn resolve_theme_dir_by_source(
             // "site" or fallback — use the site-specific copy if one exists,
             // then global, then private (super admins may have no site copy yet)
             if let Some(id) = site_id {
-                let s = FsPath::new(sites_dir).join(id.to_string()).join("themes").join(theme_name);
-                if s.is_dir() { return Some(s); }
+                let s = FsPath::new(sites_dir)
+                    .join(id.to_string())
+                    .join("themes")
+                    .join(theme_name);
+                if s.is_dir() {
+                    return Some(s);
+                }
             }
             let g = FsPath::new(themes_dir).join("global").join(theme_name);
-            if g.is_dir() { return Some(g); }
+            if g.is_dir() {
+                return Some(g);
+            }
             FsPath::new(themes_dir).join("private").join(theme_name)
         }
     };
-    if dir.is_dir() { Some(dir) } else { None }
+    if dir.is_dir() {
+        Some(dir)
+    } else {
+        None
+    }
 }
 
 /// Returns true when `path` lives inside the global themes directory.
@@ -396,11 +493,17 @@ fn is_in_private_dir(path: &FsPath, themes_dir: &str) -> bool {
 
 /// Resolve a relative file path within a theme dir, guarding against traversal.
 fn resolve_file_in_theme(theme_dir: &FsPath, rel_path: &str) -> Option<PathBuf> {
-    if rel_path.contains('\0') || rel_path.is_empty() { return None; }
+    if rel_path.contains('\0') || rel_path.is_empty() {
+        return None;
+    }
     let canonical_theme = theme_dir.canonicalize().ok()?;
     let canonical_file = theme_dir.join(rel_path).canonicalize().ok()?;
-    if !canonical_file.starts_with(&canonical_theme) { return None; }
-    if !canonical_file.is_file() { return None; }
+    if !canonical_file.starts_with(&canonical_theme) {
+        return None;
+    }
+    if !canonical_file.is_file() {
+        return None;
+    }
     Some(canonical_file)
 }
 
@@ -422,12 +525,16 @@ fn walk_theme_files(theme_dir: &FsPath) -> Vec<String> {
 }
 
 fn walk_dir_inner(base: &FsPath, current: &FsPath, out: &mut Vec<String>) {
-    let Ok(entries) = fs::read_dir(current) else { return; };
+    let Ok(entries) = fs::read_dir(current) else {
+        return;
+    };
     for entry in entries.flatten() {
         let path = entry.path();
         let name = entry.file_name();
         let name_str = name.to_string_lossy();
-        if name_str.starts_with('.') { continue; }
+        if name_str.starts_with('.') {
+            continue;
+        }
         if path.is_dir() {
             walk_dir_inner(base, &path, out);
         } else {
@@ -437,7 +544,9 @@ fn walk_dir_inner(base: &FsPath, current: &FsPath, out: &mut Vec<String>) {
                 || name_str.ends_with(".css")
                 || name_str.ends_with(".js")
                 || name_str.ends_with(".xml");
-            if !editable { continue; }
+            if !editable {
+                continue;
+            }
             if let Ok(rel) = path.strip_prefix(base) {
                 out.push(rel.to_string_lossy().replace('\\', "/"));
             }
@@ -452,18 +561,31 @@ pub async fn edit_file(
     Query(q): Query<EditorQuery>,
 ) -> Response {
     if !admin.caps.can_manage_themes {
-        return (StatusCode::FORBIDDEN, Html("<h1>403 Forbidden</h1>".to_string())).into_response();
+        return (
+            StatusCode::FORBIDDEN,
+            Html("<h1>403 Forbidden</h1>".to_string()),
+        )
+            .into_response();
     }
     let cs = state.site_hostname(admin.site_id);
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
 
     let source = q.source.as_deref().unwrap_or("site");
-    let Some(theme_dir) = resolve_theme_dir_by_source(&state.config.themes_dir, &state.config.sites_dir, &theme, Some(source), admin.site_id) else {
+    let Some(theme_dir) = resolve_theme_dir_by_source(
+        &state.config.themes_dir,
+        &state.config.sites_dir,
+        &theme,
+        Some(source),
+        admin.site_id,
+    ) else {
         return render_theme_list(&state, Some("Theme not found."), &ctx, admin.site_id, "my")
-            .await.into_response();
+            .await
+            .into_response();
     };
 
-    let is_readonly = !admin.caps.is_global_admin && (is_in_global_dir(&theme_dir, &state.config.themes_dir) || is_in_private_dir(&theme_dir, &state.config.themes_dir));
+    let is_readonly = !admin.caps.is_global_admin
+        && (is_in_global_dir(&theme_dir, &state.config.themes_dir)
+            || is_in_private_dir(&theme_dir, &state.config.themes_dir));
 
     let files = walk_theme_files(&theme_dir);
 
@@ -494,15 +616,24 @@ pub async fn edit_file(
                         }
                         Err(e) => {
                             tracing::warn!(theme = %theme, file = %rel, err = %e, "editor: read_to_string failed");
-                            (Some(rel.clone()), String::new(), has_bak,
-                                Some("Could not read file (may be binary)."))
+                            (
+                                Some(rel.clone()),
+                                String::new(),
+                                has_bak,
+                                Some("Could not read file (may be binary)."),
+                            )
                         }
                     }
                 }
                 None => {
                     tracing::warn!(theme = %theme, file = %rel, "editor: resolve_file_in_theme returned None");
-                    (Some(rel.clone()), String::new(), false, Some("File not found."))
-                },
+                    (
+                        Some(rel.clone()),
+                        String::new(),
+                        false,
+                        Some("File not found."),
+                    )
+                }
             }
         }
     } else {
@@ -512,14 +643,13 @@ pub async fn edit_file(
 
     let effective_flash: Option<String> = file_err.map(|s| s.to_string()).or(status_flash);
 
-    let editor_files: Vec<admin::pages::themes::EditorFile> = files.iter().map(|f| {
-        let abs = theme_dir.join(f);
-        let has_bak = bak_path_for(&abs).exists();
-        let edited_at = if has_bak {
-            fs::metadata(&abs)
-                .and_then(|m| m.modified())
-                .ok()
-                .map(|t| {
+    let editor_files: Vec<admin::pages::themes::EditorFile> = files
+        .iter()
+        .map(|f| {
+            let abs = theme_dir.join(f);
+            let has_bak = bak_path_for(&abs).exists();
+            let edited_at = if has_bak {
+                fs::metadata(&abs).and_then(|m| m.modified()).ok().map(|t| {
                     let secs = t
                         .duration_since(std::time::UNIX_EPOCH)
                         .unwrap_or_default()
@@ -532,21 +662,23 @@ pub async fn edit_file(
                     let mm = (time_of_day % 3600) / 60;
                     // Compute date from days since 1970-01-01
                     let (y, mo, d) = days_to_ymd(days_since_epoch);
-                    let month = ["Jan","Feb","Mar","Apr","May","Jun",
-                                 "Jul","Aug","Sep","Oct","Nov","Dec"]
-                        [(mo - 1) as usize];
+                    let month = [
+                        "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct",
+                        "Nov", "Dec",
+                    ][(mo - 1) as usize];
                     format!("{:02} {} {} {:02}:{:02}", d, month, y, hh, mm)
                 })
-        } else {
-            None
-        };
-        admin::pages::themes::EditorFile {
-            rel_path: f.clone(),
-            is_selected: selected_rel.as_deref() == Some(f.as_str()),
-            has_backup: has_bak,
-            edited_at,
-        }
-    }).collect();
+            } else {
+                None
+            };
+            admin::pages::themes::EditorFile {
+                rel_path: f.clone(),
+                is_selected: selected_rel.as_deref() == Some(f.as_str()),
+                has_backup: has_bak,
+                edited_at,
+            }
+        })
+        .collect();
 
     let customizer = build_customizer(&state.db, &theme_dir, admin.site_id, &theme).await;
     Html(admin::pages::themes::render_theme_editor(
@@ -560,7 +692,8 @@ pub async fn edit_file(
         is_readonly,
         source,
         customizer.as_ref(),
-    )).into_response()
+    ))
+    .into_response()
 }
 
 pub async fn save_file(
@@ -576,18 +709,35 @@ pub async fn save_file(
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
 
     let source = form.source.as_deref().unwrap_or("site");
-    let Some(theme_dir) = resolve_theme_dir_by_source(&state.config.themes_dir, &state.config.sites_dir, &theme, Some(source), admin.site_id) else {
+    let Some(theme_dir) = resolve_theme_dir_by_source(
+        &state.config.themes_dir,
+        &state.config.sites_dir,
+        &theme,
+        Some(source),
+        admin.site_id,
+    ) else {
         return render_theme_list(&state, Some("Theme not found."), &ctx, admin.site_id, "my")
-            .await.into_response();
+            .await
+            .into_response();
     };
 
-    if !admin.caps.is_global_admin && (is_in_global_dir(&theme_dir, &state.config.themes_dir) || is_in_private_dir(&theme_dir, &state.config.themes_dir)) {
-        return Redirect::to(&format!("/admin/themes/editor/{}?source={}", url_encode_param(&theme), source)).into_response();
+    if !admin.caps.is_global_admin
+        && (is_in_global_dir(&theme_dir, &state.config.themes_dir)
+            || is_in_private_dir(&theme_dir, &state.config.themes_dir))
+    {
+        return Redirect::to(&format!(
+            "/admin/themes/editor/{}?source={}",
+            url_encode_param(&theme),
+            source
+        ))
+        .into_response();
     }
 
     let redirect_base = format!(
         "/admin/themes/editor/{}?source={}&file={}",
-        url_encode_param(&theme), source, url_encode_param(&form.file)
+        url_encode_param(&theme),
+        source,
+        url_encode_param(&form.file)
     );
 
     let Some(abs_path) = resolve_file_in_theme(&theme_dir, &form.file) else {
@@ -605,7 +755,10 @@ pub async fn save_file(
         if let Err(e) = test_tera.add_raw_template("__validate__", &form.content) {
             // Strip ANSI colour codes Tera sometimes adds to error messages.
             let msg = e.to_string();
-            let clean: String = msg.chars().filter(|c| c.is_ascii() && (*c >= ' ' || *c == '\n')).collect();
+            let clean: String = msg
+                .chars()
+                .filter(|c| c.is_ascii() && (*c >= ' ' || *c == '\n'))
+                .collect();
             let encoded = url_encode_param(clean.trim());
             return Redirect::to(&format!("{}&error={}", redirect_base, encoded)).into_response();
         }
@@ -654,23 +807,48 @@ pub async fn restore_file(
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
 
     let source = form.source.as_deref().unwrap_or("site");
-    let Some(theme_dir) = resolve_theme_dir_by_source(&state.config.themes_dir, &state.config.sites_dir, &theme, Some(source), admin.site_id) else {
+    let Some(theme_dir) = resolve_theme_dir_by_source(
+        &state.config.themes_dir,
+        &state.config.sites_dir,
+        &theme,
+        Some(source),
+        admin.site_id,
+    ) else {
         return render_theme_list(&state, Some("Theme not found."), &ctx, admin.site_id, "my")
-            .await.into_response();
+            .await
+            .into_response();
     };
 
-    if !admin.caps.is_global_admin && (is_in_global_dir(&theme_dir, &state.config.themes_dir) || is_in_private_dir(&theme_dir, &state.config.themes_dir)) {
-        return Redirect::to(&format!("/admin/themes/editor/{}?source={}", url_encode_param(&theme), source)).into_response();
+    if !admin.caps.is_global_admin
+        && (is_in_global_dir(&theme_dir, &state.config.themes_dir)
+            || is_in_private_dir(&theme_dir, &state.config.themes_dir))
+    {
+        return Redirect::to(&format!(
+            "/admin/themes/editor/{}?source={}",
+            url_encode_param(&theme),
+            source
+        ))
+        .into_response();
     }
 
     let redirect_base = format!(
         "/admin/themes/editor/{}?source={}&file={}",
-        url_encode_param(&theme), source, url_encode_param(&form.file)
+        url_encode_param(&theme),
+        source,
+        url_encode_param(&form.file)
     );
     // When restored from the customizer landing page (colors card), stay on
     // that page instead of navigating into the raw file editor view.
-    let stay_redirect = format!("/admin/themes/editor/{}?source={}", url_encode_param(&theme), source);
-    let redirect_base = if form.stay.is_some() { stay_redirect } else { redirect_base };
+    let stay_redirect = format!(
+        "/admin/themes/editor/{}?source={}",
+        url_encode_param(&theme),
+        source
+    );
+    let redirect_base = if form.stay.is_some() {
+        stay_redirect
+    } else {
+        redirect_base
+    };
 
     let Some(abs_path) = resolve_file_in_theme(&theme_dir, &form.file) else {
         return Redirect::to(&redirect_base).into_response();
@@ -687,14 +865,21 @@ pub async fn restore_file(
     }
 
     if let Err(e) = fs::remove_file(&bak) {
-        tracing::warn!("theme editor: could not delete backup {:?} after restore: {e}", bak);
+        tracing::warn!(
+            "theme editor: could not delete backup {:?} after restore: {e}",
+            bak
+        );
     }
 
     if form.file.ends_with(".html") {
         state.templates.invalidate_theme(&theme, admin.site_id);
     }
 
-    let sep = if redirect_base.contains('?') { "&" } else { "?" };
+    let sep = if redirect_base.contains('?') {
+        "&"
+    } else {
+        "?"
+    };
     Redirect::to(&format!("{}{}restored=1", redirect_base, sep)).into_response()
 }
 
@@ -726,19 +911,44 @@ pub async fn save_customizer(
     // Which bool-option keys this particular card's form actually covers —
     // see the field's doc comment in render_customizer_landing. Absent
     // (themes/cards with no bool options) means "touch none".
-    let bool_option_keys: std::collections::HashSet<String> = form.remove("bool_option_keys")
-        .map(|raw| raw.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect())
+    let bool_option_keys: std::collections::HashSet<String> = form
+        .remove("bool_option_keys")
+        .map(|raw| {
+            raw.split(',')
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .collect()
+        })
         .unwrap_or_default();
-    let Some(theme_dir) = resolve_theme_dir_by_source(&state.config.themes_dir, &state.config.sites_dir, &theme, Some(&source), admin.site_id) else {
+    let Some(theme_dir) = resolve_theme_dir_by_source(
+        &state.config.themes_dir,
+        &state.config.sites_dir,
+        &theme,
+        Some(&source),
+        admin.site_id,
+    ) else {
         return render_theme_list(&state, Some("Theme not found."), &ctx, admin.site_id, "my")
-            .await.into_response();
+            .await
+            .into_response();
     };
 
-    if !admin.caps.is_global_admin && (is_in_global_dir(&theme_dir, &state.config.themes_dir) || is_in_private_dir(&theme_dir, &state.config.themes_dir)) {
-        return Redirect::to(&format!("/admin/themes/editor/{}?source={}", url_encode_param(&theme), source)).into_response();
+    if !admin.caps.is_global_admin
+        && (is_in_global_dir(&theme_dir, &state.config.themes_dir)
+            || is_in_private_dir(&theme_dir, &state.config.themes_dir))
+    {
+        return Redirect::to(&format!(
+            "/admin/themes/editor/{}?source={}",
+            url_encode_param(&theme),
+            source
+        ))
+        .into_response();
     }
 
-    let redirect = format!("/admin/themes/editor/{}?source={}&saved=1", url_encode_param(&theme), source);
+    let redirect = format!(
+        "/admin/themes/editor/{}?source={}&saved=1",
+        url_encode_param(&theme),
+        source
+    );
 
     let Ok(toml_content) = fs::read_to_string(theme_dir.join("theme.toml")) else {
         return Redirect::to(&redirect).into_response();
@@ -757,9 +967,17 @@ pub async fn save_customizer(
             let hex_re = regex_lite::Regex::new(r"^#[0-9a-fA-F]{6}$").unwrap();
             let mut changed = false;
             for ColorDef { key, .. } in &color_defs {
-                let Some(new_hex) = form.get(key) else { continue };
-                if !hex_re.is_match(new_hex) { continue; }
-                let var_re = regex_lite::Regex::new(&format!(r"(--{}\s*:\s*)#[0-9a-fA-F]{{3,8}}(\s*;)", key)).unwrap();
+                let Some(new_hex) = form.get(key) else {
+                    continue;
+                };
+                if !hex_re.is_match(new_hex) {
+                    continue;
+                }
+                let var_re = regex_lite::Regex::new(&format!(
+                    r"(--{}\s*:\s*)#[0-9a-fA-F]{{3,8}}(\s*;)",
+                    key
+                ))
+                .unwrap();
                 if let Some(caps) = var_re.captures(&css) {
                     let whole = caps.get(0).unwrap().as_str().to_string();
                     let replacement = format!("{}{}{}", &caps[1], new_hex, &caps[2]);
@@ -789,49 +1007,103 @@ pub async fn save_customizer(
             // submitted — otherwise every other card's bool options (absent
             // from this POST body since checkboxes only submit when checked)
             // would read as "unchecked" and get silently zeroed out here.
-            if !bool_option_keys.contains(&def.key) { continue; }
+            if !bool_option_keys.contains(&def.key) {
+                continue;
+            }
             // Checkboxes only submit the field when checked, always with
             // value="true" (see the checkbox markup in render_customizer_landing),
             // so absence means false and presence-with-that-value means true.
             let checked = form.get(&def.key).map(|v| v == "true").unwrap_or(false);
-            if let Err(e) = crate::models::theme_options::save_option(&state.db, site_id, &theme, &def.key, checked).await {
-                tracing::error!("save_customizer: failed to save option {} for theme {}: {e}", def.key, theme);
+            if let Err(e) = crate::models::theme_options::save_option(
+                &state.db, site_id, &theme, &def.key, checked,
+            )
+            .await
+            {
+                tracing::error!(
+                    "save_customizer: failed to save option {} for theme {}: {e}",
+                    def.key,
+                    theme
+                );
             }
         }
 
         for def in crate::models::theme_options::parse_order_defs(&parsed) {
-            let Some(raw) = form.get(&def.key) else { continue };
-            let known: std::collections::HashSet<&str> = def.items.iter().map(|(k, _)| k.as_str()).collect();
-            let order: Vec<String> = raw.split(',').map(|s| s.trim().to_string()).filter(|s| known.contains(s.as_str())).collect();
+            let Some(raw) = form.get(&def.key) else {
+                continue;
+            };
+            let known: std::collections::HashSet<&str> =
+                def.items.iter().map(|(k, _)| k.as_str()).collect();
+            let order: Vec<String> = raw
+                .split(',')
+                .map(|s| s.trim().to_string())
+                .filter(|s| known.contains(s.as_str()))
+                .collect();
             if order.is_empty() {
                 continue; // ignore malformed submissions rather than store an empty order
             }
-            if let Err(e) = crate::models::theme_options::save_order(&state.db, site_id, &theme, &def.key, &order).await {
-                tracing::error!("save_customizer: failed to save order {} for theme {}: {e}", def.key, theme);
+            if let Err(e) = crate::models::theme_options::save_order(
+                &state.db, site_id, &theme, &def.key, &order,
+            )
+            .await
+            {
+                tracing::error!(
+                    "save_customizer: failed to save order {} for theme {}: {e}",
+                    def.key,
+                    theme
+                );
             }
         }
 
         for def in crate::models::theme_options::parse_choice_defs(&parsed) {
-            let Some(value) = form.get(&def.key) else { continue };
+            let Some(value) = form.get(&def.key) else {
+                continue;
+            };
             if !def.choices.iter().any(|(k, _)| k == value) {
                 continue; // ignore values outside the declared choice set
             }
-            if let Err(e) = crate::models::theme_options::save_choice(&state.db, site_id, &theme, &def.key, value).await {
-                tracing::error!("save_customizer: failed to save choice {} for theme {}: {e}", def.key, theme);
+            if let Err(e) = crate::models::theme_options::save_choice(
+                &state.db, site_id, &theme, &def.key, value,
+            )
+            .await
+            {
+                tracing::error!(
+                    "save_customizer: failed to save choice {} for theme {}: {e}",
+                    def.key,
+                    theme
+                );
             }
         }
 
         for def in crate::models::theme_options::parse_text_defs(&parsed) {
-            let Some(value) = form.get(&def.key) else { continue };
-            if let Err(e) = crate::models::theme_options::save_text(&state.db, site_id, &theme, &def.key, value).await {
-                tracing::error!("save_customizer: failed to save text {} for theme {}: {e}", def.key, theme);
+            let Some(value) = form.get(&def.key) else {
+                continue;
+            };
+            if let Err(e) =
+                crate::models::theme_options::save_text(&state.db, site_id, &theme, &def.key, value)
+                    .await
+            {
+                tracing::error!(
+                    "save_customizer: failed to save text {} for theme {}: {e}",
+                    def.key,
+                    theme
+                );
             }
         }
 
         for def in crate::models::theme_options::parse_image_defs(&parsed) {
-            let Some(value) = form.get(&def.key) else { continue };
-            if let Err(e) = crate::models::theme_options::save_image(&state.db, site_id, &theme, &def.key, value).await {
-                tracing::error!("save_customizer: failed to save image {} for theme {}: {e}", def.key, theme);
+            let Some(value) = form.get(&def.key) else {
+                continue;
+            };
+            if let Err(e) = crate::models::theme_options::save_image(
+                &state.db, site_id, &theme, &def.key, value,
+            )
+            .await
+            {
+                tracing::error!(
+                    "save_customizer: failed to save image {} for theme {}: {e}",
+                    def.key,
+                    theme
+                );
             }
         }
     }
@@ -868,21 +1140,46 @@ pub async fn reset_options(
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
 
     let source = form.source.as_deref().unwrap_or("site");
-    let Some(theme_dir) = resolve_theme_dir_by_source(&state.config.themes_dir, &state.config.sites_dir, &theme, Some(source), admin.site_id) else {
+    let Some(theme_dir) = resolve_theme_dir_by_source(
+        &state.config.themes_dir,
+        &state.config.sites_dir,
+        &theme,
+        Some(source),
+        admin.site_id,
+    ) else {
         return render_theme_list(&state, Some("Theme not found."), &ctx, admin.site_id, "my")
-            .await.into_response();
+            .await
+            .into_response();
     };
 
-    let redirect = format!("/admin/themes/editor/{}?source={}", url_encode_param(&theme), source);
+    let redirect = format!(
+        "/admin/themes/editor/{}?source={}",
+        url_encode_param(&theme),
+        source
+    );
 
-    if !admin.caps.is_global_admin && (is_in_global_dir(&theme_dir, &state.config.themes_dir) || is_in_private_dir(&theme_dir, &state.config.themes_dir)) {
+    if !admin.caps.is_global_admin
+        && (is_in_global_dir(&theme_dir, &state.config.themes_dir)
+            || is_in_private_dir(&theme_dir, &state.config.themes_dir))
+    {
         return Redirect::to(&redirect).into_response();
     }
 
     if let Some(site_id) = admin.site_id {
-        let keys: Vec<String> = form.keys.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect();
-        if let Err(e) = crate::models::theme_options::delete_options(&state.db, site_id, &theme, &keys).await {
-            tracing::error!("reset_options: failed to delete options {:?} for theme {}: {e}", keys, theme);
+        let keys: Vec<String> = form
+            .keys
+            .split(',')
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect();
+        if let Err(e) =
+            crate::models::theme_options::delete_options(&state.db, site_id, &theme, &keys).await
+        {
+            tracing::error!(
+                "reset_options: failed to delete options {:?} for theme {}: {e}",
+                keys,
+                theme
+            );
         }
     }
 
@@ -910,45 +1207,72 @@ pub async fn delete_file(
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
 
     let source = form.source.as_deref().unwrap_or("site");
-    let Some(theme_dir) = resolve_theme_dir_by_source(&state.config.themes_dir, &state.config.sites_dir, &theme, Some(source), admin.site_id) else {
+    let Some(theme_dir) = resolve_theme_dir_by_source(
+        &state.config.themes_dir,
+        &state.config.sites_dir,
+        &theme,
+        Some(source),
+        admin.site_id,
+    ) else {
         return render_theme_list(&state, Some("Theme not found."), &ctx, admin.site_id, "my")
-            .await.into_response();
+            .await
+            .into_response();
     };
 
     // Guard: required templates cannot be deleted.
     let rel = form.file.trim().to_string();
     if REQUIRED_TEMPLATES.contains(&rel.as_str()) {
         let files = walk_theme_files(&theme_dir);
-        let editor_files: Vec<admin::pages::themes::EditorFile> = files.iter().map(|f| {
-            admin::pages::themes::EditorFile {
+        let editor_files: Vec<admin::pages::themes::EditorFile> = files
+            .iter()
+            .map(|f| admin::pages::themes::EditorFile {
                 rel_path: f.clone(),
                 is_selected: f == &rel,
                 has_backup: bak_path_for(&theme_dir.join(f)).exists(),
                 edited_at: None,
-            }
-        }).collect();
+            })
+            .collect();
         let customizer = build_customizer(&state.db, &theme_dir, admin.site_id, &theme).await;
         return Html(admin::pages::themes::render_theme_editor(
-            &theme, &editor_files, Some(&rel), "", false,
-            Some("Required theme templates cannot be deleted."), &ctx, false, source, customizer.as_ref(),
-        )).into_response();
+            &theme,
+            &editor_files,
+            Some(&rel),
+            "",
+            false,
+            Some("Required theme templates cannot be deleted."),
+            &ctx,
+            false,
+            source,
+            customizer.as_ref(),
+        ))
+        .into_response();
     }
 
     let Some(abs_path) = resolve_file_in_theme(&theme_dir, &rel) else {
         let files = walk_theme_files(&theme_dir);
-        let editor_files: Vec<admin::pages::themes::EditorFile> = files.iter().map(|f| {
-            admin::pages::themes::EditorFile {
+        let editor_files: Vec<admin::pages::themes::EditorFile> = files
+            .iter()
+            .map(|f| admin::pages::themes::EditorFile {
                 rel_path: f.clone(),
                 is_selected: false,
                 has_backup: bak_path_for(&theme_dir.join(f)).exists(),
                 edited_at: None,
-            }
-        }).collect();
+            })
+            .collect();
         let customizer = build_customizer(&state.db, &theme_dir, admin.site_id, &theme).await;
         return Html(admin::pages::themes::render_theme_editor(
-            &theme, &editor_files, None, "", false,
-            Some("File not found."), &ctx, false, source, customizer.as_ref(),
-        )).into_response();
+            &theme,
+            &editor_files,
+            None,
+            "",
+            false,
+            Some("File not found."),
+            &ctx,
+            false,
+            source,
+            customizer.as_ref(),
+        ))
+        .into_response();
     };
 
     // Remove .bak file if present.
@@ -962,21 +1286,36 @@ pub async fn delete_file(
     if let Err(e) = fs::remove_file(&abs_path) {
         tracing::error!("delete_file: remove failed for {:?}: {}", abs_path, e);
         let files = walk_theme_files(&theme_dir);
-        let editor_files: Vec<admin::pages::themes::EditorFile> = files.iter().map(|f| {
-            admin::pages::themes::EditorFile {
+        let editor_files: Vec<admin::pages::themes::EditorFile> = files
+            .iter()
+            .map(|f| admin::pages::themes::EditorFile {
                 rel_path: f.clone(),
                 is_selected: f == &rel,
                 has_backup: bak_path_for(&theme_dir.join(f)).exists(),
                 edited_at: None,
-            }
-        }).collect();
+            })
+            .collect();
         let customizer = build_customizer(&state.db, &theme_dir, admin.site_id, &theme).await;
         return Html(admin::pages::themes::render_theme_editor(
-            &theme, &editor_files, Some(&rel), "", false,
-            Some("Failed to delete file. Please try again."), &ctx, false, source, customizer.as_ref(),
-        )).into_response();
+            &theme,
+            &editor_files,
+            Some(&rel),
+            "",
+            false,
+            Some("Failed to delete file. Please try again."),
+            &ctx,
+            false,
+            source,
+            customizer.as_ref(),
+        ))
+        .into_response();
     }
 
     tracing::info!("theme file deleted: theme={} file={}", theme, rel);
-    Redirect::to(&format!("/admin/themes/editor/{}?source={}", url_encode_param(&theme), source)).into_response()
+    Redirect::to(&format!(
+        "/admin/themes/editor/{}?source={}",
+        url_encode_param(&theme),
+        source
+    ))
+    .into_response()
 }

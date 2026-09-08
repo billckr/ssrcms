@@ -36,21 +36,29 @@ pub fn account_page(
                 || msg.contains("do not match")
                 || msg.contains("already exists");
             let class = if is_error { "error" } else { "success" };
-            format!(r#"<div class="flash {}">{}</div>"#, class, crate::html_escape(msg))
+            format!(
+                r#"<div class="flash {}">{}</div>"#,
+                class,
+                crate::html_escape(msg)
+            )
         }
         None => String::new(),
     };
 
     let nav_link = |href: &str, label: &str| -> String {
-        let active = if current_path == href { " class=\"active\"" } else { "" };
+        let active = if current_path == href {
+            " class=\"active\""
+        } else {
+            ""
+        };
         format!(r#"<li><a href="{}"{}>{}</a></li>"#, href, active, label)
     };
 
-    let dashboard_link  = nav_link("/account",              "Dashboard");
-    let saved_link      = nav_link("/account/saved-posts",  "Saved Posts");
-    let comments_link   = nav_link("/account/my-comments",  "My Comments");
+    let dashboard_link = nav_link("/account", "Dashboard");
+    let saved_link = nav_link("/account/saved-posts", "Saved Posts");
+    let comments_link = nav_link("/account/my-comments", "My Comments");
 
-    let site_name         = crate::html_escape(&ctx.site_name);
+    let site_name = crate::html_escape(&ctx.site_name);
     let user_display_name = crate::html_escape(&ctx.user_display_name);
 
     // Account doesn't support a per-user theme setting yet, but it shares the
@@ -206,15 +214,15 @@ pub fn account_page(
   </script>
 </body>
 </html>"#,
-        title       = crate::html_escape(title),
-        site_name   = site_name,
-        css           = crate::ADMIN_CSS,
+        title = crate::html_escape(title),
+        site_name = site_name,
+        css = crate::ADMIN_CSS,
         dashboard_link = dashboard_link,
-        saved_link    = saved_link,
+        saved_link = saved_link,
         comments_link = comments_link,
         user_display_name = user_display_name,
-        flash_html  = flash_html,
-        content     = content,
+        flash_html = flash_html,
+        content = content,
         default_theme = default_theme,
     )
 }
@@ -242,14 +250,22 @@ pub struct ProfileData {
 
 /// Up to two uppercase initials, preferring the display name over the username.
 fn initials(display_name: &str, username: &str) -> String {
-    let source = if display_name.trim().is_empty() { username } else { display_name };
+    let source = if display_name.trim().is_empty() {
+        username
+    } else {
+        display_name
+    };
     let letters: String = source
         .split_whitespace()
         .filter_map(|word| word.chars().next())
         .take(2)
         .flat_map(|c| c.to_uppercase())
         .collect();
-    if letters.is_empty() { "?".to_string() } else { letters }
+    if letters.is_empty() {
+        "?".to_string()
+    } else {
+        letters
+    }
 }
 
 /// Escaped bio, or a muted placeholder line when the user hasn't written one.
@@ -499,9 +515,11 @@ document.getElementById('change-password-dialog').addEventListener('close', func
         bio = crate::html_escape(&data.bio),
         bio_shown = display_or_placeholder(&data.bio),
         initials = crate::html_escape(&initials(&data.display_name, &data.username)),
-        display_name_or_username = crate::html_escape(
-            if data.display_name.trim().is_empty() { &data.username } else { &data.display_name }
-        ),
+        display_name_or_username = crate::html_escape(if data.display_name.trim().is_empty() {
+            &data.username
+        } else {
+            &data.display_name
+        }),
     );
 
     account_page("Profile", "/account/profile", flash, &content, ctx)
@@ -510,8 +528,8 @@ document.getElementById('change-password-dialog').addEventListener('close', func
 // ── Saved Posts ───────────────────────────────────────────────────────────────
 
 pub struct SavedPostRow {
-    pub title:    String,
-    pub slug:     String,
+    pub title: String,
+    pub slug: String,
     pub post_url: String,
     pub saved_at: String,
 }
@@ -526,21 +544,31 @@ fn saved_posts_pagination(page: i64, total_pages: i64, search: &str) -> String {
         format!("&search={}", crate::html_escape(search))
     };
     let prev = if page > 1 {
-        format!(r#"<a href="/account/saved-posts?page={}{}" class="page-btn">&laquo; Prev</a>"#, page - 1, search_qs)
+        format!(
+            r#"<a href="/account/saved-posts?page={}{}" class="page-btn">&laquo; Prev</a>"#,
+            page - 1,
+            search_qs
+        )
     } else {
         r#"<span class="page-btn page-btn-disabled">&laquo; Prev</span>"#.to_string()
     };
     let next = if page < total_pages {
-        format!(r#"<a href="/account/saved-posts?page={}{}" class="page-btn">Next &raquo;</a>"#, page + 1, search_qs)
+        format!(
+            r#"<a href="/account/saved-posts?page={}{}" class="page-btn">Next &raquo;</a>"#,
+            page + 1,
+            search_qs
+        )
     } else {
         r#"<span class="page-btn page-btn-disabled">Next &raquo;</span>"#.to_string()
     };
     let start = (page - 3).max(1);
-    let end   = (page + 3).min(total_pages);
+    let end = (page + 3).min(total_pages);
     let mut nums = String::new();
     for p in start..=end {
         if p == page {
-            nums.push_str(&format!(r#"<span class="page-btn page-btn-active">{p}</span>"#));
+            nums.push_str(&format!(
+                r#"<span class="page-btn page-btn-active">{p}</span>"#
+            ));
         } else {
             nums.push_str(&format!(
                 r#"<a href="/account/saved-posts?page={p}{search_qs}" class="page-btn">{p}</a>"#,
@@ -553,12 +581,20 @@ fn saved_posts_pagination(page: i64, total_pages: i64, search: &str) -> String {
 
 /// Returns just the inner list HTML (pagination + table).
 /// Used by `render_saved_posts` and the live-search fetch (`?partial=1`).
-pub fn saved_posts_list_fragment(rows: &[SavedPostRow], page: i64, total_pages: i64, search: &str) -> String {
+pub fn saved_posts_list_fragment(
+    rows: &[SavedPostRow],
+    page: i64,
+    total_pages: i64,
+    search: &str,
+) -> String {
     if rows.is_empty() {
         let msg = if search.is_empty() {
             "You haven&rsquo;t saved any posts yet.".to_string()
         } else {
-            format!("No saved posts matched &ldquo;{}&rdquo;.", crate::html_escape(search))
+            format!(
+                "No saved posts matched &ldquo;{}&rdquo;.",
+                crate::html_escape(search)
+            )
         };
         return format!(r#"<p class="muted">{msg}</p>"#);
     }
@@ -601,12 +637,18 @@ pub fn saved_posts_list_fragment(rows: &[SavedPostRow], page: i64, total_pages: 
   <tbody>{rows}</tbody>
 </table>
 {pagination}"#,
-        rows       = row_html,
+        rows = row_html,
         pagination = pagination,
     )
 }
 
-pub fn render_saved_posts(rows: &[SavedPostRow], page: i64, total_pages: i64, search: &str, ctx: &AccountContext) -> String {
+pub fn render_saved_posts(
+    rows: &[SavedPostRow],
+    page: i64,
+    total_pages: i64,
+    search: &str,
+    ctx: &AccountContext,
+) -> String {
     let fragment = saved_posts_list_fragment(rows, page, total_pages, search);
 
     let script = crate::live_search_script(
@@ -616,7 +658,8 @@ pub fn render_saved_posts(rows: &[SavedPostRow], page: i64, total_pages: i64, se
     );
 
     let top_pagination = saved_posts_pagination(page, total_pages, search);
-    let search_toggle = crate::pill_search_toggle("saved-posts-search", "Search saved posts&hellip;", search);
+    let search_toggle =
+        crate::pill_search_toggle("saved-posts-search", "Search saved posts&hellip;", search);
 
     let content = format!(
         r#"<div style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;margin-bottom:.75rem">
@@ -627,9 +670,9 @@ pub fn render_saved_posts(rows: &[SavedPostRow], page: i64, total_pages: i64, se
 {script}
 {pill_search_init}"#,
         top_pagination = top_pagination,
-        search_toggle  = search_toggle,
-        fragment       = fragment,
-        script         = script,
+        search_toggle = search_toggle,
+        fragment = fragment,
+        script = script,
         pill_search_init = crate::pill_search_init_script(),
     );
 
@@ -651,13 +694,13 @@ fn derive_unsave_url(post_url: &str) -> String {
 // ── My Comments ──────────────────────────────────────────────────────────────
 
 pub struct MyCommentRow {
-    pub id:            String,
-    pub body_preview:  String,
-    pub post_title:    String,
-    pub post_slug:     String,
+    pub id: String,
+    pub body_preview: String,
+    pub post_title: String,
+    pub post_slug: String,
     pub site_hostname: String,
-    pub created_at:    String,
-    pub can_delete:    bool,
+    pub created_at: String,
+    pub can_delete: bool,
 }
 
 /// Build pagination HTML for the comments list.
@@ -673,21 +716,31 @@ fn comments_pagination(page: i64, total_pages: i64, search: &str) -> String {
         format!("&search={}", crate::html_escape(search))
     };
     let prev = if page > 1 {
-        format!(r#"<a href="/account/my-comments?page={}{}" class="page-btn">&laquo; Prev</a>"#, page - 1, search_qs)
+        format!(
+            r#"<a href="/account/my-comments?page={}{}" class="page-btn">&laquo; Prev</a>"#,
+            page - 1,
+            search_qs
+        )
     } else {
         r#"<span class="page-btn page-btn-disabled">&laquo; Prev</span>"#.to_string()
     };
     let next = if page < total_pages {
-        format!(r#"<a href="/account/my-comments?page={}{}" class="page-btn">Next &raquo;</a>"#, page + 1, search_qs)
+        format!(
+            r#"<a href="/account/my-comments?page={}{}" class="page-btn">Next &raquo;</a>"#,
+            page + 1,
+            search_qs
+        )
     } else {
         r#"<span class="page-btn page-btn-disabled">Next &raquo;</span>"#.to_string()
     };
     let start = (page - 3).max(1);
-    let end   = (page + 3).min(total_pages);
+    let end = (page + 3).min(total_pages);
     let mut nums = String::new();
     for p in start..=end {
         if p == page {
-            nums.push_str(&format!(r#"<span class="page-btn page-btn-active">{p}</span>"#));
+            nums.push_str(&format!(
+                r#"<span class="page-btn page-btn-active">{p}</span>"#
+            ));
         } else {
             nums.push_str(&format!(
                 r#"<a href="/account/my-comments?page={p}{search_qs}" class="page-btn">{p}</a>"#,
@@ -701,12 +754,20 @@ fn comments_pagination(page: i64, total_pages: i64, search: &str) -> String {
 /// Returns just the inner list HTML (pagination + table).
 /// Used both by `render_my_comments` and directly by the live-search
 /// fetch() call (`?partial=1`) so JS can swap only the table div.
-pub fn comments_list_fragment(rows: &[MyCommentRow], page: i64, total_pages: i64, search: &str) -> String {
+pub fn comments_list_fragment(
+    rows: &[MyCommentRow],
+    page: i64,
+    total_pages: i64,
+    search: &str,
+) -> String {
     if rows.is_empty() {
         let msg = if search.is_empty() {
             "You haven&rsquo;t made any comments yet.".to_string()
         } else {
-            format!("No comments matched &ldquo;{}&rdquo;.", crate::html_escape(search))
+            format!(
+                "No comments matched &ldquo;{}&rdquo;.",
+                crate::html_escape(search)
+            )
         };
         return format!(r#"<p class="muted">{msg}</p>"#);
     }
@@ -767,12 +828,18 @@ pub fn comments_list_fragment(rows: &[MyCommentRow], page: i64, total_pages: i64
   Comments can be deleted within 15&nbsp;minutes of posting.
 </p>
 {pagination}"#,
-        rows       = row_html,
+        rows = row_html,
         pagination = pagination,
     )
 }
 
-pub fn render_my_comments(rows: &[MyCommentRow], page: i64, total_pages: i64, search: &str, ctx: &AccountContext) -> String {
+pub fn render_my_comments(
+    rows: &[MyCommentRow],
+    page: i64,
+    total_pages: i64,
+    search: &str,
+    ctx: &AccountContext,
+) -> String {
     let fragment = comments_list_fragment(rows, page, total_pages, search);
 
     // Live-search script — shared helper from crate::live_search_script.
@@ -788,7 +855,8 @@ pub fn render_my_comments(rows: &[MyCommentRow], page: i64, total_pages: i64, se
     // Top pagination rendered outside the fragment div so the search input
     // (also outside) is never wiped by the JS live-search swap.
     let top_pagination = comments_pagination(page, total_pages, search);
-    let search_toggle = crate::pill_search_toggle("comment-search", "Search comments&hellip;", search);
+    let search_toggle =
+        crate::pill_search_toggle("comment-search", "Search comments&hellip;", search);
 
     let content = format!(
         r#"<div style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;margin-bottom:.75rem">
@@ -799,10 +867,10 @@ pub fn render_my_comments(rows: &[MyCommentRow], page: i64, total_pages: i64, se
 {script}
 {pill_search_init}"#,
         top_pagination = top_pagination,
-        search_toggle  = search_toggle,
-        fragment       = fragment,
+        search_toggle = search_toggle,
+        fragment = fragment,
         pill_search_init = crate::pill_search_init_script(),
-        script         = script,
+        script = script,
     );
 
     account_page("My Comments", "/account/my-comments", None, &content, ctx)

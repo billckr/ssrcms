@@ -20,12 +20,11 @@ pub async fn run(args: MigrateArgs) -> anyhow::Result<()> {
     let known_versions: std::collections::HashSet<i64> =
         migrator.migrations.iter().map(|m| m.version).collect();
 
-    let applied: Vec<i64> = sqlx::query_scalar(
-        "SELECT version FROM _sqlx_migrations ORDER BY version"
-    )
-    .fetch_all(&pool)
-    .await
-    .unwrap_or_default();
+    let applied: Vec<i64> =
+        sqlx::query_scalar("SELECT version FROM _sqlx_migrations ORDER BY version")
+            .fetch_all(&pool)
+            .await
+            .unwrap_or_default();
 
     let applied_set: std::collections::HashSet<i64> = applied.iter().copied().collect();
 
@@ -35,7 +34,11 @@ pub async fn run(args: MigrateArgs) -> anyhow::Result<()> {
         .collect();
 
     if !unknown.is_empty() {
-        let list = unknown.iter().map(|v| v.to_string()).collect::<Vec<_>>().join(", ");
+        let list = unknown
+            .iter()
+            .map(|v| v.to_string())
+            .collect::<Vec<_>>()
+            .join(", ");
         anyhow::bail!(
             "This CLI binary is outdated.\n\
              The database has migrations the binary doesn't know about: {list}\n\
@@ -49,7 +52,9 @@ pub async fn run(args: MigrateArgs) -> anyhow::Result<()> {
     }
 
     // Determine which migrations are pending before running.
-    let pending: Vec<_> = migrator.migrations.iter()
+    let pending: Vec<_> = migrator
+        .migrations
+        .iter()
         .filter(|m| !applied_set.contains(&m.version))
         .collect();
 
@@ -58,7 +63,11 @@ pub async fn run(args: MigrateArgs) -> anyhow::Result<()> {
         return Ok(());
     }
 
-    println!("Applying {} migration{}:", pending.len(), if pending.len() == 1 { "" } else { "s" });
+    println!(
+        "Applying {} migration{}:",
+        pending.len(),
+        if pending.len() == 1 { "" } else { "s" }
+    );
     for m in &pending {
         println!("  [{:04}] {}", m.version, m.description);
     }

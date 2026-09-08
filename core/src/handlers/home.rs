@@ -11,10 +11,10 @@ use uuid::Uuid;
 use crate::app_state::AppState;
 use crate::errors::{AppError, Result};
 use crate::middleware::site::CurrentSite;
+use crate::models::nav_menu;
 use crate::models::page_composition;
 use crate::models::post::{self, ListFilter, PostContext, PostStatus, PostType};
 use crate::models::taxonomy::{self, TaxonomyType};
-use crate::models::nav_menu;
 use crate::templates::composer;
 use crate::templates::context::{
     ContextBuilder, NavContext, PaginationContext, RequestContext, SessionContext, SiteContext,
@@ -84,12 +84,19 @@ async fn render_home(
     }
     // ── End builder check ──────────────────────────────────────────────────
 
-    let per_page = state.get_site_by_id(site_id)
+    let per_page = state
+        .get_site_by_id(site_id)
         .map(|(_, s)| s.posts_per_page)
         .unwrap_or(state.settings.posts_per_page);
     let offset = (query.page - 1) * per_page;
 
-    let total = post::count(&state.db, Some(site_id), Some(PostStatus::Published), Some(PostType::Post)).await?;
+    let total = post::count(
+        &state.db,
+        Some(site_id),
+        Some(PostStatus::Published),
+        Some(PostType::Post),
+    )
+    .await?;
     let posts_raw = post::list(
         &state.db,
         &ListFilter {
@@ -144,38 +151,53 @@ async fn render_home(
     let hook_outputs = state.templates.render_hooks_for_theme(
         &theme,
         Some(site_id),
-        &["head_start", "head_end", "body_start", "body_end", "before_content", "after_content", "footer"],
+        &[
+            "head_start",
+            "head_end",
+            "body_start",
+            "body_end",
+            "before_content",
+            "after_content",
+            "footer",
+        ],
         &ctx,
-    Some(&active_plugins));
+        Some(&active_plugins),
+    );
     ContextBuilder::add_hook_outputs(&mut ctx, &hook_outputs);
 
-    state.templates.render_for_theme(&theme, Some(site_id), "index.html", &ctx)
+    state
+        .templates
+        .render_for_theme(&theme, Some(site_id), "index.html", &ctx)
 }
 
 /// Render an error response, using the active theme's 404.html for NotFound errors.
 /// Falls back to plain HTML if the template engine is unavailable.
-pub async fn render_error_page(err: AppError, state: &AppState, path: &str, site_id: Option<uuid::Uuid>) -> Response {
+pub async fn render_error_page(
+    err: AppError,
+    state: &AppState,
+    path: &str,
+    site_id: Option<uuid::Uuid>,
+) -> Response {
     match err {
-        AppError::NotFound(_) => {
-            match render_404(state, path, site_id).await {
-                Ok(html) => (axum::http::StatusCode::NOT_FOUND, Html(html)).into_response(),
-                Err(e) => {
-                    tracing::warn!("could not render theme 404 page: {:?}", e);
-                    (
+        AppError::NotFound(_) => match render_404(state, path, site_id).await {
+            Ok(html) => (axum::http::StatusCode::NOT_FOUND, Html(html)).into_response(),
+            Err(e) => {
+                tracing::warn!("could not render theme 404 page: {:?}", e);
+                (
                         axum::http::StatusCode::NOT_FOUND,
                         Html(format!(
                             r#"<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>404 Not Found</title></head><body><h1>404 — Not Found</h1><p>The page <code>{path}</code> could not be found.</p><p><a href="/">← Back to home</a></p></body></html>"#
                         )),
                     ).into_response()
-                }
             }
-        }
+        },
         _ => {
             tracing::error!("unhandled error in handler: {:?}", err);
             (
                 axum::http::StatusCode::INTERNAL_SERVER_ERROR,
                 Html("<h1>500 Internal Server Error</h1>".to_string()),
-            ).into_response()
+            )
+                .into_response()
         }
     }
 }
@@ -196,7 +218,10 @@ async fn render_404(state: &AppState, path: &str, site_id: Option<uuid::Uuid>) -
             path: path.to_string(),
             query: HashMap::new(),
         },
-        session: SessionContext { is_logged_in: false, user: None },
+        session: SessionContext {
+            is_logged_in: false,
+            user: None,
+        },
         nav,
     }
     .into_tera_context();
@@ -215,12 +240,23 @@ async fn render_404(state: &AppState, path: &str, site_id: Option<uuid::Uuid>) -
     let hook_outputs = state.templates.render_hooks_for_theme(
         &theme,
         site_id,
-        &["head_start", "head_end", "body_start", "body_end", "before_content", "after_content", "footer"],
+        &[
+            "head_start",
+            "head_end",
+            "body_start",
+            "body_end",
+            "before_content",
+            "after_content",
+            "footer",
+        ],
         &ctx,
-    Some(&active_plugins));
+        Some(&active_plugins),
+    );
     ContextBuilder::add_hook_outputs(&mut ctx, &hook_outputs);
 
-    state.templates.render_for_theme(&theme, site_id, "404.html", &ctx)
+    state
+        .templates
+        .render_for_theme(&theme, site_id, "404.html", &ctx)
 }
 
 // ── Shared helpers ──────────────────────────────────────────────────────────
@@ -232,7 +268,9 @@ pub(crate) async fn build_taxonomy_clouds(
     site_id: Uuid,
     base_url: &str,
 ) -> (Vec<taxonomy::TermContext>, Vec<taxonomy::TermContext>) {
-    let raw_tags = taxonomy::list(&state.db, Some(site_id), TaxonomyType::Tag).await.unwrap_or_default();
+    let raw_tags = taxonomy::list(&state.db, Some(site_id), TaxonomyType::Tag)
+        .await
+        .unwrap_or_default();
     let mut tag_cloud = Vec::with_capacity(raw_tags.len());
     for t in &raw_tags {
         let count = taxonomy::post_count(&state.db, t.id).await.unwrap_or(0);
@@ -241,7 +279,9 @@ pub(crate) async fn build_taxonomy_clouds(
         }
     }
 
-    let raw_cats = taxonomy::list(&state.db, Some(site_id), TaxonomyType::Category).await.unwrap_or_default();
+    let raw_cats = taxonomy::list(&state.db, Some(site_id), TaxonomyType::Category)
+        .await
+        .unwrap_or_default();
     let mut category_cloud = Vec::with_capacity(raw_cats.len());
     for c in &raw_cats {
         let count = taxonomy::post_count(&state.db, c.id).await.unwrap_or(0);
@@ -273,9 +313,7 @@ pub(crate) async fn build_post_context(
     for c in &categories {
         let count = taxonomy::post_count(&state.db, c.id).await.unwrap_or(0);
         category_ctxs.push(crate::models::taxonomy::TermContext::from_taxonomy(
-            c,
-            base_url,
-            count,
+            c, base_url, count,
         ));
     }
 
@@ -283,18 +321,13 @@ pub(crate) async fn build_post_context(
     for t in &tags {
         let count = taxonomy::post_count(&state.db, t.id).await.unwrap_or(0);
         tag_ctxs.push(crate::models::taxonomy::TermContext::from_taxonomy(
-            t,
-            base_url,
-            count,
+            t, base_url, count,
         ));
     }
 
     let featured_image = if let Some(img_id) = p.featured_image_id {
         match media::get_by_id(&state.db, img_id).await {
-            Ok(m) => Some(crate::models::media::MediaContext::from_media(
-                &m,
-                base_url,
-            )),
+            Ok(m) => Some(crate::models::media::MediaContext::from_media(&m, base_url)),
             Err(_) => None,
         }
     } else {
@@ -312,7 +345,8 @@ pub(crate) async fn build_post_context(
         (None, vec![])
     };
 
-    let permalink_structure = p.site_id
+    let permalink_structure = p
+        .site_id
         .and_then(|sid| state.get_site_by_id(sid))
         .map(|(_, settings)| settings.permalink_structure)
         .unwrap_or_else(|| "/%postname%/".to_string());
@@ -337,8 +371,10 @@ pub(crate) async fn build_post_context(
     // that don't contain one. Excerpt/reading_time above were already
     // computed from the raw (unexpanded) content, which is what we want.
     if let Some(site_id) = p.site_id {
-        ctx.content = crate::models::form_def::expand_embeds(&state.db, site_id, &ctx.content).await;
-        ctx.content = crate::models::poll_def::expand_embeds(&state.db, site_id, &ctx.content).await;
+        ctx.content =
+            crate::models::form_def::expand_embeds(&state.db, site_id, &ctx.content).await;
+        ctx.content =
+            crate::models::poll_def::expand_embeds(&state.db, site_id, &ctx.content).await;
     }
 
     Ok(ctx)
@@ -402,11 +438,25 @@ pub(crate) async fn enrich_builder_context(
     ctx.insert("builder_menus", &builder_menus);
 }
 
-pub(crate) async fn build_site_context(state: &AppState, site_id: Option<Uuid>, base_url: &str) -> Result<SiteContext> {
-    let post_count =
-        post::count(&state.db, site_id, Some(PostStatus::Published), Some(PostType::Post)).await?;
-    let page_count =
-        post::count(&state.db, site_id, Some(PostStatus::Published), Some(PostType::Page)).await?;
+pub(crate) async fn build_site_context(
+    state: &AppState,
+    site_id: Option<Uuid>,
+    base_url: &str,
+) -> Result<SiteContext> {
+    let post_count = post::count(
+        &state.db,
+        site_id,
+        Some(PostStatus::Published),
+        Some(PostType::Post),
+    )
+    .await?;
+    let page_count = post::count(
+        &state.db,
+        site_id,
+        Some(PostStatus::Published),
+        Some(PostType::Page),
+    )
+    .await?;
 
     // Use per-site settings from the cache when a site_id is available,
     // falling back to global settings for single-site / unconfigured installs.

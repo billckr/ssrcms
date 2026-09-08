@@ -11,7 +11,7 @@ pub struct PageComposition {
     pub project_id: Option<Uuid>,
     pub name: String,
     pub slug: Option<String>,
-    pub page_type: String,   // "homepage" | "page"
+    pub page_type: String,                    // "homepage" | "page"
     pub composition: serde_json::Value,       // live — what visitors see
     pub draft_composition: serde_json::Value, // work in progress — what the editor reads/writes
     pub is_homepage: bool,
@@ -30,12 +30,12 @@ pub async fn list_by_project(pool: &PgPool, project_id: Uuid) -> Result<Vec<Page
 }
 
 pub async fn get_by_id(pool: &PgPool, id: Uuid) -> Result<Option<PageComposition>> {
-    Ok(sqlx::query_as::<_, PageComposition>(
-        "SELECT * FROM page_compositions WHERE id = $1",
+    Ok(
+        sqlx::query_as::<_, PageComposition>("SELECT * FROM page_compositions WHERE id = $1")
+            .bind(id)
+            .fetch_optional(pool)
+            .await?,
     )
-    .bind(id)
-    .fetch_optional(pool)
-    .await?)
 }
 
 /// Returns the active homepage for a site via its active project.
@@ -52,7 +52,11 @@ pub async fn get_homepage(pool: &PgPool, site_id: Uuid) -> Result<Option<PageCom
 }
 
 /// Returns a regular builder page matching `slug` for the site's active project.
-pub async fn get_by_slug(pool: &PgPool, site_id: Uuid, slug: &str) -> Result<Option<PageComposition>> {
+pub async fn get_by_slug(
+    pool: &PgPool,
+    site_id: Uuid,
+    slug: &str,
+) -> Result<Option<PageComposition>> {
     Ok(sqlx::query_as::<_, PageComposition>(
         "SELECT pc.* FROM page_compositions pc
          JOIN builder_projects bp ON bp.id = pc.project_id
@@ -143,7 +147,9 @@ pub async fn duplicate(
     .fetch_one(pool)
     .await?;
 
-    let new_name = name_override.map(|s| s.to_string()).unwrap_or_else(|| format!("{} (copy)", source.name));
+    let new_name = name_override
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| format!("{} (copy)", source.name));
     // Derive slug from the new name if the source had none (homepage, post_template, etc.)
     let new_slug = match source.slug.as_deref() {
         Some(s) => format!("{}-copy", s),
@@ -265,13 +271,11 @@ pub async fn count_published(pool: &PgPool, project_id: Uuid) -> Result<i64> {
 }
 
 pub async fn delete(pool: &PgPool, id: Uuid, site_id: Uuid) -> Result<()> {
-    sqlx::query(
-        "DELETE FROM page_compositions WHERE id = $1 AND site_id = $2",
-    )
-    .bind(id)
-    .bind(site_id)
-    .execute(pool)
-    .await?;
+    sqlx::query("DELETE FROM page_compositions WHERE id = $1 AND site_id = $2")
+        .bind(id)
+        .bind(site_id)
+        .execute(pool)
+        .await?;
     Ok(())
 }
 

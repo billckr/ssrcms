@@ -32,25 +32,21 @@ pub async fn install(pool: &PgPool, site_id: Uuid, plugin_name: &str) -> Result<
 /// Set a plugin's active flag to true for a site.
 /// The plugin must already be installed (row must exist).
 pub async fn activate(pool: &PgPool, site_id: Uuid, plugin_name: &str) -> Result<()> {
-    sqlx::query(
-        "UPDATE site_plugins SET active = true WHERE site_id = $1 AND plugin_name = $2",
-    )
-    .bind(site_id)
-    .bind(plugin_name)
-    .execute(pool)
-    .await?;
+    sqlx::query("UPDATE site_plugins SET active = true WHERE site_id = $1 AND plugin_name = $2")
+        .bind(site_id)
+        .bind(plugin_name)
+        .execute(pool)
+        .await?;
     Ok(())
 }
 
 /// Set a plugin's active flag to false for a site.
 pub async fn deactivate(pool: &PgPool, site_id: Uuid, plugin_name: &str) -> Result<()> {
-    sqlx::query(
-        "UPDATE site_plugins SET active = false WHERE site_id = $1 AND plugin_name = $2",
-    )
-    .bind(site_id)
-    .bind(plugin_name)
-    .execute(pool)
-    .await?;
+    sqlx::query("UPDATE site_plugins SET active = false WHERE site_id = $1 AND plugin_name = $2")
+        .bind(site_id)
+        .bind(plugin_name)
+        .execute(pool)
+        .await?;
     Ok(())
 }
 

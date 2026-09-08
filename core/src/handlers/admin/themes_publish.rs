@@ -3,7 +3,7 @@
 //! owns the theme list/activate/delete/screenshot handlers.
 
 use axum::{
-    extract::{State, Form},
+    extract::{Form, State},
     http::StatusCode,
     response::{IntoResponse, Redirect},
 };
@@ -38,8 +38,15 @@ pub async fn get_theme(
     if name.is_empty() || name.contains("..") || name.contains('/') || name.contains('\\') {
         let cs = state.site_hostname(admin.site_id);
         let ctx = super::page_ctx_full(&state, &admin, &cs).await;
-        return render_theme_list(&state, Some("Invalid theme name."), &ctx, admin.site_id, "global")
-            .await.into_response();
+        return render_theme_list(
+            &state,
+            Some("Invalid theme name."),
+            &ctx,
+            admin.site_id,
+            "global",
+        )
+        .await
+        .into_response();
     }
 
     let themes_dir = &state.config.themes_dir;
@@ -56,8 +63,15 @@ pub async fn get_theme(
     if !source.is_dir() {
         let cs = state.site_hostname(admin.site_id);
         let ctx = super::page_ctx_full(&state, &admin, &cs).await;
-        return render_theme_list(&state, Some("Theme not found."), &ctx, admin.site_id, return_filter)
-            .await.into_response();
+        return render_theme_list(
+            &state,
+            Some("Theme not found."),
+            &ctx,
+            admin.site_id,
+            return_filter,
+        )
+        .await
+        .into_response();
     }
 
     let site_id = match admin.site_id {
@@ -66,13 +80,21 @@ pub async fn get_theme(
             let cs = state.site_hostname(admin.site_id);
             let ctx = super::page_ctx_full(&state, &admin, &cs).await;
             return render_theme_list(
-                &state, Some("No site selected."),
-                &ctx, admin.site_id, "global",
-            ).await.into_response();
+                &state,
+                Some("No site selected."),
+                &ctx,
+                admin.site_id,
+                "global",
+            )
+            .await
+            .into_response();
         }
     };
 
-    let dest = FsPath::new(&state.config.sites_dir).join(site_id.to_string()).join("themes").join(&name);
+    let dest = FsPath::new(&state.config.sites_dir)
+        .join(site_id.to_string())
+        .join("themes")
+        .join(&name);
     if dest.exists() {
         // Already copied — just send them to their themes.
         return Redirect::to("/admin/themes?filter=my").into_response();
@@ -82,22 +104,41 @@ pub async fn get_theme(
     let dest_owned = dest.to_path_buf();
     match tokio::task::spawn_blocking(move || copy_dir_all(&source_owned, &dest_owned)).await {
         Ok(Ok(())) => {
-            tracing::info!("get_theme: copied '{}' ({}) to site {}", name, return_filter, site_id);
+            tracing::info!(
+                "get_theme: copied '{}' ({}) to site {}",
+                name,
+                return_filter,
+                site_id
+            );
             Redirect::to("/admin/themes?filter=my").into_response()
         }
         Ok(Err(e)) => {
             tracing::error!("get_theme: copy failed for '{}': {}", name, e);
             let cs = state.site_hostname(admin.site_id);
             let ctx = super::page_ctx_full(&state, &admin, &cs).await;
-            render_theme_list(&state, Some("Failed to get theme. Please try again."), &ctx, admin.site_id, return_filter)
-                .await.into_response()
+            render_theme_list(
+                &state,
+                Some("Failed to get theme. Please try again."),
+                &ctx,
+                admin.site_id,
+                return_filter,
+            )
+            .await
+            .into_response()
         }
         Err(e) => {
             tracing::error!("get_theme: task panicked: {:?}", e);
             let cs = state.site_hostname(admin.site_id);
             let ctx = super::page_ctx_full(&state, &admin, &cs).await;
-            render_theme_list(&state, Some("Failed to get theme. Please try again."), &ctx, admin.site_id, return_filter)
-                .await.into_response()
+            render_theme_list(
+                &state,
+                Some("Failed to get theme. Please try again."),
+                &ctx,
+                admin.site_id,
+                return_filter,
+            )
+            .await
+            .into_response()
         }
     }
 }
@@ -137,7 +178,7 @@ pub async fn publish_theme(
 
     let themes_dir = &state.config.themes_dir;
     let private_path = FsPath::new(themes_dir).join("private").join(&name);
-    let global_path  = FsPath::new(themes_dir).join("global").join(&name);
+    let global_path = FsPath::new(themes_dir).join("global").join(&name);
 
     if !private_path.is_dir() {
         err!("Private theme not found.");
@@ -146,7 +187,11 @@ pub async fn publish_theme(
     // If a global copy exists, remove it first (caller confirmed via JS).
     if global_path.exists() {
         if let Err(e) = fs::remove_dir_all(&global_path) {
-            tracing::error!("publish_theme: failed to remove existing global copy '{}': {:?}", name, e);
+            tracing::error!(
+                "publish_theme: failed to remove existing global copy '{}': {:?}",
+                name,
+                e
+            );
             err!("Failed to overwrite existing global theme. Please try again.");
         }
     }
@@ -155,7 +200,10 @@ pub async fn publish_theme(
     let dst = global_path.to_path_buf();
     match tokio::task::spawn_blocking(move || copy_dir_all(&src, &dst)).await {
         Ok(Ok(())) => {
-            tracing::info!("publish_theme: '{}' published to global by super_admin", name);
+            tracing::info!(
+                "publish_theme: '{}' published to global by super_admin",
+                name
+            );
             let ctx = super::page_ctx_full(&state, &admin, &cs).await;
             render_theme_list(
                 &state,

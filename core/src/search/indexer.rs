@@ -2,8 +2,8 @@
 
 use sqlx::PgPool;
 
-use crate::models::post::Post;
 use super::SearchIndex;
+use crate::models::post::Post;
 
 /// Index (or re-index) a single post.
 pub fn index_post(index: &SearchIndex, post: &Post) {
@@ -54,18 +54,21 @@ pub async fn rebuild_index(index: SearchIndex, pool: PgPool) -> Option<usize> {
     // Build all document data first, then write in a single commit.
     // upsert() commits after every document — with 1000+ posts that means
     // 1000+ Tantivy disk flushes on startup, which blocks the server for minutes.
-    let docs: Vec<(String, String, String, String, String, String)> = posts.iter().map(|post| {
-        let plain_content = ammonia::clean_text(&post.content);
-        let site_id_str = post.site_id.map(|id| id.to_string()).unwrap_or_default();
-        (
-            post.id.to_string(),
-            site_id_str,
-            post.title.clone(),
-            plain_content,
-            post.slug.clone(),
-            post.post_type.clone(),
-        )
-    }).collect();
+    let docs: Vec<(String, String, String, String, String, String)> = posts
+        .iter()
+        .map(|post| {
+            let plain_content = ammonia::clean_text(&post.content);
+            let site_id_str = post.site_id.map(|id| id.to_string()).unwrap_or_default();
+            (
+                post.id.to_string(),
+                site_id_str,
+                post.title.clone(),
+                plain_content,
+                post.slug.clone(),
+                post.post_type.clone(),
+            )
+        })
+        .collect();
 
     if let Err(e) = index.rebuild_all(&docs) {
         tracing::error!("search index rebuild failed: {}", e);

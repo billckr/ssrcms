@@ -39,8 +39,14 @@ impl Default for PollEditData {
             name: String::new(),
             question: String::new(),
             options: vec![
-                PollOptionRow { key: "option_1".to_string(), label: String::new() },
-                PollOptionRow { key: "option_2".to_string(), label: String::new() },
+                PollOptionRow {
+                    key: "option_1".to_string(),
+                    label: String::new(),
+                },
+                PollOptionRow {
+                    key: "option_2".to_string(),
+                    label: String::new(),
+                },
             ],
             success_message: "Thanks for voting!".to_string(),
             button_label: "Vote".to_string(),
@@ -56,7 +62,11 @@ pub fn polls_list_fragment(rows: &[PollRow], search: &str) -> String {
     let filtered: Vec<&PollRow> = if needle.is_empty() {
         rows.iter().collect()
     } else {
-        rows.iter().filter(|r| r.name.to_lowercase().contains(&needle) || r.slug.to_lowercase().contains(&needle)).collect()
+        rows.iter()
+            .filter(|r| {
+                r.name.to_lowercase().contains(&needle) || r.slug.to_lowercase().contains(&needle)
+            })
+            .collect()
     };
 
     let body = if filtered.is_empty() {
@@ -120,9 +130,16 @@ pub fn render_editor(data: &PollEditData, ctx: &PageContext, flash: Option<&str>
         Some(id) => format!("/admin/designer/polls/{id}"),
         None => "/admin/designer/polls".to_string(),
     };
-    let title = if is_edit { format!("Editing poll - {}", html_escape(&data.name)) } else { "New Poll".to_string() };
+    let title = if is_edit {
+        format!("Editing poll - {}", html_escape(&data.name))
+    } else {
+        "New Poll".to_string()
+    };
 
-    let rows_html: String = data.options.iter().enumerate()
+    let rows_html: String = data
+        .options
+        .iter()
+        .enumerate()
         .map(|(i, o)| option_row_html(o, i))
         .collect::<Vec<_>>()
         .join("\n");
@@ -150,8 +167,16 @@ pub fn render_editor(data: &PollEditData, ctx: &PageContext, flash: Option<&str>
         String::new()
     };
 
-    let cookie_only_checked = if data.vote_protection == "cookie_only" { " checked" } else { "" };
-    let cookie_and_ip_checked = if data.vote_protection != "cookie_only" { " checked" } else { "" };
+    let cookie_only_checked = if data.vote_protection == "cookie_only" {
+        " checked"
+    } else {
+        ""
+    };
+    let cookie_and_ip_checked = if data.vote_protection != "cookie_only" {
+        " checked"
+    } else {
+        ""
+    };
 
     let content = format!(
         r#"<form method="POST" action="{action}" id="poll-designer-form">
@@ -388,7 +413,11 @@ pub fn render_editor(data: &PollEditData, ctx: &PageContext, flash: Option<&str>
         button_label = html_escape(&data.button_label),
         cookie_only_checked = cookie_only_checked,
         cookie_and_ip_checked = cookie_and_ip_checked,
-        save_label = if is_edit { "Save Changes" } else { "Create Poll" },
+        save_label = if is_edit {
+            "Save Changes"
+        } else {
+            "Create Poll"
+        },
     );
 
     crate::admin_page(&title, "/admin/designer", flash, &content, ctx)

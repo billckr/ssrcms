@@ -64,7 +64,10 @@ pub async fn gate(State(state): State<AppState>, req: Request, next: Next) -> Re
     .await
     .ok()
     .flatten()
-    .unwrap_or_else(|| "This site is currently undergoing scheduled maintenance. Please check back soon.".to_string());
+    .unwrap_or_else(|| {
+        "This site is currently undergoing scheduled maintenance. Please check back soon."
+            .to_string()
+    });
 
     let default_theme = state.app_settings.read().unwrap().default_theme.clone();
     render(&message, &default_theme)
@@ -148,7 +151,9 @@ fn render(message: &str, default_theme: &str) -> Response {
 
     let mut resp = Html(body).into_response();
     *resp.status_mut() = axum::http::StatusCode::SERVICE_UNAVAILABLE;
-    resp.headers_mut()
-        .insert(header::RETRY_AFTER, axum::http::HeaderValue::from_static("3600"));
+    resp.headers_mut().insert(
+        header::RETRY_AFTER,
+        axum::http::HeaderValue::from_static("3600"),
+    );
     resp
 }

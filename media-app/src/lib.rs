@@ -34,7 +34,10 @@ pub async fn mount() {
     mount_into("mm-delete-folder-app", || view! { <DeleteFolderButton /> });
     mount_into("mm-new-folder-btn-app", || view! { <NewFolderButton /> });
     mount_into("mm-new-folder-modal-app", || view! { <NewFolderModal /> });
-    mount_into("mm-delete-folder-modal-app", || view! { <DeleteFolderModal /> });
+    mount_into(
+        "mm-delete-folder-modal-app",
+        || view! { <DeleteFolderModal /> },
+    );
     mount_into("mm-toolbar-app", || view! { <Toolbar /> });
     mount_into("mmGridWrap", || view! { <ContentGrid /> });
     mount_into("mmPagination", || view! { <Pagination /> });
@@ -67,7 +70,9 @@ where
     F: FnOnce() -> V + 'static,
     V: IntoView + 'static,
 {
-    let Some(window) = web_sys::window() else { return };
+    let Some(window) = web_sys::window() else {
+        return;
+    };
     let Some(doc) = window.document() else { return };
     let Some(el) = doc.get_element_by_id(id) else {
         leptos::logging::warn!("media-app: mount point #{id} not found");

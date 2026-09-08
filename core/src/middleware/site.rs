@@ -91,7 +91,11 @@ impl FromRequestParts<AppState> for CurrentSite {
             match crate::models::site::get_by_hostname(&state.db, &hostname).await {
                 Ok(_) => {
                     let base_url = make_base_url(&settings);
-                    return Ok(CurrentSite { site, settings, base_url });
+                    return Ok(CurrentSite {
+                        site,
+                        settings,
+                        base_url,
+                    });
                 }
                 Err(_) => {
                     // Cache is stale — reload it and retry once.
@@ -99,7 +103,11 @@ impl FromRequestParts<AppState> for CurrentSite {
                     let _ = state.reload_site_cache().await;
                     if let Some((site, settings)) = state.resolve_site(&hostname) {
                         let base_url = make_base_url(&settings);
-                        return Ok(CurrentSite { site, settings, base_url });
+                        return Ok(CurrentSite {
+                            site,
+                            settings,
+                            base_url,
+                        });
                     }
                     // Hostname is genuinely gone (e.g. after dev reset).
                     // Return 404 directly — do NOT fall into the empty-cache

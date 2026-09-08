@@ -1,5 +1,5 @@
-use leptos::prelude::*;
 use crate::types::GridResponse;
+use leptos::prelude::*;
 
 /// Filter/pagination + fetched-data signals shared across the three
 /// independently-mounted regions (sidebar, toolbar, main content) so a
@@ -120,7 +120,11 @@ pub fn reset_for_picker(type_filter: Option<String>) {
 /// Client-side, this only gates the Create button's disabled state — the
 /// server re-validates regardless.
 pub fn sanitize_folder_name(raw: &str) -> String {
-    let filtered: String = raw.chars().filter(|c| c.is_ascii_alphanumeric() || *c == '-').take(25).collect();
+    let filtered: String = raw
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric() || *c == '-')
+        .take(25)
+        .collect();
     filtered.trim_matches('-').to_string()
 }
 
@@ -145,7 +149,9 @@ pub fn submit_new_folder() {
             }
             Err(e) => {
                 leptos::logging::error!("media-app: create_folder failed: {e}");
-                s.new_folder_error.set(Some("Could not create folder. Please try again.".to_string()));
+                s.new_folder_error.set(Some(
+                    "Could not create folder. Please try again.".to_string(),
+                ));
             }
         }
     });
@@ -159,7 +165,9 @@ pub fn open_delete_folder_modal() {
 
 pub fn confirm_delete_folder(delete_media: bool) {
     let s = state();
-    let Some(folder_id) = s.folder_id.get_untracked() else { return };
+    let Some(folder_id) = s.folder_id.get_untracked() else {
+        return;
+    };
     leptos::task::spawn_local(async move {
         match crate::api::delete_folder(&folder_id, delete_media).await {
             Ok(()) => {
@@ -171,7 +179,9 @@ pub fn confirm_delete_folder(delete_media: bool) {
             }
             Err(e) => {
                 leptos::logging::error!("media-app: delete_folder failed: {e}");
-                s.delete_folder_error.set(Some("Could not delete folder. Please try again.".to_string()));
+                s.delete_folder_error.set(Some(
+                    "Could not delete folder. Please try again.".to_string(),
+                ));
             }
         }
     });

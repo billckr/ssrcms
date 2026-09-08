@@ -30,17 +30,27 @@ pub struct ThemeInfo {
     pub has_global_copy: bool,
 }
 
-pub fn render_with_flash(themes: &[ThemeInfo], flash: Option<&str>, ctx: &crate::PageContext, filter: &str) -> String {
+pub fn render_with_flash(
+    themes: &[ThemeInfo],
+    flash: Option<&str>,
+    ctx: &crate::PageContext,
+    filter: &str,
+) -> String {
     let cards: String = if themes.is_empty() {
         r#"<div class="empty-state">
             <p>No themes found.</p>
-        </div>"#.to_string()
+        </div>"#
+            .to_string()
     } else {
         themes.iter().map(|t| render_card(t, ctx, filter)).collect()
     };
 
-    let sel_my      = if filter != "global" && filter != "private" { " selected" } else { "" };
-    let sel_global  = if filter == "global"  { " selected" } else { "" };
+    let sel_my = if filter != "global" && filter != "private" {
+        " selected"
+    } else {
+        ""
+    };
+    let sel_global = if filter == "global" { " selected" } else { "" };
     let sel_private = if filter == "private" { " selected" } else { "" };
 
     let action_pill = if ctx.can_manage_themes {
@@ -109,8 +119,9 @@ pub fn render_create_theme_form(flash: Option<&str>, ctx: &crate::PageContext) -
     // parent picks up the :has(.icon-pill) transparent-background rule and
     // it aligns like every other single-form icon-pill.
     let (visibility_section, data_section_btn) = if ctx.is_global_admin {
-        (format!(
-            r#"<div class="card-boxed-section">
+        (
+            format!(
+                r#"<div class="card-boxed-section">
   <div class="form-group">
     <label>Visibility</label>
     <div class="radio-group">
@@ -132,8 +143,10 @@ pub fn render_create_theme_form(flash: Option<&str>, ctx: &crate::PageContext) -
   </div>
   {create_btn}
 </div>"#,
-            create_btn = create_btn,
-        ), "")
+                create_btn = create_btn,
+            ),
+            "",
+        )
     } else {
         (String::new(), create_btn)
     };
@@ -220,7 +233,14 @@ pub struct CustomizerData {
     /// (option_key, label, group, declared (choice_key, choice_label) pairs,
     /// current resolved choice_key, placement). Empty for themes that
     /// declare none.
-    pub choices: Vec<(String, String, String, Vec<(String, String)>, String, String)>,
+    pub choices: Vec<(
+        String,
+        String,
+        String,
+        Vec<(String, String)>,
+        String,
+        String,
+    )>,
     /// Free-form text fields declared with `type = "text"` — (option_key,
     /// label, group, current resolved string, placement). Empty for themes
     /// that declare none.
@@ -245,7 +265,16 @@ pub struct CustomizerData {
 /// Slugify a manifest-declared group name into something safe for DOM ids
 /// (e.g. "Layout Options" -> "layout-options").
 fn slugify_group(group: &str) -> String {
-    group.chars().map(|c| if c.is_ascii_alphanumeric() { c.to_ascii_lowercase() } else { '-' }).collect()
+    group
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() {
+                c.to_ascii_lowercase()
+            } else {
+                '-'
+            }
+        })
+        .collect()
 }
 
 /// The customizer landing page is a pure reader of whatever theme.toml
@@ -254,7 +283,12 @@ fn slugify_group(group: &str) -> String {
 /// order groups first appear. No card names, color roles, or option keys are
 /// hardcoded here — a theme author adds a new panel just by declaring a new
 /// `group` value in theme.toml.
-fn render_customizer_landing(theme_name: &str, source: &str, data: &CustomizerData, files_section: &str) -> String {
+fn render_customizer_landing(
+    theme_name: &str,
+    source: &str,
+    data: &CustomizerData,
+    files_section: &str,
+) -> String {
     let theme_esc = crate::html_escape(theme_name);
     let source_esc = crate::html_escape(source);
 
@@ -303,7 +337,9 @@ fn render_customizer_landing(theme_name: &str, source: &str, data: &CustomizerDa
     // Same split-button/form reasoning as restore_colors_btn above.
     let render_restore_options_btn = |keys: &[String], restore_form_id: &str| -> (String, String) {
         let has_override = keys.iter().any(|k| data.overridden_option_keys.contains(k));
-        if keys.is_empty() || !has_override { return (String::new(), String::new()); }
+        if keys.is_empty() || !has_override {
+            return (String::new(), String::new());
+        }
         let button = format!(
             r#"<button type="submit" form="{form_id}" class="icon-btn" title="Restore original" aria-label="Restore original" onclick="return confirm('Restore original settings? Your current changes in this section will be overwritten.')"><img src="/admin/static/icons/rotate-ccw.svg" alt=""></button>"#,
             form_id = restore_form_id,
@@ -328,46 +364,73 @@ fn render_customizer_landing(theme_name: &str, source: &str, data: &CustomizerDa
     // detector instead of each kind managing its own.
 
     let render_colors_section = |entries: &[&(String, String, String, Option<String>)]| -> String {
-        if entries.is_empty() { return String::new(); }
-        let rows: String = entries.iter().filter_map(|(key, label, _, value)| {
-            let hex = value.as_deref()?;
-            Some(format!(
-                r#"<div class="customizer-color-card">
+        if entries.is_empty() {
+            return String::new();
+        }
+        let rows: String = entries
+            .iter()
+            .filter_map(|(key, label, _, value)| {
+                let hex = value.as_deref()?;
+                Some(format!(
+                    r#"<div class="customizer-color-card">
   <input type="color" name="{key}" value="{hex}" class="customizer-color-swatch" title="{label}">
   <span class="customizer-color-label">{label}</span>
 </div>"#,
-                key = key,
-                hex = crate::html_escape(hex),
-                label = crate::html_escape(label),
-            ))
-        }).collect();
-        format!(r#"<div class="customizer-color-grid">
+                    key = key,
+                    hex = crate::html_escape(hex),
+                    label = crate::html_escape(label),
+                ))
+            })
+            .collect();
+        format!(
+            r#"<div class="customizer-color-grid">
 {rows}
-</div>"#, rows = rows)
+</div>"#,
+            rows = rows
+        )
     };
 
-    let render_bool_options_section = |entries: &[&(String, String, String, bool, String)]| -> String {
-        if entries.is_empty() { return String::new(); }
-        let rows: String = entries.iter().map(|(key, label, _, value, _)| {
-            let checked = if *value { " checked" } else { "" };
-            format!(
-                r#"<label class="switch-toggle customizer-option-row">
+    let render_bool_options_section =
+        |entries: &[&(String, String, String, bool, String)]| -> String {
+            if entries.is_empty() {
+                return String::new();
+            }
+            let rows: String = entries
+                .iter()
+                .map(|(key, label, _, value, _)| {
+                    let checked = if *value { " checked" } else { "" };
+                    format!(
+                        r#"<label class="switch-toggle customizer-option-row">
   <input type="checkbox" name="{key}" value="true"{checked}>
   <span class="switch-slider"></span>
   <span>{label}</span>
 </label>"#,
-                key = crate::html_escape(key),
-                checked = checked,
-                label = crate::html_escape(label),
-            )
-        }).collect();
-        format!(r#"<div class="customizer-option-list" style="margin-top:1rem;">
+                        key = crate::html_escape(key),
+                        checked = checked,
+                        label = crate::html_escape(label),
+                    )
+                })
+                .collect();
+            format!(
+                r#"<div class="customizer-option-list" style="margin-top:1rem;">
 {rows}
-</div>"#, rows = rows)
-    };
+</div>"#,
+                rows = rows
+            )
+        };
 
-    let render_choices_section = |entries: &[&(String, String, String, Vec<(String, String)>, String, String)]| -> String {
-        if entries.is_empty() { return String::new(); }
+    let render_choices_section = |entries: &[&(
+        String,
+        String,
+        String,
+        Vec<(String, String)>,
+        String,
+        String,
+    )]|
+     -> String {
+        if entries.is_empty() {
+            return String::new();
+        }
         entries.iter().map(|(key, label, _, choices, current, _)| {
             let key_esc = crate::html_escape(key);
             let radio_rows: String = choices.iter().map(|(choice_key, choice_label)| {
@@ -394,9 +457,12 @@ fn render_customizer_landing(theme_name: &str, source: &str, data: &CustomizerDa
         }).collect()
     };
 
-    let render_text_options_section = |entries: &[&(String, String, String, String, String)]| -> String {
-        if entries.is_empty() { return String::new(); }
-        entries.iter().map(|(key, label, _, value, _)| {
+    let render_text_options_section =
+        |entries: &[&(String, String, String, String, String)]| -> String {
+            if entries.is_empty() {
+                return String::new();
+            }
+            entries.iter().map(|(key, label, _, value, _)| {
             format!(
                 r#"<div class="customizer-text-field" style="margin-top:1rem;">
   <label class="customizer-text-label" for="customizer-text-{key}">{label}</label>
@@ -407,7 +473,7 @@ fn render_customizer_landing(theme_name: &str, source: &str, data: &CustomizerDa
                 value = crate::html_escape(value),
             )
         }).collect()
-    };
+        };
 
     // Image-picker fields: a hidden input holds the actual value (a media
     // library URL); "Choose Image" opens the shared media picker in
@@ -416,8 +482,19 @@ fn render_customizer_landing(theme_name: &str, source: &str, data: &CustomizerDa
     // every other option type uses (render_restore_options_btn) rather than
     // a field-local button, for uniformity — there's no per-field "revert"
     // control anywhere else in the customizer either.
-    let render_image_options_section = |entries: &[&(String, String, String, String, String, String, String)]| -> String {
-        if entries.is_empty() { return String::new(); }
+    let render_image_options_section = |entries: &[&(
+        String,
+        String,
+        String,
+        String,
+        String,
+        String,
+        String,
+    )]|
+     -> String {
+        if entries.is_empty() {
+            return String::new();
+        }
         entries.iter().map(|(key, label, _, value, preview_url, _default_preview, _)| {
             let key_esc = crate::html_escape(key);
             let input_id = format!("customizer-image-{key_esc}");
@@ -459,7 +536,14 @@ fn render_customizer_landing(theme_name: &str, source: &str, data: &CustomizerDa
     // as the menu editor's item reordering, minus the parent/child nesting
     // and the separate auto-save endpoint (this reuses the customizer's
     // existing dirty-check + Save button flow instead).
-    let render_order_section = |entries: &[&(String, String, String, Vec<(String, String)>, String)]| -> String {
+    let render_order_section = |entries: &[&(
+        String,
+        String,
+        String,
+        Vec<(String, String)>,
+        String,
+    )]|
+     -> String {
         entries.iter().map(|(key, label, _, items, _)| {
             let item_rows: String = items.iter().map(|(item_key, item_label)| {
                 format!(
@@ -494,20 +578,42 @@ fn render_customizer_landing(theme_name: &str, source: &str, data: &CustomizerDa
     // single group's fields. Shared by the main-column cards and the
     // sidebar's image-only cards below, so both get identical save/dirty-
     // check behavior without duplicating the template.
-    let render_group_card = |
-        group: &str,
-        group_colors: &[&(String, String, String, Option<String>)],
-        group_options: &[&(String, String, String, bool, String)],
-        group_choices: &[&(String, String, String, Vec<(String, String)>, String, String)],
-        group_order: &[&(String, String, String, Vec<(String, String)>, String)],
-        group_texts: &[&(String, String, String, String, String)],
-        group_images: &[&(String, String, String, String, String, String, String)],
-    | -> String {
+    let render_group_card = |group: &str,
+                             group_colors: &[&(String, String, String, Option<String>)],
+                             group_options: &[&(String, String, String, bool, String)],
+                             group_choices: &[&(
+        String,
+        String,
+        String,
+        Vec<(String, String)>,
+        String,
+        String,
+    )],
+                             group_order: &[&(
+        String,
+        String,
+        String,
+        Vec<(String, String)>,
+        String,
+    )],
+                             group_texts: &[&(String, String, String, String, String)],
+                             group_images: &[&(
+        String,
+        String,
+        String,
+        String,
+        String,
+        String,
+        String,
+    )]|
+     -> String {
         let gslug = slugify_group(group);
         let form_id = format!("customizer-form-{gslug}");
         let btn_id = format!("customizer-save-btn-{gslug}");
 
-        let option_keys: Vec<String> = group_options.iter().map(|(k, _, _, _, _)| k.clone())
+        let option_keys: Vec<String> = group_options
+            .iter()
+            .map(|(k, _, _, _, _)| k.clone())
             .chain(group_order.iter().map(|(k, _, _, _, _)| k.clone()))
             .chain(group_choices.iter().map(|(k, _, _, _, _, _)| k.clone()))
             .chain(group_texts.iter().map(|(k, _, _, _, _)| k.clone()))
@@ -520,7 +626,11 @@ fn render_customizer_landing(theme_name: &str, source: &str, data: &CustomizerDa
         // own an absent key is ambiguous between "unchecked" and "not part of
         // this card"; without this list, saving one card would silently zero
         // out every bool option declared in *other* cards too.
-        let bool_keys: String = group_options.iter().map(|(k, _, _, _, _)| k.as_str()).collect::<Vec<_>>().join(",");
+        let bool_keys: String = group_options
+            .iter()
+            .map(|(k, _, _, _, _)| k.as_str())
+            .collect::<Vec<_>>()
+            .join(",");
 
         let restore_form_id = format!("customizer-restore-form-{gslug}");
         let (restore_btn, restore_form) = if !group_colors.is_empty() {
@@ -605,7 +715,8 @@ fn render_customizer_landing(theme_name: &str, source: &str, data: &CustomizerDa
     // option in it is seen first — themes aren't expected to mix placements
     // within one group name.
     let mut group_order_list: Vec<String> = Vec::new();
-    let mut group_placement: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+    let mut group_placement: std::collections::HashMap<String, String> =
+        std::collections::HashMap::new();
     {
         let mut note = |group: &str, placement: &str| {
             if !group_placement.contains_key(group) {
@@ -613,31 +724,99 @@ fn render_customizer_landing(theme_name: &str, source: &str, data: &CustomizerDa
                 group_order_list.push(group.to_string());
             }
         };
-        for (_, _, group, _) in &data.colors { note(group, "main"); }
-        for (_, _, group, _, placement) in &data.options { note(group, placement); }
-        for (_, _, group, _, placement) in &data.order_options { note(group, placement); }
-        for (_, _, group, _, _, placement) in &data.choices { note(group, placement); }
-        for (_, _, group, _, placement) in &data.texts { note(group, placement); }
-        for (_, _, group, _, _, _, placement) in &data.images { note(group, placement); }
+        for (_, _, group, _) in &data.colors {
+            note(group, "main");
+        }
+        for (_, _, group, _, placement) in &data.options {
+            note(group, placement);
+        }
+        for (_, _, group, _, placement) in &data.order_options {
+            note(group, placement);
+        }
+        for (_, _, group, _, _, placement) in &data.choices {
+            note(group, placement);
+        }
+        for (_, _, group, _, placement) in &data.texts {
+            note(group, placement);
+        }
+        for (_, _, group, _, _, _, placement) in &data.images {
+            note(group, placement);
+        }
     }
 
-    let main_groups: Vec<String> = group_order_list.iter()
-        .filter(|g| group_placement.get(*g).map(|p| p != "sidebar").unwrap_or(true))
-        .cloned().collect();
-    let sidebar_groups: Vec<String> = group_order_list.iter()
-        .filter(|g| group_placement.get(*g).map(|p| p == "sidebar").unwrap_or(false))
-        .cloned().collect();
+    let main_groups: Vec<String> = group_order_list
+        .iter()
+        .filter(|g| {
+            group_placement
+                .get(*g)
+                .map(|p| p != "sidebar")
+                .unwrap_or(true)
+        })
+        .cloned()
+        .collect();
+    let sidebar_groups: Vec<String> = group_order_list
+        .iter()
+        .filter(|g| {
+            group_placement
+                .get(*g)
+                .map(|p| p == "sidebar")
+                .unwrap_or(false)
+        })
+        .cloned()
+        .collect();
 
     let build_cards = |group_list: &[String]| -> String {
-        group_list.iter().map(|group| {
-            let group_colors: Vec<&(String, String, String, Option<String>)> = data.colors.iter().filter(|(_, _, g, _)| g == group).collect();
-            let group_options: Vec<&(String, String, String, bool, String)> = data.options.iter().filter(|(_, _, g, _, _)| g == group).collect();
-            let group_choices: Vec<&(String, String, String, Vec<(String, String)>, String, String)> = data.choices.iter().filter(|(_, _, g, _, _, _)| g == group).collect();
-            let group_order: Vec<&(String, String, String, Vec<(String, String)>, String)> = data.order_options.iter().filter(|(_, _, g, _, _)| g == group).collect();
-            let group_texts: Vec<&(String, String, String, String, String)> = data.texts.iter().filter(|(_, _, g, _, _)| g == group).collect();
-            let group_images: Vec<&(String, String, String, String, String, String, String)> = data.images.iter().filter(|(_, _, g, _, _, _, _)| g == group).collect();
-            render_group_card(group, &group_colors, &group_options, &group_choices, &group_order, &group_texts, &group_images)
-        }).collect()
+        group_list
+            .iter()
+            .map(|group| {
+                let group_colors: Vec<&(String, String, String, Option<String>)> = data
+                    .colors
+                    .iter()
+                    .filter(|(_, _, g, _)| g == group)
+                    .collect();
+                let group_options: Vec<&(String, String, String, bool, String)> = data
+                    .options
+                    .iter()
+                    .filter(|(_, _, g, _, _)| g == group)
+                    .collect();
+                let group_choices: Vec<&(
+                    String,
+                    String,
+                    String,
+                    Vec<(String, String)>,
+                    String,
+                    String,
+                )> = data
+                    .choices
+                    .iter()
+                    .filter(|(_, _, g, _, _, _)| g == group)
+                    .collect();
+                let group_order: Vec<&(String, String, String, Vec<(String, String)>, String)> =
+                    data.order_options
+                        .iter()
+                        .filter(|(_, _, g, _, _)| g == group)
+                        .collect();
+                let group_texts: Vec<&(String, String, String, String, String)> = data
+                    .texts
+                    .iter()
+                    .filter(|(_, _, g, _, _)| g == group)
+                    .collect();
+                let group_images: Vec<&(String, String, String, String, String, String, String)> =
+                    data.images
+                        .iter()
+                        .filter(|(_, _, g, _, _, _, _)| g == group)
+                        .collect();
+                render_group_card(
+                    group,
+                    &group_colors,
+                    &group_options,
+                    &group_choices,
+                    &group_order,
+                    &group_texts,
+                    &group_images,
+                )
+            })
+            .collect()
     };
 
     let cards: String = build_cards(&main_groups);
@@ -693,7 +872,11 @@ fn render_customizer_landing(theme_name: &str, source: &str, data: &CustomizerDa
 
     let details_card = render_theme_details_card(&data.manifest, theme_name, source);
 
-    let media_picker = if data.images.is_empty() { String::new() } else { crate::media_picker_modal_html() };
+    let media_picker = if data.images.is_empty() {
+        String::new()
+    } else {
+        crate::media_picker_modal_html()
+    };
 
     format!(
         r#"<div class="editor-body-row">
@@ -720,7 +903,11 @@ fn render_customizer_landing(theme_name: &str, source: &str, data: &CustomizerDa
 /// always directly above the Files section, in both places. Open by default
 /// (unlike Files, this doesn't gate an action the user needs immediately,
 /// but it's the page's own identity card, so it shouldn't start collapsed).
-fn render_theme_details_card(manifest: &ThemeManifestInfo, theme_name: &str, source: &str) -> String {
+fn render_theme_details_card(
+    manifest: &ThemeManifestInfo,
+    theme_name: &str,
+    source: &str,
+) -> String {
     format!(
         r#"<details class="card-boxed customizer-details-panel" open>
   <summary class="card-boxed-header">Theme Details</summary>
@@ -775,8 +962,8 @@ pub fn render_theme_editor(
             let basename = f.rel_path.rsplit('/').next().unwrap_or(&f.rel_path);
             o.push_str(&format!(
                 r#"<option value="{val}"{sel}>{label}</option>"#,
-                val   = crate::html_escape(&f.rel_path),
-                sel   = sel,
+                val = crate::html_escape(&f.rel_path),
+                sel = sel,
                 label = crate::html_escape(&format!("{}{}", basename, marker)),
             ));
         }
@@ -883,14 +1070,15 @@ pub fn render_theme_editor(
         r#"<div class="editor-notice editor-notice--warning">
   <strong>Global theme — read only.</strong>
   This is a shared global theme. Activate it to get your own editable copy.
-</div>"#.to_string()
+</div>"#
+            .to_string()
     } else {
         String::new()
     };
 
     // Editor body — shown only when a file is selected
     let body = if let Some(rel) = selected {
-        let rel_esc  = crate::html_escape(rel);
+        let rel_esc = crate::html_escape(rel);
         let content_esc = crate::html_escape(content);
 
         let restore_btn = if has_backup {
@@ -905,18 +1093,23 @@ pub fn render_theme_editor(
     </button>
   </div>
 </form>"#,
-                theme  = theme_esc,
-                file   = rel_esc,
+                theme = theme_esc,
+                file = rel_esc,
                 source = source_esc,
             )
         } else {
             String::new()
         };
 
-        let is_required = matches!(rel,
-            "templates/base.html" | "templates/index.html" | "templates/single.html" |
-            "templates/page.html" | "templates/archive.html" | "templates/search.html" |
-            "templates/404.html"
+        let is_required = matches!(
+            rel,
+            "templates/base.html"
+                | "templates/index.html"
+                | "templates/single.html"
+                | "templates/page.html"
+                | "templates/archive.html"
+                | "templates/search.html"
+                | "templates/404.html"
         );
         let delete_btn = if !is_required {
             format!(
@@ -930,10 +1123,10 @@ pub fn render_theme_editor(
     </button>
   </div>
 </form>"#,
-                theme    = theme_esc,
-                file     = rel_esc,
-                file_js  = rel_esc,
-                source   = source_esc,
+                theme = theme_esc,
+                file = rel_esc,
+                file_js = rel_esc,
+                source = source_esc,
             )
         } else {
             String::new()
@@ -948,9 +1141,14 @@ pub fn render_theme_editor(
 
         let del_btn2 = delete_btn;
         let ro = if is_readonly { " readonly" } else { "" };
-        let save_btn = if is_readonly { "" } else { r#"<button type="submit" form="save-form" class="icon-btn" id="save-btn" title="Save file" aria-label="Save file" disabled><img src="/admin/static/icons/save.svg" alt=""></button>"# };
+        let save_btn = if is_readonly {
+            ""
+        } else {
+            r#"<button type="submit" form="save-form" class="icon-btn" id="save-btn" title="Save file" aria-label="Save file" disabled><img src="/admin/static/icons/save.svg" alt=""></button>"#
+        };
         let edited_at = if has_backup {
-            files.iter()
+            files
+                .iter()
                 .find(|f| f.rel_path == rel)
                 .and_then(|f| f.edited_at.as_deref())
                 .map(|d| format!(r#" <span class="editor-edited-at">Edited: {d}</span>"#))
@@ -1112,14 +1310,14 @@ pub fn render_theme_editor(
 }})();
 </script>
 {color_script}"#,
-            file     = rel_esc,
-            theme    = theme_esc,
-            content  = content_esc,
-            source   = source_esc,
-            restore  = restore_btn.clone(),
+            file = rel_esc,
+            theme = theme_esc,
+            content = content_esc,
+            source = source_esc,
+            restore = restore_btn.clone(),
             restore2 = restore_btn,
             sidebar_col = sidebar_col,
-            color_script  = color_script,
+            color_script = color_script,
         )
     } else if let Some(data) = customizer {
         render_customizer_landing(theme_name, source, data, &files_section)
@@ -1129,9 +1327,9 @@ pub fn render_theme_editor(
 
     let content_html = format!(
         r#"<div class="editor-wrap">{toolbar}{readonly_notice}{body}</div>"#,
-        toolbar         = toolbar,
+        toolbar = toolbar,
         readonly_notice = readonly_notice,
-        body            = body,
+        body = body,
     );
 
     admin_page(
@@ -1146,13 +1344,13 @@ pub fn render_theme_editor(
 fn render_card(t: &ThemeInfo, ctx: &crate::PageContext, filter: &str) -> String {
     // name_esc  — folder name, used for all functional references (URLs, forms, DB)
     // label_esc — display name from theme.toml, used only for visible text
-    let name_esc  = crate::html_escape(&t.name);
+    let name_esc = crate::html_escape(&t.name);
     let label_esc = crate::html_escape(&t.display_name);
 
     let screenshot_html = if t.has_screenshot {
         format!(
             r#"<div class="theme-screenshot"><img src="/admin/theme-screenshot/{name}" alt="{label} preview"></div>"#,
-            name  = name_esc,
+            name = name_esc,
             label = label_esc,
         )
     } else {
@@ -1188,12 +1386,12 @@ fn render_card(t: &ThemeInfo, ctx: &crate::PageContext, filter: &str) -> String 
   </div>
   <p class="theme-description">{desc}</p>
   <p class="theme-author">by {author}</p>"#,
-        label        = label_esc,
-        version      = crate::html_escape(&t.version),
+        label = label_esc,
+        version = crate::html_escape(&t.version),
         private_badge = private_badge,
-        in_use_badge  = in_use_badge,
-        desc         = crate::html_escape(&t.description),
-        author       = crate::html_escape(&t.author),
+        in_use_badge = in_use_badge,
+        desc = crate::html_escape(&t.description),
+        author = crate::html_escape(&t.author),
     );
 
     // ── Global / Private library views ───────────────────────────────────────
@@ -1216,7 +1414,7 @@ fn render_card(t: &ThemeInfo, ctx: &crate::PageContext, filter: &str) -> String 
     <input type="hidden" name="source" value="{source}">
     <button type="submit" class="icon-btn" title="Get Theme" aria-label="Get Theme"><img src="/admin/static/icons/download.svg" alt=""></button>
 </form>"#,
-                name   = name_esc,
+                name = name_esc,
                 source = source_val,
             )
         };
@@ -1243,7 +1441,7 @@ fn render_card(t: &ThemeInfo, ctx: &crate::PageContext, filter: &str) -> String 
     <input type="hidden" name="theme" value="{name}">
     <button type="submit" class="icon-btn" title="Publish to Global" aria-label="Publish to Global"{confirm}><img src="/admin/static/icons/upload-cloud.svg" alt=""></button>
 </form>"#,
-                name    = name_esc,
+                name = name_esc,
                 confirm = confirm_attr,
             );
 
@@ -1266,15 +1464,19 @@ fn render_card(t: &ThemeInfo, ctx: &crate::PageContext, filter: &str) -> String 
             (String::new(), String::new(), String::new())
         };
 
-        let actions_pill = if get_html.is_empty() && make_global_html.is_empty() && edit_html.is_empty() && remove_html.is_empty() {
+        let actions_pill = if get_html.is_empty()
+            && make_global_html.is_empty()
+            && edit_html.is_empty()
+            && remove_html.is_empty()
+        {
             String::new()
         } else {
             format!(
                 r#"<div class="icon-pill">{get}{make_global}{edit}{remove}</div>"#,
-                get         = get_html,
+                get = get_html,
                 make_global = make_global_html,
-                edit        = edit_html,
-                remove      = remove_html,
+                edit = edit_html,
+                remove = remove_html,
             )
         };
 
@@ -1287,9 +1489,9 @@ fn render_card(t: &ThemeInfo, ctx: &crate::PageContext, filter: &str) -> String 
     {actions_pill}
   </div>
 </div>"#,
-            screenshot   = screenshot_html,
-            header       = header,
-            badge        = in_my_themes_badge,
+            screenshot = screenshot_html,
+            header = header,
+            badge = in_my_themes_badge,
             actions_pill = actions_pill,
         );
     }
@@ -1300,7 +1502,10 @@ fn render_card(t: &ThemeInfo, ctx: &crate::PageContext, filter: &str) -> String 
     let activate_html = if t.active {
         String::new()
     } else {
-        let confirm_msg = format!("Activate theme '{}'? This will replace the current active theme for this site.", t.display_name.replace('\'', "\\'"));
+        let confirm_msg = format!(
+            "Activate theme '{}'? This will replace the current active theme for this site.",
+            t.display_name.replace('\'', "\\'")
+        );
         format!(
             r#"<form method="post" action="/admin/themes/activate" style="display:inline;"
                   data-confirm="{confirm_msg}" onsubmit="return confirm(this.dataset.confirm)">
@@ -1314,7 +1519,7 @@ fn render_card(t: &ThemeInfo, ctx: &crate::PageContext, filter: &str) -> String 
 
     let edit_html = format!(
         r#"<a href="/admin/themes/editor/{name}?source={source}" class="icon-btn" title="Customize Theme" aria-label="Customize Theme"><img src="/admin/static/icons/edit.svg" alt=""></a>"#,
-        name   = name_esc,
+        name = name_esc,
         source = crate::html_escape(&t.source),
     );
 
@@ -1332,7 +1537,10 @@ fn render_card(t: &ThemeInfo, ctx: &crate::PageContext, filter: &str) -> String 
         } else {
             (
                 "Delete",
-                format!("Permanently delete theme &quot;{name}&quot;? This cannot be undone.", name = name_esc),
+                format!(
+                    "Permanently delete theme &quot;{name}&quot;? This cannot be undone.",
+                    name = name_esc
+                ),
             )
         };
         format!(
@@ -1343,9 +1551,9 @@ fn render_card(t: &ThemeInfo, ctx: &crate::PageContext, filter: &str) -> String 
     <button type="submit" class="icon-btn icon-danger" title="{label}" aria-label="{label}"><img src="/admin/static/icons/delete.svg" alt=""></button>
 </form>"#,
             confirm = confirm_msg,
-            name    = name_esc,
-            source  = crate::html_escape(&t.source),
-            label   = btn_label,
+            name = name_esc,
+            source = crate::html_escape(&t.source),
+            label = btn_label,
         )
     } else {
         String::new()
@@ -1359,11 +1567,11 @@ fn render_card(t: &ThemeInfo, ctx: &crate::PageContext, filter: &str) -> String 
     <div class="icon-pill">{activate}{edit}{delete}</div>
   </div>
 </div>"#,
-        active     = active_class,
+        active = active_class,
         screenshot = screenshot_html,
-        header     = header,
-        activate   = activate_html,
-        edit       = edit_html,
-        delete     = delete_html,
+        header = header,
+        activate = activate_html,
+        edit = edit_html,
+        delete = delete_html,
     )
 }

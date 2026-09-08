@@ -53,7 +53,11 @@ pub async fn load_all_for_builder(
         let tree = build_tree(&items, &page_urls, None, "");
         result.insert(
             menu.id.to_string(),
-            BuilderMenuEntry { id: menu.id, name: menu.name, items: tree },
+            BuilderMenuEntry {
+                id: menu.id,
+                name: menu.name,
+                items: tree,
+            },
         );
     }
     result
@@ -85,12 +89,11 @@ pub struct NavMenuItem {
 // ── Menu CRUD ────────────────────────────────────────────────────────────────
 
 pub async fn list_by_site(pool: &PgPool, site_id: Uuid) -> Result<Vec<NavMenu>> {
-    let menus = sqlx::query_as::<_, NavMenu>(
-        "SELECT * FROM nav_menus WHERE site_id = $1 ORDER BY name",
-    )
-    .bind(site_id)
-    .fetch_all(pool)
-    .await?;
+    let menus =
+        sqlx::query_as::<_, NavMenu>("SELECT * FROM nav_menus WHERE site_id = $1 ORDER BY name")
+            .bind(site_id)
+            .fetch_all(pool)
+            .await?;
     Ok(menus)
 }
 
@@ -151,12 +154,7 @@ pub async fn create(
 /// Update a menu's name and/or location.
 /// If setting a location, clears any existing menu at that location for the same site first
 /// (enforces at-most-one-menu-per-location in the application layer).
-pub async fn update(
-    pool: &PgPool,
-    id: Uuid,
-    name: &str,
-    location: Option<&str>,
-) -> Result<()> {
+pub async fn update(pool: &PgPool, id: Uuid, name: &str, location: Option<&str>) -> Result<()> {
     // Fetch current record to know the site_id
     let current = get_by_id(pool, id).await?;
 
@@ -175,14 +173,12 @@ pub async fn update(
         }
     }
 
-    sqlx::query(
-        "UPDATE nav_menus SET name = $1, location = $2, updated_at = NOW() WHERE id = $3",
-    )
-    .bind(name)
-    .bind(location.filter(|s| !s.is_empty()))
-    .bind(id)
-    .execute(pool)
-    .await?;
+    sqlx::query("UPDATE nav_menus SET name = $1, location = $2, updated_at = NOW() WHERE id = $3")
+        .bind(name)
+        .bind(location.filter(|s| !s.is_empty()))
+        .bind(id)
+        .execute(pool)
+        .await?;
     Ok(())
 }
 
@@ -293,13 +289,9 @@ pub async fn reorder_items(pool: &PgPool, menu_id: Uuid, ordered_ids: &[Uuid]) -
 /// Loads the primary and footer menus from the database, resolves page URLs,
 /// and assembles a nested tree of [`NavItemContext`] values.
 /// Errors are swallowed — a broken menu never breaks the page.
-pub async fn build_nav_context(
-    pool: &PgPool,
-    site_id: Uuid,
-    request_path: &str,
-) -> NavContext {
+pub async fn build_nav_context(pool: &PgPool, site_id: Uuid, request_path: &str) -> NavContext {
     let primary = load_menu_for_location(pool, site_id, "primary", request_path).await;
-    let footer  = load_menu_for_location(pool, site_id, "footer",  request_path).await;
+    let footer = load_menu_for_location(pool, site_id, "footer", request_path).await;
     NavContext { primary, footer }
 }
 

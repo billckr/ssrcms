@@ -13,7 +13,7 @@ use uuid::Uuid;
 use crate::app_state::AppState;
 use crate::middleware::account_auth::SESSION_ACCOUNT_USER_ID_KEY;
 use crate::middleware::site::CurrentSite;
-use crate::models::comment::{CreateComment};
+use crate::models::comment::CreateComment;
 use crate::models::post;
 
 #[derive(Deserialize)]
@@ -66,10 +66,11 @@ pub async fn submit(
     }
 
     // Fetch post and verify comments are enabled.
-    let post_record = match post::get_published_by_slug(&state.db, Some(current_site.site.id), &slug).await {
-        Ok(p) => p,
-        Err(_) => return Redirect::to(&post_url).into_response(),
-    };
+    let post_record =
+        match post::get_published_by_slug(&state.db, Some(current_site.site.id), &slug).await {
+            Ok(p) => p,
+            Err(_) => return Redirect::to(&post_url).into_response(),
+        };
     if !post_record.comments_enabled {
         return Redirect::to(&post_url).into_response();
     }
@@ -85,7 +86,8 @@ pub async fn submit(
     .unwrap_or(0);
 
     if recent >= 2 {
-        return Redirect::to(&format!("{}?comment_error=rate_limited#comments", post_url)).into_response();
+        return Redirect::to(&format!("{}?comment_error=rate_limited#comments", post_url))
+            .into_response();
     }
 
     // Optional parent_id (only one level of threading — replies to top-level only).
@@ -99,16 +101,20 @@ pub async fn submit(
         .or_else(|| Some(peer_addr.ip().to_string()));
 
     let data = CreateComment {
-        post_id:    post_record.id,
-        site_id:    Some(current_site.site.id),
-        author_id:  user_id,
+        post_id: post_record.id,
+        site_id: Some(current_site.site.id),
+        author_id: user_id,
         parent_id,
         body,
         ip_address,
     };
 
     if let Err(e) = crate::models::comment::create(&state.db, &data).await {
-        tracing::warn!("failed to create comment on post {}: {:?}", post_record.id, e);
+        tracing::warn!(
+            "failed to create comment on post {}: {:?}",
+            post_record.id,
+            e
+        );
     }
 
     Redirect::to(&format!("{}#comments", post_url)).into_response()

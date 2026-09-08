@@ -41,7 +41,10 @@ impl PluginLoader {
     /// Scan the plugins directory, load manifests, and register hooks + templates into Tera.
     pub fn load_all(&mut self, tera: &mut Tera) -> anyhow::Result<()> {
         if !self.plugins_dir.exists() {
-            info!("plugins directory {:?} not found — no plugins loaded", self.plugins_dir);
+            info!(
+                "plugins directory {:?} not found — no plugins loaded",
+                self.plugins_dir
+            );
             return Ok(());
         }
 
@@ -95,7 +98,9 @@ impl PluginLoader {
         // Convention: templates in plugins/seo/seo/meta.html are registered as "seo/meta.html".
         for path in glob::glob(glob_str)?.flatten() {
             let rel = path.strip_prefix(plugin_dir)?;
-            let template_name = rel.to_str().ok_or_else(|| anyhow::anyhow!("non-UTF-8 path"))?;
+            let template_name = rel
+                .to_str()
+                .ok_or_else(|| anyhow::anyhow!("non-UTF-8 path"))?;
             // Convert Windows path separators
             let template_name = template_name.replace('\\', "/");
             let source = std::fs::read_to_string(&path)?;
@@ -125,7 +130,8 @@ impl PluginLoader {
     pub fn reload(&mut self, tera: &mut Tera) -> anyhow::Result<()> {
         // Unregister all existing plugin hooks.
         for plugin in &self.loaded {
-            self.hook_registry.unregister_plugin(&plugin.manifest.plugin.name);
+            self.hook_registry
+                .unregister_plugin(&plugin.manifest.plugin.name);
         }
         self.loaded.clear();
         self.load_all(tera)

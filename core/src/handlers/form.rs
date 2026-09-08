@@ -74,7 +74,10 @@ pub async fn submit(
 
     // Fetched once — needed for validation below and, further down, for
     // both the admin-notify email and the submitter-confirmation email.
-    let form = form_def::get_by_slug(&state.db, current_site.site.id, &name).await.ok().flatten();
+    let form = form_def::get_by_slug(&state.db, current_site.site.id, &name)
+        .await
+        .ok()
+        .flatten();
 
     // Skip storing empty submissions (all fields blank after stripping)
     let is_empty = data.values().all(|v| v.trim().is_empty());
@@ -108,7 +111,8 @@ pub async fn submit(
 
         // Built before `data` is moved into the submission record below —
         // only used if the form has a notify_email set.
-        let notify_body = data.iter()
+        let notify_body = data
+            .iter()
             .map(|(k, v)| format!("{k}: {v}"))
             .collect::<Vec<_>>()
             .join("\n");
@@ -116,7 +120,8 @@ pub async fn submit(
         // The submitter's own address, if this form collects one: the
         // submitted value of its first `email`-type field.
         let submitter_email = form.as_ref().and_then(|f| {
-            f.fields.iter()
+            f.fields
+                .iter()
                 .find(|field| field.field_type == "email")
                 .and_then(|field| data.get(&field.name))
                 .filter(|v| !v.trim().is_empty())
@@ -126,7 +131,8 @@ pub async fn submit(
         let input = CreateFormSubmission {
             site_id: current_site.site.id,
             form_name: name.clone(),
-            data: serde_json::to_value(&data).unwrap_or(serde_json::Value::Object(Default::default())),
+            data: serde_json::to_value(&data)
+                .unwrap_or(serde_json::Value::Object(Default::default())),
             ip_address: ip,
             form_id: form.as_ref().map(|f| f.id),
         };
@@ -146,7 +152,13 @@ pub async fn submit(
                 let state = state.clone();
                 let subject = format!("New submission: {}", form.name);
                 tokio::spawn(async move {
-                    let msg = EmailMessage { to: &to, subject: &subject, text: &notify_body, form_id: Some(form_id), provider_id };
+                    let msg = EmailMessage {
+                        to: &to,
+                        subject: &subject,
+                        text: &notify_body,
+                        form_id: Some(form_id),
+                        provider_id,
+                    };
                     if let Err(e) = mail::send_for_site(&state, site_id, msg).await {
                         tracing::error!("form notify email failed: {e:?}");
                     }
@@ -159,7 +171,13 @@ pub async fn submit(
                     let subject = fill_template(&form.settings.confirm_subject, &data);
                     let body = fill_template(&form.settings.confirm_body, &data);
                     tokio::spawn(async move {
-                        let msg = EmailMessage { to: &to, subject: &subject, text: &body, form_id: Some(form_id), provider_id };
+                        let msg = EmailMessage {
+                            to: &to,
+                            subject: &subject,
+                            text: &body,
+                            form_id: Some(form_id),
+                            provider_id,
+                        };
                         if let Err(e) = mail::send_for_site(&state, site_id, msg).await {
                             tracing::error!("form confirmation email failed: {e:?}");
                         }

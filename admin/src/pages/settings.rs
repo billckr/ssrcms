@@ -70,7 +70,11 @@ pub fn render(
     ]
     .iter()
     .map(|(value, label)| {
-        let selected = if *value == default_theme { " selected" } else { "" };
+        let selected = if *value == default_theme {
+            " selected"
+        } else {
+            ""
+        };
         format!(r#"<option value="{value}"{selected}>{label}</option>"#)
     })
     .collect::<Vec<_>>()
@@ -84,7 +88,11 @@ pub fn render(
             ),
             None => "Your account has no default site set, so this is unavailable until you set one under Sites.".to_string(),
         };
-        let disabled = if default_site_hostname.is_some() { "" } else { " disabled" };
+        let disabled = if default_site_hostname.is_some() {
+            ""
+        } else {
+            " disabled"
+        };
         format!(
             r#"<div class="card-boxed" style="border-color:var(--danger)">
     <h2 class="card-boxed-header" style="color:var(--danger)">Reset Entire App</h2>
@@ -148,7 +156,10 @@ pub fn render(
     let site_options = sites
         .iter()
         .map(|(id, hostname)| {
-            format!(r#"<option value="{id}">{}</option>"#, crate::html_escape(hostname))
+            format!(
+                r#"<option value="{id}">{}</option>"#,
+                crate::html_escape(hostname)
+            )
         })
         .collect::<Vec<_>>()
         .join("\n        ");
@@ -173,7 +184,8 @@ pub fn render(
     .collect::<Vec<_>>()
     .join("\n        ");
 
-    let content = format!(r#"
+    let content = format!(
+        r#"
 <style>
 /* Tab bar look/underline is the shared .page-tabs/.page-tab (admin.css) —
    this page used to duplicate that CSS under its own .settings-tabs/
