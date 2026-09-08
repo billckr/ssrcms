@@ -8,7 +8,7 @@
 
 use axum::{
     extract::FromRequestParts,
-    http::request::Parts,
+    http::{request::Parts, Uri},
     response::{IntoResponse, Redirect, Response},
 };
 use tower_sessions::Session;
@@ -35,20 +35,47 @@ pub struct AccountUser {
 }
 
 pub enum AccountAuthError {
-    NotAuthenticated,
-    Internal(String),
+    NotAuthenticated(String),
+    Internal { message: String, login_url: String },
 }
 
 impl IntoResponse for AccountAuthError {
     fn into_response(self) -> Response {
         match self {
-            AccountAuthError::NotAuthenticated => Redirect::to("/login").into_response(),
-            AccountAuthError::Internal(e) => {
-                tracing::error!("account auth error: {}", e);
-                Redirect::to("/login").into_response()
+            AccountAuthError::NotAuthenticated(login_url) => {
+                Redirect::to(&login_url).into_response()
+            }
+            AccountAuthError::Internal { message, login_url } => {
+                tracing::error!("account auth error: {}", message);
+                Redirect::to(&login_url).into_response()
             }
         }
     }
+}
+
+fn login_url_for_uri(uri: &Uri) -> String {
+    let return_to = uri
+        .path_and_query()
+        .map(|value| value.as_str())
+        .unwrap_or("/");
+    format!("/login?redirect={}", encode_query_value(return_to))
+}
+
+fn encode_query_value(value: &str) -> String {
+    const HEX: &[u8; 16] = b"0123456789ABCDEF";
+    let mut encoded = String::with_capacity(value.len());
+
+    for byte in value.bytes() {
+        if byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'.' | b'_' | b'~') {
+            encoded.push(char::from(byte));
+        } else {
+            encoded.push('%');
+            encoded.push(char::from(HEX[(byte >> 4) as usize]));
+            encoded.push(char::from(HEX[(byte & 0x0f) as usize]));
+        }
+    }
+
+    encoded
 }
 
 impl FromRequestParts<AppState> for AccountUser {
@@ -58,22 +85,35 @@ impl FromRequestParts<AppState> for AccountUser {
         parts: &mut Parts,
         state: &AppState,
     ) -> Result<Self, Self::Rejection> {
+        let login_url = login_url_for_uri(&parts.uri);
         let session = parts
             .extensions
             .get::<Session>()
-            .ok_or_else(|| AccountAuthError::Internal("session not found".into()))?
+            .ok_or_else(|| AccountAuthError::Internal {
+                message: "session not found".into(),
+                login_url: login_url.clone(),
+            })?
             .clone();
 
-        let user_id_str: Option<String> = session
-            .get(SESSION_ACCOUNT_USER_ID_KEY)
-            .await
-            .map_err(|e| AccountAuthError::Internal(format!("session get error: {e}")))?;
+        let user_id_str: Option<String> =
+            session
+                .get(SESSION_ACCOUNT_USER_ID_KEY)
+                .await
+                .map_err(|e| AccountAuthError::Internal {
+                    message: format!("session get error: {e}"),
+                    login_url: login_url.clone(),
+                })?;
 
-        let user_id_str = user_id_str.ok_or(AccountAuthError::NotAuthenticated)?;
-        let login_at: Option<i64> = session
-            .get(SESSION_ACCOUNT_LOGIN_AT_KEY)
-            .await
-            .map_err(|e| AccountAuthError::Internal(format!("session login-time error: {e}")))?;
+        let user_id_str =
+            user_id_str.ok_or_else(|| AccountAuthError::NotAuthenticated(login_url.clone()))?;
+        let login_at: Option<i64> =
+            session
+                .get(SESSION_ACCOUNT_LOGIN_AT_KEY)
+                .await
+                .map_err(|e| AccountAuthError::Internal {
+                    message: format!("session login-time error: {e}"),
+                    login_url: login_url.clone(),
+                })?;
         if login_at
             .map(|at| {
                 chrono::Utc::now().timestamp().saturating_sub(at) > ACCOUNT_ABSOLUTE_SESSION_SECONDS
@@ -81,25 +121,26 @@ impl FromRequestParts<AppState> for AccountUser {
             .unwrap_or(true)
         {
             let _ = session.flush().await;
-            return Err(AccountAuthError::NotAuthenticated);
+            return Err(AccountAuthError::NotAuthenticated(login_url));
         }
         let user_id: Uuid = user_id_str
             .parse()
-            .map_err(|_| AccountAuthError::NotAuthenticated)?;
+            .map_err(|_| AccountAuthError::NotAuthenticated(login_url.clone()))?;
 
         let user = crate::models::user::get_by_id(&state.db, user_id)
             .await
-            .map_err(|_| AccountAuthError::NotAuthenticated)?;
+            .map_err(|_| AccountAuthError::NotAuthenticated(login_url.clone()))?;
 
         let session_credential_version: Option<String> = session
             .get(SESSION_ACCOUNT_CREDENTIAL_VERSION_KEY)
             .await
-            .map_err(|e| {
-                AccountAuthError::Internal(format!("session credential check error: {e}"))
+            .map_err(|e| AccountAuthError::Internal {
+                message: format!("session credential check error: {e}"),
+                login_url: login_url.clone(),
             })?;
         if session_credential_version.as_deref() != Some(user.credential_version().as_str()) {
             let _ = session.flush().await;
-            return Err(AccountAuthError::NotAuthenticated);
+            return Err(AccountAuthError::NotAuthenticated(login_url));
         }
 
         // Resolve site from Host header.
@@ -140,5 +181,27 @@ impl FromRequestParts<AppState> for AccountUser {
             site_name,
             site_base_url,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{encode_query_value, login_url_for_uri};
+
+    #[test]
+    fn login_url_preserves_and_encodes_the_original_path() {
+        let uri = "/account/profile?tab=security&from=email"
+            .parse()
+            .expect("valid URI");
+
+        assert_eq!(
+            login_url_for_uri(&uri),
+            "/login?redirect=%2Faccount%2Fprofile%3Ftab%3Dsecurity%26from%3Demail"
+        );
+    }
+
+    #[test]
+    fn query_value_encoding_handles_unicode_and_reserved_characters() {
+        assert_eq!(encode_query_value("/saved café"), "%2Fsaved%20caf%C3%A9");
     }
 }

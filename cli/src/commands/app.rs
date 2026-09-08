@@ -107,6 +107,52 @@ fn port() -> String {
     std::env::var("PORT").unwrap_or_else(|_| "3000".to_string())
 }
 
+fn url_for_host_and_port(host: &str, port: &str) -> String {
+    match port {
+        "80" => format!("http://{host}"),
+        "443" => format!("https://{host}"),
+        _ => format!("http://{host}:{port}"),
+    }
+}
+
+/// Resolve the public URL for the primary site (the earliest-created site,
+/// matching the server's startup-site selection). The DB-backed site_url is
+/// authoritative because it knows whether Caddy terminates HTTPS and whether
+/// a public port differs from Axum's bind port.
+async fn default_site_url() -> String {
+    if let Ok(pool) = super::connect_db().await {
+        let row: Result<Option<(String, Option<String>)>, _> = sqlx::query_as(
+            "SELECT s.hostname, ss.value
+             FROM sites s
+             LEFT JOIN site_settings ss
+               ON ss.site_id = s.id AND ss.key = 'site_url'
+             ORDER BY s.created_at ASC
+             LIMIT 1",
+        )
+        .fetch_optional(&pool)
+        .await;
+
+        if let Ok(Some((hostname, configured_url))) = row {
+            if let Some(url) = configured_url.filter(|url| !url.trim().is_empty()) {
+                return url.trim_end_matches('/').to_string();
+            }
+            return url_for_host_and_port(&hostname, &port());
+        }
+    }
+
+    if let Ok(base_url) = std::env::var("BASE_URL") {
+        if !base_url.trim().is_empty() {
+            return base_url.trim().trim_end_matches('/').to_string();
+        }
+    }
+
+    url_for_host_and_port("localhost", &port())
+}
+
+async fn print_site_url() {
+    println!("Site URL: {}", default_site_url().await);
+}
+
 fn read_pid_in(dir: &Path) -> Option<u32> {
     fs::read_to_string(pid_file_in(dir))
         .ok()?
@@ -237,6 +283,7 @@ fn systemctl_main_pid() -> Option<u32> {
 async fn cmd_start_prod() -> anyhow::Result<()> {
     if systemctl_main_pid().is_some() {
         println!("Already running. Use 'synap app restart' to restart.");
+        print_site_url().await;
         return Ok(());
     }
     check_postgres().await?;
@@ -245,7 +292,10 @@ async fn cmd_start_prod() -> anyhow::Result<()> {
     systemctl("start")?;
     std::thread::sleep(Duration::from_secs(1));
     match systemctl_main_pid() {
-        Some(pid) => println!("Started (PID {pid}) — listening on port {}", port()),
+        Some(pid) => {
+            println!("Started (PID {pid}) — listening on port {}", port());
+            print_site_url().await;
+        }
         None => println!(
             "Started, but systemd doesn't report it as running yet — check 'synap app status'."
         ),
@@ -270,7 +320,10 @@ async fn cmd_restart_prod() -> anyhow::Result<()> {
     systemctl("restart")?;
     std::thread::sleep(Duration::from_secs(1));
     match systemctl_main_pid() {
-        Some(pid) => println!("Started (PID {pid}) — listening on port {}", port()),
+        Some(pid) => {
+            println!("Started (PID {pid}) — listening on port {}", port());
+            print_site_url().await;
+        }
         None => println!(
             "Restarted, but systemd doesn't report it as running yet — check 'synap app status'."
         ),
@@ -278,9 +331,12 @@ async fn cmd_restart_prod() -> anyhow::Result<()> {
     Ok(())
 }
 
-fn cmd_status_prod() {
+async fn cmd_status_prod() {
     match systemctl_main_pid() {
-        Some(pid) => println!("Running (PID {pid}) on port {}", port()),
+        Some(pid) => {
+            println!("Running (PID {pid}) on port {}", port());
+            print_site_url().await;
+        }
         None => println!("Not running."),
     }
     check_caddy();
@@ -297,6 +353,7 @@ fn cmd_logs_prod() -> anyhow::Result<()> {
 async fn cmd_start(release: bool) -> anyhow::Result<()> {
     if let Some(pid) = running_pid() {
         println!("Already running (PID {pid}). Use 'synap app restart' to restart.");
+        print_site_url().await;
         return Ok(());
     }
 
@@ -369,6 +426,7 @@ async fn cmd_start(release: bool) -> anyhow::Result<()> {
             fs::write(pid_file(), pid.to_string())?;
             std::mem::forget(child); // detach — tracked via the PID file from here on
             println!("Started (PID {pid}) — listening on port {}", port());
+            print_site_url().await;
             println!("Logs: {}", log_file().display());
         }
     }
@@ -428,9 +486,12 @@ async fn cmd_restart(release: bool) -> anyhow::Result<()> {
     cmd_start(release).await
 }
 
-fn cmd_status() {
+async fn cmd_status() {
     match running_pid() {
-        Some(pid) => println!("Running (PID {pid}) on port {}", port()),
+        Some(pid) => {
+            println!("Running (PID {pid}) on port {}", port());
+            print_site_url().await;
+        }
         None => println!("Not running."),
     }
     check_caddy();
@@ -467,7 +528,7 @@ pub async fn run(action: AppAction) -> anyhow::Result<()> {
             AppAction::Stop => cmd_stop(),
             AppAction::Restart { release } => cmd_restart(release).await,
             AppAction::Status => {
-                cmd_status();
+                cmd_status().await;
                 Ok(())
             }
             AppAction::Logs => cmd_logs(),
@@ -477,10 +538,35 @@ pub async fn run(action: AppAction) -> anyhow::Result<()> {
             AppAction::Stop => cmd_stop_prod(),
             AppAction::Restart { .. } => cmd_restart_prod().await,
             AppAction::Status => {
-                cmd_status_prod();
+                cmd_status_prod().await;
                 Ok(())
             }
             AppAction::Logs => cmd_logs_prod(),
         },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::url_for_host_and_port;
+
+    #[test]
+    fn site_url_omits_standard_ports() {
+        assert_eq!(
+            url_for_host_and_port("example.com", "80"),
+            "http://example.com"
+        );
+        assert_eq!(
+            url_for_host_and_port("example.com", "443"),
+            "https://example.com"
+        );
+    }
+
+    #[test]
+    fn site_url_includes_nonstandard_port() {
+        assert_eq!(
+            url_for_host_and_port("localhost", "3000"),
+            "http://localhost:3000"
+        );
     }
 }

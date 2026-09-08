@@ -574,12 +574,16 @@ pub async fn public_login_post(
         .insert(SESSION_ACCOUNT_LOGIN_AT_KEY, chrono::Utc::now().timestamp())
         .await;
 
-    // Redirect back to the page that sent the user to login, or fall back to /account.
-    let destination = match redirect_val {
-        Some(r) if is_safe_local_redirect(r) => r,
-        _ => "/account",
-    };
+    // Redirect back to the page that sent the user to login, or fall back to the site home.
+    let destination = subscriber_login_destination(redirect_val);
     Redirect::to(destination).into_response()
+}
+
+fn subscriber_login_destination(redirect: Option<&str>) -> &str {
+    match redirect {
+        Some(value) if is_safe_local_redirect(value) => value,
+        _ => "/",
+    }
 }
 
 fn is_safe_local_redirect(value: &str) -> bool {
@@ -609,10 +613,24 @@ pub async fn account_logout(session: Session) -> impl IntoResponse {
 
 #[cfg(test)]
 mod tests {
-    use super::is_safe_local_redirect;
+    use super::{is_safe_local_redirect, subscriber_login_destination};
+
+    #[test]
+    fn subscriber_login_defaults_home_and_preserves_safe_destinations() {
+        assert_eq!(subscriber_login_destination(None), "/");
+        assert_eq!(
+            subscriber_login_destination(Some("/account/profile")),
+            "/account/profile"
+        );
+        assert_eq!(
+            subscriber_login_destination(Some("https://evil.example")),
+            "/"
+        );
+    }
 
     #[test]
     fn redirect_must_be_an_internal_absolute_path() {
+        assert!(is_safe_local_redirect("/"));
         assert!(is_safe_local_redirect("/account"));
         assert!(is_safe_local_redirect("/post?tab=comments"));
         assert!(!is_safe_local_redirect("//evil.example"));
