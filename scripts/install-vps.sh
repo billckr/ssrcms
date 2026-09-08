@@ -718,10 +718,10 @@ do_ship_files() {
 
   ssh_run "mkdir -p ${INSTALL_DIR}/admin"
   local assets_tmp="/tmp/ss-install-assets-$$.tar.gz"
-  tar czf "$assets_tmp" -C "$REPO_DIR" themes plugins -C "$REPO_DIR/admin" static
+  tar czf "$assets_tmp" -C "$REPO_DIR" themes plugins documentation -C "$REPO_DIR/admin" static
   scp_run "$assets_tmp" "${VPS_USER}@${VPS_HOST}:/tmp/ss-install-assets.tar.gz"
   rm -f "$assets_tmp"
-  ssh_run "tar xzf /tmp/ss-install-assets.tar.gz -C ${INSTALL_DIR} --overwrite themes plugins 2>/dev/null; \
+  ssh_run "tar xzf /tmp/ss-install-assets.tar.gz -C ${INSTALL_DIR} --overwrite themes plugins documentation 2>/dev/null; \
            mkdir -p ${INSTALL_DIR}/admin && tar xzf /tmp/ss-install-assets.tar.gz -C ${INSTALL_DIR}/admin --overwrite static 2>/dev/null; \
            rm -f /tmp/ss-install-assets.tar.gz"
 

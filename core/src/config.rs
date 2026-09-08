@@ -28,6 +28,14 @@ pub struct AppConfig {
     #[serde(default = "default_plugins_dir")]
     pub plugins_dir: String,
 
+    /// Path to the admin documentation directory — one `.md` file per doc
+    /// (filename is the slug), with YAML-ish frontmatter for title/group/
+    /// updated_by/last_updated. Shipped in the release tarball like
+    /// `themes_dir`/`plugins_dir`, not stored in the database, so a fresh
+    /// install always has this reference material without a DB seed step.
+    #[serde(default = "default_documentation_dir")]
+    pub documentation_dir: String,
+
     /// Path to the uploads directory
     #[serde(default = "default_uploads_dir")]
     pub uploads_dir: String,
@@ -156,6 +164,9 @@ fn default_themes_dir() -> String {
 
 fn default_plugins_dir() -> String {
     "plugins".to_string()
+}
+fn default_documentation_dir() -> String {
+    "documentation".to_string()
 }
 
 fn default_uploads_dir() -> String {
@@ -297,6 +308,7 @@ mod tests {
             secret_key: default_secret_key(),
             themes_dir: default_themes_dir(),
             plugins_dir: default_plugins_dir(),
+            documentation_dir: default_documentation_dir(),
             uploads_dir: default_uploads_dir(),
             sites_dir: default_sites_dir(),
             dev_mode: false,
