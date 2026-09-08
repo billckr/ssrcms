@@ -217,6 +217,7 @@ pub mod poll_results;
 pub mod posts;
 pub mod profile;
 pub mod role_picker;
+pub mod self_update;
 pub mod settings;
 pub mod site_settings;
 pub mod sites;

@@ -2,16 +2,42 @@
 //! dashboard's update-available notice (`handlers::admin::dashboard`).
 
 use axum::{
-    extract::State,
+    extract::{Query, State},
     http::StatusCode,
     response::{Html, IntoResponse},
 };
+use serde::Deserialize;
 
 use crate::app_state::AppState;
 use crate::middleware::admin_auth::AdminUser;
 use admin::pages::whats_new::WhatsNewData;
 
-pub async fn show(State(state): State<AppState>, admin: AdminUser) -> impl IntoResponse {
+#[derive(Deserialize)]
+pub struct WhatsNewQuery {
+    pub error: Option<String>,
+}
+
+fn flash_for(q: &WhatsNewQuery) -> Option<&'static str> {
+    match q.error.as_deref() {
+        Some("wrong_password") => Some("Current password is incorrect."),
+        Some("forbidden") => Some("You don't have permission to do that."),
+        Some("disabled") => Some("Self-update is disabled on this install."),
+        Some("source_build") => {
+            Some("This is a source build — self-update needs a release-tarball install.")
+        }
+        Some("up_to_date") => Some("Already running the latest version."),
+        Some("apply_failed") => {
+            Some("Update failed — nothing was changed. Check the server logs for details.")
+        }
+        _ => None,
+    }
+}
+
+pub async fn show(
+    State(state): State<AppState>,
+    admin: AdminUser,
+    Query(q): Query<WhatsNewQuery>,
+) -> impl IntoResponse {
     if !admin.caps.is_global_admin {
         return (
             StatusCode::FORBIDDEN,
@@ -24,12 +50,19 @@ pub async fn show(State(state): State<AppState>, admin: AdminUser) -> impl IntoR
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
 
     let latest = state.latest_release.read().ok().and_then(|r| r.clone());
+    let update_available = latest
+        .as_ref()
+        .map(|r| r.tag_name != state.current_version)
+        .unwrap_or(false)
+        && !crate::version::is_source_build(&state.current_version);
+
     let data = WhatsNewData {
         current_version: state.current_version.clone(),
         latest_tag: latest.as_ref().map(|r| r.tag_name.clone()),
         latest_url: latest.as_ref().map(|r| r.html_url.clone()),
         latest_body: latest.as_ref().map(|r| r.body.clone()),
+        can_self_update: update_available && !admin.caps.is_impersonating && state.config.self_update_enabled,
     };
 
-    Html(admin::pages::whats_new::render(&data, &ctx)).into_response()
+    Html(admin::pages::whats_new::render(&data, flash_for(&q), &ctx)).into_response()
 }

@@ -143,6 +143,15 @@ pub struct AppConfig {
     /// access. Set via UPDATE_CHECK_ENABLED in .env or synaptic.toml.
     #[serde(default = "default_true")]
     pub update_check_enabled: bool,
+
+    /// Whether a super-admin can trigger the in-app self-updater
+    /// (`POST /admin/self-update`) — downloads, checksum-verifies, and
+    /// applies the latest release tarball's binaries, then restarts the
+    /// process. Disable for installs with change-control requirements or
+    /// that prefer the fully manual update path documented in
+    /// docs/deployment-guide.md. Set via SELF_UPDATE_ENABLED.
+    #[serde(default = "default_true")]
+    pub self_update_enabled: bool,
 }
 
 fn default_host() -> String {
@@ -331,6 +340,7 @@ mod tests {
             max_upload_mb: default_max_upload_mb(),
             caddyfile_path: default_caddyfile_path(),
             update_check_enabled: default_true(),
+            self_update_enabled: default_true(),
         }
     }
 

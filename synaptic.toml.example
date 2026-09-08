@@ -59,3 +59,9 @@ dev_mode = false
 # "update available" notice on the admin dashboard. Disable for installs
 # with restricted outbound network access.
 # update_check_enabled = false
+
+# Allow a super-admin to trigger the in-app self-updater from
+# /admin/whats-new (downloads, checksum-verifies, and applies the latest
+# release, then restarts). Disable for installs with change-control
+# requirements that prefer the fully manual update path.
+# self_update_enabled = false

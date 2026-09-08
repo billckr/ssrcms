@@ -2,7 +2,10 @@
 //!
 //! Shows the latest known SynapCMS release in-app (most admins won't know
 //! or care what GitHub is), with a link out to GitHub kept deliberately
-//! secondary/opt-in rather than the primary way to see what changed.
+//! secondary/opt-in rather than the primary way to see what changed. When
+//! an update is available and self-update is enabled, offers a one-click
+//! "Update now" action (POST /admin/self-update, core/src/handlers/admin/
+//! self_update.rs) gated behind re-entering the current password.
 
 use pulldown_cmark::{html as cm_html, Options, Parser};
 
@@ -24,9 +27,29 @@ pub struct WhatsNewData {
     pub latest_tag: Option<String>,
     pub latest_url: Option<String>,
     pub latest_body: Option<String>,
+    /// True when there's an update to offer AND the viewer is allowed to
+    /// trigger it (super-admin, not impersonating, self-update not disabled
+    /// via config). Drives whether the "Update now" button renders at all.
+    pub can_self_update: bool,
 }
 
-pub fn render(data: &WhatsNewData, ctx: &PageContext) -> String {
+/// Password-confirm form + toggle button for triggering the self-updater.
+/// Kept collapsed until clicked so a stray click can't submit it by accident.
+fn update_button_html(tag: &str) -> String {
+    format!(
+        r##"<div style="margin-top:1rem">
+  <button type="button" id="update-now-btn" onclick="this.hidden=true;var f=document.getElementById('update-now-form');f.hidden=false;f.style.display='flex';" class="btn btn-primary">Update to {tag}</button>
+  <form id="update-now-form" method="post" action="/admin/self-update" hidden style="margin-top:.75rem;gap:.5rem;align-items:center">
+    <input type="password" name="current_password" placeholder="Confirm your password" required autocomplete="current-password" style="flex:1;max-width:240px">
+    <button type="submit" class="btn btn-primary">Confirm update</button>
+  </form>
+  <p style="margin-top:.5rem;font-size:.75rem;color:var(--muted)">Downloads and verifies the release, then restarts the server — a few seconds of downtime.</p>
+</div>"##,
+        tag = html_escape(tag),
+    )
+}
+
+pub fn render(data: &WhatsNewData, flash: Option<&str>, ctx: &PageContext) -> String {
     let is_source_build = data.current_version.ends_with("-source");
 
     let status_card = match &data.latest_tag {
@@ -62,10 +85,16 @@ pub fn render(data: &WhatsNewData, ctx: &PageContext) -> String {
                     )
                 })
                 .unwrap_or_default();
+            let update_button = if data.can_self_update {
+                update_button_html(tag)
+            } else {
+                String::new()
+            };
             format!(
                 r#"<div class="card" style="padding:1.5rem">
   <p style="margin:0"><strong>{headline}</strong></p>
   {body_html}
+  {update_button}
   {github_link}
 </div>"#
             )
@@ -83,5 +112,5 @@ pub fn render(data: &WhatsNewData, ctx: &PageContext) -> String {
         version = html_escape(&data.current_version),
     );
 
-    admin_page("What's New", "/admin/whats-new", None, &content, ctx)
+    admin_page("What's New", "/admin/whats-new", flash, &content, ctx)
 }

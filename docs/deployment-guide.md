@@ -391,7 +391,18 @@ If the server was started from a different directory, or `PID_FILE` is set to a 
 The admin dashboard shows a small notice when a newer release is published
 (checked periodically against GitHub Releases; disable with
 `UPDATE_CHECK_ENABLED=false` if this instance has no outbound network
-access). Applying an update is still a manual step:
+access).
+
+**In-app**: a super-admin can click "Update now" on `/admin/whats-new` to
+apply the update without SSH access — downloads and checksum-verifies the
+release, swaps in the new `synapcms`/`synap`/`VERSION`, and restarts. Set
+`SELF_UPDATE_ENABLED=false` to disable this if you'd rather require the
+manual path below (e.g. change-control requirements). Note this only
+verifies a SHA256 checksum, not a cryptographic signature — it protects
+against a corrupted/tampered download, not against a compromised publishing
+pipeline.
+
+**Manual**, or if self-update is disabled:
 
 ```bash
 # 1. Download the release tarball for the version you want (see the
@@ -456,3 +467,4 @@ refresh those too — see `synaptic-signals-${VERSION}/themes`, `/plugins`,
 | `LOG_LEVEL` | No | `info` | Tracing log level (`trace`, `debug`, `info`, `warn`, `error`) |
 | `PID_FILE` | No | `./synapcms.pid` | Path to write the server PID file on startup |
 | `UPDATE_CHECK_ENABLED` | No | `true` | Periodically check GitHub Releases and show an "update available" notice on the admin dashboard |
+| `SELF_UPDATE_ENABLED` | No | `true` | Allow a super-admin to apply an update in-app from `/admin/whats-new` instead of manually |
