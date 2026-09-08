@@ -10,6 +10,7 @@ use synaptic_core::db;
 use synaptic_core::models::email_change;
 use synaptic_core::models::post::{CreatePost, ListFilter, PostStatus, PostType, UpdatePost};
 use synaptic_core::models::site;
+use synaptic_core::models::site_join_request;
 use synaptic_core::models::site_user;
 use synaptic_core::models::taxonomy::{CreateTaxonomy, TaxonomyType};
 use synaptic_core::models::user::{CreateUser, UserRole};
@@ -832,4 +833,134 @@ async fn test_email_change_delete_all_for_user() {
     );
 
     user::delete(&pool, u.id).await.ok();
+}
+
+// ── Site join request ────────────────────────────────────────────────────────
+
+async fn make_test_site(pool: &sqlx::PgPool, owner_id: uuid::Uuid) -> site::Site {
+    let id = uid();
+    site::create_with_defaults(pool, &format!("{id}.example.com"), Some(owner_id), None)
+        .await
+        .expect("failed to create test site")
+}
+
+#[tokio::test]
+#[ignore = "requires live PostgreSQL: set DATABASE_URL and run cargo test -- --include-ignored"]
+async fn test_site_join_request_create_and_consume() {
+    let pool = test_pool().await;
+    let owner = make_test_user(&pool).await;
+    let s = make_test_site(&pool, owner.id).await;
+    let u = make_test_user(&pool).await;
+
+    let token = site_join_request::create(&pool, u.id, s.id)
+        .await
+        .expect("create should succeed");
+
+    let (user_id, site_id) = site_join_request::consume(&pool, &token)
+        .await
+        .expect("token should be valid");
+    assert_eq!(user_id, u.id);
+    assert_eq!(site_id, s.id);
+
+    // Replay must fail — token is single-use.
+    assert!(
+        site_join_request::consume(&pool, &token).await.is_none(),
+        "a used token must not be consumable again"
+    );
+
+    site::delete(&pool, s.id).await.ok();
+    user::delete(&pool, u.id).await.ok();
+    user::delete(&pool, owner.id).await.ok();
+}
+
+#[tokio::test]
+#[ignore = "requires live PostgreSQL: set DATABASE_URL and run cargo test -- --include-ignored"]
+async fn test_site_join_request_expired_token_rejected() {
+    let pool = test_pool().await;
+    let owner = make_test_user(&pool).await;
+    let s = make_test_site(&pool, owner.id).await;
+    let u = make_test_user(&pool).await;
+
+    let token = site_join_request::create(&pool, u.id, s.id)
+        .await
+        .expect("create should succeed");
+    sqlx::query(
+        "UPDATE site_join_requests SET expires_at = NOW() - INTERVAL '1 hour' WHERE user_id = $1",
+    )
+    .bind(u.id)
+    .execute(&pool)
+    .await
+    .expect("expire the token");
+
+    assert!(
+        site_join_request::consume(&pool, &token).await.is_none(),
+        "an expired token must be rejected"
+    );
+
+    site::delete(&pool, s.id).await.ok();
+    user::delete(&pool, u.id).await.ok();
+    user::delete(&pool, owner.id).await.ok();
+}
+
+#[tokio::test]
+#[ignore = "requires live PostgreSQL: set DATABASE_URL and run cargo test -- --include-ignored"]
+async fn test_site_join_request_new_request_supersedes_old() {
+    let pool = test_pool().await;
+    let owner = make_test_user(&pool).await;
+    let s = make_test_site(&pool, owner.id).await;
+    let u = make_test_user(&pool).await;
+
+    let first_token = site_join_request::create(&pool, u.id, s.id)
+        .await
+        .expect("first create should succeed");
+    let second_token = site_join_request::create(&pool, u.id, s.id)
+        .await
+        .expect("second create should succeed");
+
+    assert!(
+        site_join_request::find_valid_by_token(&pool, &first_token)
+            .await
+            .is_none(),
+        "the first token should have been superseded"
+    );
+    assert!(
+        site_join_request::find_valid_by_token(&pool, &second_token)
+            .await
+            .is_some(),
+        "the second token should still be valid"
+    );
+
+    site::delete(&pool, s.id).await.ok();
+    user::delete(&pool, u.id).await.ok();
+    user::delete(&pool, owner.id).await.ok();
+}
+
+#[tokio::test]
+#[ignore = "requires live PostgreSQL: set DATABASE_URL and run cargo test -- --include-ignored"]
+async fn test_site_join_request_delete_all_for_user() {
+    let pool = test_pool().await;
+    let owner = make_test_user(&pool).await;
+    let s = make_test_site(&pool, owner.id).await;
+    let u = make_test_user(&pool).await;
+
+    let token = site_join_request::create(&pool, u.id, s.id)
+        .await
+        .expect("create should succeed");
+    assert!(site_join_request::find_valid_by_token(&pool, &token)
+        .await
+        .is_some());
+
+    site_join_request::delete_all_for_user(&pool, u.id)
+        .await
+        .expect("delete_all_for_user should succeed");
+    assert!(
+        site_join_request::find_valid_by_token(&pool, &token)
+            .await
+            .is_none(),
+        "pending request should be gone after delete_all_for_user"
+    );
+
+    site::delete(&pool, s.id).await.ok();
+    user::delete(&pool, u.id).await.ok();
+    user::delete(&pool, owner.id).await.ok();
 }

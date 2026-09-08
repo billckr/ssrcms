@@ -5,7 +5,7 @@
 //! to that site — no extra query params or hidden fields required.
 
 use axum::{
-    extract::{Query, State},
+    extract::{Path, Query, State},
     http::HeaderMap,
     response::{Html, IntoResponse, Redirect, Response},
     Form,
@@ -14,8 +14,11 @@ use serde::Deserialize;
 use uuid::Uuid;
 
 use crate::app_state::AppState;
+use crate::mail::{send_for_site, EmailMessage};
 use crate::middleware::site::CurrentSite;
+use crate::models::site_user::SiteRole;
 use crate::models::user::{validate_display_name, validate_username, CreateUser, UserRole};
+use crate::models::{site_join_request, site_user};
 
 #[derive(Deserialize)]
 pub struct SubscribeQuery {
@@ -157,14 +160,73 @@ pub async fn subscribe_post(
 
     // ── Email already exists? ─────────────────────────────────────────────────
     match crate::models::user::get_by_email(&state.db, &email).await {
-        Ok(_) => {
-            // Never attach an existing identity from an anonymous form. Doing
-            // so would let anyone enroll another person's account—and could
-            // attach a staff identity to a tenant. Keep the public response
-            // and its dominant Argon2 cost close to successful registration to
-            // avoid response-timing account enumeration. A future verified
-            // invitation flow can link accounts.
+        Ok(existing) => {
+            // Never attach an existing identity directly from an anonymous
+            // form submission — that would let anyone enroll another
+            // person's account without proving they control it. Instead, if
+            // this is an existing *subscriber* not yet on this site, email a
+            // verified join-confirmation link to their real address (never
+            // shown to whoever submitted this form). Staff identities
+            // (author/editor/site_admin/super_admin) are excluded, same as
+            // recover.rs excludes them from self-service password recovery.
+            // Keep the public response and its dominant Argon2 cost close to
+            // successful registration to avoid response-timing account
+            // enumeration — the redirect below is identical in every case.
             let _ = crate::models::user::hash_password(&form.password);
+
+            if site_id != Uuid::nil() && existing.role == "subscriber" {
+                let already_member = site_user::has_any_role(&state.db, site_id, existing.id)
+                    .await
+                    .unwrap_or(true); // fail closed: skip sending on a DB error
+                if !already_member {
+                    // Keep token creation and mail-provider latency off the
+                    // response path, same as recover.rs / account_email.rs.
+                    let task_state = state.clone();
+                    let user_id = existing.id;
+                    let user_email = existing.email.clone();
+                    let display_name = existing.display_name.clone();
+                    let site_base_url = site.base_url.clone();
+                    let site_name_for_mail = site_name.clone();
+                    tokio::spawn(async move {
+                        match site_join_request::create(&task_state.db, user_id, site_id).await {
+                            Ok(token) => {
+                                let link = format!("{site_base_url}/subscribe/confirm/{token}");
+                                let text = format!(
+                                    "Hi {display_name},\n\n\
+                                     You already have an account using this email. Someone (hopefully you) requested to join {site_name_for_mail} as a subscriber with it.\n\n\
+                                     Confirm joining {site_name_for_mail}: {link}\n\n\
+                                     This link expires in 1 hour. If you didn't request this, you can ignore this email.",
+                                );
+                                if let Err(e) = send_for_site(
+                                    &task_state,
+                                    site_id,
+                                    EmailMessage {
+                                        to: &user_email,
+                                        subject: &format!("Join {site_name_for_mail}?"),
+                                        text: &text,
+                                        form_id: None,
+                                        provider_id: None,
+                                    },
+                                )
+                                .await
+                                {
+                                    tracing::error!(
+                                        "subscribe: failed to send join-confirmation to {}: {:?}",
+                                        user_email,
+                                        e
+                                    );
+                                }
+                            }
+                            Err(e) => tracing::error!(
+                                "subscribe: failed to create join request for {}: {:?}",
+                                user_id,
+                                e
+                            ),
+                        }
+                    });
+                }
+            }
+
             return Redirect::to("/subscribe?subscribed=1").into_response();
         }
         Err(_) => {
@@ -214,6 +276,73 @@ pub async fn subscribe_post(
     // compiler's IntoResponse requirement.
     #[allow(unreachable_code)]
     Redirect::to("/subscribe").into_response()
+}
+
+/// GET /subscribe/confirm/{token} — show the "confirm joining this site"
+/// page if the token is still valid (unexpired, unused).
+pub async fn confirm_join_form(
+    State(state): State<AppState>,
+    Path(token): Path<String>,
+) -> Response {
+    let default_theme = state.app_settings.read().unwrap().default_theme.clone();
+    let site_name = match site_join_request::find_valid_by_token(&state.db, &token).await {
+        Some(pending) => state
+            .get_site_by_id(pending.site_id)
+            .map(|(_, settings)| settings.site_name),
+        None => None,
+    };
+    Html(admin::pages::subscribe::render_confirm_join(
+        &token,
+        site_name.as_deref(),
+        &default_theme,
+    ))
+    .into_response()
+}
+
+/// POST /subscribe/confirm/{token} — consume the token and grant subscriber
+/// access on the site it was issued for.
+pub async fn confirm_join_post(
+    State(state): State<AppState>,
+    Path(token): Path<String>,
+) -> Response {
+    let default_theme = state.app_settings.read().unwrap().default_theme.clone();
+
+    match site_join_request::consume(&state.db, &token).await {
+        Some((user_id, site_id)) => {
+            if let Err(e) = site_user::add(
+                &state.db,
+                site_id,
+                user_id,
+                SiteRole::Subscriber,
+                None,
+                false,
+            )
+            .await
+            {
+                tracing::error!(
+                    "subscribe: join-request consumed but failed to add site_users row for user {} on site {}: {:?}",
+                    user_id,
+                    site_id,
+                    e
+                );
+            }
+            let site_name = state
+                .get_site_by_id(site_id)
+                .map(|(_, settings)| settings.site_name)
+                .unwrap_or_default();
+            Html(admin::pages::subscribe::render_joined(
+                &site_name,
+                &default_theme,
+            ))
+            .into_response()
+        }
+        None => Html(admin::pages::subscribe::render_confirm_join(
+            &token,
+            None,
+            &default_theme,
+        ))
+        .into_response(),
+    }
 }
 
 /// Derive a unique username from a display name that also satisfies

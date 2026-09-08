@@ -206,6 +206,109 @@ pub fn render_success(site_name: &str, default_theme: &str) -> String {
     )
 }
 
+/// Render the "confirm joining this site" page. `site_name` is `None` when
+/// the token is missing, expired, or already used.
+pub fn render_confirm_join(token: &str, site_name: Option<&str>, default_theme: &str) -> String {
+    let body = match site_name {
+        Some(name) => format!(
+            r#"<p style="color:var(--muted);margin-top:.5rem">
+      Join <strong>{name}</strong> as a subscriber using your existing account?
+    </p>
+    <form method="POST" action="/subscribe/confirm/{token}">
+      <button type="submit" style="margin-top:1rem">Join {name}</button>
+    </form>"#,
+            name = crate::html_escape(name),
+            token = crate::html_escape(token),
+        ),
+        None => r#"<p style="color:var(--muted);margin-top:.5rem">
+      This confirmation link is invalid or has expired.
+    </p>
+    <p style="margin-top:1rem"><a href="/subscribe">Start over</a></p>"#
+            .to_string(),
+    };
+
+    let default_theme = match default_theme {
+        "light" | "dark" => default_theme,
+        _ => "system",
+    };
+
+    format!(
+        r#"<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Confirm Join</title>
+  <script>
+    (function() {{
+      try {{
+        var pref = localStorage.getItem('admin-theme') || '{default_theme}';
+        var dark = pref === 'dark' || (pref === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        if (dark) {{
+          document.documentElement.setAttribute('data-theme', 'dark');
+        }}
+      }} catch (e) {{}}
+    }})();
+  </script>
+  <style>{css}</style>
+</head>
+<body class="login-body">
+  <div class="login-box">
+    <h1 class="login-brand">Synaptic</h1>
+    <h2>Confirm Join</h2>
+    {body}
+  </div>
+</body>
+</html>"#,
+        css = crate::ADMIN_CSS,
+        body = body,
+        default_theme = default_theme,
+    )
+}
+
+/// Render the post-join success page.
+pub fn render_joined(site_name: &str, default_theme: &str) -> String {
+    let site_name = crate::html_escape(site_name);
+    let default_theme = match default_theme {
+        "light" | "dark" => default_theme,
+        _ => "system",
+    };
+
+    format!(
+        r#"<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Joined — {site_name}</title>
+  <script>
+    (function() {{
+      try {{
+        var pref = localStorage.getItem('admin-theme') || '{default_theme}';
+        var dark = pref === 'dark' || (pref === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        if (dark) {{
+          document.documentElement.setAttribute('data-theme', 'dark');
+        }}
+      }} catch (e) {{}}
+    }})();
+  </script>
+  <style>{css}</style>
+</head>
+<body class="login-body">
+  <div class="login-box">
+    <h1 class="login-brand">{site_name}</h1>
+    <h2>You&rsquo;ve joined {site_name}!</h2>
+    <p style="color:var(--muted);margin-top:.5rem">
+      You&rsquo;re now a subscriber here. <a href="/login">Sign in</a> to get started.
+    </p>
+  </div>
+</body>
+</html>"#,
+        css = crate::ADMIN_CSS,
+        site_name = site_name,
+    )
+}
+
 /// Render the "registrations are closed" page — shown instead of the signup
 /// form when a site's `allow_registration` setting is off.
 pub fn render_closed(site_name: &str, default_theme: &str) -> String {

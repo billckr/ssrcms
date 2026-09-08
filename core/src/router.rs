@@ -146,6 +146,12 @@ pub fn build(
                 .post(subscribe::subscribe_post)
                 .layer(DefaultBodyLimit::max(AUTH_FORM_BODY_LIMIT)),
         )
+        .route(
+            "/subscribe/confirm/{token}",
+            get(subscribe::confirm_join_form)
+                .post(subscribe::confirm_join_post)
+                .layer(DefaultBodyLimit::max(AUTH_FORM_BODY_LIMIT)),
+        )
         // ── Public login (subscriber-facing) ───────────────────────────────
         .route(
             "/login",

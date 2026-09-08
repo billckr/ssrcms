@@ -1779,6 +1779,15 @@ pub async fn erase_personal_data(
                     e
                 );
             }
+            if let Err(e) =
+                crate::models::site_join_request::delete_all_for_user(&state.db, id).await
+            {
+                tracing::warn!(
+                    "erase_personal_data: failed to delete pending site-join requests for {}: {:?}",
+                    id,
+                    e
+                );
+            }
             for (site_id, ids) in &fs_by_site {
                 if let Err(e) =
                     crate::models::form_submission::delete_many(&state.db, *site_id, ids).await

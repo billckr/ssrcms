@@ -16,6 +16,7 @@ fn protected_path(path: &str) -> bool {
         || path.starts_with("/account")
         || matches!(path, "/login" | "/subscribe" | "/recover")
         || path.starts_with("/recover/")
+        || path.starts_with("/subscribe/")
         || protected_public_account_mutation(path)
 }
 
@@ -89,6 +90,7 @@ mod tests {
         assert!(protected_path("/account/profile/update"));
         assert!(protected_path("/login"));
         assert!(protected_path("/recover/token"));
+        assert!(protected_path("/subscribe/confirm/token"));
         assert!(protected_path("/example-post/comment"));
         assert!(protected_path("/example-post/save"));
         assert!(protected_path("/example-post/unsave"));

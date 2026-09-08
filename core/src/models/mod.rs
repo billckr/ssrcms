@@ -16,6 +16,7 @@ pub mod poll_vote;
 pub mod post;
 pub mod saved_post;
 pub mod site;
+pub mod site_join_request;
 pub mod site_plugin;
 pub mod site_user;
 pub mod taxonomy;
