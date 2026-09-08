@@ -51,6 +51,17 @@ jobs:
       - name: Unit + doc tests (no database needed)
         run: cargo test --workspace
 
+      # model_crud.rs's test_pool() only connects — it never runs
+      # migrations itself, unlike routes.rs (whose common::test_router()
+      # calls bootstrap::build(), which does). That's harmless against a
+      # real dev database that's already been migrated many times over, but
+      # this Postgres service container starts out completely empty every
+      # run, so model_crud.rs needs the schema created explicitly first.
+      - name: Run migrations
+        env:
+          DATABASE_URL: postgres://synaptic:password@localhost:5432/synaptic_test
+        run: ./target/debug/synap migrate
+
       # model_crud.rs and routes.rs are #[ignore]d by default (same
       # convention as any test needing a live database) — --include-ignored
       # runs them explicitly, now that this job actually provides one.
