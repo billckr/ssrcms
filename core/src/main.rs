@@ -300,7 +300,10 @@ async fn main() -> anyhow::Result<()> {
         view_buffer: view_buffer.clone(),
         logo_url: Arc::new(std::sync::RwLock::new(logo_url)),
         wp_import_progress: Arc::new(std::sync::RwLock::new(std::collections::HashMap::new())),
+        current_version: synaptic_core::version::current_version(),
+        latest_release: Arc::new(std::sync::RwLock::new(None)),
     };
+    info!("version: running {}", state.current_version);
 
     // ── Scheduled post publisher ─────────────────────────────────────────────
     synaptic_core::scheduler::spawn_scheduled_publisher(pool.clone(), search_index.clone());
@@ -309,6 +312,14 @@ async fn main() -> anyhow::Result<()> {
     // ── View flush task ───────────────────────────────────────────────────────
     synaptic_core::scheduler::spawn_view_flush(pool.clone(), view_rx);
     info!("scheduler: view flush task started (60 s interval)");
+
+    // ── Release check task ───────────────────────────────────────────────────
+    if cfg.update_check_enabled {
+        synaptic_core::scheduler::spawn_release_check(state.latest_release.clone());
+        info!("scheduler: release check task started (6 h interval)");
+    } else {
+        info!("scheduler: release check task disabled (UPDATE_CHECK_ENABLED=false)");
+    }
 
     // ── Router ────────────────────────────────────────────────────────────────
     let app = router::build(state.clone(), admin_session_layer, account_session_layer);

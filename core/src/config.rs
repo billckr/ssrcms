@@ -128,6 +128,13 @@ pub struct AppConfig {
     /// "https://api.eu.mailgun.net/v3" for EU-region accounts.
     #[serde(default = "default_mailgun_base_url")]
     pub mailgun_base_url: String,
+
+    /// Whether to periodically check GitHub Releases for a newer SynapCMS
+    /// version and show an "update available" notice on the admin
+    /// dashboard. Disable for installs with restricted outbound network
+    /// access. Set via UPDATE_CHECK_ENABLED in .env or synaptic.toml.
+    #[serde(default = "default_true")]
+    pub update_check_enabled: bool,
 }
 
 fn default_host() -> String {
@@ -187,6 +194,9 @@ fn default_smtp_encryption() -> String {
 }
 fn default_max_upload_mb() -> u64 {
     25
+}
+fn default_true() -> bool {
+    true
 }
 fn default_mailgun_base_url() -> String {
     "https://api.mailgun.net/v3".to_string()
@@ -308,6 +318,7 @@ mod tests {
             mailgun_base_url: default_mailgun_base_url(),
             max_upload_mb: default_max_upload_mb(),
             caddyfile_path: default_caddyfile_path(),
+            update_check_enabled: default_true(),
         }
     }
 

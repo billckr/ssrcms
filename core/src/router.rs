@@ -19,7 +19,7 @@ use crate::handlers::admin::{
     form_designer as admin_form_designer, forms as admin_forms, logo_upload, media,
     menus as admin_menus, poll_designer as admin_poll_designer, poll_results as admin_poll_results,
     posts, profile, role_picker, settings, site_settings, sites as admin_sites, taxonomy, themes,
-    themes_editor, themes_publish, themes_upload, upload, users, wp_import,
+    themes_editor, themes_publish, themes_upload, upload, users, whats_new, wp_import,
 };
 use crate::handlers::{
     account, account_email, archive, auth, comment as comment_handler, form as form_handler, home,
@@ -365,6 +365,7 @@ pub fn build(
         // ── Admin plugins — disabled pre-launch, re-enable post-launch ────
         // ── Admin documentation ────────────────────────────────────────────
         .route("/admin/documentation", get(admin_documentation::list))
+        .route("/admin/whats-new", get(whats_new::show))
         // ── Admin themes ───────────────────────────────────────────────────
         .route("/admin/themes", get(themes::list))
         .route("/admin/themes/activate", post(themes::activate))

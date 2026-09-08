@@ -408,6 +408,13 @@ pub struct AppState {
     /// Live progress for running/recently-finished WP imports — see
     /// `WpImportProgress`.
     pub wp_import_progress: WpImportProgressMap,
+    /// This process's own version — from the release tarball's `VERSION`
+    /// file if present, else a `-source` marker. See `crate::version`.
+    pub current_version: String,
+    /// Latest published GitHub Release, refreshed periodically by
+    /// `scheduler::spawn_release_check`. `None` until the first successful
+    /// check (or always, if `update_check_enabled` is false).
+    pub latest_release: Arc<RwLock<Option<crate::scheduler::LatestRelease>>>,
 }
 
 /// Look for `admin/static/branding/logo.{svg,png,webp}` (checked in that

@@ -17,3 +17,4 @@ pub mod scheduler;
 pub mod search;
 pub mod templates;
 pub mod utils;
+pub mod version;

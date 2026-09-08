@@ -8,7 +8,7 @@ use chrono::{Datelike, Local};
 use crate::app_state::AppState;
 use crate::middleware::admin_auth::AdminUser;
 use crate::models::user;
-use admin::pages::dashboard::DashboardData;
+use admin::pages::dashboard::{DashboardData, UpdateNotice};
 
 #[derive(serde::Deserialize, Default)]
 pub struct DashboardQuery {
@@ -467,6 +467,26 @@ pub async fn dashboard(
         0
     };
 
+    // Update-available notice (super-admin only) — compares this process's
+    // own version (from the release VERSION file, see `crate::version`)
+    // against the latest GitHub Release seen by the background release
+    // checker. A source build (no VERSION file) has nothing meaningful to
+    // compare, so it never shows the notice.
+    let update_notice: Option<UpdateNotice> = if admin.caps.is_global_admin
+        && !admin.caps.is_impersonating
+        && !crate::version::is_source_build(&state.current_version)
+    {
+        state.latest_release.read().ok().and_then(|r| {
+            r.as_ref().and_then(|release| {
+                (release.tag_name != state.current_version).then(|| UpdateNotice {
+                    tag: release.tag_name.clone(),
+                })
+            })
+        })
+    } else {
+        None
+    };
+
     let cs = state.site_hostname(site_id);
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
 
@@ -537,6 +557,7 @@ pub async fn dashboard(
         // eventually let this be delegated to other roles.
         show_welcome_panel: admin.caps.is_global_admin
             && admin.user.welcome_panel_dismissed_at.is_none(),
+        update_notice,
     };
 
     Html(admin::pages::dashboard::render(&data, None, &ctx))

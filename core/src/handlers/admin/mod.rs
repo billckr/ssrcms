@@ -227,4 +227,5 @@ pub mod themes_publish;
 pub mod themes_upload;
 pub mod upload;
 pub mod users;
+pub mod whats_new;
 pub mod wp_import;

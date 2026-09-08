@@ -53,6 +53,13 @@ pub struct DashboardData {
     /// Total posts across the install (super-admin only; 0 otherwise). Drives
     /// the Welcome panel's dynamic "getting started" card.
     pub total_posts_ever: i64,
+    /// Set (super-admin only) when a newer SynapCMS release is available.
+    pub update_notice: Option<UpdateNotice>,
+}
+
+pub struct UpdateNotice {
+    /// The newer release's tag name, e.g. "v0.1.0-alpha18".
+    pub tag: String,
 }
 
 pub struct RecentPostSummary {
@@ -626,13 +633,28 @@ pub fn render(data: &DashboardData, flash: Option<&str>, ctx: &crate::PageContex
         })
     };
 
+    let update_notice = match &data.update_notice {
+        // Deliberately not `.flash` — that class is auto-faded out after 5s
+        // by the global dashboard script (see admin_page's inline <script>),
+        // which is right for one-shot save/error messages but wrong here:
+        // this should stay visible on every dashboard load until the admin
+        // actually updates. Links to the in-app What's New page rather than
+        // GitHub directly — most admins won't know or care what GitHub is;
+        // that page is where the release notes and the (opt-in) GitHub link
+        // live.
+        Some(n) => format!(
+            r#"<div class="update-notice"><span>SynapCMS {tag} is available.</span> <a href="/admin/whats-new">What's new &rarr;</a></div>"#,
+            tag = crate::html_escape(&n.tag),
+        ),
+        None => String::new(),
+    };
     let welcome_panel = if data.show_welcome_panel {
         welcome_panel_html(data.total_posts_ever)
     } else {
         String::new()
     };
     let content = format!(
-        "{welcome_panel}{}",
+        "{update_notice}{welcome_panel}{}",
         widgets_section(&data.widget_layout, &default_layout, &widget_bodies)
     );
 

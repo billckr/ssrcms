@@ -25,3 +25,4 @@ pub mod subscribe;
 pub mod taxonomy;
 pub mod themes;
 pub mod users;
+pub mod whats_new;

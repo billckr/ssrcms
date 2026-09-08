@@ -52,3 +52,10 @@ log_format = "text"
 # This also permits non-Secure session cookies for plain-HTTP local development.
 # Production (`dev_mode = false`) marks all session cookies Secure.
 dev_mode = false
+
+# ── Updates ───────────────────────────────────────────────────────────────────
+
+# Periodically check GitHub Releases for a newer version and show an
+# "update available" notice on the admin dashboard. Disable for installs
+# with restricted outbound network access.
+# update_check_enabled = false

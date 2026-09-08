@@ -122,14 +122,16 @@ jobs:
 
   create-release:
     name: Create GitHub Release
-    needs: [build-x86_64]
+    needs: [build-x86_64, build-aarch64]
+    if: always() && needs.build-x86_64.result == 'success'
     runs-on: ubuntu-22.04
     permissions:
       contents: write
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: release-x86_64
+          pattern: release-*
+          merge-multiple: true
 
       - name: Create release
         uses: softprops/action-gh-release@v2

@@ -388,19 +388,37 @@ If the server was started from a different directory, or `PID_FILE` is set to a 
 
 ## Updating
 
-```bash
-# 1. Build new binaries
-cargo build --release
+The admin dashboard shows a small notice when a newer release is published
+(checked periodically against GitHub Releases; disable with
+`UPDATE_CHECK_ENABLED=false` if this instance has no outbound network
+access). Applying an update is still a manual step:
 
-# 2. Replace binaries (the service will be briefly down)
+```bash
+# 1. Download the release tarball for the version you want (see the
+#    dashboard notice or https://github.com/billckr/ssrcms/releases for the
+#    latest tag), and verify its checksum.
+VERSION=v0.1.0-alphaN   # replace with the target tag
+curl -LO "https://github.com/billckr/ssrcms/releases/download/${VERSION}/synaptic-signals-${VERSION}-x86_64-linux.tar.gz"
+curl -LO "https://github.com/billckr/ssrcms/releases/download/${VERSION}/synaptic-signals-${VERSION}-x86_64-linux.tar.gz.sha256"
+sha256sum -c "synaptic-signals-${VERSION}-x86_64-linux.tar.gz.sha256"
+tar xzf "synaptic-signals-${VERSION}-x86_64-linux.tar.gz"
+
+# 2. Replace binaries (the service will be briefly down). Copy the VERSION
+#    file too — it's what lets the running app report its own version and
+#    know when the *next* update is available.
 sudo systemctl stop synapcms
-sudo cp target/release/synapcms     /opt/synaptic-signals/synapcms
-sudo cp target/release/synap /opt/synaptic-signals/synap
+sudo cp "synaptic-signals-${VERSION}/synaptic"     /opt/synaptic-signals/synapcms
+sudo cp "synaptic-signals-${VERSION}/synaptic-cli" /opt/synaptic-signals/synap
+sudo cp "synaptic-signals-${VERSION}/VERSION"      /opt/synaptic-signals/VERSION
 sudo systemctl start synapcms
 
 # 3. Apply any new migrations
 sudo /opt/synaptic-signals/synap migrate
 ```
+
+Themes/plugins/admin static assets ship in the same tarball if you need to
+refresh those too — see `synaptic-signals-${VERSION}/themes`, `/plugins`,
+`/admin/static`.
 
 ---
 
@@ -437,3 +455,4 @@ sudo /opt/synaptic-signals/synap migrate
 | `SEARCH_INDEX_PATH` | No | `./search-index` | Path for Tantivy index files |
 | `LOG_LEVEL` | No | `info` | Tracing log level (`trace`, `debug`, `info`, `warn`, `error`) |
 | `PID_FILE` | No | `./synapcms.pid` | Path to write the server PID file on startup |
+| `UPDATE_CHECK_ENABLED` | No | `true` | Periodically check GitHub Releases and show an "update available" notice on the admin dashboard |

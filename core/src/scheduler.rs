@@ -4,10 +4,80 @@
 //! time-sensitive CMS operations.
 
 use sqlx::PgPool;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 use tokio::sync::mpsc;
 use tokio::time::{interval, Duration};
 use uuid::Uuid;
+
+/// The latest published GitHub Release, as last seen by `spawn_release_check`.
+#[derive(Debug, Clone)]
+pub struct LatestRelease {
+    /// The release's tag name, e.g. "v0.1.0-alpha18".
+    pub tag_name: String,
+    /// Link to the release page — shown as a secondary, opt-in link; most
+    /// admins won't know or care what GitHub is, so `body` below is the
+    /// primary in-app "what's new" text.
+    pub html_url: String,
+    /// Release notes body (GitHub's auto-generated notes today — a bulleted
+    /// PR list once the project uses PRs, or hand-written notes if a real
+    /// changelog process gets adopted later). Empty string if GitHub
+    /// returned no body.
+    pub body: String,
+}
+
+#[derive(serde::Deserialize)]
+struct GithubReleaseResponse {
+    tag_name: String,
+    html_url: String,
+    #[serde(default)]
+    body: Option<String>,
+}
+
+/// Spawn a background task that periodically checks GitHub Releases for the
+/// latest published SynapCMS release, so the admin dashboard can show an
+/// "update available" notice.
+///
+/// Checked every 6 hours (well within GitHub's 60 req/hr unauthenticated
+/// rate limit for a single instance). Failures (offline install, GitHub
+/// unreachable, rate-limited) are logged and otherwise ignored — the next
+/// tick tries again, and the notice simply doesn't show in the meantime.
+pub fn spawn_release_check(latest_release: Arc<RwLock<Option<LatestRelease>>>) {
+    tokio::spawn(async move {
+        let client = reqwest::Client::builder()
+            .user_agent("SynapCMS-UpdateCheck/1.0")
+            .timeout(Duration::from_secs(10))
+            .build()
+            .unwrap_or_else(|_| reqwest::Client::new());
+
+        let mut ticker = interval(Duration::from_secs(6 * 60 * 60));
+        loop {
+            ticker.tick().await;
+            match check_latest_release(&client).await {
+                Ok(release) => {
+                    if let Ok(mut w) = latest_release.write() {
+                        *w = Some(release);
+                    }
+                }
+                Err(e) => tracing::warn!("release check: failed to fetch latest release: {:?}", e),
+            }
+        }
+    });
+}
+
+async fn check_latest_release(client: &reqwest::Client) -> Result<LatestRelease, reqwest::Error> {
+    let resp = client
+        .get("https://api.github.com/repos/billckr/ssrcms/releases/latest")
+        .send()
+        .await?
+        .error_for_status()?
+        .json::<GithubReleaseResponse>()
+        .await?;
+    Ok(LatestRelease {
+        tag_name: resp.tag_name,
+        html_url: resp.html_url,
+        body: resp.body.unwrap_or_default(),
+    })
+}
 
 /// Spawn a background task that publishes scheduled posts whose `published_at`
 /// has passed.
