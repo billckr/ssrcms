@@ -11,7 +11,7 @@ use tower_sessions::Session;
 use uuid::Uuid;
 
 use crate::app_state::AppState;
-use crate::middleware::account_auth::SESSION_ACCOUNT_USER_ID_KEY;
+use crate::middleware::account_auth::{login_url_for_return_to, validated_account_user_for_site};
 use crate::middleware::site::CurrentSite;
 use crate::models::comment::CreateComment;
 use crate::models::post;
@@ -42,17 +42,19 @@ pub async fn submit(
 ) -> impl IntoResponse {
     let post_url = format!("/{}", slug);
 
-    // Session check — redirect to login if not authenticated.
-    let user_id_str: Option<String> = session
-        .get(SESSION_ACCOUNT_USER_ID_KEY)
-        .await
-        .unwrap_or(None);
-    let user_id = match user_id_str.and_then(|s| s.parse::<Uuid>().ok()) {
-        Some(id) => id,
-        None => {
-            return Redirect::to(&format!("/login?redirect={}", post_url)).into_response();
-        }
-    };
+    // Use the same expiry, credential-revocation, active-user, and site-access
+    // checks as the protected account area.
+    let user_id =
+        match validated_account_user_for_site(&state, &session, current_site.site.id).await {
+            Ok(Some(user)) => user.id,
+            Ok(None) => {
+                return Redirect::to(&login_url_for_return_to(&post_url)).into_response();
+            }
+            Err(error) => {
+                tracing::warn!("comment account session validation failed: {error}");
+                return Redirect::to(&login_url_for_return_to(&post_url)).into_response();
+            }
+        };
 
     // Human check — reject if checkbox was not ticked.
     if form.human_check.is_none() {

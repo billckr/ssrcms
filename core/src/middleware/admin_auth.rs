@@ -162,6 +162,56 @@ impl IntoResponse for AdminAuthError {
     }
 }
 
+/// Resolve and fully validate the identity stored in an admin session.
+/// Public draft-preview checks use this helper too, preventing those requests
+/// from bypassing absolute expiry or password-change revocation.
+pub(crate) async fn validated_admin_session_user(
+    state: &AppState,
+    session: &Session,
+) -> Result<Option<User>, String> {
+    let user_id_str: Option<String> = session
+        .get(SESSION_USER_ID_KEY)
+        .await
+        .map_err(|e| format!("session get error: {e}"))?;
+    let Some(user_id_str) = user_id_str else {
+        return Ok(None);
+    };
+
+    let login_at: Option<i64> = session
+        .get(SESSION_LOGIN_AT_KEY)
+        .await
+        .map_err(|e| format!("session login-time error: {e}"))?;
+    if login_at
+        .map(|at| {
+            chrono::Utc::now().timestamp().saturating_sub(at) > ADMIN_ABSOLUTE_SESSION_SECONDS
+        })
+        .unwrap_or(true)
+    {
+        let _ = session.flush().await;
+        return Ok(None);
+    }
+
+    let Ok(user_id) = user_id_str.parse::<Uuid>() else {
+        let _ = session.flush().await;
+        return Ok(None);
+    };
+    let Ok(user) = crate::models::user::get_by_id(&state.db, user_id).await else {
+        let _ = session.flush().await;
+        return Ok(None);
+    };
+
+    let session_credential_version: Option<String> = session
+        .get(SESSION_CREDENTIAL_VERSION_KEY)
+        .await
+        .map_err(|e| format!("session credential check error: {e}"))?;
+    if session_credential_version.as_deref() != Some(user.credential_version().as_str()) {
+        let _ = session.flush().await;
+        return Ok(None);
+    }
+
+    Ok(Some(user))
+}
+
 /// Shared session/user/site resolution used by both `AdminUser` and
 /// `PickRoleUser`. Does NOT resolve the site role — callers that need
 /// authorization must do that themselves (see `AdminUser::from_request_parts`).
@@ -180,48 +230,14 @@ async fn resolve_user_and_site(
         })?
         .clone();
 
-    // Read the user ID from the session.
-    let user_id_str: Option<String> = session
-        .get(SESSION_USER_ID_KEY)
+    let user = validated_admin_session_user(state, &session)
         .await
-        .map_err(|e| AdminAuthError::Internal(format!("session get error: {e}")))?;
-
-    let user_id_str = user_id_str.ok_or_else(|| {
-        tracing::warn!("admin_auth: no user_id in session — redirecting to login");
-        AdminAuthError::NotAuthenticated
-    })?;
-
-    let login_at: Option<i64> = session
-        .get(SESSION_LOGIN_AT_KEY)
-        .await
-        .map_err(|e| AdminAuthError::Internal(format!("session login-time error: {e}")))?;
-    if login_at
-        .map(|at| {
-            chrono::Utc::now().timestamp().saturating_sub(at) > ADMIN_ABSOLUTE_SESSION_SECONDS
-        })
-        .unwrap_or(true)
-    {
-        let _ = session.flush().await;
-        return Err(AdminAuthError::NotAuthenticated);
-    }
-
-    let user_id: Uuid = user_id_str
-        .parse()
-        .map_err(|_| AdminAuthError::NotAuthenticated)?;
-
-    // Fetch user from DB.
-    let user = crate::models::user::get_by_id(&state.db, user_id)
-        .await
-        .map_err(|_| AdminAuthError::NotAuthenticated)?;
-
-    let session_credential_version: Option<String> = session
-        .get(SESSION_CREDENTIAL_VERSION_KEY)
-        .await
-        .map_err(|e| AdminAuthError::Internal(format!("session credential check error: {e}")))?;
-    if session_credential_version.as_deref() != Some(user.credential_version().as_str()) {
-        let _ = session.flush().await;
-        return Err(AdminAuthError::NotAuthenticated);
-    }
+        .map_err(AdminAuthError::Internal)?
+        .ok_or_else(|| {
+            tracing::warn!("admin_auth: invalid session — redirecting to login");
+            AdminAuthError::NotAuthenticated
+        })?;
+    let user_id = user.id;
 
     // Super admin, site_admin, editor, and author roles can access the admin.
     match user.role.as_str() {

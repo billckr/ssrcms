@@ -41,7 +41,7 @@ pub async fn home(
     let path = uri.path().to_string();
     let site_id = current_site.site.id;
     let base_url = current_site.base_url.clone();
-    let session_ctx = super::resolve_session(&state, &session).await;
+    let session_ctx = super::resolve_session(&state, &session, site_id).await;
     match render_home(state.clone(), query, uri, site_id, &base_url, session_ctx).await {
         Ok(html) => Html(html).into_response(),
         Err(e) => {

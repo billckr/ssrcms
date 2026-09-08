@@ -22,35 +22,38 @@ use tower_sessions::Session;
 use uuid::Uuid;
 
 use crate::app_state::AppState;
-use crate::middleware::account_auth::SESSION_ACCOUNT_USER_ID_KEY;
-use crate::middleware::admin_auth::{ADMIN_SESSION_COOKIE_NAME, SESSION_USER_ID_KEY};
+use crate::middleware::account_auth::validated_account_user_for_site;
+use crate::middleware::admin_auth::{validated_admin_session_user, ADMIN_SESSION_COOKIE_NAME};
 use crate::templates::context::{SessionContext, SessionUserContext};
 
 /// Resolve the subscriber session into a `SessionContext` for Tera templates.
 /// Never redirects — returns an anonymous context if the session is missing or invalid.
-pub(super) async fn resolve_session(state: &AppState, session: &Session) -> SessionContext {
-    let user_id_str: Option<String> = session
-        .get(SESSION_ACCOUNT_USER_ID_KEY)
-        .await
-        .unwrap_or(None);
-    if let Some(id_str) = user_id_str {
-        if let Ok(uid) = id_str.parse::<Uuid>() {
-            if let Ok(user) = crate::models::user::get_by_id(&state.db, uid).await {
-                return SessionContext {
-                    is_logged_in: true,
-                    user: Some(SessionUserContext {
-                        id: user.id.to_string(),
-                        username: user.username.clone(),
-                        display_name: user.display_name.clone(),
-                        role: user.role.as_str().to_string(),
-                    }),
-                };
+pub(super) async fn resolve_session(
+    state: &AppState,
+    session: &Session,
+    site_id: Uuid,
+) -> SessionContext {
+    match validated_account_user_for_site(state, session, site_id).await {
+        Ok(Some(user)) => SessionContext {
+            is_logged_in: true,
+            user: Some(SessionUserContext {
+                id: user.id.to_string(),
+                username: user.username.clone(),
+                display_name: user.display_name.clone(),
+                role: user.role.as_str().to_string(),
+            }),
+        },
+        Ok(None) => SessionContext {
+            is_logged_in: false,
+            user: None,
+        },
+        Err(error) => {
+            tracing::warn!("optional account session validation failed: {error}");
+            SessionContext {
+                is_logged_in: false,
+                user: None,
             }
         }
-    }
-    SessionContext {
-        is_logged_in: false,
-        user: None,
     }
 }
 
@@ -119,26 +122,36 @@ pub(super) async fn insert_theme_options(ctx: &mut tera::Context, state: &AppSta
 /// cannot see. Never redirects; a false result just means "no preview access",
 /// falling through to the normal published-only lookup.
 pub(super) async fn can_preview_site(state: &AppState, headers: &HeaderMap, site_id: Uuid) -> bool {
-    let Some(user_id) = admin_user_id_from_cookie(state, headers).await else {
-        return false;
-    };
-    let Ok(user) = crate::models::user::get_by_id(&state.db, user_id).await else {
+    let Some(user) = admin_user_from_cookie(state, headers).await else {
         return false;
     };
 
     match user.role.as_str() {
         "super_admin" => true,
         "site_admin" | "editor" | "author" => {
-            crate::models::site_user::has_any_role(&state.db, site_id, user_id)
+            crate::models::site_user::list_roles_for_user_and_site(&state.db, site_id, user.id)
                 .await
+                .map(|roles| site_roles_allow_preview(&roles))
                 .unwrap_or(false)
         }
         _ => false,
     }
 }
 
-/// Reads the *admin* session's user id directly off the `admin_session`
-/// cookie, bypassing the `Session` extractor entirely.
+fn site_roles_allow_preview(roles: &[crate::models::site_user::SiteRole]) -> bool {
+    roles.iter().any(|role| {
+        matches!(
+            role,
+            crate::models::site_user::SiteRole::Admin
+                | crate::models::site_user::SiteRole::Editor
+                | crate::models::site_user::SiteRole::Author
+        )
+    })
+}
+
+/// Reads and fully validates the *admin* session directly from the
+/// `admin_session` cookie, bypassing only the public router's account-session
+/// extractor—not the admin expiry or credential checks.
 ///
 /// The public/front-end routes (where this is called from) are wired to the
 /// separate *account* `SessionManagerLayer` (cookie name `"session"`, see
@@ -150,7 +163,10 @@ pub(super) async fn can_preview_site(state: &AppState, headers: &HeaderMap, site
 /// silently dead. Both session layers share one Postgres-backed store (just
 /// different cookie names), so a session loaded this way is the exact same
 /// data an admin route would see via the normal extractor.
-async fn admin_user_id_from_cookie(state: &AppState, headers: &HeaderMap) -> Option<Uuid> {
+async fn admin_user_from_cookie(
+    state: &AppState,
+    headers: &HeaderMap,
+) -> Option<crate::models::user::User> {
     let cookie_header = headers.get(axum::http::header::COOKIE)?.to_str().ok()?;
     let session_id_str = cookie_header.split(';').find_map(|part| {
         let part = part.trim();
@@ -164,10 +180,26 @@ async fn admin_user_id_from_cookie(state: &AppState, headers: &HeaderMap) -> Opt
     ));
     let admin_session = Session::new(Some(session_id), store, None);
 
-    let user_id_str: String = admin_session
-        .get(SESSION_USER_ID_KEY)
-        .await
-        .ok()
-        .flatten()?;
-    user_id_str.parse().ok()
+    match validated_admin_session_user(state, &admin_session).await {
+        Ok(user) => user,
+        Err(error) => {
+            tracing::warn!("draft preview session validation failed: {error}");
+            None
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::site_roles_allow_preview;
+    use crate::models::site_user::SiteRole;
+
+    #[test]
+    fn draft_preview_requires_a_content_role() {
+        assert!(site_roles_allow_preview(&[SiteRole::Admin]));
+        assert!(site_roles_allow_preview(&[SiteRole::Editor]));
+        assert!(site_roles_allow_preview(&[SiteRole::Author]));
+        assert!(!site_roles_allow_preview(&[SiteRole::Subscriber]));
+        assert!(!site_roles_allow_preview(&[]));
+    }
 }

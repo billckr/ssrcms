@@ -87,42 +87,51 @@ pub async fn request_post(
     // same as an unregistered email, so the form can't be used to fingerprint
     // which addresses belong to staff.
     if let Some(target) = target.filter(|u| u.role == "subscriber") {
-        match password_reset::create(&state.db, target.id).await {
-            Ok(token) => {
-                let link = format!("{}/recover/{}", site.base_url, token);
-                let text = format!(
-                    "Hi {},\n\n\
-                     We received a request to reset the password for your account on {}.\n\n\
-                     Reset your password: {}\n\n\
-                     This link expires in 1 hour. If you didn't request this, you can ignore this email.",
-                    target.display_name, site.settings.site_name, link,
-                );
-                if let Err(e) = send_for_site(
-                    &state,
-                    site.site.id,
-                    EmailMessage {
-                        to: &target.email,
-                        subject: "Reset your password",
-                        text: &text,
-                        form_id: None,
-                        provider_id: None,
-                    },
-                )
-                .await
-                {
-                    tracing::error!(
-                        "recover: failed to send reset email to {}: {:?}",
-                        target.email,
-                        e
+        // Keep token creation and mail-provider latency off the response path.
+        // Otherwise a registered subscriber is measurably slower than an
+        // unknown/staff address despite the identical response body.
+        let task_state = state.clone();
+        let site_id = site.site.id;
+        let site_name = site.settings.site_name.clone();
+        let site_base_url = site.base_url.clone();
+        tokio::spawn(async move {
+            match password_reset::create(&task_state.db, target.id).await {
+                Ok(token) => {
+                    let link = format!("{site_base_url}/recover/{token}");
+                    let text = format!(
+                        "Hi {},\n\n\
+                         We received a request to reset the password for your account on {}.\n\n\
+                         Reset your password: {}\n\n\
+                         This link expires in 1 hour. If you didn't request this, you can ignore this email.",
+                        target.display_name, site_name, link,
                     );
+                    if let Err(e) = send_for_site(
+                        &task_state,
+                        site_id,
+                        EmailMessage {
+                            to: &target.email,
+                            subject: "Reset your password",
+                            text: &text,
+                            form_id: None,
+                            provider_id: None,
+                        },
+                    )
+                    .await
+                    {
+                        tracing::error!(
+                            "recover: failed to send reset email to {}: {:?}",
+                            target.email,
+                            e
+                        );
+                    }
                 }
+                Err(e) => tracing::error!(
+                    "recover: failed to create reset token for {}: {:?}",
+                    target.email,
+                    e
+                ),
             }
-            Err(e) => tracing::error!(
-                "recover: failed to create reset token for {}: {:?}",
-                target.email,
-                e
-            ),
-        }
+        });
     }
 
     Html(admin::pages::recover::render_request(
@@ -185,9 +194,7 @@ pub async fn reset_post(
     };
 
     match password_reset::consume_and_set_password(&state.db, &token, &password_hash).await {
-        Ok(Some(_)) => {
-            Redirect::to("/login?flash=Password+reset.+You+can+now+sign+in.").into_response()
-        }
+        Ok(Some(_)) => Redirect::to("/login?notice=password-reset").into_response(),
         Ok(None) => Html(admin::pages::recover::render_reset(
             &token,
             false,

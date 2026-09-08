@@ -161,8 +161,10 @@ pub async fn subscribe_post(
             // Never attach an existing identity from an anonymous form. Doing
             // so would let anyone enroll another person's account—and could
             // attach a staff identity to a tenant. Keep the public response
-            // indistinguishable from successful registration to avoid account
-            // enumeration. A future verified invitation flow can link accounts.
+            // and its dominant Argon2 cost close to successful registration to
+            // avoid response-timing account enumeration. A future verified
+            // invitation flow can link accounts.
+            let _ = crate::models::user::hash_password(&form.password);
             return Redirect::to("/subscribe?subscribed=1").into_response();
         }
         Err(_) => {

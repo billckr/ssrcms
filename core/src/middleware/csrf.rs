@@ -16,6 +16,19 @@ fn protected_path(path: &str) -> bool {
         || path.starts_with("/account")
         || matches!(path, "/login" | "/subscribe" | "/recover")
         || path.starts_with("/recover/")
+        || protected_public_account_mutation(path)
+}
+
+fn protected_public_account_mutation(path: &str) -> bool {
+    let mut segments = path.trim_start_matches('/').split('/');
+    matches!(
+        (segments.next(), segments.next(), segments.next()),
+        (
+            Some(slug),
+            Some("comment" | "save" | "unsave"),
+            None
+        ) if !slug.is_empty() && !matches!(slug, "form" | "poll")
+    )
 }
 
 /// Reject cross-origin state-changing requests on auth/account/admin routes.
@@ -76,6 +89,11 @@ mod tests {
         assert!(protected_path("/account/profile/update"));
         assert!(protected_path("/login"));
         assert!(protected_path("/recover/token"));
+        assert!(protected_path("/example-post/comment"));
+        assert!(protected_path("/example-post/save"));
+        assert!(protected_path("/example-post/unsave"));
         assert!(!protected_path("/form/contact"));
+        assert!(!protected_path("/form/save"));
+        assert!(!protected_path("/save"));
     }
 }

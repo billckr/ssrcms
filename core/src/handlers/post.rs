@@ -59,7 +59,7 @@ pub async fn single_post(
     // If the active builder project owns a page with this slug, render it via
     // the composer instead of falling through to the theme's single.html.
     if let Ok(Some(comp)) = page_composition::get_by_slug(&state.db, site_id, &slug).await {
-        let session_ctx = super::resolve_session(&state, &session).await;
+        let session_ctx = super::resolve_session(&state, &session, site_id).await;
         match render_builder_page(comp, &state, &base_url, &path, session_ctx).await {
             Ok(html) => return Html(html).into_response(),
             Err(e) => {
@@ -114,7 +114,7 @@ pub(crate) async fn render_single_post_response(
     }
 
     // Resolve subscriber session (optional — never fails).
-    let session_ctx = super::resolve_session(state, session).await;
+    let session_ctx = super::resolve_session(state, session, site_id).await;
 
     // Record a unique view (skips bots and logged-in account users).
     if !session_ctx.is_logged_in {
@@ -405,7 +405,7 @@ pub async fn save_post(
     session: Session,
 ) -> Response {
     let redirect = axum::response::Redirect::to(&format!("/{}", slug));
-    let session_ctx = super::resolve_session(&state, &session).await;
+    let session_ctx = super::resolve_session(&state, &session, current_site.site.id).await;
     let Some(ref u) = session_ctx.user else {
         return redirect.into_response();
     };
@@ -437,11 +437,11 @@ pub async fn unsave_post(
     let return_to = form
         .return_to
         .as_deref()
-        .filter(|s| s.starts_with('/'))
+        .filter(|value| super::auth::is_safe_local_redirect(value))
         .unwrap_or(&fallback)
         .to_string();
     let redirect = axum::response::Redirect::to(&return_to);
-    let session_ctx = super::resolve_session(&state, &session).await;
+    let session_ctx = super::resolve_session(&state, &session, current_site.site.id).await;
     let Some(ref u) = session_ctx.user else {
         return redirect.into_response();
     };

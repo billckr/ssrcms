@@ -58,6 +58,10 @@ fn login_url_for_uri(uri: &Uri) -> String {
         .path_and_query()
         .map(|value| value.as_str())
         .unwrap_or("/");
+    login_url_for_return_to(return_to)
+}
+
+pub(crate) fn login_url_for_return_to(return_to: &str) -> String {
     format!("/login?redirect={}", encode_query_value(return_to))
 }
 
@@ -78,6 +82,79 @@ fn encode_query_value(value: &str) -> String {
     encoded
 }
 
+/// Resolve and fully validate an account session without redirecting.
+///
+/// Public pages and public mutations use this same boundary as `AccountUser`
+/// so absolute expiry and password-change revocation cannot be bypassed by a
+/// handler that only needs an optional identity.
+pub(crate) async fn validated_account_user(
+    state: &AppState,
+    session: &Session,
+) -> Result<Option<User>, String> {
+    let user_id_str: Option<String> = session
+        .get(SESSION_ACCOUNT_USER_ID_KEY)
+        .await
+        .map_err(|e| format!("session get error: {e}"))?;
+    let Some(user_id_str) = user_id_str else {
+        return Ok(None);
+    };
+
+    let login_at: Option<i64> = session
+        .get(SESSION_ACCOUNT_LOGIN_AT_KEY)
+        .await
+        .map_err(|e| format!("session login-time error: {e}"))?;
+    if login_at
+        .map(|at| {
+            chrono::Utc::now().timestamp().saturating_sub(at) > ACCOUNT_ABSOLUTE_SESSION_SECONDS
+        })
+        .unwrap_or(true)
+    {
+        let _ = session.flush().await;
+        return Ok(None);
+    }
+
+    let Ok(user_id) = user_id_str.parse::<Uuid>() else {
+        let _ = session.flush().await;
+        return Ok(None);
+    };
+    let Ok(user) = crate::models::user::get_by_id(&state.db, user_id).await else {
+        let _ = session.flush().await;
+        return Ok(None);
+    };
+
+    let session_credential_version: Option<String> = session
+        .get(SESSION_ACCOUNT_CREDENTIAL_VERSION_KEY)
+        .await
+        .map_err(|e| format!("session credential check error: {e}"))?;
+    if session_credential_version.as_deref() != Some(user.credential_version().as_str()) {
+        let _ = session.flush().await;
+        return Ok(None);
+    }
+
+    Ok(Some(user))
+}
+
+/// Validate both the account session and the user's continuing membership in
+/// the site receiving the request. Removing a user from a site takes effect on
+/// their next request instead of waiting for the session to expire.
+pub(crate) async fn validated_account_user_for_site(
+    state: &AppState,
+    session: &Session,
+    site_id: Uuid,
+) -> Result<Option<User>, String> {
+    let Some(user) = validated_account_user(state, session).await? else {
+        return Ok(None);
+    };
+    let has_access = crate::models::site_user::has_any_role(&state.db, site_id, user.id)
+        .await
+        .map_err(|e| format!("account site access check error: {e}"))?;
+    if !has_access {
+        let _ = session.flush().await;
+        return Ok(None);
+    }
+    Ok(Some(user))
+}
+
 impl FromRequestParts<AppState> for AccountUser {
     type Rejection = AccountAuthError;
 
@@ -94,54 +171,6 @@ impl FromRequestParts<AppState> for AccountUser {
                 login_url: login_url.clone(),
             })?
             .clone();
-
-        let user_id_str: Option<String> =
-            session
-                .get(SESSION_ACCOUNT_USER_ID_KEY)
-                .await
-                .map_err(|e| AccountAuthError::Internal {
-                    message: format!("session get error: {e}"),
-                    login_url: login_url.clone(),
-                })?;
-
-        let user_id_str =
-            user_id_str.ok_or_else(|| AccountAuthError::NotAuthenticated(login_url.clone()))?;
-        let login_at: Option<i64> =
-            session
-                .get(SESSION_ACCOUNT_LOGIN_AT_KEY)
-                .await
-                .map_err(|e| AccountAuthError::Internal {
-                    message: format!("session login-time error: {e}"),
-                    login_url: login_url.clone(),
-                })?;
-        if login_at
-            .map(|at| {
-                chrono::Utc::now().timestamp().saturating_sub(at) > ACCOUNT_ABSOLUTE_SESSION_SECONDS
-            })
-            .unwrap_or(true)
-        {
-            let _ = session.flush().await;
-            return Err(AccountAuthError::NotAuthenticated(login_url));
-        }
-        let user_id: Uuid = user_id_str
-            .parse()
-            .map_err(|_| AccountAuthError::NotAuthenticated(login_url.clone()))?;
-
-        let user = crate::models::user::get_by_id(&state.db, user_id)
-            .await
-            .map_err(|_| AccountAuthError::NotAuthenticated(login_url.clone()))?;
-
-        let session_credential_version: Option<String> = session
-            .get(SESSION_ACCOUNT_CREDENTIAL_VERSION_KEY)
-            .await
-            .map_err(|e| AccountAuthError::Internal {
-                message: format!("session credential check error: {e}"),
-                login_url: login_url.clone(),
-            })?;
-        if session_credential_version.as_deref() != Some(user.credential_version().as_str()) {
-            let _ = session.flush().await;
-            return Err(AccountAuthError::NotAuthenticated(login_url));
-        }
 
         // Resolve site from Host header.
         let raw_host = parts
@@ -174,6 +203,16 @@ impl FromRequestParts<AppState> for AccountUser {
                 let base_url = format!("http://{}", raw_host);
                 (None, state.settings.site_name.clone(), base_url)
             };
+
+        let user = match site_id {
+            Some(site_id) => validated_account_user_for_site(state, &session, site_id).await,
+            None => validated_account_user(state, &session).await,
+        }
+        .map_err(|message| AccountAuthError::Internal {
+            message,
+            login_url: login_url.clone(),
+        })?
+        .ok_or_else(|| AccountAuthError::NotAuthenticated(login_url))?;
 
         Ok(AccountUser {
             user,

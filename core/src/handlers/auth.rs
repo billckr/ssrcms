@@ -138,7 +138,14 @@ pub struct LoginForm {
 #[derive(Deserialize)]
 pub struct RedirectQuery {
     pub redirect: Option<String>,
-    pub flash: Option<String>,
+    pub notice: Option<String>,
+}
+
+fn public_login_notice(notice: Option<&str>) -> Option<&'static str> {
+    match notice {
+        Some("password-reset") => Some("Password reset. You can now sign in."),
+        _ => None,
+    }
 }
 
 /// GET /admin/login — render login page.
@@ -383,9 +390,10 @@ pub async fn public_login_form(
     let site_name = site_name_for_login(&state, &resolved_site);
     let logo_url = logo_url_for_login(&state, &resolved_site).await;
     let redirect = q.redirect.as_deref();
+    let notice = public_login_notice(q.notice.as_deref());
     Html(admin::pages::login::render_public(
         None,
-        q.flash.as_deref(),
+        notice,
         redirect,
         &default_theme,
         &site_name,
@@ -586,7 +594,7 @@ fn subscriber_login_destination(redirect: Option<&str>) -> &str {
     }
 }
 
-fn is_safe_local_redirect(value: &str) -> bool {
+pub(crate) fn is_safe_local_redirect(value: &str) -> bool {
     value.starts_with('/')
         && !value.starts_with("//")
         && !value.contains('\\')
@@ -613,7 +621,20 @@ pub async fn account_logout(session: Session) -> impl IntoResponse {
 
 #[cfg(test)]
 mod tests {
-    use super::{is_safe_local_redirect, subscriber_login_destination};
+    use super::{is_safe_local_redirect, public_login_notice, subscriber_login_destination};
+
+    #[test]
+    fn public_login_only_renders_known_notices() {
+        assert_eq!(
+            public_login_notice(Some("password-reset")),
+            Some("Password reset. You can now sign in.")
+        );
+        assert_eq!(
+            public_login_notice(Some("Enter your credentials here")),
+            None
+        );
+        assert_eq!(public_login_notice(None), None);
+    }
 
     #[test]
     fn subscriber_login_defaults_home_and_preserves_safe_destinations() {

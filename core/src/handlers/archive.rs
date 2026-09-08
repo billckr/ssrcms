@@ -44,7 +44,7 @@ pub async fn category_archive(
     let path = uri.path().to_string();
     let site_id = current_site.site.id;
     let base_url = current_site.base_url.clone();
-    let session_ctx = super::resolve_session(&state, &session).await;
+    let session_ctx = super::resolve_session(&state, &session, site_id).await;
     match render_taxonomy_archive(
         state.clone(),
         slug,
@@ -74,7 +74,7 @@ pub async fn tag_archive(
     let path = uri.path().to_string();
     let site_id = current_site.site.id;
     let base_url = current_site.base_url.clone();
-    let session_ctx = super::resolve_session(&state, &session).await;
+    let session_ctx = super::resolve_session(&state, &session, site_id).await;
     match render_taxonomy_archive(
         state.clone(),
         slug,
@@ -104,7 +104,7 @@ pub async fn author_archive(
     let path = uri.path().to_string();
     let site_id = current_site.site.id;
     let base_url = current_site.base_url.clone();
-    let session_ctx = super::resolve_session(&state, &session).await;
+    let session_ctx = super::resolve_session(&state, &session, site_id).await;
     match render_author_archive(
         state.clone(),
         username,

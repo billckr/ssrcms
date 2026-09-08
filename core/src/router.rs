@@ -84,6 +84,7 @@ pub fn build(
     admin_session_layer: SessionManagerLayer<PostgresStore>,
     account_session_layer: SessionManagerLayer<PostgresStore>,
 ) -> Router {
+    const AUTH_FORM_BODY_LIMIT: usize = 16 * 1024;
     // Absolute safety net against unbounded/chunked bodies — fixed at startup,
     // deliberately generous. The real, admin-configurable ceiling is enforced
     // dynamically below by `upload_limit_layer` so it can change without a
@@ -116,9 +117,18 @@ pub fn build(
         // ── Public content routes ──────────────────────────────────────────
         .route("/", get(home::home))
         .route("/{slug}", get(post_handler::single_post))
-        .route("/{slug}/comment", post(comment_handler::submit))
-        .route("/{slug}/save", post(post_handler::save_post))
-        .route("/{slug}/unsave", post(post_handler::unsave_post))
+        .route(
+            "/{slug}/comment",
+            post(comment_handler::submit).layer(DefaultBodyLimit::max(AUTH_FORM_BODY_LIMIT)),
+        )
+        .route(
+            "/{slug}/save",
+            post(post_handler::save_post).layer(DefaultBodyLimit::max(AUTH_FORM_BODY_LIMIT)),
+        )
+        .route(
+            "/{slug}/unsave",
+            post(post_handler::unsave_post).layer(DefaultBodyLimit::max(AUTH_FORM_BODY_LIMIT)),
+        )
         .route("/category/{slug}", get(archive::category_archive))
         .route("/tag/{slug}", get(archive::tag_archive))
         .route("/author/{username}", get(archive::author_archive))
@@ -132,37 +142,52 @@ pub fn build(
         // ── Subscriber signup ──────────────────────────────────────────────
         .route(
             "/subscribe",
-            get(subscribe::subscribe_form).post(subscribe::subscribe_post),
+            get(subscribe::subscribe_form)
+                .post(subscribe::subscribe_post)
+                .layer(DefaultBodyLimit::max(AUTH_FORM_BODY_LIMIT)),
         )
         // ── Public login (subscriber-facing) ───────────────────────────────
         .route(
             "/login",
-            get(auth::public_login_form).post(auth::public_login_post),
+            get(auth::public_login_form)
+                .post(auth::public_login_post)
+                .layer(DefaultBodyLimit::max(AUTH_FORM_BODY_LIMIT)),
         )
         // ── Password recovery (subscriber-facing) ───────────────────────────
         .route(
             "/recover",
-            get(recover::request_form).post(recover::request_post),
+            get(recover::request_form)
+                .post(recover::request_post)
+                .layer(DefaultBodyLimit::max(AUTH_FORM_BODY_LIMIT)),
         )
         .route(
             "/recover/{token}",
-            get(recover::reset_form).post(recover::reset_post),
+            get(recover::reset_form)
+                .post(recover::reset_post)
+                .layer(DefaultBodyLimit::max(AUTH_FORM_BODY_LIMIT)),
         )
         // ── Account area (any authenticated user) ───────────────────────────
         .route("/account", get(account::dashboard))
         .route("/account/profile", get(account::profile_view))
-        .route("/account/profile/update", post(account::profile_update))
+        .route(
+            "/account/profile/update",
+            post(account::profile_update).layer(DefaultBodyLimit::max(AUTH_FORM_BODY_LIMIT)),
+        )
         .route(
             "/account/profile/change-password",
-            post(account::profile_change_password),
+            post(account::profile_change_password)
+                .layer(DefaultBodyLimit::max(AUTH_FORM_BODY_LIMIT)),
         )
         .route("/account/saved-posts", get(account::saved_posts))
         .route("/account/my-comments", get(account::my_comments))
         .route(
             "/account/comments/{id}/delete",
-            post(account::delete_comment),
+            post(account::delete_comment).layer(DefaultBodyLimit::max(AUTH_FORM_BODY_LIMIT)),
         )
-        .route("/account/logout", post(auth::account_logout))
+        .route(
+            "/account/logout",
+            post(auth::account_logout).layer(DefaultBodyLimit::max(AUTH_FORM_BODY_LIMIT)),
+        )
         // ── Static files ──────────────────────────────────────────────────
         .route("/uploads/{*path}", get(uploads::serve))
         .route("/theme/static/{*path}", get(theme_static::serve));
@@ -177,7 +202,10 @@ pub fn build(
 
     // /:slug/unlock must be registered before the fallback.
     // Nested password-protected pages are not supported in MVP (guarded at handler level).
-    public_router = public_router.route("/{slug}/unlock", post(post_unlock::unlock_page));
+    public_router = public_router.route(
+        "/{slug}/unlock",
+        post(post_unlock::unlock_page).layer(DefaultBodyLimit::max(AUTH_FORM_BODY_LIMIT)),
+    );
     // fallback handles nested page URLs like /a/b/c and any unmatched /{slug} that resolves to
     // a page. Registered here (inside public_router, before `.layer()` below) rather than on the
     // merged router, because `page::single_page` extracts `Session` — it must be wrapped by
@@ -190,14 +218,25 @@ pub fn build(
     // can edit site config, content, media, and users).
     let admin_router = Router::new()
         // ── Admin auth ─────────────────────────────────────────────────────
-        .route("/admin/login", get(auth::login_form).post(auth::login_post))
-        .route("/admin/logout", post(auth::logout))
+        .route(
+            "/admin/login",
+            get(auth::login_form)
+                .post(auth::login_post)
+                .layer(DefaultBodyLimit::max(AUTH_FORM_BODY_LIMIT)),
+        )
+        .route(
+            "/admin/logout",
+            post(auth::logout).layer(DefaultBodyLimit::max(AUTH_FORM_BODY_LIMIT)),
+        )
         // ── Admin profile ──────────────────────────────────────────────────
         .route("/admin/profile", get(profile::view))
-        .route("/admin/profile/update", post(profile::update_profile))
+        .route(
+            "/admin/profile/update",
+            post(profile::update_profile).layer(DefaultBodyLimit::max(AUTH_FORM_BODY_LIMIT)),
+        )
         .route(
             "/admin/profile/change-password",
-            post(profile::change_password),
+            post(profile::change_password).layer(DefaultBodyLimit::max(AUTH_FORM_BODY_LIMIT)),
         )
         // ── Admin dashboard ────────────────────────────────────────────────
         .route("/admin", get(dashboard::dashboard))
