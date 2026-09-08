@@ -49,4 +49,6 @@ log_format = "text"
 # ── Development ───────────────────────────────────────────────────────────────
 
 # Enable hot reload of templates and plugins (do not use in production)
+# This also permits non-Secure session cookies for plain-HTTP local development.
+# Production (`dev_mode = false`) marks all session cookies Secure.
 dev_mode = false

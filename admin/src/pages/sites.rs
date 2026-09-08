@@ -1377,10 +1377,7 @@ pub fn render_new(data: &NewSiteData, flash: Option<&str>, ctx: &crate::PageCont
       <div class="form-note" style="margin-bottom:1.25rem">
         <p><strong>Password requirements:</strong></p>
         <ul style="list-style:none;padding-left:0;margin:0.25rem 0 0">
-          <li id="new-pw-req-len"><span class="pw-dot" style="display:inline-block;width:1.1rem;font-style:normal">·</span>8–12 characters</li>
-          <li id="new-pw-req-upper"><span class="pw-dot" style="display:inline-block;width:1.1rem;font-style:normal">·</span>At least one uppercase letter</li>
-          <li id="new-pw-req-num"><span class="pw-dot" style="display:inline-block;width:1.1rem;font-style:normal">·</span>At least one number</li>
-          <li id="new-pw-req-sym"><span class="pw-dot" style="display:inline-block;width:1.1rem;font-style:normal">·</span>At least one symbol: ! @ # $ % &amp;</li>
+          <li id="new-pw-req-len"><span class="pw-dot" style="display:inline-block;width:1.1rem;font-style:normal">·</span>12–128 characters; passphrases are welcome</li>
         </ul>
       </div>
       <small>A new account is created and assigned as this site's admin and owner.</small>
@@ -1404,10 +1401,7 @@ pub fn render_new(data: &NewSiteData, flash: Option<&str>, ctx: &crate::PageCont
     {{ id: 'hn-req-hyphen', test: function(h) {{ return h.split('.').every(function(l) {{ return l.length > 0 && !l.startsWith('-') && !l.endsWith('-'); }}); }} }},
   ];
   var pwReqs = [
-    {{ id: 'new-pw-req-len',   test: function(p) {{ return p.length >= 8 && p.length <= 12; }} }},
-    {{ id: 'new-pw-req-upper', test: function(p) {{ return /[A-Z]/.test(p); }} }},
-    {{ id: 'new-pw-req-num',   test: function(p) {{ return /[0-9]/.test(p); }} }},
-    {{ id: 'new-pw-req-sym',   test: function(p) {{ return /[!@#$%&]/.test(p); }} }},
+    {{ id: 'new-pw-req-len', test: function(p) {{ return Array.from(p).length >= 12 && Array.from(p).length <= 128; }} }},
   ];
   var unameReqs = [
     {{ id: 'new-uname-req-len',    test: function(u) {{ return u.length >= 5 && u.length <= 15; }} }},
@@ -1420,7 +1414,7 @@ pub fn render_new(data: &NewSiteData, flash: Option<&str>, ctx: &crate::PageCont
     return /^(?:[a-z0-9](?:[a-z0-9\-]*[a-z0-9])?\.)+[a-z]{{2,}}$/i.test(h);
   }}
   function isValidPassword(p) {{
-    return p.length >= 8 && p.length <= 12 && /[A-Z]/.test(p) && /[0-9]/.test(p) && /[!@#$%&]/.test(p);
+    return Array.from(p).length >= 12 && Array.from(p).length <= 128;
   }}
   function toSlug(s) {{
     return s.toLowerCase().replace(/[^a-z0-9\s-]/g, '').trim()

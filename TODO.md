@@ -32,7 +32,18 @@ done.
 
 - [ ] revisit whether Media Manager's alt-text field should be required (or at least nudge/warn) on upload — currently optional, editors can leave it blank. Don't force it outright without more thought (WP doesn't require it either); consider a softer nudge instead. Surfaced while auditing PageSpeed accessibility findings (2026-08-21).
 
+- [ ] follow-ups deferred from the 2026-09-07 auth security hardening (`AUTH_SECURITY_REVIEW.md` / `AUTH_SECURITY_IMPLEMENTATION_RESULTS.md`), none required before the fixes already shipped:
+  - verified self-service email changes (pending-email table, confirmation link, notify old address) — email is read-only for now
+  - a real "join another site" flow for an existing identity (authenticated action or one-time email invitation), now that anonymous auto-linking is closed
+  - move the in-process login/registration/recovery rate limiter to PostgreSQL or a shared cache before running more than one app instance
+  - TOTP authenticator-app MFA for staff, plus hashed recovery codes
+  - WebAuthn/passkeys
+  - a local common/breached-password denylist check
+  - the `core/tests/routes.rs` HTTP integration test suite is still `todo!()` placeholders — needs a live-Postgres test harness
+
 ## Done
+
+- [x] bug: `cli/src/commands/install.rs::generate_password()` generated a 10-character password (not re-checked against `validate_password()`) after the 2026-09-07 auth security pass raised the minimum to 12 chars — non-interactive installs without `ADMIN_PASSWORD` could mint a super_admin below the app's own policy. Fixed 2026-09-07: generator widened to 16 chars to match `core::models::user::generate_password()`, generated output is now validated before use, and a regression test covers it. See `GENERATE_PASSWORD_BUG.md`.
 
 - [x] change the text field colors on post page — they were white/bright for a dark theme; rolled out site-wide via --field-bg/--field-text
 - [x] theme images take about 0.25 or higher secs to fully load. admin/themes — fixed 2026-08-18 (`7975541`): the no-store cache-buster middleware was overwriting the theme-screenshot handler's own Cache-Control on every /admin/* response, so thumbnails were never actually cached and re-fetched every load.

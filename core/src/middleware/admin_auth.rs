@@ -16,6 +16,9 @@ use crate::models::user::User;
 
 /// Session key where the logged-in user's UUID is stored.
 pub const SESSION_USER_ID_KEY: &str = "admin_user_id";
+pub const SESSION_CREDENTIAL_VERSION_KEY: &str = "admin_credential_version";
+pub const SESSION_LOGIN_AT_KEY: &str = "admin_login_at";
+const ADMIN_ABSOLUTE_SESSION_SECONDS: i64 = 24 * 60 * 60;
 
 /// Cookie name for the admin session (set via `SessionManagerLayer::with_name`
 /// in `main.rs`) — kept as a named constant, not a literal, because
@@ -104,7 +107,7 @@ impl AdminCaps {
             can_manage_sites: is_admin,
             can_manage_plugins: is_global_admin,
             can_manage_settings: is_global_admin && is_on_default_site,
-            can_manage_content: true,
+            can_manage_content: is_editor_or_above || site_role == Some(SiteRole::Author),
             can_manage_themes: is_admin,
             can_manage_taxonomies: is_editor_or_above,
             can_manage_forms: is_admin,
@@ -190,6 +193,18 @@ async fn resolve_user_and_site(
         AdminAuthError::NotAuthenticated
     })?;
 
+    let login_at: Option<i64> = session
+        .get(SESSION_LOGIN_AT_KEY)
+        .await
+        .map_err(|e| AdminAuthError::Internal(format!("session login-time error: {e}")))?;
+    if login_at
+        .map(|at| chrono::Utc::now().timestamp().saturating_sub(at) > ADMIN_ABSOLUTE_SESSION_SECONDS)
+        .unwrap_or(true)
+    {
+        let _ = session.flush().await;
+        return Err(AdminAuthError::NotAuthenticated);
+    }
+
     let user_id: Uuid = user_id_str
         .parse()
         .map_err(|_| AdminAuthError::NotAuthenticated)?;
@@ -198,6 +213,15 @@ async fn resolve_user_and_site(
     let user = crate::models::user::get_by_id(&state.db, user_id)
         .await
         .map_err(|_| AdminAuthError::NotAuthenticated)?;
+
+    let session_credential_version: Option<String> = session
+        .get(SESSION_CREDENTIAL_VERSION_KEY)
+        .await
+        .map_err(|e| AdminAuthError::Internal(format!("session credential check error: {e}")))?;
+    if session_credential_version.as_deref() != Some(user.credential_version().as_str()) {
+        let _ = session.flush().await;
+        return Err(AdminAuthError::NotAuthenticated);
+    }
 
     // Super admin, site_admin, editor, and author roles can access the admin.
     match user.role.as_str() {
@@ -361,6 +385,15 @@ impl FromRequestParts<AppState> for AdminUser {
             crate::models::site_user::SiteRole::from_str(&user.role)
         };
 
+        // A subscriber membership is never an admin-panel role. This explicit
+        // boundary prevents a staff identity that also has a subscriber row on
+        // another tenant from entering that tenant's admin area.
+        if !is_global_admin
+            && matches!(site_role, None | Some(crate::models::site_user::SiteRole::Subscriber))
+        {
+            return Err(AdminAuthError::Forbidden);
+        }
+
         // Show the "visiting" badge when a super_admin is browsing any site other
         // than their own default/home site.  Using default_site_id (not owner_user_id)
         // because a super_admin typically creates every client site themselves, so
@@ -399,5 +432,28 @@ impl FromRequestParts<AppState> for AdminUser {
         };
 
         Ok(AdminUser { user, site_id, site_role, can_self_publish, caps })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::AdminCaps;
+    use crate::models::site_user::SiteRole;
+
+    #[test]
+    fn subscriber_has_no_admin_capabilities() {
+        let caps = AdminCaps::from_roles("subscriber", Some(SiteRole::Subscriber), false, false, true);
+        assert!(!caps.can_manage_content);
+        assert!(!caps.can_manage_users);
+        assert!(!caps.can_manage_sites);
+        assert!(!caps.can_manage_forms);
+    }
+
+    #[test]
+    fn author_can_manage_content_but_not_admin_settings() {
+        let caps = AdminCaps::from_roles("author", Some(SiteRole::Author), false, false, true);
+        assert!(caps.can_manage_content);
+        assert!(!caps.can_manage_users);
+        assert!(!caps.can_manage_settings);
     }
 }

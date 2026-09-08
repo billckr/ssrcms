@@ -238,10 +238,12 @@ pub fn admin_page(title: &str, current_path: &str, flash: Option<&str>, content:
               <img src="/admin/static/icons/fingerprint-light.svg" alt="">
               <span>Profile</span>
             </a>
-            <a href="/admin/logout" class="header-menu-item">
+            <form method="POST" action="/admin/logout" style="margin:0">
+            <button type="submit" class="header-menu-item" style="width:100%;border:0;background:none;text-align:left">
               <img src="/admin/static/icons/log-out.svg" alt="">
               <span>Log out</span>
-            </a>
+            </button>
+            </form>
           </div>
         </div>
       </header>

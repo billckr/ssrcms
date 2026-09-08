@@ -82,10 +82,7 @@ pub fn render(error: Option<&str>, site_name: &str, default_theme: &str) -> Stri
         <ul style="list-style:none;padding-left:0;margin:0;display:grid;gap:.15rem">
           <li id="dname-req-len"><span class="pw-dot" style="display:inline-block;width:1.1rem;font-style:normal">·</span>Display name: 1–60 characters</li>
           <li id="email-req-valid"><span class="pw-dot" style="display:inline-block;width:1.1rem;font-style:normal">·</span>Valid email address</li>
-          <li id="pw-req-len"><span class="pw-dot" style="display:inline-block;width:1.1rem;font-style:normal">·</span>Password: 8–12 characters</li>
-          <li id="pw-req-upper"><span class="pw-dot" style="display:inline-block;width:1.1rem;font-style:normal">·</span>Password: at least one uppercase letter</li>
-          <li id="pw-req-num"><span class="pw-dot" style="display:inline-block;width:1.1rem;font-style:normal">·</span>Password: at least one number</li>
-          <li id="pw-req-sym"><span class="pw-dot" style="display:inline-block;width:1.1rem;font-style:normal">·</span>Password: at least one symbol (! @ # $ % &amp;)</li>
+          <li id="pw-req-len"><span class="pw-dot" style="display:inline-block;width:1.1rem;font-style:normal">·</span>Password: 12–128 characters; passphrases are welcome</li>
           <li id="human-req"><span class="pw-dot" style="display:inline-block;width:1.1rem;font-style:normal">·</span>&#x201c;I&#x2019;m Human&#x201d; confirmed</li>
         </ul>
       </div>
@@ -141,10 +138,7 @@ pub fn render(error: Option<&str>, site_name: &str, default_theme: &str) -> Stri
 
       var pw = pwEl ? pwEl.value : '';
       var pwReqs = [
-        ['pw-req-len',   function(p) {{ return p.length >= 8 && p.length <= 12; }}],
-        ['pw-req-upper', function(p) {{ return /[A-Z]/.test(p); }}],
-        ['pw-req-num',   function(p) {{ return /[0-9]/.test(p); }}],
-        ['pw-req-sym',   function(p) {{ return /[!@#$%&]/.test(p); }}],
+        ['pw-req-len', function(p) {{ return Array.from(p).length >= 12 && Array.from(p).length <= 128; }}],
       ];
       pwReqs.forEach(function(req) {{
         setDot(req[0], pw ? req[1](pw) : null);

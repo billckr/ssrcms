@@ -4,6 +4,7 @@
 
 use axum::{
     extract::{Path, State},
+    http::HeaderMap,
     response::{Html, IntoResponse, Redirect, Response},
     Form,
 };
@@ -40,6 +41,7 @@ pub async fn request_form(State(state): State<AppState>) -> Response {
 pub async fn request_post(
     State(state): State<AppState>,
     site: CurrentSite,
+    headers: HeaderMap,
     Form(form): Form<RequestForm>,
 ) -> Response {
     let default_theme = state.app_settings.read().unwrap().default_theme.clone();
@@ -48,7 +50,15 @@ pub async fn request_post(
         return Html(admin::pages::recover::render_request(None, true, &default_theme)).into_response();
     }
 
-    let email = form.email.trim().to_lowercase();
+    let email = user::normalize_email(&form.email);
+    if email.len() > 254 {
+        return Html(admin::pages::recover::render_request(None, true, &default_theme)).into_response();
+    }
+    if !crate::middleware::auth_security::allow("recover", &headers, &email) {
+        // Preserve the non-enumerating response and avoid giving automated
+        // callers a useful distinction between addresses.
+        return Html(admin::pages::recover::render_request(None, true, &default_theme)).into_response();
+    }
     let target = user::get_by_email(&state.db, &email).await.ok();
     // Staff accounts (super_admin/site_admin/editor/author) are excluded the
     // same way they're excluded from public /login — self-service recovery
@@ -119,32 +129,19 @@ pub async fn reset_post(
         invalid_form!(msg);
     }
 
-    let Some(user_id) = password_reset::consume(&state.db, &token).await else {
-        // Expired/used/invalid by the time of submission.
-        return Html(admin::pages::recover::render_reset(&token, false, None, &default_theme)).into_response();
-    };
-
     let password_hash = match user::hash_password(&form.password) {
         Ok(h) => h,
         Err(e) => {
-            tracing::error!("recover: password hashing failed for user {}: {:?}", user_id, e);
+            tracing::error!("recover: password hashing failed: {:?}", e);
             invalid_form!("Something went wrong. Please try again.");
         }
     };
 
-    let update = user::UpdateUser {
-        username: None,
-        email: None,
-        display_name: None,
-        password_hash: Some(password_hash),
-        role: None,
-        bio: None,
-    };
-
-    match user::update(&state.db, user_id, &update).await {
-        Ok(_) => Redirect::to("/login?flash=Password+reset.+You+can+now+sign+in.").into_response(),
+    match password_reset::consume_and_set_password(&state.db, &token, &password_hash).await {
+        Ok(Some(_)) => Redirect::to("/login?flash=Password+reset.+You+can+now+sign+in.").into_response(),
+        Ok(None) => Html(admin::pages::recover::render_reset(&token, false, None, &default_theme)).into_response(),
         Err(e) => {
-            tracing::error!("recover: failed to update password for user {}: {:?}", user_id, e);
+            tracing::error!("recover: failed to update password: {:?}", e);
             invalid_form!("Something went wrong. Please try again.");
         }
     }

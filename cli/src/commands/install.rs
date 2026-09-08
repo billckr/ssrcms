@@ -622,6 +622,9 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
                 }
                 None => {
                     let pw = generate_password();
+                    validate_password(&pw).map_err(|e| {
+                        anyhow::anyhow!("Generated admin password violated password policy: {e}")
+                    })?;
                     println!("GENERATED_ADMIN_PASSWORD={pw}");
                     println!("IMPORTANT: Save this password — it will not be shown again.");
                     pw
@@ -630,7 +633,7 @@ pub async fn run(args: InstallArgs) -> anyhow::Result<()> {
         } else {
             loop {
                 let pw = Password::new()
-                    .with_prompt("Admin password (8-12 chars, 1 uppercase, 1 number, 1 symbol: !@#$%&)")
+                    .with_prompt("Admin password (12-128 characters; passphrases supported)")
                     .with_confirmation("Confirm password", "Passwords do not match")
                     .interact()?;
                 match validate_password(&pw) {
@@ -1325,7 +1328,7 @@ fn setup_local_service(
 }
 
 /// Generate a password that satisfies validate_password():
-/// 8-12 chars, ≥1 uppercase, ≥1 digit, ≥1 symbol from !@#$%&
+/// 12-128 Unicode scalar values; passphrases are supported.
 fn generate_password() -> String {
     use rand::seq::SliceRandom;
     use rand::Rng;
@@ -1337,13 +1340,14 @@ fn generate_password() -> String {
     // Exclude $ and ! — they get mangled in shell env vars and URL strings.
     let symbols: &[char]   = &['@', '#', '%', '&'];
 
-    // Guarantee one of each required class within the 10-char budget.
-    let mut chars: Vec<char> = Vec::with_capacity(10);
+    // Keep mixed character classes for generated-password entropy and
+    // compatibility, even though the policy now permits passphrases.
+    let mut chars: Vec<char> = Vec::with_capacity(16);
     chars.push(upper[rng.gen_range(0..upper.len())]);
     chars.push(digits[rng.gen_range(0..digits.len())]);
     chars.push(symbols[rng.gen_range(0..symbols.len())]);
-    // Fill remaining 7 slots with lowercase.
-    for _ in 0..7 {
+    // Fill the remaining slots with lowercase characters.
+    for _ in 0..13 {
         chars.push(lower[rng.gen_range(0..lower.len())]);
     }
     chars.shuffle(&mut rng);
@@ -1393,24 +1397,28 @@ fn find_template(path: &str) -> Option<String> {
 }
 
 fn validate_password(password: &str) -> Result<(), &'static str> {
-    let len = password.len();
-    if len < 8 {
-        return Err("Password must be at least 8 characters");
+    let len = password.chars().count();
+    if len < 12 {
+        return Err("Password must be at least 12 characters");
     }
-    if len > 12 {
-        return Err("Password must be no more than 12 characters");
-    }
-    if !password.chars().any(|c| c.is_uppercase()) {
-        return Err("Password must contain at least one uppercase letter");
-    }
-    if !password.chars().any(|c| c.is_ascii_digit()) {
-        return Err("Password must contain at least one number");
-    }
-    const ALLOWED_SYMBOLS: &[char] = &['!', '@', '#', '$', '%', '&', '*', '-', '_', '+'];
-    if !password.chars().any(|c| ALLOWED_SYMBOLS.contains(&c)) {
-        return Err("Password must contain at least one symbol: ! @ # $ % &");
+    if len > 128 {
+        return Err("Password must be no more than 128 characters");
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod password_tests {
+    use super::{generate_password, validate_password};
+
+    #[test]
+    fn generated_admin_password_always_satisfies_current_policy() {
+        for _ in 0..100 {
+            let password = generate_password();
+            assert_eq!(password.chars().count(), 16);
+            assert!(validate_password(&password).is_ok());
+        }
+    }
 }
 
 fn copy_dir_all(src: &std::path::Path, dst: &std::path::Path) -> std::io::Result<()> {

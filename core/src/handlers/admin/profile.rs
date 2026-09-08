@@ -4,6 +4,7 @@ use axum::{
     Form,
 };
 use serde::Deserialize;
+use tower_sessions::Session;
 
 use crate::app_state::AppState;
 use crate::middleware::admin_auth::AdminUser;
@@ -20,7 +21,7 @@ fn flash_for(q: &ProfileQuery) -> Option<&'static str> {
         Some("update_failed") => Some("Error updating profile. Please try again."),
         Some("password_mismatch") => Some("New passwords do not match."),
         Some("wrong_password") => Some("Current password is incorrect."),
-        Some("weak_password") => Some("Password must be 8-12 characters, with at least one uppercase letter, one number, and one symbol (! @ # $ % &)."),
+        Some("weak_password") => Some("Password must be 12-128 characters."),
         Some("password_hash_failed") => Some("Password hashing error. Please try again."),
         Some("password_update_failed") => Some("Error changing password. Please try again."),
         _ => match q.success.as_deref() {
@@ -69,7 +70,9 @@ pub async fn update_profile(
 
     let update = UpdateUser {
         username: None,
-        email: Some(form.email),
+        // Email is an authentication identifier. Self-service changes stay
+        // disabled until a pending-address verification flow is available.
+        email: None,
         display_name: Some(display_name),
         password_hash: None,
         role: None,
@@ -95,6 +98,7 @@ pub struct ChangePasswordForm {
 pub async fn change_password(
     State(state): State<AppState>,
     admin: AdminUser,
+    session: Session,
     Form(form): Form<ChangePasswordForm>,
 ) -> impl IntoResponse {
     if form.new_password != form.confirm_password {
@@ -125,7 +129,13 @@ pub async fn change_password(
     };
 
     match crate::models::user::update(&state.db, admin.user.id, &update).await {
-        Ok(_) => Redirect::to("/admin/profile?success=password_changed").into_response(),
+        Ok(updated) => {
+            let _ = session.insert(
+                crate::middleware::admin_auth::SESSION_CREDENTIAL_VERSION_KEY,
+                updated.credential_version(),
+            ).await;
+            Redirect::to("/admin/profile?success=password_changed").into_response()
+        },
         Err(e) => {
             tracing::error!("password change failed: {e}");
             Redirect::to("/admin/profile?error=password_update_failed").into_response()

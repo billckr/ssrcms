@@ -91,7 +91,7 @@
             <a href="/account/profile">Profile</a>
           </li>
           <li class="nav-item nav-item-account">
-            <a href="/account/logout">Log out</a>
+            <form method="post" action="/account/logout"><button type="submit">Log out</button></form>
           </li>
         {% endif %}
       </ul>
@@ -102,7 +102,7 @@
           </button>
           <div class="user-menu-dropdown" id="userMenuDropdown">
             <a href="/account/profile" class="user-menu-item">Profile</a>
-            <a href="/account/logout" class="user-menu-item">Log out</a>
+            <form method="post" action="/account/logout"><button type="submit" class="user-menu-item">Log out</button></form>
           </div>
         </div>
       {% endif %}

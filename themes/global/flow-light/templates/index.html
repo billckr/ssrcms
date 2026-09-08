@@ -54,7 +54,7 @@
         <a href="/account/profile">Profile</a>
       </li>
       <li class="flow-nav-item flow-nav-item-account">
-        <a href="/account/logout">Log out</a>
+        <form method="post" action="/account/logout"><button type="submit">Log out</button></form>
       </li>
     {% endif %}
   </ul>
@@ -65,7 +65,7 @@
       </button>
       <div class="flow-user-menu-dropdown" id="flowUserMenuDropdown">
         <a href="/account/profile" class="flow-user-menu-item">Profile</a>
-        <a href="/account/logout" class="flow-user-menu-item">Log out</a>
+        <form method="post" action="/account/logout"><button type="submit" class="flow-user-menu-item">Log out</button></form>
       </div>
     </div>
   {% endif %}

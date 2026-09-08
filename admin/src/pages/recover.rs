@@ -95,7 +95,7 @@ pub fn render_reset(token: &str, valid: bool, error: Option<&str>, default_theme
       <label for="password">New password</label>
       <input type="password" id="password" name="password" required autofocus autocomplete="new-password">
       <small style="color:var(--muted);display:block;margin-top:.25rem">
-        8&ndash;12 characters &middot; uppercase &middot; number &middot; symbol (! @ # $ % &amp;)
+        12&ndash;128 characters; passphrases and password-manager generated values are supported
       </small>
 
       <label for="confirm_password" style="margin-top:.75rem">Confirm new password</label>

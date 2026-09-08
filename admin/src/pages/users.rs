@@ -1018,10 +1018,7 @@ function toggleSiteFields() {{
     <div class="form-note" style="margin-bottom:.75rem">
       <p><strong>Password requirements:</strong></p>
       <ul style="list-style:none;padding-left:0;margin:0.25rem 0 0">
-        <li id="pw-req-len"><span class="pw-dot" style="display:inline-block;width:1.1rem;font-style:normal">·</span>8–12 characters</li>
-        <li id="pw-req-upper"><span class="pw-dot" style="display:inline-block;width:1.1rem;font-style:normal">·</span>At least one uppercase letter</li>
-        <li id="pw-req-num"><span class="pw-dot" style="display:inline-block;width:1.1rem;font-style:normal">·</span>At least one number</li>
-        <li id="pw-req-sym"><span class="pw-dot" style="display:inline-block;width:1.1rem;font-style:normal">·</span>At least one symbol: ! @ # $ % &amp;</li>
+        <li id="pw-req-len"><span class="pw-dot" style="display:inline-block;width:1.1rem;font-style:normal">·</span>12–128 characters; passphrases are welcome</li>
       </ul>
     </div>
     <div class="form-note" style="margin-bottom:0">
@@ -1100,11 +1097,8 @@ function toggleSiteFields() {{
     if (err) {{ e.preventDefault(); alert(err); }}
   }});
   function validatePw(pw) {{
-    if (pw.length < 8)  return 'Password must be at least 8 characters.';
-    if (pw.length > 12) return 'Password must be no more than 12 characters.';
-    if (!/[A-Z]/.test(pw))       return 'Password must contain at least one uppercase letter.';
-    if (!/[0-9]/.test(pw))       return 'Password must contain at least one number.';
-    if (!/[!@#$%&]/.test(pw))    return 'Password must contain at least one symbol: ! @ # $ % &';
+    if (Array.from(pw).length < 12)  return 'Password must be at least 12 characters.';
+    if (Array.from(pw).length > 128) return 'Password must be no more than 128 characters.';
     return null;
   }}
   // ── Real-time validation (new user form only) ────────────────────────────
@@ -1113,10 +1107,7 @@ function toggleSiteFields() {{
 
     // Password requirements checklist.
     var pwReqs = [
-      {{ id: 'pw-req-len',   test: function(p) {{ return p.length >= 8 && p.length <= 12; }} }},
-      {{ id: 'pw-req-upper', test: function(p) {{ return /[A-Z]/.test(p); }} }},
-      {{ id: 'pw-req-num',   test: function(p) {{ return /[0-9]/.test(p); }} }},
-      {{ id: 'pw-req-sym',   test: function(p) {{ return /[!@#$%&]/.test(p); }} }},
+      {{ id: 'pw-req-len', test: function(p) {{ return Array.from(p).length >= 12 && Array.from(p).length <= 128; }} }},
     ];
     // Username requirements checklist.
     var unameReqs = [
@@ -1766,4 +1757,3 @@ pub fn render_erase_review(data: &ErasureReviewData, flash: Option<&str>, ctx: &
 
     crate::admin_page("Erase Personal Data", "/admin/users", flash, &content, ctx)
 }
-

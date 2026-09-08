@@ -19,6 +19,9 @@ use crate::models::user::User;
 
 /// Session key for the account area — kept separate from SESSION_USER_ID_KEY.
 pub const SESSION_ACCOUNT_USER_ID_KEY: &str = "account_user_id";
+pub const SESSION_ACCOUNT_CREDENTIAL_VERSION_KEY: &str = "account_credential_version";
+pub const SESSION_ACCOUNT_LOGIN_AT_KEY: &str = "account_login_at";
+const ACCOUNT_ABSOLUTE_SESSION_SECONDS: i64 = 7 * 24 * 60 * 60;
 
 /// An authenticated account user (any role) extracted from the session.
 pub struct AccountUser {
@@ -64,11 +67,31 @@ impl FromRequestParts<AppState> for AccountUser {
             .map_err(|e| AccountAuthError::Internal(format!("session get error: {e}")))?;
 
         let user_id_str = user_id_str.ok_or(AccountAuthError::NotAuthenticated)?;
+        let login_at: Option<i64> = session
+            .get(SESSION_ACCOUNT_LOGIN_AT_KEY)
+            .await
+            .map_err(|e| AccountAuthError::Internal(format!("session login-time error: {e}")))?;
+        if login_at
+            .map(|at| chrono::Utc::now().timestamp().saturating_sub(at) > ACCOUNT_ABSOLUTE_SESSION_SECONDS)
+            .unwrap_or(true)
+        {
+            let _ = session.flush().await;
+            return Err(AccountAuthError::NotAuthenticated);
+        }
         let user_id: Uuid = user_id_str.parse().map_err(|_| AccountAuthError::NotAuthenticated)?;
 
         let user = crate::models::user::get_by_id(&state.db, user_id)
             .await
             .map_err(|_| AccountAuthError::NotAuthenticated)?;
+
+        let session_credential_version: Option<String> = session
+            .get(SESSION_ACCOUNT_CREDENTIAL_VERSION_KEY)
+            .await
+            .map_err(|e| AccountAuthError::Internal(format!("session credential check error: {e}")))?;
+        if session_credential_version.as_deref() != Some(user.credential_version().as_str()) {
+            let _ = session.flush().await;
+            return Err(AccountAuthError::NotAuthenticated);
+        }
 
         // Resolve site from Host header.
         let raw_host = parts

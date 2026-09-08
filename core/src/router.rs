@@ -120,7 +120,7 @@ pub fn build(
         .route("/account/saved-posts",            get(account::saved_posts))
         .route("/account/my-comments",            get(account::my_comments))
         .route("/account/comments/{id}/delete",    post(account::delete_comment))
-        .route("/account/logout",                 get(auth::account_logout))
+        .route("/account/logout",                 post(auth::account_logout))
         // ── Static files ──────────────────────────────────────────────────
         .route("/uploads/{*path}", get(uploads::serve))
         .route("/theme/static/{*path}", get(theme_static::serve));
@@ -149,7 +149,7 @@ pub fn build(
     let admin_router = Router::new()
         // ── Admin auth ─────────────────────────────────────────────────────
         .route("/admin/login", get(auth::login_form).post(auth::login_post))
-        .route("/admin/logout", get(auth::logout))
+        .route("/admin/logout", post(auth::logout))
         // ── Admin profile ──────────────────────────────────────────────────
         .route("/admin/profile", get(profile::view))
         .route("/admin/profile/update", post(profile::update_profile))
@@ -325,6 +325,7 @@ pub fn build(
     let router = public_router.merge(admin_router);
 
     router
+        .layer(middleware::from_fn(crate::middleware::csrf::same_origin))
         .layer(middleware::from_fn(no_store_for_protected))
         .layer(maintenance_layer)
         .layer(ip_allowlist_layer)

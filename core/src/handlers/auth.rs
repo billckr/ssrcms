@@ -10,8 +10,8 @@ use serde::Deserialize;
 use tower_sessions::Session;
 
 use crate::app_state::AppState;
-use crate::middleware::account_auth::SESSION_ACCOUNT_USER_ID_KEY;
-use crate::middleware::admin_auth::{SESSION_CURRENT_ROLE_KEY, SESSION_CURRENT_SITE_KEY, SESSION_USER_ID_KEY};
+use crate::middleware::account_auth::{SESSION_ACCOUNT_CREDENTIAL_VERSION_KEY, SESSION_ACCOUNT_LOGIN_AT_KEY, SESSION_ACCOUNT_USER_ID_KEY};
+use crate::middleware::admin_auth::{SESSION_CREDENTIAL_VERSION_KEY, SESSION_CURRENT_ROLE_KEY, SESSION_CURRENT_SITE_KEY, SESSION_LOGIN_AT_KEY, SESSION_USER_ID_KEY};
 
 /// Records a staff (/admin/login) login attempt to the audit log — subscriber
 /// logins at the public /login form are intentionally not logged here, same
@@ -148,11 +148,21 @@ pub async fn login_post(
     let site_name = site_name_for_login(&state, &resolved_site);
     let logo_url = logo_url_for_login(&state, &resolved_site).await;
 
-    // Look up user by email.
-    let user = match crate::models::user::get_by_email(&state.db, &form.email).await {
+    let email = crate::models::user::normalize_email(&form.email);
+    if email.len() > 254 || form.password.len() > 1024 {
+        crate::models::user::verify_dummy_password("invalid oversized credentials");
+        return Html(admin::pages::login::render(Some("Invalid email or password."), &default_theme, &site_name, logo_url.as_deref())).into_response();
+    }
+    if !crate::middleware::auth_security::allow("admin-login", &headers, &email) {
+        return (axum::http::StatusCode::TOO_MANY_REQUESTS, "Too many sign-in attempts. Please try again later.").into_response();
+    }
+
+    // Look up user by normalized email.
+    let user = match crate::models::user::get_by_email(&state.db, &email).await {
         Ok(u) => u,
         Err(_) => {
-            log_staff_login(&state, None, &form.email, "unknown", None, false).await;
+            crate::models::user::verify_dummy_password(&form.password);
+            log_staff_login(&state, None, &email, "unknown", None, false).await;
             return Html(admin::pages::login::render(Some("Invalid email or password."), &default_theme, &site_name, logo_url.as_deref())).into_response();
         }
     };
@@ -201,12 +211,24 @@ pub async fn login_post(
         }
     }
 
+    // Rotate before establishing authentication to prevent session fixation.
+    if let Err(e) = session.cycle_id().await {
+        tracing::error!("session rotation error: {}", e);
+        return Html(admin::pages::login::render(Some("Session error. Please try again."), &default_theme, &site_name, logo_url.as_deref())).into_response();
+    }
+
     // Store user ID in session.
     if let Err(e) = session.insert(SESSION_USER_ID_KEY, user.id.to_string()).await {
         tracing::error!("session insert error: {}", e);
         return Html(admin::pages::login::render(Some("Session error. Please try again."), &default_theme, &site_name, logo_url.as_deref())).into_response();
     }
-    tracing::info!("login: user_id stored in session for {}", form.email);
+    if let Err(e) = session.insert(SESSION_CREDENTIAL_VERSION_KEY, user.credential_version()).await {
+        tracing::error!("session credential insert error: {}", e);
+        let _ = session.flush().await;
+        return Html(admin::pages::login::render(Some("Session error. Please try again."), &default_theme, &site_name, logo_url.as_deref())).into_response();
+    }
+    let _ = session.insert(SESSION_LOGIN_AT_KEY, chrono::Utc::now().timestamp()).await;
+    tracing::info!("login: user_id stored in session: {}", user.id);
 
     // Store the resolved site in the session immediately so the AdminUser
     // extractor doesn't have to re-derive it from scratch on the next request.
@@ -258,9 +280,20 @@ pub async fn public_login_post(
     let site_name = site_name_for_login(&state, &resolved_site);
     let logo_url = logo_url_for_login(&state, &resolved_site).await;
 
-    let user = match crate::models::user::get_by_email(&state.db, &form.email).await {
+    let email = crate::models::user::normalize_email(&form.email);
+    if email.len() > 254 || form.password.len() > 1024 {
+        crate::models::user::verify_dummy_password("invalid oversized credentials");
+        return Html(admin::pages::login::render_public(Some("Invalid email or password."), None, redirect_val, &default_theme, &site_name, logo_url.as_deref())).into_response();
+    }
+    if !crate::middleware::auth_security::allow("account-login", &headers, &email) {
+        return (axum::http::StatusCode::TOO_MANY_REQUESTS, "Too many sign-in attempts. Please try again later.").into_response();
+    }
+    let user = match crate::models::user::get_by_email(&state.db, &email).await {
         Ok(u) => u,
-        Err(_) => return Html(admin::pages::login::render_public(Some("Invalid email or password."), None, redirect_val, &default_theme, &site_name, logo_url.as_deref())).into_response(),
+        Err(_) => {
+            crate::models::user::verify_dummy_password(&form.password);
+            return Html(admin::pages::login::render_public(Some("Invalid email or password."), None, redirect_val, &default_theme, &site_name, logo_url.as_deref())).into_response();
+        }
     };
     if !user.verify_password(&form.password) {
         return Html(admin::pages::login::render_public(Some("Invalid email or password."), None, redirect_val, &default_theme, &site_name, logo_url.as_deref())).into_response();
@@ -296,20 +329,37 @@ pub async fn public_login_post(
         )).into_response(),
     }
 
+    if let Err(e) = session.cycle_id().await {
+        tracing::error!("account login session rotation error: {}", e);
+        return Html(admin::pages::login::render_public(Some("Session error. Please try again."), None, redirect_val, &default_theme, &site_name, logo_url.as_deref())).into_response();
+    }
     if let Err(e) = session.insert(SESSION_ACCOUNT_USER_ID_KEY, user.id.to_string()).await {
         tracing::error!("account login session insert error: {}", e);
         return Html(admin::pages::login::render_public(Some("Session error. Please try again."), None, redirect_val, &default_theme, &site_name, logo_url.as_deref())).into_response();
     }
+    if let Err(e) = session.insert(SESSION_ACCOUNT_CREDENTIAL_VERSION_KEY, user.credential_version()).await {
+        tracing::error!("account login credential insert error: {}", e);
+        let _ = session.flush().await;
+        return Html(admin::pages::login::render_public(Some("Session error. Please try again."), None, redirect_val, &default_theme, &site_name, logo_url.as_deref())).into_response();
+    }
+    let _ = session.insert(SESSION_ACCOUNT_LOGIN_AT_KEY, chrono::Utc::now().timestamp()).await;
 
     // Redirect back to the page that sent the user to login, or fall back to /account.
     let destination = match redirect_val {
-        Some(r) if r.starts_with('/') => r,
+        Some(r) if is_safe_local_redirect(r) => r,
         _ => "/account",
     };
     Redirect::to(destination).into_response()
 }
 
-/// GET /admin/logout — destroy the session (not just the auth key) and redirect to admin login.
+fn is_safe_local_redirect(value: &str) -> bool {
+    value.starts_with('/')
+        && !value.starts_with("//")
+        && !value.contains('\\')
+        && !value.chars().any(char::is_control)
+}
+
+/// POST /admin/logout — destroy the session (not just the auth key) and redirect to admin login.
 ///
 /// `flush()` (not `remove()`) is required: tower_sessions' cookie-removal check only fires when
 /// a request arrives with no session id at all, so merely removing keys leaves the record (and
@@ -320,9 +370,24 @@ pub async fn logout(session: Session) -> impl IntoResponse {
     Redirect::to("/admin/login")
 }
 
-/// GET /account/logout — destroy the session and redirect to /login. See `logout` above for why
+/// POST /account/logout — destroy the session and redirect to /login. See `logout` above for why
 /// this uses `flush()` rather than removing the account key.
 pub async fn account_logout(session: Session) -> impl IntoResponse {
     let _ = session.flush().await;
     Redirect::to("/login")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_safe_local_redirect;
+
+    #[test]
+    fn redirect_must_be_an_internal_absolute_path() {
+        assert!(is_safe_local_redirect("/account"));
+        assert!(is_safe_local_redirect("/post?tab=comments"));
+        assert!(!is_safe_local_redirect("//evil.example"));
+        assert!(!is_safe_local_redirect("https://evil.example"));
+        assert!(!is_safe_local_redirect("/\\evil.example"));
+        assert!(!is_safe_local_redirect("/ok\nLocation: https://evil.example"));
+    }
 }

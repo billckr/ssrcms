@@ -6,6 +6,7 @@
 
 use axum::{
     extract::{Query, State},
+    http::HeaderMap,
     response::{Html, IntoResponse, Redirect, Response},
     Form,
 };
@@ -60,11 +61,20 @@ pub async fn subscribe_form(
 pub async fn subscribe_post(
     State(state): State<AppState>,
     site: CurrentSite,
+    headers: HeaderMap,
     Form(form): Form<SubscribeForm>,
 ) -> Response {
     let site_name = site.settings.site_name.clone();
     let site_id = site.site.id;
     let default_theme = state.app_settings.read().unwrap().default_theme.clone();
+
+    let normalized_email = crate::models::user::normalize_email(&form.email);
+    if normalized_email.len() > 254 {
+        return Html(admin::pages::subscribe::render(Some("A valid email address is required."), &site_name, &default_theme)).into_response();
+    }
+    if !crate::middleware::auth_security::allow("subscribe", &headers, &normalized_email) {
+        return (axum::http::StatusCode::TOO_MANY_REQUESTS, "Too many registration attempts. Please try again later.").into_response();
+    }
 
     // Re-checked here, not just on the GET form — a direct POST (bypassing
     // the UI) must not be able to create an account when registration is off.
@@ -98,7 +108,7 @@ pub async fn subscribe_post(
     if let Err(msg) = validate_display_name(form.display_name.trim()) {
         err!(msg);
     }
-    let email = form.email.trim().to_lowercase();
+    let email = normalized_email;
     if email.is_empty() || !email.contains('@') {
         err!("A valid email address is required.");
     }
@@ -111,30 +121,13 @@ pub async fn subscribe_post(
 
     // ── Email already exists? ─────────────────────────────────────────────────
     match crate::models::user::get_by_email(&state.db, &email).await {
-        Ok(existing) => {
-            // Known user — ensure they have a site_users row for this site.
-            match crate::models::site_user::has_any_role(&state.db, site_id, existing.id).await {
-                Ok(true) => {
-                    err!("This email address is already subscribed to this site.");
-                }
-                _ => {
-                    // Not yet linked to this site — add the row.
-                    if let Err(e) = crate::models::site_user::add(
-                        &state.db,
-                        site_id,
-                        existing.id,
-                        crate::models::site_user::SiteRole::Subscriber,
-                        None,
-                        false,
-                    )
-                    .await
-                    {
-                        tracing::error!("subscribe: failed to link existing user to site: {:?}", e);
-                        err!("Something went wrong. Please try again.");
-                    }
-                    return Redirect::to("/subscribe?subscribed=1").into_response();
-                }
-            }
+        Ok(_) => {
+            // Never attach an existing identity from an anonymous form. Doing
+            // so would let anyone enroll another person's account—and could
+            // attach a staff identity to a tenant. Keep the public response
+            // indistinguishable from successful registration to avoid account
+            // enumeration. A future verified invitation flow can link accounts.
+            return Redirect::to("/subscribe?subscribed=1").into_response();
         }
         Err(_) => {
             // New user — generate a username from display name and create the account.

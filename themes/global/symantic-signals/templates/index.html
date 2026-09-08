@@ -85,7 +85,7 @@
         {% if session.is_logged_in %}
         <div class="tag-cloud">
           <a href="/account" class="tag">{{ session.user.display_name }}</a>
-          <a href="/account/logout" class="tag">Sign out</a>
+          <form method="post" action="/account/logout" style="display:inline"><button type="submit" class="tag">Sign out</button></form>
         </div>
         {% else %}
         <div class="tag-cloud">

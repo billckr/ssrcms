@@ -77,7 +77,8 @@ pub fn render_profile(profile: &ProfileForm, flash: Option<&str>, ctx: &crate::P
 
       <div class="form-group">
         <label for="email">Email</label>
-        <input type="email" id="email" name="email" value="{email}" required>
+        <input type="email" id="email" name="email" value="{email}" readonly>
+        <small>Contact an administrator to change your sign-in email.</small>
       </div>
 
       <div class="form-group">
@@ -115,21 +116,18 @@ pub fn render_profile(profile: &ProfileForm, flash: Option<&str>, ctx: &crate::P
 
       <div class="form-group">
         <label for="new_password">New Password</label>
-        <input type="password" id="new_password" name="new_password" required minlength="8" maxlength="12">
+        <input type="password" id="new_password" name="new_password" required minlength="12" maxlength="128">
       </div>
 
       <div class="form-group">
         <label for="confirm_password">Confirm New Password</label>
-        <input type="password" id="confirm_password" name="confirm_password" required minlength="8" maxlength="12">
+        <input type="password" id="confirm_password" name="confirm_password" required minlength="12" maxlength="128">
       </div>
 
       <div class="form-note">
         <p><strong>Password requirements:</strong></p>
         <ul style="list-style:none;padding-left:0;margin:0.25rem 0 0">
-          <li id="np-req-len"><span class="pw-dot" style="display:inline-block;width:1.1rem;font-style:normal">&middot;</span>8–12 characters</li>
-          <li id="np-req-upper"><span class="pw-dot" style="display:inline-block;width:1.1rem;font-style:normal">&middot;</span>At least one uppercase letter</li>
-          <li id="np-req-num"><span class="pw-dot" style="display:inline-block;width:1.1rem;font-style:normal">&middot;</span>At least one number</li>
-          <li id="np-req-sym"><span class="pw-dot" style="display:inline-block;width:1.1rem;font-style:normal">&middot;</span>At least one symbol: ! @ # $ % &amp;</li>
+          <li id="np-req-len"><span class="pw-dot" style="display:inline-block;width:1.1rem;font-style:normal">&middot;</span>12–128 characters; passphrases are welcome</li>
           <li id="np-req-match"><span class="pw-dot" style="display:inline-block;width:1.1rem;font-style:normal">&middot;</span>Passwords match</li>
         </ul>
       </div>
@@ -191,10 +189,7 @@ document.getElementById('change-password-dialog').addEventListener('close', func
   var saveBtn = document.getElementById('change-password-save-btn');
 
   var npReqs = [
-    {{ id: 'np-req-len',   test: function(p) {{ return p.length >= 8 && p.length <= 12; }} }},
-    {{ id: 'np-req-upper', test: function(p) {{ return /[A-Z]/.test(p); }} }},
-    {{ id: 'np-req-num',   test: function(p) {{ return /[0-9]/.test(p); }} }},
-    {{ id: 'np-req-sym',   test: function(p) {{ return /[!@#$%&]/.test(p); }} }},
+    {{ id: 'np-req-len', test: function(p) {{ return Array.from(p).length >= 12 && Array.from(p).length <= 128; }} }},
   ];
 
   var updateFeedback = function() {{
@@ -248,17 +243,8 @@ document.getElementById('change-password-dialog').addEventListener('close', func
     var errorEl = document.getElementById('change-password-error');
     var errors = [];
 
-    if (newPw.length < 8 || newPw.length > 12) {{
-      errors.push('Password must be 8-12 characters.');
-    }}
-    if (!/[A-Z]/.test(newPw)) {{
-      errors.push('Password must contain at least one uppercase letter.');
-    }}
-    if (!/[0-9]/.test(newPw)) {{
-      errors.push('Password must contain at least one number.');
-    }}
-    if (!/[!@#$%&]/.test(newPw)) {{
-      errors.push('Password must contain at least one symbol: ! @ # $ % &');
+    if (Array.from(newPw).length < 12 || Array.from(newPw).length > 128) {{
+      errors.push('Password must be 12-128 characters.');
     }}
     if (newPw !== confirmPw) {{
       errors.push('New passwords do not match.');

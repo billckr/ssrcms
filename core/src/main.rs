@@ -89,7 +89,7 @@ async fn main() -> anyhow::Result<()> {
         // Axum always runs behind Caddy on plain HTTP — never directly over HTTPS.
         // Secure:true means the browser will never send the cookie back over HTTP,
         // which breaks every login. Caddy handles TLS; we own the cookie content.
-        .with_secure(false)
+        .with_secure(!cfg.dev_mode)
         // Lax: cookie is sent on top-level navigations and form POST redirects.
         .with_same_site(tower_sessions::cookie::SameSite::Lax)
         .with_expiry(tower_sessions::Expiry::OnInactivity(
@@ -103,7 +103,7 @@ async fn main() -> anyhow::Result<()> {
         .with_always_save(true);
     let account_session_layer = SessionManagerLayer::new(session_store)
         .with_name("session")
-        .with_secure(false)
+        .with_secure(!cfg.dev_mode)
         .with_same_site(tower_sessions::cookie::SameSite::Lax)
         .with_expiry(tower_sessions::Expiry::OnInactivity(
             tower_sessions::cookie::time::Duration::hours(24),

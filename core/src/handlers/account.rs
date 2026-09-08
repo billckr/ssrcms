@@ -8,6 +8,7 @@ use axum::{
 };
 use serde::Deserialize;
 use uuid::Uuid;
+use tower_sessions::Session;
 
 use crate::app_state::AppState;
 use crate::middleware::account_auth::AccountUser;
@@ -69,7 +70,9 @@ pub async fn profile_update(
     // the current DB value (its None means "leave untouched", not "clear").
     let update = UpdateUser {
         username:      None,
-        email:         Some(form.email),
+        // Email changes require a verified pending-email flow. Keep the current
+        // identity address until that flow is implemented.
+        email:         None,
         display_name:  Some(form.display_name.unwrap_or_default()),
         password_hash: None,
         role:          None,
@@ -95,6 +98,7 @@ pub struct ChangePasswordForm {
 pub async fn profile_change_password(
     State(state): State<AppState>,
     account: AccountUser,
+    session: Session,
     Form(form): Form<ChangePasswordForm>,
 ) -> Redirect {
     let redirect = |flash: &str| Redirect::to(&format!("/account/profile?flash={}", flash.replace(' ', "+")));
@@ -121,7 +125,13 @@ pub async fn profile_change_password(
     };
 
     let flash = match crate::models::user::update(&state.db, account.user.id, &update).await {
-        Ok(_)  => "Password changed successfully!",
+        Ok(updated) => {
+            let _ = session.insert(
+                crate::middleware::account_auth::SESSION_ACCOUNT_CREDENTIAL_VERSION_KEY,
+                updated.credential_version(),
+            ).await;
+            "Password changed successfully!"
+        }
         Err(_) => "Error changing password. Please try again.",
     };
 

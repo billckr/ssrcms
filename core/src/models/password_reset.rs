@@ -28,16 +28,54 @@ pub async fn create(pool: &PgPool, user_id: Uuid) -> Result<String> {
     let token_hash = hash_token(&token);
     let expires_at = Utc::now() + Duration::minutes(TOKEN_TTL_MINUTES);
 
+    let mut tx = pool.begin().await?;
+    sqlx::query("DELETE FROM password_resets WHERE user_id = $1 AND used_at IS NULL")
+        .bind(user_id)
+        .execute(&mut *tx)
+        .await?;
     sqlx::query(
         "INSERT INTO password_resets (user_id, token_hash, expires_at) VALUES ($1, $2, $3)",
     )
     .bind(user_id)
     .bind(&token_hash)
     .bind(expires_at)
-    .execute(pool)
+    .execute(&mut *tx)
     .await?;
+    tx.commit().await?;
 
     Ok(token)
+}
+
+/// Atomically consume a valid token and replace its user's password hash.
+/// Returning `None` means the token was invalid, expired, or already used.
+pub async fn consume_and_set_password(
+    pool: &PgPool,
+    token: &str,
+    password_hash: &str,
+) -> Result<Option<Uuid>> {
+    let token_hash = hash_token(token);
+    let mut tx = pool.begin().await?;
+    let user_id = sqlx::query_scalar::<_, Uuid>(
+        "UPDATE password_resets SET used_at = NOW()
+         WHERE token_hash = $1 AND used_at IS NULL AND expires_at > NOW()
+         RETURNING user_id",
+    )
+    .bind(&token_hash)
+    .fetch_optional(&mut *tx)
+    .await?;
+
+    let Some(user_id) = user_id else {
+        tx.rollback().await?;
+        return Ok(None);
+    };
+
+    sqlx::query("UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2")
+        .bind(password_hash)
+        .bind(user_id)
+        .execute(&mut *tx)
+        .await?;
+    tx.commit().await?;
+    Ok(Some(user_id))
 }
 
 /// Look up the user a still-valid (unexpired, unused) token belongs to,

@@ -56,8 +56,7 @@ impl UserRole {
     }
 }
 
-/// Generate an 8-char password satisfying `validate_password`'s rule: 1
-/// uppercase, 1 digit, 1 symbol from `!@#$%&`, rest lowercase, shuffled.
+/// Generate a 16-character password with mixed character classes.
 /// Used to seed accounts nobody has typed a password for yet (e.g. WP
 /// author import) — the caller is responsible for getting it to the user.
 pub fn generate_password() -> String {
@@ -68,11 +67,11 @@ pub fn generate_password() -> String {
     let mut rng = StdRng::from_entropy();
     let lower = b"abcdefghijklmnopqrstuvwxyz";
     let symbols = b"!@#$%&";
-    let mut chars: Vec<char> = Vec::with_capacity(8);
+    let mut chars: Vec<char> = Vec::with_capacity(16);
     chars.push((lower[rng.gen_range(0..lower.len())] as char).to_ascii_uppercase());
     chars.push(char::from_digit(rng.gen_range(0..10), 10).unwrap());
     chars.push(symbols[rng.gen_range(0..symbols.len())] as char);
-    for _ in 0..5 {
+    for _ in 0..13 {
         chars.push(lower[rng.gen_range(0..lower.len())] as char);
     }
     chars.shuffle(&mut rng);
@@ -81,27 +80,23 @@ pub fn generate_password() -> String {
 
 /// Validate a plaintext password against site-wide requirements.
 ///
-/// Rules: 8–12 characters, at least one uppercase letter, at least one digit,
-/// and at least one symbol from the allowed set `!@#$%&`.
+/// Rules: 12–128 Unicode scalar values. Long passphrases and password-manager
+/// generated values are intentionally supported; Argon2 supplies the strength
+/// boundary rather than brittle character-composition rules.
 pub fn validate_password(password: &str) -> std::result::Result<(), &'static str> {
-    let len = password.len();
-    if len < 8 {
-        return Err("Password must be at least 8 characters");
+    let len = password.chars().count();
+    if len < 12 {
+        return Err("Password must be at least 12 characters");
     }
-    if len > 12 {
-        return Err("Password must be no more than 12 characters");
-    }
-    if !password.chars().any(|c| c.is_uppercase()) {
-        return Err("Password must contain at least one uppercase letter");
-    }
-    if !password.chars().any(|c| c.is_ascii_digit()) {
-        return Err("Password must contain at least one number");
-    }
-    const ALLOWED_SYMBOLS: &[char] = &['!', '@', '#', '$', '%', '&'];
-    if !password.chars().any(|c| ALLOWED_SYMBOLS.contains(&c)) {
-        return Err("Password must contain at least one symbol: ! @ # $ % &");
+    if len > 128 {
+        return Err("Password must be no more than 128 characters");
     }
     Ok(())
+}
+
+/// Canonical representation used for storage and identity lookup.
+pub fn normalize_email(email: &str) -> String {
+    email.trim().to_lowercase()
 }
 
 /// Validate a username against site-wide requirements.
@@ -183,6 +178,14 @@ impl User {
         };
         Argon2::default().verify_password(password.as_bytes(), &hash).is_ok()
     }
+
+    /// Opaque marker copied into a session at login. A password change alters
+    /// this value, invalidating every older session without storing the password
+    /// hash itself in session data or scanning the session table.
+    pub fn credential_version(&self) -> String {
+        use sha2::{Digest, Sha256};
+        format!("{:x}", Sha256::digest(self.password_hash.as_bytes()))
+    }
 }
 
 /// Subset of User safe for template context — no password hash.
@@ -250,7 +253,7 @@ pub async fn create(pool: &PgPool, data: &CreateUser) -> Result<User> {
         "#,
     )
     .bind(&data.username)
-    .bind(&data.email)
+    .bind(normalize_email(&data.email))
     .bind(&data.display_name)
     .bind(&password_hash)
     .bind(data.role.as_str())
@@ -383,9 +386,9 @@ pub async fn username_available(
 
 pub async fn get_by_email(pool: &PgPool, email: &str) -> Result<User> {
     sqlx::query_as::<_, User>(
-        "SELECT * FROM users WHERE email = $1 AND is_active = TRUE AND deleted_at IS NULL",
+        "SELECT * FROM users WHERE lower(email) = $1 AND is_active = TRUE AND deleted_at IS NULL",
     )
-    .bind(email)
+    .bind(normalize_email(email))
     .fetch_optional(pool)
     .await?
     .ok_or_else(|| AppError::NotFound(format!("user with email '{email}'")))
@@ -664,7 +667,7 @@ pub async fn update(pool: &PgPool, id: Uuid, data: &UpdateUser) -> Result<User> 
     let current = get_by_id(pool, id).await?;
 
     let new_username = data.username.clone().unwrap_or(current.username);
-    let new_email = data.email.clone().unwrap_or(current.email);
+    let new_email = data.email.as_deref().map(normalize_email).unwrap_or(current.email);
     let new_display_name = data.display_name.clone().unwrap_or(current.display_name);
     let new_password_hash = data.password_hash.clone().unwrap_or(current.password_hash);
     let new_role = data.role.as_ref().map(|r| r.as_str().to_string()).unwrap_or(current.role);
@@ -703,6 +706,19 @@ pub fn hash_password(password: &str) -> Result<String> {
         .hash_password(password.as_bytes(), &salt)
         .map(|h| h.to_string())
         .map_err(|e| AppError::Internal(format!("password hashing failed: {e}")))
+}
+
+/// Spend approximately the same Argon2 work for an unknown email as for a
+/// known account, reducing account-discovery signal from response timing.
+pub fn verify_dummy_password(password: &str) {
+    use once_cell::sync::Lazy;
+    static DUMMY_HASH: Lazy<String> = Lazy::new(|| {
+        hash_password("dummy login password only").expect("static dummy password must hash")
+    });
+    use argon2::{Argon2, PasswordHash, PasswordVerifier};
+    if let Ok(hash) = PasswordHash::new(&DUMMY_HASH) {
+        let _ = Argon2::default().verify_password(password.as_bytes(), &hash);
+    }
 }
 
 /// True when `site_id` is some super_admin's own default/home site — the
@@ -803,9 +819,9 @@ mod tests {
 
     #[test]
     fn validate_password_accepts_valid() {
-        assert!(validate_password("Secure1!").is_ok());
-        assert!(validate_password("Hello1!ab").is_ok());
-        assert!(validate_password("Abcdef1@").is_ok());
+        assert!(validate_password("correct horse battery staple").is_ok());
+        assert!(validate_password("a long password with spaces").is_ok());
+        assert!(validate_password("simple-is-fine").is_ok());
     }
 
     #[test]
@@ -815,28 +831,27 @@ mod tests {
 
     #[test]
     fn validate_password_rejects_too_long() {
-        assert!(validate_password("Abcdefgh1!xxx").is_err()); // 13 chars
+        assert!(validate_password(&"x".repeat(129)).is_err());
     }
 
     #[test]
-    fn validate_password_rejects_no_uppercase() {
-        assert!(validate_password("secure1!abc").is_err());
+    fn validate_password_accepts_no_uppercase() {
+        assert!(validate_password("lowercase passphrase").is_ok());
     }
 
     #[test]
-    fn validate_password_rejects_no_digit() {
-        assert!(validate_password("SecureAb!").is_err());
+    fn validate_password_accepts_no_digit() {
+        assert!(validate_password("No digits needed here").is_ok());
     }
 
     #[test]
-    fn validate_password_rejects_no_symbol() {
-        assert!(validate_password("Secure1abc").is_err());
+    fn validate_password_accepts_no_symbol() {
+        assert!(validate_password("LongPassword123").is_ok());
     }
 
     #[test]
-    fn validate_password_rejects_disallowed_symbol() {
-        // ^ is not in the allowed set !@#$%&
-        assert!(validate_password("Secure1^").is_err());
+    fn validate_password_accepts_unicode_and_symbols() {
+        assert!(validate_password("very long 🔐 passphrase").is_ok());
     }
 
     #[test]
