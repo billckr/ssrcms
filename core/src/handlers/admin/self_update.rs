@@ -17,24 +17,37 @@
 //! legitimate (a compromised publishing pipeline could publish a matching
 //! checksum for a malicious build). Documented as a known limitation
 //! rather than silently assumed away.
+//!
+//! Responds with JSON, not a redirect — the admin/src/pages/whats_new.rs
+//! frontend drives this via `fetch()` into a progress-bar modal, not a
+//! normal form submit, since a plain fetch would otherwise silently follow
+//! a redirect and look identical whether the update succeeded or failed.
 
 use anyhow::Context;
-use axum::{
-    extract::State,
-    response::{Html, IntoResponse, Redirect},
-    Form,
-};
+use axum::{extract::State, response::IntoResponse, Form, Json};
 use serde::Deserialize;
+use serde_json::json;
 use sha2::{Digest, Sha256};
 use std::path::PathBuf;
 use std::time::Duration;
-
-use admin::html_escape;
 
 use crate::app_state::AppState;
 use crate::middleware::admin_auth::AdminUser;
 
 const REPO: &str = "billckr/ssrcms";
+
+/// Architectures the release pipeline actually builds — see
+/// .github/workflows/release.yml. Checked before constructing a download
+/// URL so an unsupported host fails with a clear message instead of a bare
+/// 404 from GitHub.
+const SUPPORTED_ARCHES: &[&str] = &["x86_64", "aarch64"];
+
+/// Candidate absolute paths for `tar`, checked in order before falling back
+/// to a bare `PATH` lookup — same defensiveness as the existing Caddy-reload
+/// call (`sites.rs`) using an absolute path rather than trusting `PATH`
+/// under the hardened systemd unit, but as a list rather than one hardcoded
+/// path since `tar`'s location varies more by distro than Caddy's does.
+const TAR_CANDIDATES: &[&str] = &["/usr/bin/tar", "/bin/tar"];
 
 #[derive(Deserialize)]
 pub struct SelfUpdateForm {
@@ -47,16 +60,23 @@ pub async fn apply(
     Form(form): Form<SelfUpdateForm>,
 ) -> impl IntoResponse {
     if !admin.caps.is_global_admin || admin.caps.is_impersonating {
-        return Redirect::to("/admin/whats-new?error=forbidden").into_response();
+        return Json(json!({"error": "forbidden"})).into_response();
     }
     if !state.config.self_update_enabled {
-        return Redirect::to("/admin/whats-new?error=disabled").into_response();
+        return Json(json!({"error": "disabled"})).into_response();
     }
     if !admin.user.verify_password(&form.current_password) {
-        return Redirect::to("/admin/whats-new?error=wrong_password").into_response();
+        return Json(json!({"error": "wrong_password"})).into_response();
     }
     if crate::version::is_source_build(&state.current_version) {
-        return Redirect::to("/admin/whats-new?error=source_build").into_response();
+        return Json(json!({"error": "source_build"})).into_response();
+    }
+    if !SUPPORTED_ARCHES.contains(&std::env::consts::ARCH) {
+        tracing::error!(
+            "self-update: unsupported architecture {:?} — no matching release asset exists",
+            std::env::consts::ARCH
+        );
+        return Json(json!({"error": "unsupported_arch"})).into_response();
     }
 
     let tag = {
@@ -65,7 +85,7 @@ pub async fn apply(
             Some(release) if release.tag_name != state.current_version => {
                 release.tag_name.clone()
             }
-            _ => return Redirect::to("/admin/whats-new?error=up_to_date").into_response(),
+            _ => return Json(json!({"error": "up_to_date"})).into_response(),
         }
     };
 
@@ -79,7 +99,7 @@ pub async fn apply(
             .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-');
     if !valid_tag {
         tracing::error!("self-update: refusing to use malformed tag {:?}", tag);
-        return Redirect::to("/admin/whats-new?error=apply_failed").into_response();
+        return Json(json!({"error": "apply_failed"})).into_response();
     }
 
     match run_update(&tag).await {
@@ -103,22 +123,21 @@ pub async fn apply(
                 std::process::exit(0);
             });
 
-            Html(format!(
-                r#"<!doctype html><html><head><meta http-equiv="refresh" content="8;url=/admin/whats-new">
-<title>Updating&hellip;</title></head>
-<body style="font-family:system-ui;padding:3rem;text-align:center;color:#1e293b">
-<h1>Applying {tag}&hellip;</h1>
-<p>The server is restarting now. This page will reload automatically in a few seconds.</p>
-</body></html>"#,
-                tag = html_escape(&tag)
-            ))
-            .into_response()
+            Json(json!({"ok": true, "tag": tag})).into_response()
         }
         Err(e) => {
             tracing::error!("self-update: failed to apply {}: {:?}", tag, e);
-            Redirect::to("/admin/whats-new?error=apply_failed").into_response()
+            Json(json!({"error": "apply_failed"})).into_response()
         }
     }
+}
+
+fn find_tar() -> PathBuf {
+    TAR_CANDIDATES
+        .iter()
+        .map(PathBuf::from)
+        .find(|p| p.is_file())
+        .unwrap_or_else(|| PathBuf::from("tar")) // fall back to a PATH lookup
 }
 
 async fn run_update(tag: &str) -> anyhow::Result<()> {
@@ -175,11 +194,12 @@ async fn run_update(tag: &str) -> anyhow::Result<()> {
     std::fs::write(&tarball_path, &tarball_bytes)
         .with_context(|| format!("writing downloaded tarball to {:?}", tarball_path))?;
 
-    let tar_status = std::process::Command::new("tar")
+    let tar_bin = find_tar();
+    let tar_status = std::process::Command::new(&tar_bin)
         .args(["xzf", tarball_name.as_str()])
         .current_dir(&staging)
         .status()
-        .context("spawning tar to extract the release")?;
+        .with_context(|| format!("spawning {:?} to extract the release", tar_bin))?;
     if !tar_status.success() {
         anyhow::bail!("tar extraction failed with status {tar_status}");
     }
