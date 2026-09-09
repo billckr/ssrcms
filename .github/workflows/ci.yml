@@ -71,10 +71,25 @@ jobs:
           DATABASE_URL: postgres://synaptic:password@localhost:5432/synaptic_test
         run: cargo test -p synaptic-core --test model_crud -- --include-ignored --nocapture
 
+      # --test-threads=1: every test in this file shares one mutable
+      # "localhost" site (see common::ensure_test_site), and several tests
+      # (enable_locale_for_test, post creation/translation) mutate rows tied
+      # to that one site with no per-test isolation. That's an accepted,
+      # documented race for the read-modify-write in enable_locale_for_test,
+      # but it also intermittently made
+      # test_locale_prefixed_url_shows_translated_content fail in CI
+      # ("expected an hreflang alternate link for '<locale>'") even after
+      # that specific race was fixed — not reproducible locally after dozens
+      # of runs, which points at CI-specific timing (fresh empty DB racing
+      # multiple concurrent site-creation attempts, Docker-networked
+      # Postgres) rather than one single fixable line. Serializing this
+      # binary's tests removes the whole class of shared-state races at once
+      # instead of chasing each new flake individually; this file's suite is
+      # small enough that this costs a few seconds, not minutes.
       - name: Integration tests — routes
         env:
           DATABASE_URL: postgres://synaptic:password@localhost:5432/synaptic_test
-        run: cargo test -p synaptic-core --test routes -- --include-ignored --nocapture
+        run: cargo test -p synaptic-core --test routes -- --include-ignored --nocapture --test-threads=1
 
       - name: Integration tests — theme_e2e
         env:
