@@ -465,13 +465,27 @@ async fn test_account_dashboard_shows_site_logo() {
     );
 }
 
+/// Serializes `enable_locale_for_test`'s read-modify-write across every test
+/// in this binary. `routes.rs` tests run concurrently and all share the one
+/// "localhost" site, so two tests reading the enabled-locales list at the
+/// same time and each writing back their own addition would silently drop
+/// whichever one wrote first — this is exactly what caused
+/// `test_locale_prefixed_url_shows_translated_content` to intermittently
+/// fail in CI ("expected an hreflang alternate link for '<locale>'") once
+/// enough tests ran concurrently to make the race likely. A process-wide
+/// lock (all `#[tokio::test]`s share one process) turns the read-modify-write
+/// back into an atomic-enough critical section without touching the
+/// production `site_locale` model, which has no reason to know about this
+/// test-only sharing problem.
+static LOCALE_ENABLE_LOCK: once_cell::sync::Lazy<tokio::sync::Mutex<()>> =
+    once_cell::sync::Lazy::new(|| tokio::sync::Mutex::new(()));
+
 /// Adds `locale` to the "localhost" test site's enabled-locales list without
 /// clobbering any other locale a concurrently-running test may have already
-/// enabled — `routes.rs` tests run concurrently and all share this one site,
-/// so a blind overwrite would race. Best-effort read-then-write, same class
-/// of accepted non-atomicity as `common::ensure_test_site`'s seed check.
+/// enabled — see `LOCALE_ENABLE_LOCK`.
 async fn enable_locale_for_test(pool: &sqlx::PgPool, site_id: uuid::Uuid) -> String {
     use synaptic_core::models::site_locale;
+    let _guard = LOCALE_ENABLE_LOCK.lock().await;
     let locale = format!("t{}", &uuid::Uuid::new_v4().simple().to_string()[..6]);
     let mut codes = site_locale::enabled_locales_for_site(pool, site_id).await;
     codes.push(locale.clone());
