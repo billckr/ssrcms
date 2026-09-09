@@ -120,23 +120,44 @@ async fn ensure_test_site(database_url: &str) {
 
     if synaptic_core::models::site::get_by_hostname(&pool, "localhost")
         .await
-        .is_ok()
+        .is_err()
     {
-        return;
+        // routes.rs's tests run concurrently (no --test-threads=1), so
+        // several can reach this point before any of them has inserted — the
+        // check-then-create above isn't atomic. Rather than serialize the
+        // whole suite over it, treat "someone else's concurrent call just
+        // created it" as success: only a real failure (not a duplicate-
+        // hostname conflict) should panic.
+        match synaptic_core::models::site::create_with_defaults(&pool, "localhost", None, None)
+            .await
+        {
+            Ok(_) => {}
+            Err(synaptic_core::errors::AppError::Database(sqlx::Error::Database(db_err)))
+                if db_err.is_unique_violation() => {}
+            Err(e) => panic!("failed to seed test site: {e}"),
+        }
     }
 
-    // routes.rs's tests run concurrently (no --test-threads=1), so several
-    // can reach this point before any of them has inserted — the
-    // check-then-create above isn't atomic. Rather than serialize the whole
-    // suite over it, treat "someone else's concurrent call just created it"
-    // as success: only a real failure (not a duplicate-hostname conflict)
-    // should panic.
-    match synaptic_core::models::site::create_with_defaults(&pool, "localhost", None, None).await
-    {
-        Ok(_) => {}
-        Err(synaptic_core::errors::AppError::Database(sqlx::Error::Database(db_err)))
-            if db_err.is_unique_violation() => {}
-        Err(e) => panic!("failed to seed test site: {e}"),
+    // `create_with_defaults` seeds `active_theme = "default"`, but the
+    // bundled "default" theme has no hreflang/canonical/language-switcher
+    // markup — only "flow-light" does (see documentation/translations.md's
+    // Theme Integration section). Several tests (locale-prefixed hreflang
+    // links, site logo markup) assert on flow-light-specific output, and
+    // that only ever passed by accident on a developer's long-lived local
+    // "localhost" site that happened to already be switched to flow-light —
+    // a database that's freshly migrated every run (as CI's is) keeps
+    // "default" and those assertions fail deterministically, not flakily.
+    // Re-fetch rather than trust either branch above (the unique-violation
+    // path above doesn't have the row), idempotent and cheap either way, so
+    // just always pin it rather than only on first creation.
+    if let Ok(site) = synaptic_core::models::site::get_by_hostname(&pool, "localhost").await {
+        let _ = synaptic_core::app_state::set_site_setting(
+            &pool,
+            site.id,
+            "active_theme",
+            "flow-light",
+        )
+        .await;
     }
 }
 
