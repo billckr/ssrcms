@@ -127,7 +127,9 @@ configuration is serialized and encrypted into `config_encrypted` using AES-256-
 installation's `SECRET_KEY`. The same cryptographic helpers are used for email-provider secrets.
 
 Changing `SECRET_KEY` without migrating encrypted values makes existing provider configurations
-undecryptable. Credentials are masked in summaries and never prefilled back into edit forms.
+undecryptable. Credentials are never prefilled back into edit forms. Admin summaries and
+placeholders reveal at most the final four characters of a non-empty credential, regardless of its
+delimiter format.
 
 ### `post_translations`
 

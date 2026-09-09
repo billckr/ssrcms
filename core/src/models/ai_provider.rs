@@ -309,6 +309,8 @@ mod tests {
             api_key_placeholder,
             "sk-ant-api03-abcdefghijklmnopqrstuvwxyz"
         );
+        assert_eq!(api_key_placeholder, "...wxyz");
+        assert!(!api_key_placeholder.contains("api03"));
 
         let model_placeholder = placeholders
             .iter()
