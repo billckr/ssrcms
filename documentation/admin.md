@@ -1,12 +1,12 @@
 ---
 title: Admin Panel
 group: system
-updated_by: codex
+updated_by: claude
 last_updated: 2026-09-09
 ---
 # Admin Panel
 
-> Last updated: 2026-09-09 | Updated by: codex
+> Last updated: 2026-09-09 | Updated by: claude
 
 ## Overview
 
@@ -233,10 +233,12 @@ without a database seed or hard-coded registry.
 
 ### Settings & Profile (`settings.rs`, `profile.rs`)
 
-`settings.rs` edits `app_settings` (installation-wide `app_name`/`timezone`) — gated by
-`can_manage_settings`, which per `admin_auth.rs` is only true for a super_admin viewing their own
-default/home site. `profile.rs` lets any admin user edit their own email/display
-name/bio and change their own password (current-password re-verification + policy check).
+`settings.rs` edits `app_settings` (installation-wide `app_name`/`timezone`/`max_upload_mb`/
+`default_theme`/`ai_translation_enabled` — the last one a kill switch for the whole AI Post
+Translation feature, see that doc's Administrator Workflow §0) — gated by `can_manage_settings`,
+which per `admin_auth.rs` is only true for a super_admin viewing their own default/home site.
+`profile.rs` lets any admin user edit their own email/display name/bio and change their own
+password (current-password re-verification + policy check).
 
 `POST /admin/profile/sign-out-other-devices` (added 2026-09-08) invalidates every other active
 session for the signed-in admin/staff account — same "Sign out other devices" mechanism as the

@@ -27,6 +27,29 @@ HTML or Markdown string. Builder/page-composition content is not translated.
 
 ## Administrator Workflow
 
+### 0. Installation-wide switch (super admin)
+
+A super admin can turn AI Translation off for every site at once from **System Settings →
+General → Features** (`/admin/settings`), independent of any per-site provider configuration.
+It's on by default — existing installs are unaffected until someone flips it.
+
+Turning it off is non-destructive: providers, their encrypted credentials, verification status,
+and existing translations are left untouched in the database and reappear exactly as they were
+when the switch is turned back on. It only gates *access*:
+
+- The AI Translation tab and panel are omitted from every site's Settings page (not just hidden
+  with CSS — the markup isn't rendered at all).
+- The post editor's Translations sidebar section is omitted the same way.
+- Every AI-provider and translate route (create/update/delete a provider, discover models, test,
+  translate a post) checks the switch itself, first thing, and returns 403 if it's off — this is
+  enforced independently of the UI, so a site manager who knows the URL shape can't bypass it by
+  posting to the routes directly while the tab is hidden. See `ai_translation_enabled` in
+  `core/src/handlers/admin/ai_providers.rs` and the equivalent check in
+  `core/src/handlers/admin/posts.rs::translate_post_action`.
+
+The setting itself lives in the installation-wide `app_settings` table (`AppSettings::ai_translation_enabled`
+in `core/src/app_state.rs`) and is hot-reloadable — no restart needed after saving.
+
 ### 1. Configure a provider
 
 Open **Sites**, choose the site, then open **Settings → AI Translation**. Add either:
@@ -226,6 +249,10 @@ search do not necessarily add these values to their Tera context.
 
 ## Permissions and Security
 
+- The installation-wide switch (see Administrator Workflow §0) can only be changed by a super
+  admin viewing their own default/home site (`can_manage_settings`), same restriction as the rest
+  of System Settings. Every AI-provider and translate route rejects requests while it's off,
+  regardless of the caller's own role — a site manager cannot re-enable it for just their site.
 - Provider and enabled-language management uses the site's normal site-manager authorization.
 - Translating a post requires content-management permission; translating a page requires
   page-management permission.
@@ -375,6 +402,8 @@ version.
 | `core/src/handlers/post.rs` | Translation overlay during post rendering |
 | `core/src/handlers/home.rs` | Canonical and `hreflang` context construction |
 | `migrations/0003_ai_translation.sql` | Provider and translation tables |
+| `core/src/app_state.rs` | `AppSettings::ai_translation_enabled` installation-wide switch |
+| `core/src/handlers/admin/settings.rs` | Features tab save handler for the installation-wide switch |
 
 ## Testing and Verification
 
