@@ -1,12 +1,12 @@
 ---
 title: AI Post Translation
 group: feature
-updated_by: codex
+updated_by: claude
 last_updated: 2026-09-09
 ---
 # AI Post Translation
 
-> Last updated: 2026-09-09 | Updated by: codex
+> Last updated: 2026-09-09 | Updated by: claude
 
 ## Overview
 
@@ -46,13 +46,17 @@ stored only when the form is submitted.
 Provider credentials are write-only in the UI. When editing a provider, blank credential fields
 retain the stored encrypted values, so changing only the model does not require re-entering the
 API key. The refresh button reloads the model list using the saved credential unless a replacement
-key has been entered. Saving an edit resets verification status.
+key has been entered.
 
-Use the provider's globe/Test button after saving it. A successful test must complete a small model
-request and return the same structured JSON shape required by translation. The provider is then
-marked verified and becomes available in post editors. Verification establishes connectivity,
-authentication, model-name validity, and basic structured-output compatibility; it does not
-guarantee that a much larger translation request will fit the model's limits.
+Saving a provider (create or edit) automatically runs the same check as the Test button: SynapCMS
+sends a small model request and requires the same structured JSON shape required by translation. On
+success the provider is marked verified immediately and becomes available in post editors with no
+extra click. On failure the provider is still saved (so entered fields aren't lost), but stays
+unverified, and the flash message reports the provider/parser error — fix the issue and save again,
+or use the provider's Test button directly to retry the same check without resubmitting the whole
+form. Verification establishes connectivity, authentication, model-name validity, and basic
+structured-output compatibility; it does not guarantee that a much larger translation request will
+fit the model's limits.
 
 ### 2. Enable languages
 
@@ -70,7 +74,9 @@ and a verified provider, then press the globe button.
 
 The request uses the last saved version of the post. If the editor contains unsaved changes,
 SynapCMS asks the administrator to save them first. While the model request is running, the globe
-button is disabled. The request is synchronous and can legitimately take several seconds.
+button is disabled and spins, and a small status line beside it reads "Translating…" so a slow
+provider response doesn't look like nothing is happening. The request is synchronous and can
+legitimately take several seconds.
 
 On success, the editor reloads with a message such as `Translated into Spanish.` and lists the
 translation with a public View link. Translating the same post into the same locale again replaces
@@ -258,7 +264,9 @@ encrypted value is installation-specific and still sensitive.
 ### Provider verifies but is absent from the editor
 
 Confirm that the provider belongs to the same site as the post, still shows **Verified**, and at
-least one locale is enabled. Editing provider settings resets verification, so run Test again.
+least one locale is enabled. Saving an edit to the provider re-runs verification automatically; if
+that save's flash message reported a verification failure, the provider stayed unverified — fix the
+reported issue and save again, or use the Test button to retry.
 
 ### Clicking Translate saves the post instead
 
@@ -339,9 +347,9 @@ version.
 
 | Method | Path | Purpose |
 |---|---|---|
-| POST | `/admin/sites/{id}/ai-providers` | Create a provider |
+| POST | `/admin/sites/{id}/ai-providers` | Create a provider and verify it |
 | POST | `/admin/sites/{id}/ai-providers/models` | Discover models with unsaved Add Provider credentials |
-| POST | `/admin/sites/{id}/ai-providers/{provider_id}` | Update provider configuration and reset verification |
+| POST | `/admin/sites/{id}/ai-providers/{provider_id}` | Update provider configuration and re-verify |
 | POST | `/admin/sites/{id}/ai-providers/{provider_id}/models` | Discover models while retaining blank saved credentials |
 | POST | `/admin/sites/{id}/ai-providers/{provider_id}/test` | Test and verify a provider |
 | POST | `/admin/sites/{id}/ai-providers/{provider_id}/delete` | Delete a provider |

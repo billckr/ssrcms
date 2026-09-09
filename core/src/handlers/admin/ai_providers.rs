@@ -130,6 +130,20 @@ fn config_from_form(
     }
 }
 
+/// True when the installation-wide AI Translation switch
+/// (`AppSettings::ai_translation_enabled`, set by a super admin at
+/// /admin/settings) is on. Every handler in this module checks this itself,
+/// first thing, before any site lookup — hiding the AI Translation tab in
+/// the site settings UI (`admin::pages::sites::render_settings`) is not
+/// enforcement on its own, since a signed-in site admin (or anyone who knows
+/// the URL shape) could otherwise still reach these routes directly while
+/// the tab is hidden.
+fn ai_translation_enabled(state: &AppState) -> bool {
+    state.app_settings.read().unwrap().ai_translation_enabled
+}
+
+const AI_TRANSLATION_DISABLED_MSG: &str = "AI Translation is disabled for this installation.";
+
 fn flash_redirect(site_id: Uuid, msg: &str) -> Redirect {
     let msg = crate::handlers::admin::themes::url_encode_param(msg);
     Redirect::to(&format!(
@@ -145,6 +159,9 @@ pub async fn create(
     Path(id): Path<Uuid>,
     Form(form): Form<AiProviderForm>,
 ) -> impl IntoResponse {
+    if !ai_translation_enabled(&state) {
+        return (StatusCode::FORBIDDEN, AI_TRANSLATION_DISABLED_MSG).into_response();
+    }
     let site = match crate::models::site::get_by_id(&state.db, id).await {
         Ok(s) => s,
         Err(_) => return Redirect::to("/admin/sites").into_response(),
@@ -175,7 +192,7 @@ pub async fn create(
         Err(msg) => return flash_redirect(id, msg).into_response(),
     };
 
-    if let Err(e) = ai_provider::create(
+    let row = match ai_provider::create(
         &state.db,
         id,
         form.label.trim(),
@@ -184,15 +201,37 @@ pub async fn create(
     )
     .await
     {
-        tracing::error!("failed to create AI provider for site {}: {:?}", id, e);
-        return flash_redirect(id, "Failed to save provider.").into_response();
-    }
+        Ok(row) => row,
+        Err(e) => {
+            tracing::error!("failed to create AI provider for site {}: {:?}", id, e);
+            return flash_redirect(id, "Failed to save provider.").into_response();
+        }
+    };
 
-    Redirect::to(&format!(
-        "/admin/sites/{}/settings?flash=Provider added. Test it to verify it works.&tab=ai-translation",
-        id
-    ))
-    .into_response()
+    match crate::translate::test_provider(&config).await {
+        Ok(()) => {
+            if let Err(e) = ai_provider::mark_verified(&state.db, row.id).await {
+                tracing::error!("failed to mark AI provider {} verified: {:?}", row.id, e);
+            }
+            Redirect::to(&format!(
+                "/admin/sites/{}/settings?flash=Provider added and verified.&tab=ai-translation",
+                id
+            ))
+            .into_response()
+        }
+        Err(e) => {
+            tracing::warn!(
+                "verification failed for new AI provider {}: {:?}",
+                row.id,
+                e
+            );
+            flash_redirect(
+                id,
+                &format!("Provider added, but verification failed: {e}. Use the Test icon to retry once fixed."),
+            )
+            .into_response()
+        }
+    }
 }
 
 /// POST /admin/sites/{id}/ai-providers/{provider_id} — update an existing
@@ -205,6 +244,9 @@ pub async fn update(
     Path((id, provider_id)): Path<(Uuid, Uuid)>,
     Form(form): Form<AiProviderForm>,
 ) -> impl IntoResponse {
+    if !ai_translation_enabled(&state) {
+        return (StatusCode::FORBIDDEN, AI_TRANSLATION_DISABLED_MSG).into_response();
+    }
     let site = match crate::models::site::get_by_id(&state.db, id).await {
         Ok(s) => s,
         Err(_) => return Redirect::to("/admin/sites").into_response(),
@@ -245,7 +287,34 @@ pub async fn update(
     };
 
     match ai_provider::update(&state.db, provider_id, id, form.label.trim(), &config, &state.config.secret_key).await {
-        Ok(Some(_)) => Redirect::to(&format!("/admin/sites/{}/settings?flash=Provider updated. Test it to re-verify it.&tab=ai-translation", id)).into_response(),
+        Ok(Some(_)) => match crate::translate::test_provider(&config).await {
+            Ok(()) => {
+                if let Err(e) = ai_provider::mark_verified(&state.db, provider_id).await {
+                    tracing::error!(
+                        "failed to mark AI provider {} verified: {:?}",
+                        provider_id,
+                        e
+                    );
+                }
+                Redirect::to(&format!(
+                    "/admin/sites/{}/settings?flash=Provider updated and verified.&tab=ai-translation",
+                    id
+                ))
+                .into_response()
+            }
+            Err(e) => {
+                tracing::warn!(
+                    "verification failed for updated AI provider {}: {:?}",
+                    provider_id,
+                    e
+                );
+                flash_redirect(
+                    id,
+                    &format!("Provider updated, but verification failed: {e}. Use the Test icon to retry once fixed."),
+                )
+                .into_response()
+            }
+        },
         Ok(None) => flash_redirect(id, "Provider not found.").into_response(),
         Err(e) => {
             tracing::error!("failed to update AI provider {}: {:?}", provider_id, e);
@@ -280,6 +349,9 @@ pub async fn discover_new_models(
     Path(id): Path<Uuid>,
     Form(form): Form<AiProviderForm>,
 ) -> impl IntoResponse {
+    if !ai_translation_enabled(&state) {
+        return models_error(StatusCode::FORBIDDEN, AI_TRANSLATION_DISABLED_MSG);
+    }
     let site = match crate::models::site::get_by_id(&state.db, id).await {
         Ok(site) => site,
         Err(_) => return models_error(StatusCode::NOT_FOUND, "Site not found."),
@@ -301,6 +373,9 @@ pub async fn discover_saved_models(
     Path((id, provider_id)): Path<(Uuid, Uuid)>,
     Form(form): Form<AiProviderForm>,
 ) -> impl IntoResponse {
+    if !ai_translation_enabled(&state) {
+        return models_error(StatusCode::FORBIDDEN, AI_TRANSLATION_DISABLED_MSG);
+    }
     let site = match crate::models::site::get_by_id(&state.db, id).await {
         Ok(site) => site,
         Err(_) => return models_error(StatusCode::NOT_FOUND, "Site not found."),
@@ -330,6 +405,9 @@ pub async fn delete(
     admin: AdminUser,
     Path((id, provider_id)): Path<(Uuid, Uuid)>,
 ) -> impl IntoResponse {
+    if !ai_translation_enabled(&state) {
+        return (StatusCode::FORBIDDEN, AI_TRANSLATION_DISABLED_MSG).into_response();
+    }
     let site = match crate::models::site::get_by_id(&state.db, id).await {
         Ok(s) => s,
         Err(_) => return Redirect::to("/admin/sites").into_response(),
@@ -357,6 +435,9 @@ pub async fn test(
     admin: AdminUser,
     Path((id, provider_id)): Path<(Uuid, Uuid)>,
 ) -> impl IntoResponse {
+    if !ai_translation_enabled(&state) {
+        return (StatusCode::FORBIDDEN, AI_TRANSLATION_DISABLED_MSG).into_response();
+    }
     let site = match crate::models::site::get_by_id(&state.db, id).await {
         Ok(s) => s,
         Err(_) => return Redirect::to("/admin/sites").into_response(),

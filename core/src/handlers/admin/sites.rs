@@ -809,6 +809,7 @@ pub async fn site_settings(
         .map(|(code, name)| (code.to_string(), name.to_string()))
         .collect();
     let enabled_locales = crate::models::site_locale::enabled_locales_for_site(&state.db, id).await;
+    let ai_translation_enabled = state.app_settings.read().unwrap().ai_translation_enabled;
     let data = SiteSettingsData {
         id: site.id.to_string(),
         hostname: site.hostname.clone(),
@@ -827,6 +828,7 @@ pub async fn site_settings(
         ai_providers,
         available_locales,
         enabled_locales,
+        ai_translation_enabled,
     };
     Html(admin::pages::sites::render_settings(&data, flash, &ctx)).into_response()
 }

@@ -8,6 +8,7 @@ pub fn render(
     timezone: &str,
     max_upload_mb: u64,
     default_theme: &str,
+    ai_translation_enabled: bool,
     sites: &[(Uuid, String)],
     default_site_hostname: Option<&str>,
     ctx: &crate::PageContext,
@@ -183,6 +184,12 @@ pub fn render(
     })
     .collect::<Vec<_>>()
     .join("\n        ");
+
+    let ai_translation_checked = if ai_translation_enabled {
+        " checked"
+    } else {
+        ""
+    };
 
     let content = format!(
         r#"
@@ -361,6 +368,34 @@ pub fn render(
         </div>
         <div class="icon-pill" style="margin-top:1rem">
           <button type="submit" id="appearance-save-btn" class="icon-btn" title="Save Appearance" aria-label="Save Appearance" disabled>
+            <img src="/admin/static/icons/save.svg" alt="">
+          </button>
+        </div>
+      </div>
+    </form>
+    </div>
+  </div>
+
+  <div class="card-boxed">
+    <h2 class="card-boxed-header">Features</h2>
+    <div class="card-boxed-body">
+    <form method="post" action="/admin/settings" class="edit-form features-settings-form">
+      <input type="hidden" name="tab" value="features">
+
+      <div class="card-boxed-section">
+        <div class="form-group">
+          <label style="display:inline;font-weight:400">
+            <input type="checkbox" id="sg-ai-translation-enabled" name="ai_translation_enabled" style="display:inline;width:auto;height:auto"{ai_translation_checked}>
+            Enable AI Post Translation
+          </label>
+          <small>
+            Installation-wide switch. When off, the AI Translation tab is hidden on every site's
+            settings page and all provider/translate requests are rejected server-side, even if
+            requested directly — this cannot be bypassed by a site admin or user while off.
+          </small>
+        </div>
+        <div class="icon-pill" style="margin-top:1rem">
+          <button type="submit" id="features-save-btn" class="icon-btn" title="Save Features" aria-label="Save Features" disabled>
             <img src="/admin/static/icons/save.svg" alt="">
           </button>
         </div>
@@ -764,6 +799,7 @@ dtEnableOnChange('.general-settings-form', 'general-save-btn');
 dtEnableOnChange('.localisation-settings-form', 'localisation-save-btn');
 dtEnableOnChange('.appearance-settings-form', 'appearance-save-btn');
 dtEnableOnChange('.uploads-settings-form', 'uploads-save-btn');
+dtEnableOnChange('.features-settings-form', 'features-save-btn');
 
 // Logo upload: dtEnableOnChange's FormData-snapshot diff can't tell a
 // selected file apart from an empty one (a File serializes to the same
@@ -794,6 +830,7 @@ window.resetLogoConfirm = function() {{
         site_options = site_options,
         nuke_all_card = nuke_all_card,
         reindex_search_card = reindex_search_card,
+        ai_translation_checked = ai_translation_checked,
     );
 
     crate::admin_page("System Settings", "/admin/settings", flash, &content, ctx)

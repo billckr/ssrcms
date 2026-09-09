@@ -680,3 +680,241 @@ async fn test_locale_prefix_not_enabled_404s_normally() {
         "a non-enabled locale-shaped prefix over a nonexistent path should 404 exactly as any other unmatched path would"
     );
 }
+
+#[tokio::test]
+#[ignore = "requires a live PostgreSQL instance — see module docs"]
+async fn test_ai_provider_model_discovery_retains_saved_key_when_edit_form_leaves_it_blank() {
+    use synaptic_core::models::ai_provider::{self, AiProviderConfig};
+    use synaptic_core::models::site;
+    use synaptic_core::models::user::{self, CreateUser, UserRole};
+
+    let database_url = std::env::var("DATABASE_URL")
+        .expect("DATABASE_URL must be set to run integration tests (see tests/routes.rs)");
+    let pool = synaptic_core::db::connect(&database_url)
+        .await
+        .expect("failed to connect for test setup");
+
+    let app = common::test_router().await; // ensures the "localhost" test site exists
+    let test_site = site::get_by_hostname(&pool, "localhost")
+        .await
+        .expect("test site must exist");
+
+    // `test_router()`'s AppConfig always uses this fixed secret_key (see
+    // common::test_config) — matching it here is what lets the route
+    // handler's own decrypt_config call (using the app's real secret_key)
+    // successfully decrypt this provider back out.
+    let secret_key = "test-secret-key-not-for-production-use-only";
+    let saved_config = AiProviderConfig::Anthropic {
+        api_key: "sk-ant-adhoc-saved-key".to_string(),
+        model_name: "claude-old-model".to_string(),
+    };
+    let provider = ai_provider::create(
+        &pool,
+        test_site.id,
+        "Adhoc Retain-Key Test",
+        &saved_config,
+        secret_key,
+    )
+    .await
+    .expect("failed to seed test AI provider");
+
+    let unique = uuid::Uuid::new_v4().simple().to_string();
+    let email = format!("retain-key-test-{unique}@example.com");
+    let password = "Verify12345Pass!";
+    let admin_user = user::create(
+        &pool,
+        &CreateUser {
+            username: format!("retainkey{}", &unique[..12]),
+            email: email.clone(),
+            display_name: "Retain Key Test".to_string(),
+            password: password.to_string(),
+            role: UserRole::SuperAdmin,
+        },
+    )
+    .await
+    .expect("failed to create test admin");
+
+    let login_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/admin/login")
+                .header("content-type", "application/x-www-form-urlencoded")
+                .header("host", "localhost")
+                .header("origin", "http://localhost")
+                .extension(common::connect_info())
+                .body(Body::from(format!("email={email}&password={password}")))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let cookie = extract_cookie(&login_response, "admin_session");
+
+    // The Edit form's request when a user leaves the API key field blank and
+    // just picks a different model from the (already-loaded) dropdown —
+    // exactly the "Connect and load models" click on an existing provider.
+    let body = "label=Adhoc+Retain-Key+Test&provider_type=anthropic&anthropic_api_key=&anthropic_model_choice=claude-different-model&anthropic_model_name=";
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!(
+                    "/admin/sites/{}/ai-providers/{}/models",
+                    test_site.id, provider.id
+                ))
+                .header("content-type", "application/x-www-form-urlencoded")
+                .header("host", "localhost")
+                .header("origin", "http://localhost")
+                .header("cookie", cookie)
+                .extension(common::connect_info())
+                .body(Body::from(body))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    let status = response.status();
+    let response_body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let response_body = String::from_utf8(response_body.to_vec()).unwrap();
+
+    let _ = ai_provider::delete(&pool, provider.id, test_site.id).await;
+    let _ = user::delete(&pool, admin_user.id).await;
+
+    // "sk-ant-adhoc-saved-key" isn't a real Anthropic key, so the actual
+    // upstream call is expected to fail — that's fine and not what this test
+    // checks. What it rules out is the specific failure mode of the saved
+    // key NOT being reused at all: config_from_form only ever returns "Enter
+    // an API key before loading models." when the blank form field has
+    // nothing saved to fall back to, which would mean editing a provider
+    // silently lost its stored key.
+    assert!(
+        !response_body.contains("Enter an API key before loading models"),
+        "blank API key field on an edit form must fall back to the saved encrypted key, not demand a fresh one — got {status}: {response_body}"
+    );
+}
+
+#[tokio::test]
+#[ignore = "requires a live PostgreSQL instance — see module docs"]
+async fn test_ai_provider_save_retains_saved_key_and_updates_model_when_edit_form_leaves_key_blank(
+) {
+    use synaptic_core::models::ai_provider::{self, AiProviderConfig};
+    use synaptic_core::models::site;
+    use synaptic_core::models::user::{self, CreateUser, UserRole};
+
+    let database_url = std::env::var("DATABASE_URL")
+        .expect("DATABASE_URL must be set to run integration tests (see tests/routes.rs)");
+    let pool = synaptic_core::db::connect(&database_url)
+        .await
+        .expect("failed to connect for test setup");
+
+    let app = common::test_router().await;
+    let test_site = site::get_by_hostname(&pool, "localhost")
+        .await
+        .expect("test site must exist");
+
+    let secret_key = "test-secret-key-not-for-production-use-only";
+    let saved_config = AiProviderConfig::Anthropic {
+        api_key: "sk-ant-adhoc-saved-key-2".to_string(),
+        model_name: "claude-old-model-2".to_string(),
+    };
+    let provider = ai_provider::create(
+        &pool,
+        test_site.id,
+        "Adhoc Save Retain-Key Test",
+        &saved_config,
+        secret_key,
+    )
+    .await
+    .expect("failed to seed test AI provider");
+
+    let unique = uuid::Uuid::new_v4().simple().to_string();
+    let email = format!("save-retain-key-test-{unique}@example.com");
+    let password = "Verify12345Pass!";
+    let admin_user = user::create(
+        &pool,
+        &CreateUser {
+            username: format!("saveretain{}", &unique[..10]),
+            email: email.clone(),
+            display_name: "Save Retain Key Test".to_string(),
+            password: password.to_string(),
+            role: UserRole::SuperAdmin,
+        },
+    )
+    .await
+    .expect("failed to create test admin");
+
+    let login_response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/admin/login")
+                .header("content-type", "application/x-www-form-urlencoded")
+                .header("host", "localhost")
+                .header("origin", "http://localhost")
+                .extension(common::connect_info())
+                .body(Body::from(format!("email={email}&password={password}")))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let cookie = extract_cookie(&login_response, "admin_session");
+
+    // The actual "Save Provider" submit — blank key, a newly-picked model
+    // (as if loaded via the dropdown and selected), same label.
+    let body = "label=Adhoc+Save+Retain-Key+Test&provider_type=anthropic&anthropic_api_key=&anthropic_model_choice=claude-new-model-2&anthropic_model_name=";
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!(
+                    "/admin/sites/{}/ai-providers/{}",
+                    test_site.id, provider.id
+                ))
+                .header("content-type", "application/x-www-form-urlencoded")
+                .header("host", "localhost")
+                .header("origin", "http://localhost")
+                .header("cookie", cookie)
+                .extension(common::connect_info())
+                .body(Body::from(body))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let status = response.status();
+
+    let row_after = ai_provider::get_by_id(&pool, provider.id)
+        .await
+        .expect("failed to refetch provider")
+        .expect("provider must still exist after update");
+    let decrypted_after = ai_provider::decrypt_config(secret_key, &row_after);
+
+    let _ = ai_provider::delete(&pool, provider.id, test_site.id).await;
+    let _ = user::delete(&pool, admin_user.id).await;
+
+    assert!(
+        status == StatusCode::FOUND || status == StatusCode::SEE_OTHER,
+        "expected the save to redirect back to settings, got {status}"
+    );
+    match decrypted_after {
+        Some(AiProviderConfig::Anthropic {
+            api_key,
+            model_name,
+        }) => {
+            assert_eq!(
+                api_key, "sk-ant-adhoc-saved-key-2",
+                "leaving the API key field blank on save must keep the originally saved key, not blank it out or drop the provider into an unusable state"
+            );
+            assert_eq!(
+                model_name, "claude-new-model-2",
+                "the newly-selected model from the dropdown must be the one actually saved"
+            );
+        }
+        other => panic!("expected a decryptable Anthropic config after save, got {other:?}"),
+    }
+}

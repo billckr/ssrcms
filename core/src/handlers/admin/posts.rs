@@ -420,6 +420,7 @@ async fn new_post_type(
         available_locales: vec![],
         ai_providers: vec![],
         translations: vec![],
+        ai_translation_enabled: state.app_settings.read().unwrap().ai_translation_enabled,
     };
     Html(admin::pages::posts::render_editor(&edit, None, &ctx))
 }
@@ -735,6 +736,7 @@ async fn edit_post_type(
         available_locales,
         ai_providers,
         translations,
+        ai_translation_enabled: state.app_settings.read().unwrap().ai_translation_enabled,
     };
 
     let flash = match success {
@@ -903,6 +905,7 @@ pub async fn save_new(
             available_locales: vec![],
             ai_providers: vec![],
             translations: vec![],
+            ai_translation_enabled: state.app_settings.read().unwrap().ai_translation_enabled,
         };
         return Html(admin::pages::posts::render_editor(
             &edit,
@@ -1015,6 +1018,7 @@ pub async fn save_new(
                 available_locales: vec![],
                 ai_providers: vec![],
                 translations: vec![],
+                ai_translation_enabled: state.app_settings.read().unwrap().ai_translation_enabled,
             };
             let msg = friendly_save_error(&e);
             Html(admin::pages::posts::render_editor(&edit, Some(&msg), &ctx)).into_response()
@@ -1184,6 +1188,7 @@ pub async fn save_edit(
             available_locales: vec![],
             ai_providers: vec![],
             translations: vec![],
+            ai_translation_enabled: state.app_settings.read().unwrap().ai_translation_enabled,
         };
         return Html(admin::pages::posts::render_editor(
             &edit,
@@ -1314,6 +1319,7 @@ pub async fn save_edit(
                 available_locales: vec![],
                 ai_providers: vec![],
                 translations: vec![],
+                ai_translation_enabled: state.app_settings.read().unwrap().ai_translation_enabled,
             };
             let msg = friendly_save_error(&e);
             Html(admin::pages::posts::render_editor(&edit, Some(&msg), &ctx)).into_response()
@@ -1599,6 +1605,17 @@ pub async fn translate_post_action(
     Path(id): Path<Uuid>,
     Form(form): Form<TranslatePostForm>,
 ) -> impl IntoResponse {
+    // Installation-wide kill switch (see `handlers::admin::ai_providers::
+    // ai_translation_enabled` for the full rationale) — checked here too so
+    // a post already showing a verified provider in its dropdown can't still
+    // be translated after a super admin turns the feature off mid-session.
+    if !state.app_settings.read().unwrap().ai_translation_enabled {
+        return (
+            axum::http::StatusCode::FORBIDDEN,
+            "AI Translation is disabled for this installation.",
+        )
+            .into_response();
+    }
     let post = match crate::models::post::get_by_id(&state.db, id).await {
         Ok(p) => p,
         Err(_) => return Redirect::to("/admin/posts").into_response(),

@@ -340,6 +340,11 @@ pub struct SiteSettingsData {
     pub available_locales: Vec<(String, String)>,
     /// Which of `available_locales`' codes this site has enabled.
     pub enabled_locales: Vec<String>,
+    /// Installation-wide AI Translation kill switch (`AppSettings::ai_translation_enabled`,
+    /// set by a super admin at /admin/settings). When false, the AI Translation tab and
+    /// panel are omitted entirely rather than just hidden with CSS — the corresponding
+    /// admin routes reject requests server-side regardless of what this page renders.
+    pub ai_translation_enabled: bool,
 }
 
 /// One configured AI translation provider, as shown in the AI Translation
@@ -661,7 +666,7 @@ pub fn render_settings(
       <input type="text" id="{field_prefix}label" name="label" required value="{label}">
     </div>
     {fields_html}
-    <p class="field-hint">Blank credential fields retain their saved encrypted values. Changing the model or credentials requires another verification test.</p>
+    <p class="field-hint">Re-enter every field — credentials aren't shown back once saved, and saving here replaces them all.</p>
     <div class="icon-pill">
       <button type="submit" class="icon-btn" title="Save Provider" aria-label="Save Provider"><img src="/admin/static/icons/save.svg" alt=""></button>
       <button type="button" class="icon-btn" title="Cancel" aria-label="Cancel"
@@ -725,7 +730,7 @@ pub fn render_settings(
       <input type="text" id="{field_prefix}label" name="label" required value="{label}">
     </div>
     {fields_html}
-    <p class="field-hint">Re-enter every field — credentials aren't shown back once saved, and saving here replaces them all.</p>
+    <p class="field-hint">Blank credential fields retain their saved encrypted values. Saving automatically re-verifies the provider.</p>
     <div class="icon-pill">
       <button type="submit" class="icon-btn" title="Save Provider" aria-label="Save Provider"><img src="/admin/static/icons/save.svg" alt=""></button>
       <button type="button" class="icon-btn" title="Cancel" aria-label="Cancel"
@@ -773,6 +778,215 @@ pub fn render_settings(
         .collect::<Vec<_>>()
         .join("\n");
 
+    let ai_translation_tab_button_html = if data.ai_translation_enabled {
+        r#"<button type="button" class="page-tab" role="tab" aria-selected="false" aria-controls="tab-ai-translation" data-tab="ai-translation">AI Translation</button>"#.to_string()
+    } else {
+        String::new()
+    };
+
+    // Omitted entirely (not just CSS-hidden) when the installation-wide
+    // toggle is off, matching the AI-provider/translate routes' own
+    // server-side enforcement (see `require_ai_translation_enabled` in
+    // `handlers::admin::ai_providers`) — this page never ships the form
+    // markup for a feature the backend won't accept requests for.
+    let ai_translation_tab_panel_html = if data.ai_translation_enabled {
+        format!(
+            r#"<div id="tab-ai-translation" class="settings-tab-panel" role="tabpanel">
+<div class="two-col">
+<div>
+<div class="card-boxed">
+  <h2 class="card-boxed-header">AI Providers</h2>
+  <div class="card-boxed-body">
+  <p class="form-note" style="margin:0 0 1rem">
+    Configure an AI provider to translate posts from the post editor. Anthropic calls Claude's
+    API directly; OpenAI-Compatible covers OpenAI itself, or a local server such as Ollama or
+    LM Studio.
+  </p>
+  {ai_providers_list_html}
+  </div>
+</div>
+</div>
+<script>
+function toggleAiProviderEdit(id) {{
+  var target = document.getElementById(id);
+  var opening = target.style.display === 'none';
+  document.querySelectorAll('.ai-provider-edit-form').forEach(function(f) {{
+    f.style.display = 'none';
+  }});
+  if (opening) target.style.display = 'block';
+}}
+(function() {{
+  function syncCustom(control, preserveValue) {{
+    var select = control.querySelector('[data-model-select]');
+    var custom = control.querySelector('[data-custom-model]');
+    var isCustom = select.value === '__custom__';
+    custom.style.display = isCustom ? '' : 'none';
+    custom.required = isCustom;
+    if (!isCustom && !preserveValue) custom.value = '';
+    if (isCustom) custom.focus();
+  }}
+
+  document.addEventListener('change', function(e) {{
+    var select = e.target.closest('[data-model-select]');
+    if (!select) return;
+    syncCustom(select.closest('.ai-model-control'), false);
+  }});
+
+  document.addEventListener('click', function(e) {{
+    var button = e.target.closest('[data-load-models]');
+    if (!button) return;
+    var control = button.closest('.ai-model-control');
+    var select = control.querySelector('[data-model-select]');
+    var status = control.querySelector('[data-model-status]');
+    var form = control.closest('form');
+    button.disabled = true;
+    status.textContent = 'Connecting and loading models…';
+    fetch(form.action.replace(/\/$/, '') + '/models', {{
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: {{'Content-Type': 'application/x-www-form-urlencoded'}},
+        body: new URLSearchParams(new FormData(form)).toString()
+      }})
+        .then(function(response) {{
+          return response.json().catch(function() {{ return {{error: 'The provider returned an unreadable response.'}}; }})
+            .then(function(data) {{
+              if (!response.ok) throw new Error(data.error || 'Could not load models.');
+              return data;
+            }});
+        }})
+        .then(function(data) {{
+          var current = select.value;
+          select.replaceChildren();
+          var prompt = document.createElement('option');
+          prompt.value = '';
+          prompt.textContent = 'Select a model';
+          select.appendChild(prompt);
+          var returnedCurrent = data.models.some(function(model) {{ return model.id === current; }});
+          if (current && current !== '__custom__' && !returnedCurrent) {{
+            var oldOption = document.createElement('option');
+            oldOption.value = current;
+            oldOption.textContent = current + ' (current; not returned by provider)';
+            select.appendChild(oldOption);
+          }}
+          data.models.forEach(function(model) {{
+            var option = document.createElement('option');
+            option.value = model.id;
+            option.textContent = model.display_name;
+            if (model.display_name !== model.id) option.textContent += ' — ' + model.id;
+            if (model.cost_tier) option.textContent += ' [' + model.cost_tier + ']';
+            select.appendChild(option);
+          }});
+          var customOption = document.createElement('option');
+          customOption.value = '__custom__';
+          customOption.textContent = 'Enter a custom model ID…';
+          select.appendChild(customOption);
+          if (current && Array.from(select.options).some(function(o) {{ return o.value === current; }})) {{
+            select.value = current;
+          }}
+          syncCustom(control, true);
+          button.title = 'Refresh available models';
+          button.setAttribute('aria-label', 'Refresh available models');
+          status.textContent = data.models.length + ' models loaded. Cost labels are guidance; confirm current provider pricing.';
+        }})
+        .catch(function(error) {{
+          status.textContent = error.message + ' You can select “Enter a custom model ID” instead.';
+        }})
+        .finally(function() {{ button.disabled = false; }});
+  }});
+
+  document.addEventListener('DOMContentLoaded', function() {{
+    document.querySelectorAll('.ai-model-control').forEach(function(control) {{
+      syncCustom(control, true);
+    }});
+  }});
+}})();
+</script>
+
+<div>
+<div class="card-boxed">
+  <h2 class="card-boxed-header">Add Provider</h2>
+  <div class="card-boxed-body">
+  <form method="post" action="/admin/sites/{id}/ai-providers" class="edit-form" id="add-ai-provider-form">
+    <div class="card-boxed-section">
+      <div class="form-group">
+        <label for="ai-provider-label">Label</label>
+        <input type="text" id="ai-provider-label" name="label" required placeholder="e.g. Claude">
+      </div>
+      <div class="form-group">
+        <label for="ai-provider-type">Provider</label>
+        <select id="ai-provider-type" name="provider_type">
+          <option value="anthropic">Anthropic</option>
+          <option value="openai_compatible">OpenAI-Compatible</option>
+        </select>
+      </div>
+    </div>
+    <div class="card-boxed-section ai-provider-fields" data-provider="anthropic">
+      {anthropic_fields_html}
+      <div class="icon-pill">
+        <button type="submit" id="add-ai-provider-btn-anthropic" class="icon-btn" title="Add Provider" aria-label="Add Provider">
+          <img src="/admin/static/icons/save.svg" alt="">
+        </button>
+      </div>
+    </div>
+    <div class="card-boxed-section ai-provider-fields" data-provider="openai_compatible" style="display:none">
+      {openai_compatible_fields_html}
+      <div class="icon-pill">
+        <button type="submit" id="add-ai-provider-btn-openai_compatible" class="icon-btn" title="Add Provider" aria-label="Add Provider">
+          <img src="/admin/static/icons/save.svg" alt="">
+        </button>
+      </div>
+    </div>
+  </form>
+  </div>
+</div>
+<script>
+(function() {{
+  var typeSelect = document.getElementById('ai-provider-type');
+  var groups = document.querySelectorAll('.ai-provider-fields');
+  function sync() {{
+    groups.forEach(function(g) {{
+      g.style.display = (g.dataset.provider === typeSelect.value) ? '' : 'none';
+    }});
+  }}
+  typeSelect.addEventListener('change', sync);
+  sync();
+}})();
+</script>
+</div>
+</div>
+
+<div class="card-boxed" style="max-width:720px;margin-top:1rem">
+  <h2 class="card-boxed-header">Enabled Languages</h2>
+  <div class="card-boxed-body">
+  <form method="post" action="/admin/sites/{id}/enabled-locales" class="edit-form">
+    <div class="card-boxed-section">
+      <p class="form-note" style="margin:0 0 .75rem;color:var(--danger)">
+        Enabling a language reserves its code as a URL prefix (e.g. <code>/es/...</code>). Any
+        existing top-level post or page whose slug exactly matches an enabled language code
+        becomes unreachable at its own URL.
+      </p>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:.5rem">
+        {locale_checkboxes_html}
+      </div>
+    </div>
+    <div class="icon-pill">
+      <button type="submit" class="icon-btn" title="Save" aria-label="Save"><img src="/admin/static/icons/save.svg" alt=""></button>
+    </div>
+  </form>
+  </div>
+</div>
+</div>
+"#,
+            id = crate::html_escape(&data.id),
+            ai_providers_list_html = ai_providers_list_html,
+            anthropic_fields_html = ai_provider_fields_html("anthropic", "", None),
+            openai_compatible_fields_html = ai_provider_fields_html("openai_compatible", "", None),
+            locale_checkboxes_html = locale_checkboxes_html,
+        )
+    } else {
+        String::new()
+    };
+
     let content = format!(
         r#"<div>
 <style>
@@ -783,7 +997,7 @@ pub fn render_settings(
   <button type="button" class="page-tab active" role="tab" aria-selected="true" aria-controls="tab-general" data-tab="general">General</button>
   <button type="button" class="page-tab" role="tab" aria-selected="false" aria-controls="tab-maintenance" data-tab="maintenance">Maintenance</button>
   <button type="button" class="page-tab" role="tab" aria-selected="false" aria-controls="tab-email" data-tab="email">Email Settings</button>
-  <button type="button" class="page-tab" role="tab" aria-selected="false" aria-controls="tab-ai-translation" data-tab="ai-translation">AI Translation</button>
+  {ai_translation_tab_button_html}
   <button type="button" class="page-tab" role="tab" aria-selected="false" aria-controls="tab-import" data-tab="import">Import Content</button>
 </div>
 
@@ -1205,182 +1419,7 @@ function toggleProviderEdit(id) {{
 </div>
 </div>
 
-<div id="tab-ai-translation" class="settings-tab-panel" role="tabpanel">
-<div class="two-col">
-<div>
-<div class="card-boxed">
-  <h2 class="card-boxed-header">AI Providers</h2>
-  <div class="card-boxed-body">
-  <p class="form-note" style="margin:0 0 1rem">
-    Configure an AI provider to translate posts from the post editor. Anthropic calls Claude's
-    API directly; OpenAI-Compatible covers OpenAI itself, or a local server such as Ollama or
-    LM Studio.
-  </p>
-  {ai_providers_list_html}
-  </div>
-</div>
-</div>
-<script>
-function toggleAiProviderEdit(id) {{
-  var target = document.getElementById(id);
-  var opening = target.style.display === 'none';
-  document.querySelectorAll('.ai-provider-edit-form').forEach(function(f) {{
-    f.style.display = 'none';
-  }});
-  if (opening) target.style.display = 'block';
-}}
-(function() {{
-  function syncCustom(control, preserveValue) {{
-    var select = control.querySelector('[data-model-select]');
-    var custom = control.querySelector('[data-custom-model]');
-    var isCustom = select.value === '__custom__';
-    custom.style.display = isCustom ? '' : 'none';
-    custom.required = isCustom;
-    if (!isCustom && !preserveValue) custom.value = '';
-    if (isCustom) custom.focus();
-  }}
-
-  document.querySelectorAll('.ai-model-control').forEach(function(control) {{
-    var select = control.querySelector('[data-model-select]');
-    var button = control.querySelector('[data-load-models]');
-    var status = control.querySelector('[data-model-status]');
-    select.addEventListener('change', function() {{ syncCustom(control, false); }});
-
-    button.addEventListener('click', function() {{
-      var form = control.closest('form');
-      button.disabled = true;
-      status.textContent = 'Connecting and loading models…';
-      fetch(form.action.replace(/\/$/, '') + '/models', {{
-        method: 'POST',
-        credentials: 'same-origin',
-        headers: {{'Content-Type': 'application/x-www-form-urlencoded'}},
-        body: new URLSearchParams(new FormData(form)).toString()
-      }})
-        .then(function(response) {{
-          return response.json().catch(function() {{ return {{error: 'The provider returned an unreadable response.'}}; }})
-            .then(function(data) {{
-              if (!response.ok) throw new Error(data.error || 'Could not load models.');
-              return data;
-            }});
-        }})
-        .then(function(data) {{
-          var current = select.value;
-          select.replaceChildren();
-          var prompt = document.createElement('option');
-          prompt.value = '';
-          prompt.textContent = 'Select a model';
-          select.appendChild(prompt);
-          var returnedCurrent = data.models.some(function(model) {{ return model.id === current; }});
-          if (current && current !== '__custom__' && !returnedCurrent) {{
-            var oldOption = document.createElement('option');
-            oldOption.value = current;
-            oldOption.textContent = current + ' (current; not returned by provider)';
-            select.appendChild(oldOption);
-          }}
-          data.models.forEach(function(model) {{
-            var option = document.createElement('option');
-            option.value = model.id;
-            option.textContent = model.display_name;
-            if (model.display_name !== model.id) option.textContent += ' — ' + model.id;
-            if (model.cost_tier) option.textContent += ' [' + model.cost_tier + ']';
-            select.appendChild(option);
-          }});
-          var customOption = document.createElement('option');
-          customOption.value = '__custom__';
-          customOption.textContent = 'Enter a custom model ID…';
-          select.appendChild(customOption);
-          if (current && Array.from(select.options).some(function(o) {{ return o.value === current; }})) {{
-            select.value = current;
-          }}
-          syncCustom(control, true);
-          button.title = 'Refresh available models';
-          button.setAttribute('aria-label', 'Refresh available models');
-          status.textContent = data.models.length + ' models loaded. Cost labels are guidance; confirm current provider pricing.';
-        }})
-        .catch(function(error) {{
-          status.textContent = error.message + ' You can select “Enter a custom model ID” instead.';
-        }})
-        .finally(function() {{ button.disabled = false; }});
-    }});
-    syncCustom(control, true);
-  }});
-}})();
-</script>
-
-<div>
-<div class="card-boxed">
-  <h2 class="card-boxed-header">Add Provider</h2>
-  <div class="card-boxed-body">
-  <form method="post" action="/admin/sites/{id}/ai-providers" class="edit-form" id="add-ai-provider-form">
-    <div class="card-boxed-section">
-      <div class="form-group">
-        <label for="ai-provider-label">Label</label>
-        <input type="text" id="ai-provider-label" name="label" required placeholder="e.g. Claude">
-      </div>
-      <div class="form-group">
-        <label for="ai-provider-type">Provider</label>
-        <select id="ai-provider-type" name="provider_type">
-          <option value="anthropic">Anthropic</option>
-          <option value="openai_compatible">OpenAI-Compatible</option>
-        </select>
-      </div>
-    </div>
-    <div class="card-boxed-section ai-provider-fields" data-provider="anthropic">
-      {anthropic_fields_html}
-      <div class="icon-pill">
-        <button type="submit" id="add-ai-provider-btn-anthropic" class="icon-btn" title="Add Provider" aria-label="Add Provider">
-          <img src="/admin/static/icons/save.svg" alt="">
-        </button>
-      </div>
-    </div>
-    <div class="card-boxed-section ai-provider-fields" data-provider="openai_compatible" style="display:none">
-      {openai_compatible_fields_html}
-      <div class="icon-pill">
-        <button type="submit" id="add-ai-provider-btn-openai_compatible" class="icon-btn" title="Add Provider" aria-label="Add Provider">
-          <img src="/admin/static/icons/save.svg" alt="">
-        </button>
-      </div>
-    </div>
-  </form>
-  </div>
-</div>
-<script>
-(function() {{
-  var typeSelect = document.getElementById('ai-provider-type');
-  var groups = document.querySelectorAll('.ai-provider-fields');
-  function sync() {{
-    groups.forEach(function(g) {{
-      g.style.display = (g.dataset.provider === typeSelect.value) ? '' : 'none';
-    }});
-  }}
-  typeSelect.addEventListener('change', sync);
-  sync();
-}})();
-</script>
-</div>
-</div>
-
-<div class="card-boxed" style="max-width:720px;margin-top:1rem">
-  <h2 class="card-boxed-header">Enabled Languages</h2>
-  <div class="card-boxed-body">
-  <form method="post" action="/admin/sites/{id}/enabled-locales" class="edit-form">
-    <div class="card-boxed-section">
-      <p class="form-note" style="margin:0 0 .75rem;color:var(--danger)">
-        Enabling a language reserves its code as a URL prefix (e.g. <code>/es/...</code>). Any
-        existing top-level post or page whose slug exactly matches an enabled language code
-        becomes unreachable at its own URL.
-      </p>
-      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:.5rem">
-        {locale_checkboxes_html}
-      </div>
-    </div>
-    <div class="icon-pill">
-      <button type="submit" class="icon-btn" title="Save" aria-label="Save"><img src="/admin/static/icons/save.svg" alt=""></button>
-    </div>
-  </form>
-  </div>
-</div>
-</div>
+{ai_translation_tab_panel_html}
 
 <div id="tab-import" class="settings-tab-panel" role="tabpanel">
 <div style="max-width:720px">
@@ -1627,10 +1666,8 @@ function toggleAiProviderEdit(id) {{
         },
         maintenance_message = crate::html_escape(&data.maintenance_message),
         providers_list_html = providers_list_html,
-        ai_providers_list_html = ai_providers_list_html,
-        anthropic_fields_html = ai_provider_fields_html("anthropic", "", None),
-        openai_compatible_fields_html = ai_provider_fields_html("openai_compatible", "", None),
-        locale_checkboxes_html = locale_checkboxes_html,
+        ai_translation_tab_button_html = ai_translation_tab_button_html,
+        ai_translation_tab_panel_html = ai_translation_tab_panel_html,
     );
 
     crate::admin_page(

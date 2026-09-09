@@ -24,13 +24,14 @@ pub async fn settings(
     let flash = params.get("flash").map(|s| s.as_str());
     let cs = state.site_hostname(admin.site_id);
     let ctx = super::page_ctx_full(&state, &admin, &cs).await;
-    let (app_name, timezone, max_upload_mb, default_theme) = {
+    let (app_name, timezone, max_upload_mb, default_theme, ai_translation_enabled) = {
         let s = state.app_settings.read().unwrap();
         (
             s.app_name.clone(),
             s.timezone.clone(),
             s.max_upload_mb.max(0) as u64,
             s.default_theme.clone(),
+            s.ai_translation_enabled,
         )
     };
     let sites: Vec<(uuid::Uuid, String)> = crate::models::site::list(&state.db)
@@ -50,6 +51,7 @@ pub async fn settings(
         &timezone,
         max_upload_mb,
         &default_theme,
+        ai_translation_enabled,
         &sites,
         default_site_hostname.as_deref(),
         &ctx,
@@ -165,6 +167,37 @@ pub async fn save_settings(
             }
             _ => "Max upload size must be between 1 and 1000 MB.",
         };
+        return Redirect::to(&format!(
+            "/admin/settings?flash={}",
+            flash.replace(' ', "+")
+        ))
+        .into_response();
+    }
+
+    if tab == "features" {
+        // Checkboxes are absent from the submitted form entirely when
+        // unchecked, so presence (not value) is what "enabled" means here.
+        let enabled = form.contains_key("ai_translation_enabled");
+
+        let mut error: Option<String> = None;
+        if let Err(e) = set_app_setting(
+            &state.db,
+            "ai_translation_enabled",
+            if enabled { "true" } else { "false" },
+        )
+        .await
+        {
+            tracing::error!("failed to save ai_translation_enabled: {}", e);
+            error = Some("Failed to save settings. Please try again.".to_string());
+        }
+
+        if error.is_none() {
+            if let Err(e) = state.reload_app_settings().await {
+                tracing::warn!("failed to reload app_settings cache: {}", e);
+            }
+        }
+
+        let flash = error.as_deref().unwrap_or("Feature settings saved.");
         return Redirect::to(&format!(
             "/admin/settings?flash={}",
             flash.replace(' ', "+")

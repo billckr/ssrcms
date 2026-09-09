@@ -185,6 +185,15 @@ pub struct AppSettings {
     /// visitor has picked their own preference in the header theme toggle
     /// (which is stored per-browser in localStorage and always wins once set).
     pub default_theme: String,
+    /// Installation-wide kill switch for the AI Post Translation feature, set
+    /// by a super admin at /admin/settings. When false, the AI Translation
+    /// tab is hidden on every site's settings page AND every AI-provider/
+    /// translate admin route rejects the request server-side (see
+    /// `require_ai_translation_enabled` in `handlers::admin::ai_providers`) —
+    /// this must not be a UI-only hide, since a site manager could otherwise
+    /// bypass it by posting to the routes directly. Defaults to true because
+    /// the feature predates this toggle and existing installs already use it.
+    pub ai_translation_enabled: bool,
 }
 
 impl Default for AppSettings {
@@ -194,6 +203,7 @@ impl Default for AppSettings {
             timezone: "UTC".to_string(),
             max_upload_mb: 25,
             default_theme: "system".to_string(),
+            ai_translation_enabled: true,
         }
     }
 }
@@ -220,6 +230,10 @@ impl AppSettings {
                 .remove("default_theme")
                 .filter(|v| matches!(v.as_str(), "light" | "dark" | "system"))
                 .unwrap_or_else(|| "system".into()),
+            ai_translation_enabled: map
+                .remove("ai_translation_enabled")
+                .map(|v| v != "false")
+                .unwrap_or(true),
         })
     }
 }

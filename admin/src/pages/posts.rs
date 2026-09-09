@@ -95,6 +95,11 @@ pub struct PostEdit {
     pub ai_providers: Vec<(String, String)>,
     /// Existing translations of this post.
     pub translations: Vec<PostTranslationSummary>,
+    /// Installation-wide AI Translation kill switch (`AppSettings::ai_translation_enabled`).
+    /// When false, the whole Translations sidebar section is omitted rather than shown with
+    /// a disabled/broken-looking Translate button — the translate route rejects requests
+    /// server-side regardless, but there's no reason to render dead UI for it.
+    pub ai_translation_enabled: bool,
 }
 
 /// One existing translation, as shown in the post editor's Translations
@@ -1073,8 +1078,10 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
     );
 
     // Only a saved, existing post/page has anything to translate — nothing
-    // to show yet for a new, unsaved one.
-    let translations_section = if let Some(post_id) = &post.id {
+    // to show yet for a new, unsaved one. Also omitted entirely when the
+    // installation-wide AI Translation switch is off (see `ai_translation_enabled`).
+    let translations_section = if post.ai_translation_enabled && post.id.is_some() {
+        let post_id = post.id.as_ref().unwrap();
         let translations_list_html = if post.translations.is_empty() {
             r#"<p class="form-note" style="margin:0 0 .5rem">No translations yet.</p>"#.to_string()
         } else {
@@ -1155,6 +1162,7 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
     <button type="button" class="icon-btn" title="Translate" aria-label="Translate" data-path="/admin/posts/{post_id}/translate" onclick="translatePost(this)">
       <img src="/admin/static/icons/globe.svg" alt="">
     </button>
+    <small data-translate-status></small>
   </div>
 </div>"#,
                 post_id = crate::html_escape(post_id),
@@ -1430,6 +1438,9 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
   .ql-snow .ql-picker-label {{ color: var(--field-text); }}
   .ql-snow .ql-picker-options {{ background: var(--field-bg); color: var(--field-text); border-color: var(--border); }}
   .ql-snow .ql-picker.ql-expanded .ql-picker-label {{ color: var(--field-text); }}
+
+  .icon-btn.is-busy img {{ animation: translate-spin 1s linear infinite; }}
+  @keyframes translate-spin {{ to {{ transform: rotate(360deg); }} }}
 </style>
 <form method="POST" action="{action}" id="post-editor-form">
   <div class="editor-layout">
@@ -1753,7 +1764,10 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
     var provider = document.getElementById('translate-provider');
     if (!locale || !provider) return;
 
+    var status = button.parentElement.querySelector('[data-translate-status]');
     button.disabled = true;
+    button.classList.add('is-busy');
+    if (status) status.textContent = 'Translating…';
     var body = new URLSearchParams();
     body.set('locale', locale.value);
     body.set('provider_id', provider.value);
@@ -1763,6 +1777,8 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
       }})
       .catch(function() {{
         button.disabled = false;
+        button.classList.remove('is-busy');
+        if (status) status.textContent = 'The translation request could not be sent.';
         alert('The translation request could not be sent.');
       }});
   }};
