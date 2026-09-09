@@ -83,9 +83,13 @@ pub fn generate_password() -> String {
 
 /// Validate a plaintext password against site-wide requirements.
 ///
-/// Rules: 12–128 Unicode scalar values. Long passphrases and password-manager
-/// generated values are intentionally supported; Argon2 supplies the strength
-/// boundary rather than brittle character-composition rules.
+/// Rules: 12–128 Unicode scalar values, and not on the common/weak-password
+/// denylist (`utils::common_passwords`) — a small, hand-curated set of long
+/// passwords that are nonetheless trivially guessable (a weak base word
+/// padded with digits to clear the length floor, keyboard walks, etc.), not
+/// a real breach corpus. Long passphrases and password-manager generated
+/// values are otherwise intentionally supported; Argon2 supplies the
+/// strength boundary rather than brittle character-composition rules.
 pub fn validate_password(password: &str) -> std::result::Result<(), &'static str> {
     let len = password.chars().count();
     if len < 12 {
@@ -93,6 +97,9 @@ pub fn validate_password(password: &str) -> std::result::Result<(), &'static str
     }
     if len > 128 {
         return Err("Password must be no more than 128 characters");
+    }
+    if crate::utils::common_passwords::is_common_password(password) {
+        return Err("This password is too common. Please choose a less predictable one");
     }
     Ok(())
 }
@@ -910,6 +917,13 @@ mod tests {
     #[test]
     fn validate_password_accepts_unicode_and_symbols() {
         assert!(validate_password("very long 🔐 passphrase").is_ok());
+    }
+
+    #[test]
+    fn validate_password_rejects_common_denylisted_password() {
+        assert!(validate_password("password123456").is_err());
+        // Case shouldn't matter.
+        assert!(validate_password("PASSWORD123456").is_err());
     }
 
     #[test]
