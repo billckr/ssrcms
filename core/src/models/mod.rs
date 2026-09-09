@@ -1,3 +1,4 @@
+pub mod ai_provider;
 pub mod audit_log;
 pub mod builder_project;
 pub mod comment;
@@ -14,9 +15,11 @@ pub mod password_reset;
 pub mod poll_def;
 pub mod poll_vote;
 pub mod post;
+pub mod post_translation;
 pub mod saved_post;
 pub mod site;
 pub mod site_join_request;
+pub mod site_locale;
 pub mod site_plugin;
 pub mod site_user;
 pub mod taxonomy;

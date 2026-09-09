@@ -8,7 +8,9 @@
   {# — SEO meta tags — #}
   {% if post is defined %}
     <meta name="description" content="{{ post.excerpt | strip_html | truncate(length=160) }}">
-    <link rel="canonical" href="{{ post.url | safe }}">
+    <link rel="canonical" href="{{ canonical_url | default(value=post.url) | safe }}">
+    {% if hreflang_links is defined %}{% for alt in hreflang_links %}<link rel="alternate" hreflang="{{ alt.locale }}" href="{{ alt.url | safe }}">
+    {% endfor %}{% endif %}
     <meta property="og:title" content="{{ post.title }} — {{ site.name }}">
     <meta property="og:description" content="{{ post.excerpt | strip_html | truncate(length=160) }}">
     <meta property="og:url" content="{{ post.url | safe }}">
@@ -24,7 +26,9 @@
     <meta name="twitter:description" content="{{ post.excerpt | strip_html | truncate(length=160) }}">
   {% else %}
     <meta name="description" content="{{ site.description }}">
-    <link rel="canonical" href="{{ request.url | safe }}">
+    <link rel="canonical" href="{{ canonical_url | default(value=request.url) | safe }}">
+    {% if hreflang_links is defined %}{% for alt in hreflang_links %}<link rel="alternate" hreflang="{{ alt.locale }}" href="{{ alt.url | safe }}">
+    {% endfor %}{% endif %}
     <meta property="og:title" content="{{ site.name }}">
     <meta property="og:description" content="{{ site.description }}">
     <meta property="og:url" content="{{ request.url | safe }}">

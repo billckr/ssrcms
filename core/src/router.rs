@@ -13,14 +13,14 @@ use tower_sessions_sqlx_store::PostgresStore;
 
 use crate::app_state::AppState;
 use crate::handlers::admin::{
-    activity_log, analytics as admin_analytics, builder as admin_builder,
-    comments as admin_comments, dashboard, designer_hub as admin_designer_hub, dev_tools,
-    documentation as admin_documentation, email_providers as admin_email_providers,
-    form_designer as admin_form_designer, forms as admin_forms, logo_upload, media,
-    menus as admin_menus, poll_designer as admin_poll_designer, poll_results as admin_poll_results,
-    posts, profile, role_picker, self_update, settings, site_settings, sites as admin_sites,
-    taxonomy, themes, themes_editor, themes_publish, themes_upload, upload, users, whats_new,
-    wp_import,
+    activity_log, ai_providers as admin_ai_providers, analytics as admin_analytics,
+    builder as admin_builder, comments as admin_comments, dashboard,
+    designer_hub as admin_designer_hub, dev_tools, documentation as admin_documentation,
+    email_providers as admin_email_providers, form_designer as admin_form_designer,
+    forms as admin_forms, logo_upload, media, menus as admin_menus,
+    poll_designer as admin_poll_designer, poll_results as admin_poll_results, posts, profile,
+    role_picker, self_update, settings, site_settings, sites as admin_sites, taxonomy, themes,
+    themes_editor, themes_publish, themes_upload, upload, users, whats_new, wp_import,
 };
 use crate::handlers::{
     account, account_email, archive, auth, comment as comment_handler, form as form_handler, home,
@@ -287,6 +287,14 @@ pub fn build(
             get(posts::edit_post).post(posts::save_edit),
         )
         .route("/admin/posts/{id}/delete", post(posts::delete_post))
+        .route(
+            "/admin/posts/{id}/translate",
+            post(posts::translate_post_action),
+        )
+        .route(
+            "/admin/posts/{id}/translations/{locale}/delete",
+            post(posts::delete_translation),
+        )
         .route(
             "/admin/api/posts/{id}/sources-public",
             post(posts::api_set_sources_public),
@@ -588,6 +596,26 @@ pub fn build(
         .route(
             "/admin/sites/{id}/email-providers/{provider_id}/delete",
             post(admin_email_providers::delete),
+        )
+        .route(
+            "/admin/sites/{id}/ai-providers",
+            post(admin_ai_providers::create),
+        )
+        .route(
+            "/admin/sites/{id}/ai-providers/{provider_id}",
+            post(admin_ai_providers::update),
+        )
+        .route(
+            "/admin/sites/{id}/ai-providers/{provider_id}/test",
+            post(admin_ai_providers::test),
+        )
+        .route(
+            "/admin/sites/{id}/ai-providers/{provider_id}/delete",
+            post(admin_ai_providers::delete),
+        )
+        .route(
+            "/admin/sites/{id}/enabled-locales",
+            post(admin_sites::update_enabled_locales),
         )
         .route("/admin/sites/{id}/delete", post(admin_sites::delete))
         .route(

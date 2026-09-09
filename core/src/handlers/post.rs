@@ -33,7 +33,9 @@ struct CommentPaginationContext {
     post_url: String,
 }
 
-use super::home::{build_post_context, build_site_context, render_error_page};
+use super::home::{
+    build_post_context, build_seo_locale_context, build_site_context, render_error_page,
+};
 
 /// `GET /{slug}` — render a single post or page.
 pub async fn single_post(
@@ -71,7 +73,7 @@ pub async fn single_post(
     // ── End builder check ──────────────────────────────────────────────────
 
     render_single_post_response(
-        &state, site_id, &base_url, slug, uri, &jar, &session, addr, &headers, cpage,
+        &state, site_id, &base_url, slug, uri, &jar, &session, addr, &headers, cpage, None,
     )
     .await
 }
@@ -95,6 +97,7 @@ pub(crate) async fn render_single_post_response(
     addr: SocketAddr,
     headers: &HeaderMap,
     cpage: usize,
+    locale: Option<String>,
 ) -> Response {
     let path = uri.path().to_string();
 
@@ -151,6 +154,7 @@ pub(crate) async fn render_single_post_response(
         session_ctx,
         cpage,
         preview_allowed,
+        locale,
     )
     .await
     {
@@ -209,6 +213,7 @@ fn is_bot(ua: &str) -> bool {
     .any(|kw| lower.contains(kw))
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn render_post(
     state: AppState,
     slug: String,
@@ -218,6 +223,7 @@ async fn render_post(
     session_ctx: SessionContext,
     cpage: usize,
     preview_allowed: bool,
+    locale: Option<String>,
 ) -> crate::errors::Result<String> {
     let post_record = match post::get_published_by_slug(&state.db, Some(site_id), &slug).await {
         Ok(p) => p,
@@ -240,11 +246,36 @@ async fn render_post(
             base_url,
             session_ctx,
             preview_allowed,
+            locale,
         )
         .await;
     }
 
-    let post_ctx = build_post_context(&state, &post_record, base_url).await?;
+    let mut post_ctx = build_post_context(&state, &post_record, base_url).await?;
+
+    // Compute canonical/hreflang from the *original*-language context before
+    // any translation overlay or locale-prefixing below touches `post_ctx`.
+    let (canonical_url, hreflang_links) =
+        build_seo_locale_context(&state, &post_ctx, site_id, base_url).await;
+
+    if let Some(locale) = &locale {
+        if let Ok(Some(translation)) =
+            crate::models::post_translation::get(&state.db, post_record.id, locale).await
+        {
+            post_ctx.title = translation.title;
+            post_ctx.excerpt = translation.excerpt.unwrap_or_default();
+            post_ctx.content = translation.content;
+        }
+        // Locale-prefix the URL regardless of whether a translation row was
+        // found — the visitor stays on the locale URL either way (silent
+        // fallback to original-language content).
+        let post_path = post_ctx
+            .url
+            .strip_prefix(base_url)
+            .unwrap_or(&post_ctx.url)
+            .to_string();
+        post_ctx.url = format!("{base_url}/{locale}{post_path}");
+    }
 
     let prev = if let Some(pub_at) = post_record.published_at {
         match post::get_prev(&state.db, post_record.site_id, pub_at).await? {
@@ -304,7 +335,10 @@ async fn render_post(
         } else {
             None
         },
-        post_url: format!("/{}", slug),
+        post_url: match &locale {
+            Some(l) => format!("/{l}/{}", slug),
+            None => format!("/{}", slug),
+        },
     };
 
     let site_ctx = build_site_context(&state, Some(site_id), base_url).await?;
@@ -336,7 +370,19 @@ async fn render_post(
         })
         .unwrap_or_default();
 
-    let nav = crate::models::nav_menu::build_nav_context(&state.db, site_id, uri.path()).await;
+    // Nav "active item" matching is on the *content* path — a locale prefix
+    // isn't part of any nav href (nav isn't locale-aware this pass; see the
+    // AI-translation feature's known limitations), so strip it back off
+    // here or every nav link on a translated post would show as inactive.
+    let nav_path = match &locale {
+        Some(l) => uri
+            .path()
+            .strip_prefix(&format!("/{l}"))
+            .unwrap_or(uri.path())
+            .to_string(),
+        None => uri.path().to_string(),
+    };
+    let nav = crate::models::nav_menu::build_nav_context(&state.db, site_id, &nav_path).await;
     let mut ctx = ContextBuilder {
         site: site_ctx,
         request: RequestContext {
@@ -351,6 +397,8 @@ async fn render_post(
     super::insert_theme_options(&mut ctx, &state, site_id).await;
 
     ctx.insert("post", &post_ctx);
+    ctx.insert("canonical_url", &canonical_url);
+    ctx.insert("hreflang_links", &hreflang_links);
     ctx.insert("is_saved", &is_saved);
     ctx.insert("prev_post", &prev);
     ctx.insert("next_post", &next);

@@ -197,6 +197,7 @@ pub fn sanitize_media_text(input: &str) -> String {
 }
 
 pub mod activity_log;
+pub mod ai_providers;
 pub mod analytics;
 pub mod builder;
 pub mod comments;

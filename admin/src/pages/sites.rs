@@ -333,6 +333,26 @@ pub struct SiteSettingsData {
     pub maintenance_mode: bool,
     pub maintenance_message: String,
     pub providers: Vec<EmailProviderSummary>,
+    pub ai_providers: Vec<AiProviderSummary>,
+    /// Every locale the AI-translation feature can offer, as (code, English
+    /// name) pairs — the full curated list, not just this site's enabled
+    /// subset (see `enabled_locales` below).
+    pub available_locales: Vec<(String, String)>,
+    /// Which of `available_locales`' codes this site has enabled.
+    pub enabled_locales: Vec<String>,
+}
+
+/// One configured AI translation provider, as shown in the AI Translation
+/// tab's provider list. Credentials themselves never come back to the
+/// browser. Mirrors `EmailProviderSummary` exactly.
+pub struct AiProviderSummary {
+    pub id: String,
+    pub label: String,
+    /// "anthropic" | "openai_compatible"
+    pub provider_type: String,
+    pub verified: bool,
+    pub hint: Option<String>,
+    pub field_placeholders: std::collections::HashMap<String, String>,
 }
 
 /// One configured email provider, as shown in the Email Settings tab's
@@ -492,6 +512,78 @@ fn provider_fields_html(
     }
 }
 
+fn ai_provider_type_label(provider_type: &str) -> &'static str {
+    match provider_type {
+        "anthropic" => "Anthropic",
+        "openai_compatible" => "OpenAI-Compatible",
+        _ => "Unknown",
+    }
+}
+
+fn ai_provider_type_badge_html(provider_type: &str) -> String {
+    format!(
+        r#"<span class="form-note" style="margin:0">{}</span>"#,
+        ai_provider_type_label(provider_type)
+    )
+}
+
+/// The credential fields for one AI provider type — mirrors
+/// `provider_fields_html`'s shape and `id_prefix` convention exactly.
+fn ai_provider_fields_html(
+    provider_type: &str,
+    id_prefix: &str,
+    placeholders: Option<&std::collections::HashMap<String, String>>,
+) -> String {
+    let ph = |field: &str, default: &str| -> String {
+        crate::html_escape(
+            placeholders
+                .and_then(|m| m.get(field))
+                .map(|s| s.as_str())
+                .unwrap_or(default),
+        )
+    };
+    match provider_type {
+        "anthropic" => format!(
+            r#"<div class="form-group">
+  <label for="{p}anthropic_api_key">API key</label>
+  <input type="password" id="{p}anthropic_api_key" name="anthropic_api_key" autocomplete="off" placeholder="{key_ph}">
+</div>
+<div class="form-group">
+  <label for="{p}anthropic_model_name">Model name</label>
+  <input type="text" id="{p}anthropic_model_name" name="anthropic_model_name" placeholder="{model_ph}">
+  <small>e.g. claude-sonnet-5</small>
+</div>"#,
+            p = id_prefix,
+            key_ph = ph("anthropic_api_key", ""),
+            model_ph = ph("anthropic_model_name", "e.g. claude-sonnet-5"),
+        ),
+        "openai_compatible" => format!(
+            r#"<div class="form-group">
+  <label for="{p}openai_compatible_base_url">Base URL</label>
+  <input type="text" id="{p}openai_compatible_base_url" name="openai_compatible_base_url" placeholder="{url_ph}">
+  <small>Include the version path — e.g. https://api.openai.com/v1, or http://localhost:11434/v1 for a local Ollama server.</small>
+</div>
+<div class="form-group">
+  <label for="{p}openai_compatible_api_key">API key</label>
+  <input type="password" id="{p}openai_compatible_api_key" name="openai_compatible_api_key" autocomplete="off" placeholder="{key_ph}">
+  <small>Leave blank for a local server that doesn't require one.</small>
+</div>
+<div class="form-group">
+  <label for="{p}openai_compatible_model_name">Model name</label>
+  <input type="text" id="{p}openai_compatible_model_name" name="openai_compatible_model_name" placeholder="{model_ph}">
+</div>"#,
+            p = id_prefix,
+            url_ph = ph(
+                "openai_compatible_base_url",
+                "e.g. https://api.openai.com/v1"
+            ),
+            key_ph = ph("openai_compatible_api_key", ""),
+            model_ph = ph("openai_compatible_model_name", "e.g. gpt-4o or llama3.1"),
+        ),
+        _ => String::new(),
+    }
+}
+
 pub fn render_settings(
     data: &SiteSettingsData,
     flash: Option<&str>,
@@ -557,6 +649,92 @@ pub fn render_settings(
         }).collect::<Vec<_>>().join("\n")
     };
 
+    let ai_providers_list_html = if data.ai_providers.is_empty() {
+        r#"<p class="form-note" style="margin:0">No AI providers configured yet — add one below.</p>"#.to_string()
+    } else {
+        data.ai_providers.iter().map(|p| {
+            let status = if p.verified {
+                r#"<span class="badge badge-published">Verified</span>"#.to_string()
+            } else {
+                r#"<span class="badge">Unverified</span>"#.to_string()
+            };
+            let edit_id = format!("edit-ai-provider-{}", p.id);
+            let field_prefix = format!("edit-ai-{}-", p.id);
+            format!(
+                r#"<div class="card-boxed-section">
+  <div style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;flex-wrap:wrap">
+    <div style="display:flex;align-items:center;gap:.6rem">
+      <strong>{label}</strong>
+      {type_badge}
+      {status}
+    </div>
+    <div class="icon-pill-actionbuttons">
+      <button type="button" class="icon-btn" title="Edit Provider" aria-label="Edit Provider"
+              onclick="toggleAiProviderEdit('{edit_id}')">
+        <img src="/admin/static/icons/edit.svg" alt="">
+      </button>
+      <form method="post" action="/admin/sites/{site_id}/ai-providers/{id}/test" style="display:inline">
+        <button type="submit" class="icon-btn" title="Test Provider" aria-label="Test Provider"><img src="/admin/static/icons/globe.svg" alt=""></button>
+      </form>
+      <form method="post" action="/admin/sites/{site_id}/ai-providers/{id}/delete" style="display:inline" onsubmit="return confirm('Delete this AI provider? Any posts already translated stay translated, but you will no longer be able to translate more with it.')">
+        <button type="submit" class="icon-btn icon-danger" title="Delete Provider" aria-label="Delete Provider"><img src="/admin/static/icons/trash.svg" alt=""></button>
+      </form>
+    </div>
+  </div>
+  <form method="post" action="/admin/sites/{site_id}/ai-providers/{id}" id="{edit_id}" class="ai-provider-edit-form" style="display:none;margin-top:.75rem;padding-top:.75rem;border-top:1px solid var(--border)">
+    <input type="hidden" name="provider_type" value="{provider_type}">
+    <div class="form-group">
+      <label for="{field_prefix}label">Label</label>
+      <input type="text" id="{field_prefix}label" name="label" required value="{label}">
+    </div>
+    {fields_html}
+    <p class="field-hint">Re-enter every field — credentials aren't shown back once saved, and saving here replaces them all.</p>
+    <div class="icon-pill">
+      <button type="submit" class="icon-btn" title="Save Provider" aria-label="Save Provider"><img src="/admin/static/icons/save.svg" alt=""></button>
+      <button type="button" class="icon-btn" title="Cancel" aria-label="Cancel"
+              onclick="document.getElementById('{edit_id}').style.display='none'"><img src="/admin/static/icons/x.svg" alt=""></button>
+    </div>
+  </form>
+</div>"#,
+                label = crate::html_escape(&p.label),
+                type_badge = ai_provider_type_badge_html(&p.provider_type),
+                status = status,
+                site_id = crate::html_escape(&data.id),
+                id = crate::html_escape(&p.id),
+                edit_id = edit_id,
+                provider_type = crate::html_escape(&p.provider_type),
+                field_prefix = field_prefix,
+                fields_html = ai_provider_fields_html(&p.provider_type, &field_prefix, Some(&p.field_placeholders)),
+            )
+        }).collect::<Vec<_>>().join("\n")
+    };
+
+    let enabled_locales_set: std::collections::HashSet<&str> =
+        data.enabled_locales.iter().map(|s| s.as_str()).collect();
+    let locale_checkboxes_html = data
+        .available_locales
+        .iter()
+        .map(|(code, name)| {
+            let checked = if enabled_locales_set.contains(code.as_str()) {
+                "checked"
+            } else {
+                ""
+            };
+            let cb_id = format!("locale-{}", code.replace(['-', ' '], "_"));
+            format!(
+                r#"<label for="{cb_id}" style="display:flex;align-items:center;gap:.4rem;font-weight:400;cursor:pointer">
+  <input type="checkbox" id="{cb_id}" name="locales" value="{code}" {checked}>
+  {name} <code style="color:var(--muted)">({code})</code>
+</label>"#,
+                cb_id = cb_id,
+                code = crate::html_escape(code),
+                checked = checked,
+                name = crate::html_escape(name),
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+
     let content = format!(
         r#"<div>
 <style>
@@ -567,6 +745,7 @@ pub fn render_settings(
   <button type="button" class="page-tab active" role="tab" aria-selected="true" aria-controls="tab-general" data-tab="general">General</button>
   <button type="button" class="page-tab" role="tab" aria-selected="false" aria-controls="tab-maintenance" data-tab="maintenance">Maintenance</button>
   <button type="button" class="page-tab" role="tab" aria-selected="false" aria-controls="tab-email" data-tab="email">Email Settings</button>
+  <button type="button" class="page-tab" role="tab" aria-selected="false" aria-controls="tab-ai-translation" data-tab="ai-translation">AI Translation</button>
   <button type="button" class="page-tab" role="tab" aria-selected="false" aria-controls="tab-import" data-tab="import">Import Content</button>
 </div>
 
@@ -988,6 +1167,107 @@ function toggleProviderEdit(id) {{
 </div>
 </div>
 
+<div id="tab-ai-translation" class="settings-tab-panel" role="tabpanel">
+<div class="two-col">
+<div>
+<div class="card-boxed">
+  <h2 class="card-boxed-header">AI Providers</h2>
+  <div class="card-boxed-body">
+  <p class="form-note" style="margin:0 0 1rem">
+    Configure an AI provider to translate posts from the post editor. Anthropic calls Claude's
+    API directly; OpenAI-Compatible covers OpenAI itself, or a local server such as Ollama or
+    LM Studio.
+  </p>
+  {ai_providers_list_html}
+  </div>
+</div>
+</div>
+<script>
+function toggleAiProviderEdit(id) {{
+  var target = document.getElementById(id);
+  var opening = target.style.display === 'none';
+  document.querySelectorAll('.ai-provider-edit-form').forEach(function(f) {{
+    f.style.display = 'none';
+  }});
+  if (opening) target.style.display = 'block';
+}}
+</script>
+
+<div>
+<div class="card-boxed">
+  <h2 class="card-boxed-header">Add Provider</h2>
+  <div class="card-boxed-body">
+  <form method="post" action="/admin/sites/{id}/ai-providers" class="edit-form" id="add-ai-provider-form">
+    <div class="card-boxed-section">
+      <div class="form-group">
+        <label for="ai-provider-label">Label</label>
+        <input type="text" id="ai-provider-label" name="label" required placeholder="e.g. Claude">
+      </div>
+      <div class="form-group">
+        <label for="ai-provider-type">Provider</label>
+        <select id="ai-provider-type" name="provider_type">
+          <option value="anthropic">Anthropic</option>
+          <option value="openai_compatible">OpenAI-Compatible</option>
+        </select>
+      </div>
+    </div>
+    <div class="card-boxed-section ai-provider-fields" data-provider="anthropic">
+      {anthropic_fields_html}
+      <div class="icon-pill">
+        <button type="submit" id="add-ai-provider-btn-anthropic" class="icon-btn" title="Add Provider" aria-label="Add Provider">
+          <img src="/admin/static/icons/save.svg" alt="">
+        </button>
+      </div>
+    </div>
+    <div class="card-boxed-section ai-provider-fields" data-provider="openai_compatible" style="display:none">
+      {openai_compatible_fields_html}
+      <div class="icon-pill">
+        <button type="submit" id="add-ai-provider-btn-openai_compatible" class="icon-btn" title="Add Provider" aria-label="Add Provider">
+          <img src="/admin/static/icons/save.svg" alt="">
+        </button>
+      </div>
+    </div>
+  </form>
+  </div>
+</div>
+<script>
+(function() {{
+  var typeSelect = document.getElementById('ai-provider-type');
+  var groups = document.querySelectorAll('.ai-provider-fields');
+  function sync() {{
+    groups.forEach(function(g) {{
+      g.style.display = (g.dataset.provider === typeSelect.value) ? '' : 'none';
+    }});
+  }}
+  typeSelect.addEventListener('change', sync);
+  sync();
+}})();
+</script>
+</div>
+</div>
+
+<div class="card-boxed" style="max-width:720px;margin-top:1rem">
+  <h2 class="card-boxed-header">Enabled Languages</h2>
+  <div class="card-boxed-body">
+  <form method="post" action="/admin/sites/{id}/enabled-locales" class="edit-form">
+    <div class="card-boxed-section">
+      <p class="form-note" style="margin:0 0 .75rem;color:var(--danger)">
+        Enabling a language reserves its code as a URL prefix (e.g. <code>/es/...</code>). Any
+        existing top-level post or page whose slug exactly matches an enabled language code
+        becomes unreachable at its own URL.
+      </p>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:.5rem">
+        {locale_checkboxes_html}
+      </div>
+    </div>
+    <div class="icon-pill">
+      <button type="submit" class="icon-btn" title="Save" aria-label="Save"><img src="/admin/static/icons/save.svg" alt=""></button>
+    </div>
+  </form>
+  </div>
+</div>
+</div>
+
 <div id="tab-import" class="settings-tab-panel" role="tabpanel">
 <div style="max-width:720px">
 <div class="card-boxed">
@@ -1233,6 +1513,10 @@ function toggleProviderEdit(id) {{
         },
         maintenance_message = crate::html_escape(&data.maintenance_message),
         providers_list_html = providers_list_html,
+        ai_providers_list_html = ai_providers_list_html,
+        anthropic_fields_html = ai_provider_fields_html("anthropic", "", None),
+        openai_compatible_fields_html = ai_provider_fields_html("openai_compatible", "", None),
+        locale_checkboxes_html = locale_checkboxes_html,
     );
 
     crate::admin_page(

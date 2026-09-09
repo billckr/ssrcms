@@ -378,8 +378,11 @@ async fn test_account_dashboard_shows_site_logo() {
     let logo_dir = std::path::Path::new("admin/static/branding").join(site.id.to_string());
     std::fs::create_dir_all(&logo_dir).expect("failed to create test logo dir");
     let logo_path = logo_dir.join("logo.svg");
-    std::fs::write(&logo_path, b"<svg xmlns=\"http://www.w3.org/2000/svg\"></svg>")
-        .expect("failed to write test logo file");
+    std::fs::write(
+        &logo_path,
+        b"<svg xmlns=\"http://www.w3.org/2000/svg\"></svg>",
+    )
+    .expect("failed to write test logo file");
 
     // Throwaway subscriber — the one actually visiting /account.
     let email = format!("logo-test-sub-{unique}@example.com");
@@ -459,5 +462,221 @@ async fn test_account_dashboard_shows_site_logo() {
     assert!(
         body.contains(r#"class="brand-logo""#) && body.contains(&expected_src),
         "expected /account sidebar to render this site's logo <img src=\"{expected_src}\">, got: {brand_snippet}"
+    );
+}
+
+/// Adds `locale` to the "localhost" test site's enabled-locales list without
+/// clobbering any other locale a concurrently-running test may have already
+/// enabled — `routes.rs` tests run concurrently and all share this one site,
+/// so a blind overwrite would race. Best-effort read-then-write, same class
+/// of accepted non-atomicity as `common::ensure_test_site`'s seed check.
+async fn enable_locale_for_test(pool: &sqlx::PgPool, site_id: uuid::Uuid) -> String {
+    use synaptic_core::models::site_locale;
+    let locale = format!("t{}", &uuid::Uuid::new_v4().simple().to_string()[..6]);
+    let mut codes = site_locale::enabled_locales_for_site(pool, site_id).await;
+    codes.push(locale.clone());
+    site_locale::set_enabled_locales(pool, site_id, &codes)
+        .await
+        .expect("failed to enable test locale");
+    locale
+}
+
+/// Creates a throwaway published post directly via the model (no admin
+/// login/editor round trip needed for these routing tests).
+async fn create_test_post(
+    pool: &sqlx::PgPool,
+    site_id: uuid::Uuid,
+    slug: &str,
+) -> synaptic_core::models::post::Post {
+    use synaptic_core::models::post::{CreatePost, PostStatus, PostType};
+    use synaptic_core::models::user::{self, CreateUser, UserRole};
+
+    let unique = uuid::Uuid::new_v4().simple().to_string();
+    let author = user::create(
+        pool,
+        &CreateUser {
+            username: format!("locpost{}", &unique[..12]),
+            email: format!("locale-test-{unique}@example.com"),
+            display_name: "Locale Test Author".to_string(),
+            password: "Verify12345Pass!".to_string(),
+            role: UserRole::Author,
+        },
+    )
+    .await
+    .expect("failed to create test author");
+
+    synaptic_core::models::post::create(
+        pool,
+        &CreatePost {
+            site_id: Some(site_id),
+            title: "Hello World".to_string(),
+            slug: Some(slug.to_string()),
+            content: "<p>Original content.</p>".to_string(),
+            content_format: Some("html".to_string()),
+            excerpt: None,
+            status: PostStatus::Published,
+            post_type: PostType::Post,
+            author_id: author.id,
+            featured_image_id: None,
+            published_at: Some(chrono::Utc::now()),
+            template: None,
+            post_password_hash: None,
+            comments_enabled: true,
+            parent_id: None,
+            sources: vec![],
+            sources_public: false,
+        },
+    )
+    .await
+    .expect("failed to create test post")
+}
+
+#[tokio::test]
+#[ignore = "requires a live PostgreSQL instance — see module docs"]
+async fn test_locale_prefixed_url_shows_translated_content() {
+    use synaptic_core::models::post_translation;
+
+    let database_url = std::env::var("DATABASE_URL")
+        .expect("DATABASE_URL must be set to run integration tests (see tests/routes.rs)");
+    let pool = synaptic_core::db::connect(&database_url)
+        .await
+        .expect("failed to connect for test setup");
+
+    let app = common::test_router().await; // ensures the "localhost" test site exists
+    let site = synaptic_core::models::site::get_by_hostname(&pool, "localhost")
+        .await
+        .expect("test site must exist");
+
+    let unique = uuid::Uuid::new_v4().simple().to_string();
+    let slug = format!("locale-test-post-{}", &unique[..8]);
+    let post = create_test_post(&pool, site.id, &slug).await;
+    let locale = enable_locale_for_test(&pool, site.id).await;
+
+    post_translation::upsert(
+        &pool,
+        post.id,
+        &locale,
+        "Hola Mundo",
+        Some("Un resumen"),
+        "<p>Contenido traducido.</p>",
+        post.updated_at,
+    )
+    .await
+    .expect("failed to save test translation");
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri(format!("/{locale}/{slug}"))
+                .header("host", "localhost")
+                .extension(common::connect_info())
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let body = String::from_utf8(body.to_vec()).unwrap();
+
+    let _ = synaptic_core::models::post::delete(&pool, post.id).await;
+
+    assert!(
+        body.contains("Hola Mundo"),
+        "expected the translated title in the response body"
+    );
+    assert!(
+        body.contains("Contenido traducido"),
+        "expected the translated content in the response body"
+    );
+    assert!(
+        body.contains(&format!(r#"hreflang="{locale}""#)),
+        "expected an hreflang alternate link for '{locale}'"
+    );
+}
+
+#[tokio::test]
+#[ignore = "requires a live PostgreSQL instance — see module docs"]
+async fn test_locale_prefixed_url_falls_back_to_original_without_translation() {
+    let database_url = std::env::var("DATABASE_URL")
+        .expect("DATABASE_URL must be set to run integration tests (see tests/routes.rs)");
+    let pool = synaptic_core::db::connect(&database_url)
+        .await
+        .expect("failed to connect for test setup");
+
+    let app = common::test_router().await;
+    let site = synaptic_core::models::site::get_by_hostname(&pool, "localhost")
+        .await
+        .expect("test site must exist");
+
+    let unique = uuid::Uuid::new_v4().simple().to_string();
+    let slug = format!("locale-fallback-post-{}", &unique[..8]);
+    let post = create_test_post(&pool, site.id, &slug).await;
+    let locale = enable_locale_for_test(&pool, site.id).await;
+    // Deliberately no post_translation row for this (post, locale) pair.
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri(format!("/{locale}/{slug}"))
+                .header("host", "localhost")
+                .extension(common::connect_info())
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        response.status(),
+        StatusCode::OK,
+        "an enabled locale with no translation for this post should still render, not 404"
+    );
+
+    let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let body = String::from_utf8(body.to_vec()).unwrap();
+
+    let _ = synaptic_core::models::post::delete(&pool, post.id).await;
+
+    assert!(
+        body.contains("Hello World") && body.contains("Original content."),
+        "expected the original (untranslated) content as a silent fallback"
+    );
+}
+
+#[tokio::test]
+#[ignore = "requires a live PostgreSQL instance — see module docs"]
+async fn test_locale_prefix_not_enabled_404s_normally() {
+    let app = common::test_router().await;
+
+    // A slug that matches no post at all — with "xx" not an enabled locale,
+    // this must 404 exactly like any other unmatched two-segment path would
+    // (a slug that *does* match a post would instead 301 to its canonical
+    // permalink via `try_post_permalink`'s existing decorative-segment
+    // self-correction, which is a separate, pre-existing behavior this test
+    // isn't targeting).
+    let unique = uuid::Uuid::new_v4().simple().to_string();
+    let missing_slug = format!("locale-notenabled-missing-{}", &unique[..8]);
+
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri(format!("/xx/{missing_slug}"))
+                .header("host", "localhost")
+                .extension(common::connect_info())
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(
+        response.status(),
+        StatusCode::NOT_FOUND,
+        "a non-enabled locale-shaped prefix over a nonexistent path should 404 exactly as any other unmatched path would"
     );
 }

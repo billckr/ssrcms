@@ -371,6 +371,25 @@ img { max-width: 100%; display: block; }
 .post-meta-category::before { content: '\2014'; margin-right: 0.7rem; color: var(--color-text-muted); }
 .reading-time::before { content: '\2014'; margin-right: 0.7rem; color: var(--color-text-muted); }
 
+/* AI-translation language switcher — a short list of "<a lang="es">es</a>"
+   links, one per locale this post/page has been translated into (plus the
+   original), only rendered at all when there's more than one to choose
+   from. Inside .post-meta on a post it inherits that row's font/spacing;
+   on a page (no surrounding .post-meta) it gets its own small treatment. */
+.lang-switcher::before { content: '\2014'; margin-right: 0.7rem; color: var(--color-text-muted); }
+.lang-switcher a { text-transform: uppercase; }
+.page-header .lang-switcher {
+  display: block;
+  margin-top: 0.5rem;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--color-text);
+}
+.page-header .lang-switcher a { color: var(--color-primary); text-decoration: none; }
+.page-header .lang-switcher a:hover { text-decoration: underline; }
+
 .post-title {
   font-family: var(--font-display);
   font-weight: 600;

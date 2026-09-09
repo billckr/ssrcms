@@ -226,6 +226,14 @@ devices" (`POST /account/profile/sign-out-other-devices`, `POST
 session without also touching a recovery-sensitive field. See the manual-invalidation note in
 the **Middleware & Auth** doc, and the **Account Area** doc for the user-facing flow.
 
+### AI translation (0003, post-baseline, 2026-09-09)
+
+`ai_providers` (per-site AI provider credentials, JSON-blob-in-one-encrypted-column, same shape
+as `email_providers`) and `post_translations` (one row per `(post_id, locale)`: title/excerpt/
+content plus `source_updated_at` for staleness detection). A site's enabled locales are *not* a
+new table — a single `site_settings` row (key `enabled_locales`), the same list-shaped KV
+convention `ip_allowlist` already uses. See the **AI Post Translation** doc for the full feature.
+
 ## Known Limitations / TODOs
 
 Because `sqlx::migrate!()` embeds migrations at compile time, adding a new migration file

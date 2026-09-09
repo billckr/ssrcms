@@ -1,12 +1,12 @@
 ---
 title: Admin Panel
 group: system
-updated_by: claude
-last_updated: 2026-09-08
+updated_by: codex
+last_updated: 2026-09-09
 ---
 # Admin Panel
 
-> Last updated: 2026-09-08 | Updated by: claude
+> Last updated: 2026-09-09 | Updated by: codex
 
 ## Overview
 
@@ -224,10 +224,12 @@ installer with a required-file check (`REQUIRED_TEMPLATES`).
 
 ### Documentation Viewer (`documentation.rs`)
 
-`/admin/documentation` — super_admin only — reads every row of the `documentation` table
-(ordered `system` group before `feature` group, then title) and renders it via
-`admin::pages::documentation::render_list`. This is the very table these four docs are stored
-in.
+`/admin/documentation` — super_admin only — scans the configured `documentation/` directory for
+Markdown files, reads each file's `---`-delimited frontmatter, and renders the resulting index and
+sections through `admin::pages::documentation::render_list`. Documents are ordered with the
+`system` group first, then `feature`, then any other group, and alphabetically by title within a
+group. Adding a valid Markdown file such as `translations.md` therefore adds it to the in-app index
+without a database seed or hard-coded registry.
 
 ### Settings & Profile (`settings.rs`, `profile.rs`)
 
@@ -260,4 +262,3 @@ See the `routing` doc for the full `/admin/*` route table (all admin routes are 
   traversal from user-supplied theme/plugin/file names.
 - `/admin/plugins/*` handlers exist in source but are not registered in `router.rs` — the
   feature is code-complete but inert pre-launch.
-

@@ -88,6 +88,27 @@ pub struct PostEdit {
     pub updated_at: Option<String>,
     /// Exact update timestamp used to reject stale concurrent saves.
     pub version: Option<String>,
+    /// Locales this site has enabled for AI translation (code, English
+    /// name pairs) — empty means none are enabled yet.
+    pub available_locales: Vec<(String, String)>,
+    /// Verified AI providers usable to translate this post (id, label).
+    pub ai_providers: Vec<(String, String)>,
+    /// Existing translations of this post.
+    pub translations: Vec<PostTranslationSummary>,
+}
+
+/// One existing translation, as shown in the post editor's Translations
+/// section.
+pub struct PostTranslationSummary {
+    pub locale: String,
+    pub locale_name: String,
+    /// Human-readable "generated N ago"-style string.
+    pub generated_at: String,
+    /// True when the source post has changed since this translation was
+    /// generated (see `PostTranslationRow::is_stale`).
+    pub is_stale: bool,
+    /// Public URL of the translated post (e.g. `/es/my-post`).
+    pub view_url: String,
 }
 
 pub struct TermOption {
@@ -1051,6 +1072,110 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
         remove_display = remove_display,
     );
 
+    // Only a saved, existing post/page has anything to translate — nothing
+    // to show yet for a new, unsaved one.
+    let translations_section = if let Some(post_id) = &post.id {
+        let translations_list_html = if post.translations.is_empty() {
+            r#"<p class="form-note" style="margin:0 0 .5rem">No translations yet.</p>"#.to_string()
+        } else {
+            post.translations
+                .iter()
+                .map(|t| {
+                    let stale_badge = if t.is_stale {
+                        r#" <span class="badge">Source changed</span>"#
+                    } else {
+                        ""
+                    };
+                    format!(
+                        r#"<div style="display:flex;align-items:center;justify-content:space-between;gap:.5rem;padding:.35rem 0;border-bottom:1px solid var(--border)">
+  <div>
+    <a href="{view_url}" target="_blank" rel="noopener">{locale_name}</a>{stale_badge}
+    <div class="field-hint">Generated {generated_at}</div>
+  </div>
+  <button type="button" class="icon-btn icon-danger" title="Delete Translation" aria-label="Delete Translation" data-path="/admin/posts/{post_id}/translations/{locale}/delete" data-label="{locale_name}" onclick="deleteTranslationConfirm(this)"><img src="/admin/static/icons/trash.svg" alt=""></button>
+</div>"#,
+                        view_url = crate::html_escape(&t.view_url),
+                        locale_name = crate::html_escape(&t.locale_name),
+                        stale_badge = stale_badge,
+                        generated_at = crate::html_escape(&t.generated_at),
+                        post_id = crate::html_escape(post_id),
+                        locale = crate::html_escape(&t.locale),
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join("\n")
+        };
+
+        let translate_form_html = if post.available_locales.is_empty() {
+            format!(
+                r#"<p class="form-note" style="margin:.5rem 0 0">No languages enabled yet — enable some in <a href="/admin/sites/{site_id}/settings?tab=ai-translation">AI Translation settings</a>.</p>"#,
+                site_id = crate::html_escape(&post.site_id),
+            )
+        } else if post.ai_providers.is_empty() {
+            format!(
+                r#"<p class="form-note" style="margin:.5rem 0 0">No verified AI provider yet — add one in <a href="/admin/sites/{site_id}/settings?tab=ai-translation">AI Translation settings</a>.</p>"#,
+                site_id = crate::html_escape(&post.site_id),
+            )
+        } else {
+            let locale_options = post
+                .available_locales
+                .iter()
+                .map(|(code, name)| {
+                    format!(
+                        r#"<option value="{code}">{name}</option>"#,
+                        code = crate::html_escape(code),
+                        name = crate::html_escape(name),
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join("\n");
+            let provider_options = post
+                .ai_providers
+                .iter()
+                .map(|(id, label)| {
+                    format!(
+                        r#"<option value="{id}">{label}</option>"#,
+                        id = crate::html_escape(id),
+                        label = crate::html_escape(label),
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join("\n");
+            format!(
+                r#"<div style="margin-top:.5rem">
+  <div class="form-group">
+    <label for="translate-locale" class="sr-only">Language</label>
+    <select id="translate-locale" name="locale" form="translation-request-form">{locale_options}</select>
+  </div>
+  <div class="form-group">
+    <label for="translate-provider" class="sr-only">AI Provider</label>
+    <select id="translate-provider" name="provider_id" form="translation-request-form">{provider_options}</select>
+  </div>
+  <div class="icon-pill">
+    <button type="button" class="icon-btn" title="Translate" aria-label="Translate" data-path="/admin/posts/{post_id}/translate" onclick="translatePost(this)">
+      <img src="/admin/static/icons/globe.svg" alt="">
+    </button>
+  </div>
+</div>"#,
+                post_id = crate::html_escape(post_id),
+                locale_options = locale_options,
+                provider_options = provider_options,
+            )
+        };
+
+        format!(
+            r#"<div class="form-section">
+      <h3>Translations</h3>
+      {translations_list_html}
+      {translate_form_html}
+    </div>"#,
+            translations_list_html = translations_list_html,
+            translate_form_html = translate_form_html,
+        )
+    } else {
+        String::new()
+    };
+
     let protected_checked = if post.post_password_set {
         "checked"
     } else {
@@ -1384,12 +1509,14 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
         </div>
       </div>
       {featured_image_section}
+      {translations_section}
       {inline_media_section}
       {parent_section}
       {categories_section}
     </div>
   </div>
 </form>
+<form id="translation-request-form"></form>
 <script src="/admin/static/quill/quill.min.js"></script>
 <script>
 (function() {{
@@ -1611,6 +1738,44 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
     fetch(path, {{ method: 'POST' }}).then(function(r) {{
       window.location.href = r.url || path;
     }});
+  }};
+
+  // Translation controls live inside the editor's main form, so they use
+  // fetch instead of invalid nested forms. Translation always uses the last
+  // saved post content; make that explicit rather than silently translating
+  // a stale version while the editor has unsaved changes.
+  window.translatePost = function(button) {{
+    if (formDirty) {{
+      alert('Save your changes before translating this post.');
+      return;
+    }}
+    var locale = document.getElementById('translate-locale');
+    var provider = document.getElementById('translate-provider');
+    if (!locale || !provider) return;
+
+    button.disabled = true;
+    var body = new URLSearchParams();
+    body.set('locale', locale.value);
+    body.set('provider_id', provider.value);
+    fetch(button.dataset.path, {{ method: 'POST', body: body }})
+      .then(function(r) {{
+        window.location.href = r.url || button.dataset.path;
+      }})
+      .catch(function() {{
+        button.disabled = false;
+        alert('The translation request could not be sent.');
+      }});
+  }};
+
+  window.deleteTranslationConfirm = function(button) {{
+    if (formDirty) {{
+      alert('Save your changes before deleting a translation.');
+      return;
+    }}
+    if (!confirm('Delete the ' + button.dataset.label + ' translation?')) return;
+    fetch(button.dataset.path, {{ method: 'POST' }})
+      .then(function(r) {{ window.location.href = r.url || button.dataset.path; }})
+      .catch(function() {{ alert('The translation could not be deleted.'); }});
   }};
 
   // Load existing content.
@@ -2070,6 +2235,7 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
         parent_section = parent_section,
         categories_section = categories_section,
         featured_image_section = featured_image_section,
+        translations_section = translations_section,
         inline_media_section = inline_media_section,
         comments_and_password_box = comments_and_password_box,
         author_card = author_card,

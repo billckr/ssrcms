@@ -17,5 +17,6 @@ pub mod router;
 pub mod scheduler;
 pub mod search;
 pub mod templates;
+pub mod translate;
 pub mod utils;
 pub mod version;

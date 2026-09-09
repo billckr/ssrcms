@@ -43,6 +43,32 @@ pub fn decrypt(secret_key: &str, encoded: &str) -> Option<String> {
     String::from_utf8(plaintext).ok()
 }
 
+/// Masks a secret for display in an admin UI: dash-delimited keys
+/// (Mailgun-style) show only their last two segments, e.g.
+/// `966c...280-11c539c0-c7ddc18d` becomes `11c539c0-c7ddc18d` — the same
+/// trailing portion Mailgun's own dashboard shows. Anything else shows only
+/// its last 8 characters. Shared by every provider-config model that stores
+/// a secret at rest (email providers, AI providers, ...) so the masking
+/// logic exists in exactly one place.
+pub fn mask_secret(s: &str) -> String {
+    let parts: Vec<&str> = s.split('-').collect();
+    if parts.len() >= 3 {
+        format!("{}-{}", parts[parts.len() - 2], parts[parts.len() - 1])
+    } else if s.chars().count() > 8 {
+        let tail: String = s
+            .chars()
+            .rev()
+            .take(8)
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev()
+            .collect();
+        format!("...{}", tail)
+    } else {
+        s.to_string()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -60,5 +86,23 @@ mod tests {
     fn wrong_key_fails() {
         let encrypted = encrypt("test-secret-key", "hello");
         assert_eq!(decrypt("different-key", &encrypted), None);
+    }
+
+    #[test]
+    fn mask_secret_shows_last_two_dash_segments() {
+        assert_eq!(
+            mask_secret("fixture-middle-visible-tail"),
+            "visible-tail"
+        );
+    }
+
+    #[test]
+    fn mask_secret_shows_last_eight_chars_otherwise() {
+        assert_eq!(mask_secret("abcdefghijklmnopqrstuvwxyz"), "...stuvwxyz");
+    }
+
+    #[test]
+    fn mask_secret_leaves_short_strings_unmasked() {
+        assert_eq!(mask_secret("short"), "short");
     }
 }

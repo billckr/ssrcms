@@ -2,11 +2,11 @@
 title: Posts
 group: feature
 updated_by: claude
-last_updated: 2026-08-12
+last_updated: 2026-09-09
 ---
 # Posts
 
-> Last updated: 2026-08-12 | Updated by: claude
+> Last updated: 2026-09-09 | Updated by: claude
 
 ## Overview
 
@@ -21,6 +21,10 @@ The `Post` struct's key columns: `id`, `site_id`, `title`, `slug`, `content`, `c
 ### URL Pattern
 
 Posts are served at `/{slug}` with no `/blog/` prefix. Slugs are unique across both posts and pages within a site. `single_post` (`core/src/handlers/post.rs`) first checks whether the active Puck builder project owns a page at this slug (`page_composition::get_by_slug`) and renders it via the composer if so; otherwise it looks up the post/page and, if `post_type == "page"`, delegates to `page::render_page()`.
+
+### AI Translation (2026-09-09)
+
+A plain post/page's `title`/`excerpt`/`content` can be AI-translated into another language and served at `/{locale}/{slug}` — see the **AI Post Translation** doc for the full feature (provider config, routing, SEO tags). Builder/page-composition posts aren't covered (their content is a JSON block tree, not these three flat fields).
 
 ### Status Workflow
 

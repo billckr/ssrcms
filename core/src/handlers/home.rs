@@ -380,6 +380,66 @@ pub(crate) async fn build_post_context(
     Ok(ctx)
 }
 
+/// One `<link rel="alternate" hreflang="...">` entry.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct HreflangLink {
+    /// A locale code (e.g. "es"), or the site's own base language for the
+    /// original (untranslated) entry.
+    pub locale: String,
+    pub url: String,
+}
+
+/// The canonical URL and hreflang alternate links for a post/page, given the
+/// already-built `post_ctx` (its `.url` is always the *original*-language
+/// URL — see `handlers::page::single_page`'s locale-peel comment) and
+/// `base_url`. `canonical_url` is always the original-language URL, even
+/// when the current request is on a locale prefix and even when that
+/// locale has no translation yet for this post — this avoids duplicate-
+/// content dilution for an enabled-but-untranslated locale. `hreflang_links`
+/// is empty (render nothing) unless this post actually has at least one
+/// translation; when non-empty, it lists the site's base language plus
+/// every locale this post has been translated into — never the full
+/// site-wide enabled-locale list, since advertising an untranslated locale
+/// would just invite a search engine to index a second copy of the
+/// original.
+pub(crate) async fn build_seo_locale_context(
+    state: &AppState,
+    post_ctx: &PostContext,
+    site_id: Uuid,
+    base_url: &str,
+) -> (String, Vec<HreflangLink>) {
+    let canonical_url = post_ctx.url.clone();
+    let Ok(post_id) = post_ctx.id.parse::<Uuid>() else {
+        return (canonical_url, vec![]);
+    };
+    let translations = crate::models::post_translation::list_for_post(&state.db, post_id)
+        .await
+        .unwrap_or_default();
+    if translations.is_empty() {
+        return (canonical_url, vec![]);
+    }
+
+    let path = canonical_url
+        .strip_prefix(base_url)
+        .unwrap_or(&canonical_url);
+    let site_language = state
+        .get_site_by_id(site_id)
+        .map(|(_, settings)| settings.language)
+        .unwrap_or_else(|| "en".to_string());
+
+    let mut links = vec![HreflangLink {
+        locale: site_language,
+        url: canonical_url.clone(),
+    }];
+    for t in &translations {
+        links.push(HreflangLink {
+            locale: t.locale.clone(),
+            url: format!("{base_url}/{}{path}", t.locale),
+        });
+    }
+    (canonical_url, links)
+}
+
 /// Fetch posts, categories, and tags for the current site and inject them into
 /// a Tera context so builder block templates (Posts, Categories, Tags) can use them.
 pub(crate) async fn enrich_builder_context(

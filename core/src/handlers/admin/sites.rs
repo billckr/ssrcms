@@ -779,6 +779,36 @@ pub async fn site_settings(
             }
         })
         .collect();
+    let ai_providers = crate::models::ai_provider::list_for_site(&state.db, id)
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .map(|p| {
+            let config = crate::models::ai_provider::decrypt_config(&state.config.secret_key, &p);
+            let hint = config.as_ref().map(|c| c.display_hint());
+            let field_placeholders = config
+                .map(|c| {
+                    c.field_placeholders()
+                        .into_iter()
+                        .map(|(k, v)| (k.to_string(), v))
+                        .collect()
+                })
+                .unwrap_or_default();
+            admin::pages::sites::AiProviderSummary {
+                id: p.id.to_string(),
+                label: p.label,
+                provider_type: p.provider_type,
+                verified: p.verified,
+                hint,
+                field_placeholders,
+            }
+        })
+        .collect();
+    let available_locales = crate::utils::locales::all_locales()
+        .iter()
+        .map(|(code, name)| (code.to_string(), name.to_string()))
+        .collect();
+    let enabled_locales = crate::models::site_locale::enabled_locales_for_site(&state.db, id).await;
     let data = SiteSettingsData {
         id: site.id.to_string(),
         hostname: site.hostname.clone(),
@@ -794,6 +824,9 @@ pub async fn site_settings(
         maintenance_mode,
         maintenance_message,
         providers,
+        ai_providers,
+        available_locales,
+        enabled_locales,
     };
     Html(admin::pages::sites::render_settings(&data, flash, &ctx)).into_response()
 }
@@ -1076,6 +1109,58 @@ pub async fn save_maintenance(
 
     Redirect::to(&format!(
         "/admin/sites/{}/settings?flash=Saved.&tab=maintenance",
+        id
+    ))
+    .into_response()
+}
+
+#[derive(Deserialize, Default)]
+pub struct EnabledLocalesForm {
+    #[serde(default)]
+    pub locales: Vec<String>,
+}
+
+/// POST /admin/sites/{id}/enabled-locales — which locales this site serves
+/// translated posts under (e.g. enabling "es" reserves the `/es/...` URL
+/// prefix — see `models::site_locale`'s doc comment for the trade-off).
+/// Only locales on `utils::locales::all_locales()` are accepted, silently
+/// dropping anything else (a tampered/unexpected form value).
+pub async fn update_enabled_locales(
+    State(state): State<AppState>,
+    admin: AdminUser,
+    Path(id): Path<Uuid>,
+    // axum::Form (serde_urlencoded) fails to deserialize a *single*
+    // repeated-name field into a Vec — it only special-cases 2+ occurrences
+    // — so a lone checked checkbox 500s with "invalid type: string, expected
+    // a sequence". axum_extra::extract::Form (serde_html_form) handles 0/1/N
+    // occurrences uniformly; posts.rs's categories/tags checkboxes already
+    // rely on the same extractor for the same reason.
+    axum_extra::extract::Form(form): axum_extra::extract::Form<EnabledLocalesForm>,
+) -> impl IntoResponse {
+    let site = match crate::models::site::get_by_id(&state.db, id).await {
+        Ok(s) => s,
+        Err(_) => return Redirect::to("/admin/sites").into_response(),
+    };
+    if !require_site_manager(&state, &admin, &site).await {
+        return (axum::http::StatusCode::FORBIDDEN, "Forbidden").into_response();
+    }
+
+    let known: std::collections::HashSet<&str> = crate::utils::locales::all_locales()
+        .iter()
+        .map(|(code, _)| *code)
+        .collect();
+    let codes: Vec<String> = form
+        .locales
+        .into_iter()
+        .filter(|code| known.contains(code.as_str()))
+        .collect();
+
+    if let Err(e) = crate::models::site_locale::set_enabled_locales(&state.db, id, &codes).await {
+        tracing::error!("failed to save enabled_locales for site {}: {:?}", id, e);
+    }
+
+    Redirect::to(&format!(
+        "/admin/sites/{}/settings?flash=Saved.&tab=ai-translation",
         id
     ))
     .into_response()

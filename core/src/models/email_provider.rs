@@ -58,7 +58,7 @@ impl ProviderConfig {
         match self {
             ProviderConfig::Mailgun { domain, api_key } => vec![
                 ("mailgun_domain", domain.clone()),
-                ("mailgun_api_key", mask_secret(api_key)),
+                ("mailgun_api_key", crate::crypto::mask_secret(api_key)),
             ],
             ProviderConfig::Smtp {
                 host,
@@ -70,14 +70,14 @@ impl ProviderConfig {
                 ("smtp_host", host.clone()),
                 ("smtp_port", port.to_string()),
                 ("smtp_username", username.clone()),
-                ("smtp_password", mask_secret(password)),
+                ("smtp_password", crate::crypto::mask_secret(password)),
             ],
             ProviderConfig::SendGrid {
                 api_key,
                 from_email,
             } => vec![
                 ("sendgrid_from_email", from_email.clone()),
-                ("sendgrid_api_key", mask_secret(api_key)),
+                ("sendgrid_api_key", crate::crypto::mask_secret(api_key)),
             ],
             ProviderConfig::Postmark {
                 server_token,
@@ -86,7 +86,10 @@ impl ProviderConfig {
             } => vec![
                 ("postmark_from_email", from_email.clone()),
                 ("postmark_message_stream", message_stream.clone()),
-                ("postmark_server_token", mask_secret(server_token)),
+                (
+                    "postmark_server_token",
+                    crate::crypto::mask_secret(server_token),
+                ),
             ],
         }
     }
@@ -97,7 +100,7 @@ impl ProviderConfig {
     pub fn display_hint(&self) -> String {
         match self {
             ProviderConfig::Mailgun { domain, api_key } => {
-                format!("{} · {}", domain, mask_secret(api_key))
+                format!("{} · {}", domain, crate::crypto::mask_secret(api_key))
             }
             ProviderConfig::Smtp {
                 host,
@@ -111,39 +114,20 @@ impl ProviderConfig {
                 api_key,
                 from_email,
             } => {
-                format!("{} · {}", from_email, mask_secret(api_key))
+                format!("{} · {}", from_email, crate::crypto::mask_secret(api_key))
             }
             ProviderConfig::Postmark {
                 server_token,
                 from_email,
                 ..
             } => {
-                format!("{} · {}", from_email, mask_secret(server_token))
+                format!(
+                    "{} · {}",
+                    from_email,
+                    crate::crypto::mask_secret(server_token)
+                )
             }
         }
-    }
-}
-
-/// Masks a secret for display: dash-delimited keys (Mailgun-style) show
-/// only their last two segments, e.g. `966c...280-11c539c0-c7ddc18d` becomes
-/// `11c539c0-c7ddc18d` — the same trailing portion Mailgun's own dashboard
-/// shows. Anything else shows only its last 8 characters.
-fn mask_secret(s: &str) -> String {
-    let parts: Vec<&str> = s.split('-').collect();
-    if parts.len() >= 3 {
-        format!("{}-{}", parts[parts.len() - 2], parts[parts.len() - 1])
-    } else if s.chars().count() > 8 {
-        let tail: String = s
-            .chars()
-            .rev()
-            .take(8)
-            .collect::<Vec<_>>()
-            .into_iter()
-            .rev()
-            .collect();
-        format!("...{}", tail)
-    } else {
-        s.to_string()
     }
 }
 

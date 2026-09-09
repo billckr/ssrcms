@@ -12,15 +12,30 @@ use uuid::Uuid;
 use crate::app_state::AppState;
 use crate::middleware::site::CurrentSite;
 use crate::models::post::{self, ListFilter, PostStatus, PostType};
+use crate::models::site_locale;
 use crate::templates::context::{ContextBuilder, RequestContext, SessionContext};
 
-use super::home::{build_post_context, build_site_context, render_error_page};
+use super::home::{
+    build_post_context, build_seo_locale_context, build_site_context, render_error_page,
+};
 
 /// Fallback handler — render a static page, supporting nested paths like /services/service-1.
 /// Also the entry point for decorated post permalinks (e.g.
 /// `/2026/08/my-post`) — any multi-segment path that doesn't resolve to a
 /// page hierarchy is retried as a post permalink by its LAST segment; see
 /// `SiteSettings::permalink_structure`'s doc comment for why.
+///
+/// **Locale-prefixed URLs** (e.g. `/es/my-post`, for the AI-translation
+/// feature): a 2+-segment path can never match the direct `/{slug}` route
+/// (`handlers::post::single_post`, a fixed 1-segment pattern), so it always
+/// lands here. If the first segment matches a locale this site has enabled
+/// (`models::site_locale`), it's peeled off before any of the existing
+/// segment-count logic runs, and the remainder is resolved exactly as an
+/// un-prefixed path would be — the peeled locale is threaded through
+/// separately (see `render_page`) purely to select which translation to
+/// overlay onto the rendered content, never to change *which* post/page
+/// resolves. A locale that isn't enabled for this site is just an ordinary
+/// (probably 404ing) path segment, same as today.
 #[allow(clippy::too_many_arguments)]
 pub async fn single_page(
     State(state): State<AppState>,
@@ -42,8 +57,49 @@ pub async fn single_page(
 
     // Split URI path into segments, filtering empty parts from leading/trailing slashes
     let path = uri.path().trim_start_matches('/').to_string();
-    let segments: Vec<&str> = path.split('/').filter(|s: &&str| !s.is_empty()).collect();
+    let all_segments: Vec<&str> = path.split('/').filter(|s: &&str| !s.is_empty()).collect();
+
+    let enabled_locales = site_locale::enabled_locales_for_site(&state.db, site_id).await;
+    let locale: Option<String> =
+        if all_segments.len() >= 2 && enabled_locales.iter().any(|l| l == all_segments[0]) {
+            Some(all_segments[0].to_string())
+        } else {
+            None
+        };
+    let segments: Vec<&str> = if locale.is_some() {
+        all_segments[1..].to_vec()
+    } else {
+        all_segments
+    };
     let slug = segments.first().copied().unwrap_or("");
+
+    // A single content segment under a locale prefix (e.g. `/es/my-post`,
+    // vs. a nested `/es/parent/child`) needs the *same* dual post-or-page
+    // resolution the direct, un-prefixed `/{slug}` route
+    // (`post::single_post`) already does — `render_page` below only ever
+    // understands pages. Delegate to the exact same pipeline
+    // (password gate, view tracking, post-vs-page branching) that route
+    // uses, just reached from inside this fallback instead of axum's
+    // routing table (a locale-prefixed 2-segment path can never match the
+    // direct route's 1-segment pattern, so it always lands here first).
+    if let Some(loc) = &locale {
+        if segments.len() == 1 {
+            return super::post::render_single_post_response(
+                &state,
+                site_id,
+                &base_url,
+                slug.to_string(),
+                uri.clone(),
+                &jar,
+                &session,
+                addr,
+                &headers,
+                cpage,
+                Some(loc.clone()),
+            )
+            .await;
+        }
+    }
 
     // Password gate: only applies to top-level pages (no parent).
     // Nested pages skip the password gate in MVP.
@@ -87,6 +143,7 @@ pub async fn single_page(
         &base_url,
         session_ctx,
         preview_allowed,
+        locale.clone(),
     )
     .await;
 
@@ -103,6 +160,7 @@ pub async fn single_page(
                 site_id,
                 &base_url,
                 &segments,
+                locale.as_deref(),
                 &request_path,
                 &uri,
                 &jar,
@@ -146,6 +204,7 @@ async fn try_post_permalink(
     site_id: Uuid,
     base_url: &str,
     segments: &[&str],
+    locale: Option<&str>,
     request_path: &str,
     uri: &axum::http::Uri,
     jar: &SignedCookieJar,
@@ -171,7 +230,18 @@ async fn try_post_permalink(
         .into_iter()
         .find(|t| t.taxonomy == "category")
         .map(|t| t.slug);
-    let canonical_path = post::build_permalink(&structure, &post_record, category_slug.as_deref());
+    // A locale prefix (already stripped from `segments` by the caller) isn't
+    // part of the permalink structure itself — prepend it back on so the
+    // comparison/redirect below stays on the same locale-prefixed URL
+    // instead of silently dropping the visitor back to the original
+    // language.
+    let canonical_path = match locale {
+        Some(l) => format!(
+            "/{l}{}",
+            post::build_permalink(&structure, &post_record, category_slug.as_deref())
+        ),
+        None => post::build_permalink(&structure, &post_record, category_slug.as_deref()),
+    };
 
     // Compare ignoring a trailing slash either side — both shapes are the
     // "same" URL, no need to redirect one to the other.
@@ -190,6 +260,7 @@ async fn try_post_permalink(
                 addr,
                 headers,
                 cpage,
+                locale.map(str::to_string),
             )
             .await,
         );
@@ -199,6 +270,7 @@ async fn try_post_permalink(
     Some(Redirect::permanent(&format!("{canonical_path}{query}")).into_response())
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(super) async fn render_page(
     state: AppState,
     segments: Vec<&str>,
@@ -207,6 +279,7 @@ pub(super) async fn render_page(
     base_url: &str,
     session_ctx: SessionContext,
     preview_allowed: bool,
+    locale: Option<String>,
 ) -> crate::errors::Result<String> {
     // Look up the page: single segment = slug lookup, multiple = hierarchical path.
     // Preview-allowed staff sessions fall back to an any-status lookup when the
@@ -243,9 +316,55 @@ pub(super) async fn render_page(
         )));
     }
 
-    let page_ctx = build_post_context(&state, &post_record, base_url).await?;
+    let mut page_ctx = build_post_context(&state, &post_record, base_url).await?;
+
+    // Compute canonical/hreflang from the *original*-language context before
+    // any translation overlay or locale-prefixing below touches `page_ctx`.
+    let (canonical_url, hreflang_links) =
+        build_seo_locale_context(&state, &page_ctx, site_id, base_url).await;
+
+    if let Some(locale) = &locale {
+        if let Ok(Some(translation)) =
+            crate::models::post_translation::get(&state.db, post_record.id, locale).await
+        {
+            page_ctx.title = translation.title;
+            page_ctx.excerpt = translation.excerpt.unwrap_or_default();
+            page_ctx.content = translation.content;
+        }
+        // Locale-prefix the URL/breadcrumbs regardless of whether a
+        // translation row was found — the visitor stays on the locale URL
+        // either way (silent fallback to original-language content), so
+        // every link on the page should keep pointing at that same locale.
+        let page_path = page_ctx
+            .url
+            .strip_prefix(base_url)
+            .unwrap_or(&page_ctx.url)
+            .to_string();
+        page_ctx.url = format!("{base_url}/{locale}{page_path}");
+        for crumb in &mut page_ctx.breadcrumbs {
+            let crumb_path = crumb
+                .url
+                .strip_prefix(base_url)
+                .unwrap_or(&crumb.url)
+                .to_string();
+            crumb.url = format!("{base_url}/{locale}{crumb_path}");
+        }
+    }
+
     let site_ctx = build_site_context(&state, Some(site_id), base_url).await?;
-    let nav = crate::models::nav_menu::build_nav_context(&state.db, site_id, uri.path()).await;
+    // Nav "active item" matching is on the *content* path — a locale prefix
+    // isn't part of any nav href (nav isn't locale-aware this pass; see the
+    // AI-translation feature's known limitations), so strip it back off
+    // here or every nav link on a translated page would show as inactive.
+    let nav_path = match &locale {
+        Some(l) => uri
+            .path()
+            .strip_prefix(&format!("/{l}"))
+            .unwrap_or(uri.path())
+            .to_string(),
+        None => uri.path().to_string(),
+    };
+    let nav = crate::models::nav_menu::build_nav_context(&state.db, site_id, &nav_path).await;
 
     let mut ctx = ContextBuilder {
         site: site_ctx,
@@ -261,6 +380,8 @@ pub(super) async fn render_page(
     super::insert_theme_options(&mut ctx, &state, site_id).await;
 
     ctx.insert("page", &page_ctx);
+    ctx.insert("canonical_url", &canonical_url);
+    ctx.insert("hreflang_links", &hreflang_links);
 
     // For the RSS feed template, inject the 20 most recent published posts.
     let template_name_raw = post_record

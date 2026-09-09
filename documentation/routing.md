@@ -2,11 +2,11 @@
 title: Routing
 group: system
 updated_by: claude
-last_updated: 2026-09-08
+last_updated: 2026-09-09
 ---
 # Routing
 
-> Last updated: 2026-09-08 | Updated by: claude
+> Last updated: 2026-09-09 | Updated by: claude
 
 ## Overview
 
@@ -39,6 +39,19 @@ fallback — nested password-protected pages aren't supported in MVP). The page 
 Posts and pages both live at `/{slug}` — no `/blog/` prefix. `post_handler::single_post`
 resolves the slug and, if the record's `post_type` is `page`, delegates to the page fallback
 handling. The fallback also directly handles nested page paths that never match `/{slug}`.
+
+### Locale-Prefixed URLs (AI Translation, 2026-09-09)
+
+`/{locale}/{slug}` (and nested paths) is not a separately registered route — it's always a 2+
+segment path, so it can never match the direct `/{slug}` route and always lands in the
+`page::single_page` fallback described above. There, before any of the existing segment-count
+logic runs, a leading segment matching one of the site's enabled locales (`models::site_locale`)
+is peeled off and threaded through separately, purely to select which translation to overlay
+once the underlying post/page resolves — it never changes *which* post/page resolves. See the
+**AI Post Translation** doc for the full routing/SEO details, including why a single content
+segment under a locale prefix needs the same dual post-or-page handling `single_post` uses
+(`render_page` alone only understands pages) and the accepted reserved-namespace trade-off of
+enabling a locale whose code collides with a real top-level slug.
 
 ### Page Builder Routes
 

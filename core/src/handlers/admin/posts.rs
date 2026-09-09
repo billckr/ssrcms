@@ -417,6 +417,9 @@ async fn new_post_type(
         created_at: None,
         updated_at: None,
         version: None,
+        available_locales: vec![],
+        ai_providers: vec![],
+        translations: vec![],
     };
     Html(admin::pages::posts::render_editor(&edit, None, &ctx))
 }
@@ -470,6 +473,61 @@ pub async fn edit_page(
     )
     .await
     .into_response()
+}
+
+/// Data for the post editor's Translations sidebar section: the site's
+/// enabled locales, its verified AI providers, and this post's existing
+/// translations. `post_base_url`/`post_path` are the same absolute-URL
+/// components `edit_post_type` already computes for `live_url`/`preview_url`
+/// — reused here so a translation's "View" link opens correctly regardless
+/// of which host the admin is currently browsing from.
+async fn fetch_translation_editor_data(
+    state: &AppState,
+    site_id: Option<Uuid>,
+    post: &crate::models::post::Post,
+    post_base_url: &str,
+    post_path: &str,
+) -> (
+    Vec<(String, String)>,
+    Vec<(String, String)>,
+    Vec<admin::pages::posts::PostTranslationSummary>,
+) {
+    let Some(site_id) = site_id else {
+        return (vec![], vec![], vec![]);
+    };
+    let enabled_codes =
+        crate::models::site_locale::enabled_locales_for_site(&state.db, site_id).await;
+    let available_locales: Vec<(String, String)> = enabled_codes
+        .iter()
+        .filter_map(|code| {
+            crate::utils::locales::display_name(code).map(|name| (code.clone(), name.to_string()))
+        })
+        .collect();
+    let ai_providers: Vec<(String, String)> =
+        crate::models::ai_provider::list_verified_for_site(&state.db, site_id)
+            .await
+            .unwrap_or_default()
+            .into_iter()
+            .map(|p| (p.id.to_string(), p.label))
+            .collect();
+    let translations = crate::models::post_translation::list_for_post(&state.db, post.id)
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .map(|t| {
+            let locale_name = crate::utils::locales::display_name(&t.locale)
+                .unwrap_or(t.locale.as_str())
+                .to_string();
+            admin::pages::posts::PostTranslationSummary {
+                is_stale: t.is_stale(post),
+                view_url: format!("{post_base_url}/{}{post_path}", t.locale),
+                generated_at: t.generated_at.format("%Y-%m-%d %H:%M UTC").to_string(),
+                locale: t.locale,
+                locale_name,
+            }
+        })
+        .collect();
+    (available_locales, ai_providers, translations)
 }
 
 /// `is_author` here really means "is a *restricted* Author" — callers
@@ -626,6 +684,9 @@ async fn edit_post_type(
         _ => None,
     };
 
+    let (available_locales, ai_providers, translations) =
+        fetch_translation_editor_data(&state, site_id, &post, &post_base_url, &post_path).await;
+
     let edit = PostEdit {
         id: Some(post.id.to_string()),
         title: post.title.clone(),
@@ -671,11 +732,15 @@ async fn edit_post_type(
         created_at: Some(post.created_at.format("%Y-%m-%d %H:%M UTC").to_string()),
         updated_at: Some(post.updated_at.format("%Y-%m-%d %H:%M UTC").to_string()),
         version: Some(post.updated_at.to_rfc3339()),
+        available_locales,
+        ai_providers,
+        translations,
     };
 
     let flash = match success {
         Some("saved") => Some("Saved."),
-        _ => None,
+        Some(message) => Some(message),
+        None => None,
     };
     Html(admin::pages::posts::render_editor(&edit, flash, &ctx)).into_response()
 }
@@ -835,6 +900,9 @@ pub async fn save_new(
             created_at: None,
             updated_at: None,
             version: None,
+            available_locales: vec![],
+            ai_providers: vec![],
+            translations: vec![],
         };
         return Html(admin::pages::posts::render_editor(
             &edit,
@@ -944,6 +1012,9 @@ pub async fn save_new(
                 created_at: None,
                 updated_at: None,
                 version: None,
+                available_locales: vec![],
+                ai_providers: vec![],
+                translations: vec![],
             };
             let msg = friendly_save_error(&e);
             Html(admin::pages::posts::render_editor(&edit, Some(&msg), &ctx)).into_response()
@@ -1110,6 +1181,9 @@ pub async fn save_edit(
             created_at: None,
             updated_at: None,
             version: None,
+            available_locales: vec![],
+            ai_providers: vec![],
+            translations: vec![],
         };
         return Html(admin::pages::posts::render_editor(
             &edit,
@@ -1237,6 +1311,9 @@ pub async fn save_edit(
                 created_at: None,
                 updated_at: None,
                 version: None,
+                available_locales: vec![],
+                ai_providers: vec![],
+                translations: vec![],
             };
             let msg = friendly_save_error(&e);
             Html(admin::pages::posts::render_editor(&edit, Some(&msg), &ctx)).into_response()
@@ -1490,6 +1567,137 @@ pub async fn delete_page(
     }
     crate::search::indexer::delete_post(&state.search_index, &id.to_string());
     Redirect::to("/admin/pages").into_response()
+}
+
+#[derive(Deserialize)]
+pub struct TranslatePostForm {
+    pub locale: String,
+    pub provider_id: Uuid,
+}
+
+/// Builds the right `/admin/{posts|pages}/{id}/edit?success=...` redirect
+/// for a post/page, reusing the existing `success`-flash convention
+/// `edit_post_type` already reads (see `EditPostQuery`).
+fn edit_redirect(post: &crate::models::post::Post, msg: &str) -> Redirect {
+    let base = if post.post_type == "page" {
+        format!("/admin/pages/{}/edit", post.id)
+    } else {
+        format!("/admin/posts/{}/edit", post.id)
+    };
+    let msg = crate::handlers::admin::themes::url_encode_param(msg);
+    Redirect::to(&format!("{base}?success={msg}"))
+}
+
+/// POST /admin/posts/{id}/translate — translate a post/page's title,
+/// excerpt, and content into another language via a configured AI provider,
+/// and save the result as a `post_translations` row. Awaited synchronously
+/// (not spawned) since the admin is waiting on the result — same as the
+/// email-provider "Test" action.
+pub async fn translate_post_action(
+    State(state): State<AppState>,
+    admin: AdminUser,
+    Path(id): Path<Uuid>,
+    Form(form): Form<TranslatePostForm>,
+) -> impl IntoResponse {
+    let post = match crate::models::post::get_by_id(&state.db, id).await {
+        Ok(p) => p,
+        Err(_) => return Redirect::to("/admin/posts").into_response(),
+    };
+    if !admin.caps.is_global_admin && post.site_id != admin.site_id {
+        return Redirect::to("/admin/posts").into_response();
+    }
+    let required_cap = if post.post_type == "page" {
+        admin.caps.can_manage_pages
+    } else {
+        admin.caps.can_manage_content
+    };
+    if !required_cap {
+        return (axum::http::StatusCode::FORBIDDEN, "Forbidden").into_response();
+    }
+
+    let Some(site_id) = post.site_id else {
+        return edit_redirect(&post, "This post has no site.").into_response();
+    };
+    let Some(locale_name) = crate::utils::locales::display_name(&form.locale) else {
+        return edit_redirect(&post, "Unknown language.").into_response();
+    };
+    let provider_row =
+        match crate::models::ai_provider::get_by_id(&state.db, form.provider_id).await {
+            Ok(Some(row)) if row.site_id == site_id => row,
+            _ => return edit_redirect(&post, "AI provider not found.").into_response(),
+        };
+    let Some(config) =
+        crate::models::ai_provider::decrypt_config(&state.config.secret_key, &provider_row)
+    else {
+        return edit_redirect(&post, "Failed to decrypt AI provider config.").into_response();
+    };
+
+    match crate::translate::translate_post(&config, &post, locale_name).await {
+        Ok(result) => {
+            if let Err(e) = crate::models::post_translation::upsert(
+                &state.db,
+                id,
+                &form.locale,
+                &result.title,
+                result.excerpt.as_deref(),
+                &result.content,
+                post.updated_at,
+            )
+            .await
+            {
+                tracing::error!(
+                    "failed to save translation for post {} locale {}: {:?}",
+                    id,
+                    form.locale,
+                    e
+                );
+                return edit_redirect(&post, "Failed to save translation.").into_response();
+            }
+            edit_redirect(&post, &format!("Translated into {locale_name}.")).into_response()
+        }
+        Err(e) => {
+            tracing::error!(
+                "translation failed for post {} locale {}: {:?}",
+                id,
+                form.locale,
+                e
+            );
+            edit_redirect(&post, &format!("Translation failed: {e}")).into_response()
+        }
+    }
+}
+
+/// POST /admin/posts/{id}/translations/{locale}/delete
+pub async fn delete_translation(
+    State(state): State<AppState>,
+    admin: AdminUser,
+    Path((id, locale)): Path<(Uuid, String)>,
+) -> impl IntoResponse {
+    let post = match crate::models::post::get_by_id(&state.db, id).await {
+        Ok(p) => p,
+        Err(_) => return Redirect::to("/admin/posts").into_response(),
+    };
+    if !admin.caps.is_global_admin && post.site_id != admin.site_id {
+        return Redirect::to("/admin/posts").into_response();
+    }
+    let required_cap = if post.post_type == "page" {
+        admin.caps.can_manage_pages
+    } else {
+        admin.caps.can_manage_content
+    };
+    if !required_cap {
+        return (axum::http::StatusCode::FORBIDDEN, "Forbidden").into_response();
+    }
+
+    if let Err(e) = crate::models::post_translation::delete(&state.db, id, &locale).await {
+        tracing::error!(
+            "failed to delete translation for post {} locale {}: {:?}",
+            id,
+            locale,
+            e
+        );
+    }
+    edit_redirect(&post, "Translation deleted.").into_response()
 }
 
 #[derive(Deserialize)]

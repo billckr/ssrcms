@@ -39,6 +39,11 @@
       <span class="post-author">by&nbsp;<a href="{{ post.author.url | safe }}">{{ post.author.display_name }}</a></span>
       <span class="post-meta-category">{% if post.categories | length > 0 %}[ {% for cat in post.categories %}<a href="{{ cat.url }}">{{ cat.name }}</a>{% if not loop.last %}<span class="post-header-eyebrow-sep" aria-hidden="true">, </span>{% endif %}{% endfor %} ]{% else %}Entry{% endif %}</span>
       <span class="reading-time">{{ post.reading_time }} min read</span>
+      {% if hreflang_links | length > 1 %}
+        <span class="lang-switcher">
+          {% for alt in hreflang_links %}<a href="{{ alt.url | safe }}" lang="{{ alt.locale }}">{{ alt.locale }}</a>{% if not loop.last %} · {% endif %}{% endfor %}
+        </span>
+      {% endif %}
       {% if session.is_logged_in %}
         {% if is_saved %}
           <form method="post" action="/{{ post.slug }}/unsave" class="save-post-form">

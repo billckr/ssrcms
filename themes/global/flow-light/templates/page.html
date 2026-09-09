@@ -6,6 +6,11 @@
 <article class="single-page">
   <header class="page-header">
     <h1 class="page-title" data-reveal style="--d:0">{{ page.title }}</h1>
+    {% if hreflang_links | length > 1 %}
+      <span class="lang-switcher">
+        {% for alt in hreflang_links %}<a href="{{ alt.url | safe }}" lang="{{ alt.locale }}">{{ alt.locale }}</a>{% if not loop.last %} · {% endif %}{% endfor %}
+      </span>
+    {% endif %}
   </header>
 
   {% if page.featured_image %}
