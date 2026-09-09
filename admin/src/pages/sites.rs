@@ -732,7 +732,7 @@ pub fn render_settings(
     {fields_html}
     <p class="field-hint">Blank credential fields retain their saved encrypted values. Saving automatically re-verifies the provider.</p>
     <div class="icon-pill">
-      <button type="submit" class="icon-btn" title="Save Provider" aria-label="Save Provider"><img src="/admin/static/icons/save.svg" alt=""></button>
+      <button type="submit" class="icon-btn ai-provider-edit-save" title="Save Provider" aria-label="Save Provider" disabled><img src="/admin/static/icons/save.svg" alt=""></button>
       <button type="button" class="icon-btn" title="Cancel" aria-label="Cancel"
               onclick="document.getElementById('{edit_id}').style.display='none'"><img src="/admin/static/icons/x.svg" alt=""></button>
     </div>
@@ -752,31 +752,23 @@ pub fn render_settings(
         }).collect::<Vec<_>>().join("\n")
     };
 
-    let enabled_locales_set: std::collections::HashSet<&str> =
-        data.enabled_locales.iter().map(|s| s.as_str()).collect();
-    let locale_checkboxes_html = data
-        .available_locales
-        .iter()
-        .map(|(code, name)| {
-            let checked = if enabled_locales_set.contains(code.as_str()) {
-                "checked"
-            } else {
-                ""
-            };
-            let cb_id = format!("locale-{}", code.replace(['-', ' '], "_"));
-            format!(
-                r#"<label for="{cb_id}" style="display:flex;align-items:center;gap:.4rem;font-weight:400;cursor:pointer">
-  <input type="checkbox" id="{cb_id}" name="locales" value="{code}" {checked}>
-  {name} <code style="color:var(--muted)">({code})</code>
-</label>"#,
-                cb_id = cb_id,
-                code = crate::html_escape(code),
-                checked = checked,
-                name = crate::html_escape(name),
-            )
-        })
-        .collect::<Vec<_>>()
-        .join("\n");
+    // The language picker (dropdown + Add button, building a removable chip
+    // list) is entirely client-rendered from these two JSON blobs — see the
+    // <script> in ai_translation_tab_panel_html below. That script owns
+    // building both the `<option>` list and the hidden `name="locales"`
+    // checkboxes the form actually submits, so the wire format posted to
+    // /admin/sites/{id}/enabled-locales is unchanged from the old checkbox
+    // grid: one or more `locales=<code>` values.
+    let all_locales_json = serde_json::to_string(
+        &data
+            .available_locales
+            .iter()
+            .map(|(code, name)| serde_json::json!({ "code": code, "name": name }))
+            .collect::<Vec<_>>(),
+    )
+    .unwrap_or_else(|_| "[]".to_string());
+    let enabled_locales_json =
+        serde_json::to_string(&data.enabled_locales).unwrap_or_else(|_| "[]".to_string());
 
     let ai_translation_tab_button_html = if data.ai_translation_enabled {
         r#"<button type="button" class="page-tab" role="tab" aria-selected="false" aria-controls="tab-ai-translation" data-tab="ai-translation">AI Translation</button>"#.to_string()
@@ -797,11 +789,6 @@ pub fn render_settings(
 <div class="card-boxed">
   <h2 class="card-boxed-header">AI Providers</h2>
   <div class="card-boxed-body">
-  <p class="form-note" style="margin:0 0 1rem">
-    Configure an AI provider to translate posts from the post editor. Anthropic calls Claude's
-    API directly; OpenAI-Compatible covers OpenAI itself, or a local server such as Ollama or
-    LM Studio.
-  </p>
   {ai_providers_list_html}
   </div>
 </div>
@@ -815,6 +802,18 @@ function toggleAiProviderEdit(id) {{
   }});
   if (opening) target.style.display = 'block';
 }}
+document.querySelectorAll('.ai-provider-edit-form').forEach(function(form) {{
+  var btn = form.querySelector('.ai-provider-edit-save');
+  function snapshot() {{
+    return Array.from(new FormData(form).entries()).map(function(e) {{ return e[0] + '=' + e[1]; }}).join('&');
+  }}
+  var initialSnapshot = snapshot();
+  function checkChanged() {{
+    btn.disabled = snapshot() === initialSnapshot;
+  }}
+  form.addEventListener('input', checkChanged);
+  form.addEventListener('change', checkChanged);
+}});
 (function() {{
   function syncCustom(control, preserveValue) {{
     var select = control.querySelector('[data-model-select]');
@@ -908,6 +907,11 @@ function toggleAiProviderEdit(id) {{
   <div class="card-boxed-body">
   <form method="post" action="/admin/sites/{id}/ai-providers" class="edit-form" id="add-ai-provider-form">
     <div class="card-boxed-section">
+      <p class="form-note" style="margin:0 0 1rem">
+        Configure an AI provider to translate posts from the post editor. Anthropic calls Claude's
+        API directly; OpenAI-Compatible covers OpenAI itself, or a local server such as Ollama or
+        LM Studio.
+      </p>
       <div class="form-group">
         <label for="ai-provider-label">Label</label>
         <input type="text" id="ai-provider-label" name="label" required placeholder="e.g. Claude">
@@ -923,7 +927,7 @@ function toggleAiProviderEdit(id) {{
     <div class="card-boxed-section ai-provider-fields" data-provider="anthropic">
       {anthropic_fields_html}
       <div class="icon-pill">
-        <button type="submit" id="add-ai-provider-btn-anthropic" class="icon-btn" title="Add Provider" aria-label="Add Provider">
+        <button type="submit" id="add-ai-provider-btn-anthropic" class="icon-btn" title="Add Provider" aria-label="Add Provider" disabled>
           <img src="/admin/static/icons/save.svg" alt="">
         </button>
       </div>
@@ -931,7 +935,7 @@ function toggleAiProviderEdit(id) {{
     <div class="card-boxed-section ai-provider-fields" data-provider="openai_compatible" style="display:none">
       {openai_compatible_fields_html}
       <div class="icon-pill">
-        <button type="submit" id="add-ai-provider-btn-openai_compatible" class="icon-btn" title="Add Provider" aria-label="Add Provider">
+        <button type="submit" id="add-ai-provider-btn-openai_compatible" class="icon-btn" title="Add Provider" aria-label="Add Provider" disabled>
           <img src="/admin/static/icons/save.svg" alt="">
         </button>
       </div>
@@ -950,30 +954,150 @@ function toggleAiProviderEdit(id) {{
   }}
   typeSelect.addEventListener('change', sync);
   sync();
+
+  var addForm = document.getElementById('add-ai-provider-form');
+  var addBtnAnthropic = document.getElementById('add-ai-provider-btn-anthropic');
+  var addBtnOpenai = document.getElementById('add-ai-provider-btn-openai_compatible');
+  function addSnapshot() {{
+    return Array.from(new FormData(addForm).entries()).map(function(e) {{ return e[0] + '=' + e[1]; }}).join('&');
+  }}
+  var addInitialSnapshot = addSnapshot();
+  function checkAddChanged() {{
+    var changed = addSnapshot() !== addInitialSnapshot;
+    addBtnAnthropic.disabled = !changed;
+    addBtnOpenai.disabled = !changed;
+  }}
+  addForm.addEventListener('input', checkAddChanged);
+  addForm.addEventListener('change', checkAddChanged);
 }})();
 </script>
-</div>
-</div>
 
-<div class="card-boxed" style="max-width:720px;margin-top:1rem">
+<div class="card-boxed" style="margin-top:1rem">
   <h2 class="card-boxed-header">Enabled Languages</h2>
   <div class="card-boxed-body">
   <form method="post" action="/admin/sites/{id}/enabled-locales" class="edit-form">
     <div class="card-boxed-section">
-      <p class="form-note" style="margin:0 0 .75rem;color:var(--danger)">
+      <p class="form-note" style="margin:0 0 .75rem">
         Enabling a language reserves its code as a URL prefix (e.g. <code>/es/...</code>). Any
         existing top-level post or page whose slug exactly matches an enabled language code
         becomes unreachable at its own URL.
       </p>
-      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:.5rem">
-        {locale_checkboxes_html}
+      <div class="form-group">
+        <label for="locale-add-select">Add a language</label>
+        <div style="display:flex;gap:.5rem;align-items:center">
+          <select id="locale-add-select" style="width:auto;max-width:320px"></select>
+          <button type="button" class="icon-btn" id="locale-add-btn" title="Add Language" aria-label="Add Language" disabled>
+            <img src="/admin/static/icons/plus.svg" alt="">
+          </button>
+        </div>
       </div>
-    </div>
-    <div class="icon-pill">
-      <button type="submit" class="icon-btn" title="Save" aria-label="Save"><img src="/admin/static/icons/save.svg" alt=""></button>
+      <div id="locale-chip-list" class="locale-chip-list"></div>
+      <p class="form-note" id="locale-empty-note" style="margin:.5rem 0 0">No languages enabled yet.</p>
+      <div class="icon-pill">
+        <button type="submit" class="icon-btn" id="locale-save-btn" title="Save" aria-label="Save" disabled><img src="/admin/static/icons/save.svg" alt=""></button>
+      </div>
     </div>
   </form>
   </div>
+</div>
+<style>
+.locale-chip-list {{ display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .75rem; }}
+.locale-chip {{
+  display: inline-flex; align-items: center; gap: .35rem;
+  background: var(--tint); border: 1px solid var(--border); border-radius: 999px;
+  padding: .2rem .3rem .2rem .65rem; font-size: .8rem;
+}}
+.locale-chip-remove {{
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 18px; height: 18px; padding: 0; border: none; background: transparent;
+  border-radius: 50%; cursor: pointer; opacity: .65;
+}}
+.locale-chip-remove:hover {{ opacity: 1; background: var(--border); }}
+.locale-chip-remove img {{ width: 12px; height: 12px; display: block; }}
+</style>
+<script>
+(function() {{
+  var ALL_LOCALES = {all_locales_json};
+  var enabled = new Set({enabled_locales_json});
+  var initialEnabled = new Set(enabled);
+  var list = document.getElementById('locale-chip-list');
+  var select = document.getElementById('locale-add-select');
+  var addBtn = document.getElementById('locale-add-btn');
+  var emptyNote = document.getElementById('locale-empty-note');
+  var saveBtn = document.getElementById('locale-save-btn');
+
+  function isDirty() {{
+    if (enabled.size !== initialEnabled.size) return true;
+    for (var code of enabled) {{
+      if (!initialEnabled.has(code)) return true;
+    }}
+    return false;
+  }}
+
+  function render() {{
+    list.innerHTML = '';
+    ALL_LOCALES.forEach(function(loc) {{
+      if (!enabled.has(loc.code)) return;
+      var chip = document.createElement('span');
+      chip.className = 'locale-chip';
+      chip.dataset.code = loc.code;
+      var label = document.createElement('span');
+      label.textContent = loc.name + ' (' + loc.code + ')';
+      var hiddenInput = document.createElement('input');
+      hiddenInput.type = 'checkbox';
+      hiddenInput.name = 'locales';
+      hiddenInput.value = loc.code;
+      hiddenInput.checked = true;
+      hiddenInput.hidden = true;
+      var removeBtn = document.createElement('button');
+      removeBtn.type = 'button';
+      removeBtn.className = 'locale-chip-remove';
+      removeBtn.setAttribute('aria-label', 'Remove ' + loc.name);
+      removeBtn.title = 'Remove';
+      removeBtn.innerHTML = '<img src="/admin/static/icons/x.svg" alt="">';
+      chip.appendChild(label);
+      chip.appendChild(hiddenInput);
+      chip.appendChild(removeBtn);
+      list.appendChild(chip);
+    }});
+    emptyNote.hidden = list.children.length > 0;
+
+    var remaining = ALL_LOCALES.filter(function(loc) {{ return !enabled.has(loc.code); }});
+    select.innerHTML = '';
+    var placeholder = document.createElement('option');
+    placeholder.value = '';
+    placeholder.selected = true;
+    placeholder.disabled = true;
+    placeholder.textContent = remaining.length ? 'Select a language to add…' : 'All languages enabled';
+    select.appendChild(placeholder);
+    remaining.forEach(function(loc) {{
+      var opt = document.createElement('option');
+      opt.value = loc.code;
+      opt.textContent = loc.name + ' (' + loc.code + ')';
+      select.appendChild(opt);
+    }});
+    select.disabled = remaining.length === 0;
+    addBtn.disabled = true;
+    saveBtn.disabled = !isDirty();
+  }}
+
+  select.addEventListener('change', function() {{ addBtn.disabled = !select.value; }});
+  addBtn.addEventListener('click', function() {{
+    if (!select.value) return;
+    enabled.add(select.value);
+    render();
+  }});
+  list.addEventListener('click', function(e) {{
+    var btn = e.target.closest('.locale-chip-remove');
+    if (!btn) return;
+    enabled.delete(btn.closest('.locale-chip').dataset.code);
+    render();
+  }});
+
+  render();
+}})();
+</script>
+</div>
 </div>
 </div>
 "#,
@@ -981,7 +1105,8 @@ function toggleAiProviderEdit(id) {{
             ai_providers_list_html = ai_providers_list_html,
             anthropic_fields_html = ai_provider_fields_html("anthropic", "", None),
             openai_compatible_fields_html = ai_provider_fields_html("openai_compatible", "", None),
-            locale_checkboxes_html = locale_checkboxes_html,
+            all_locales_json = all_locales_json,
+            enabled_locales_json = enabled_locales_json,
         )
     } else {
         String::new()
