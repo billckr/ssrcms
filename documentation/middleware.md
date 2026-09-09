@@ -148,6 +148,23 @@ distributed identifier-flood. This is single-process only — before running mor
 app instance, move the counters to PostgreSQL or a shared cache so limits apply across
 instances.
 
+**Escalating delay on repeated login failures (2026-09-08):** `allow()` above is a flat
+ceiling — every attempt costs the same right up until the window's limit, then a hard
+block. A second, separate mechanism in the same file (`login_delay_remaining`,
+`record_login_failure`, `record_login_success`) adds exponential backoff specifically for
+wrong-password guessing against `/admin/login`: the first 3 (`FREE_ATTEMPTS`) failures for a
+given identity cost nothing, then each subsequent one roughly doubles the wait before the
+next attempt is even evaluated (2s, 4s, 8s, ... capped at 5 minutes), tracked in its own
+`Lazy<Mutex<HashMap<String, FailureState>>>` keyed by `flow:identity` (no IP component — a
+botnet spreading guesses across many IPs at one account is exactly the case a purely
+IP-based scheme misses). A correct password clears the identity's failure history even if a
+later authorization step (role/site mismatch) still rejects the request, since that's a
+wrong-form mistake, not a credential-guessing signal. Deliberately scoped to `/admin/login`
+only for now, not `/login` (subscriber) — mirrors the existing `log_staff_login` precedent
+in `handlers/auth.rs` treating subscriber logins as high-volume/low-stakes relative to staff
+access; extending it to the subscriber flow (or to `/recover`, `/subscribe`) is a small,
+separate follow-up if warranted later.
+
 ### Session Timeouts & Logout
 
 Admin and account logins use two entirely separate `tower_sessions` cookies/layers

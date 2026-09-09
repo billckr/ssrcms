@@ -209,12 +209,26 @@ pub async fn login_post(
         )
             .into_response();
     }
+    if let Some(remaining) = crate::middleware::auth_security::login_delay_remaining(
+        "admin-login",
+        &email,
+    ) {
+        return (
+            axum::http::StatusCode::TOO_MANY_REQUESTS,
+            format!(
+                "Too many failed attempts. Please wait {}s and try again.",
+                remaining.as_secs() + 1
+            ),
+        )
+            .into_response();
+    }
 
     // Look up user by normalized email.
     let user = match crate::models::user::get_by_email(&state.db, &email).await {
         Ok(u) => u,
         Err(_) => {
             crate::models::user::verify_dummy_password(&form.password);
+            crate::middleware::auth_security::record_login_failure("admin-login", &email);
             log_staff_login(&state, None, &email, "unknown", None, false).await;
             return Html(admin::pages::login::render(
                 Some("Invalid email or password."),
@@ -228,6 +242,7 @@ pub async fn login_post(
 
     // Verify password.
     if !user.verify_password(&form.password) {
+        crate::middleware::auth_security::record_login_failure("admin-login", &email);
         log_staff_login(&state, Some(user.id), &user.email, &user.role, None, false).await;
         return Html(admin::pages::login::render(
             Some("Invalid email or password."),
@@ -237,6 +252,7 @@ pub async fn login_post(
         ))
         .into_response();
     }
+    crate::middleware::auth_security::record_login_success("admin-login", &email);
 
     // Check role — staff only. Subscribers must use /login.
     match user.role.as_str() {

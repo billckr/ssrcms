@@ -165,6 +165,57 @@ async fn test_admin_login_post_bad_credentials() {
 
 #[tokio::test]
 #[ignore = "requires a live PostgreSQL instance — see module docs"]
+async fn test_admin_login_escalating_delay_after_repeated_failures() {
+    let app = common::test_router().await;
+    // Unique per run — auth_security's failure tracker is a process-global
+    // static shared by every test in this binary (routes.rs tests run
+    // concurrently), so a fixed email would flake against whichever other
+    // test happens to touch the same identity.
+    let email = format!("escalating-delay-{}@example.com", uuid::Uuid::new_v4());
+    let body = format!("email={email}&password=definitely-wrong-password");
+
+    let attempt = |app: axum::Router, body: String| async move {
+        app.oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/admin/login")
+                .header("content-type", "application/x-www-form-urlencoded")
+                .header("host", "localhost")
+                .header("origin", "http://localhost")
+                .extension(common::connect_info())
+                .body(Body::from(body))
+                .unwrap(),
+        )
+        .await
+        .unwrap()
+    };
+
+    // The first few wrong-password attempts (FREE_ATTEMPTS in
+    // middleware::auth_security) are free — no delay imposed yet.
+    let first = attempt(app.clone(), body.clone()).await;
+    assert_eq!(
+        first.status(),
+        StatusCode::OK,
+        "an early failed attempt should just re-render the login page, not be throttled"
+    );
+
+    // Enough further attempts to cross the free threshold and trigger a delay.
+    let mut last_status = first.status();
+    for _ in 0..5 {
+        last_status = attempt(app.clone(), body.clone()).await.status();
+        if last_status == StatusCode::TOO_MANY_REQUESTS {
+            break;
+        }
+    }
+    assert_eq!(
+        last_status,
+        StatusCode::TOO_MANY_REQUESTS,
+        "repeated failures against the same identity should eventually trigger the escalating delay"
+    );
+}
+
+#[tokio::test]
+#[ignore = "requires a live PostgreSQL instance — see module docs"]
 async fn test_sign_out_other_devices_invalidates_other_admin_sessions() {
     use synaptic_core::models::user::{self, CreateUser, UserRole};
 
