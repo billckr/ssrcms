@@ -6,7 +6,7 @@
 
 use std::time::Duration;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::models::ai_provider::AiProviderConfig;
 use crate::models::post::Post;
@@ -19,6 +19,16 @@ pub struct TranslationResult {
     pub title: String,
     pub excerpt: Option<String>,
     pub content: String,
+}
+
+/// One model returned by a provider's model-discovery endpoint. Providers
+/// expose identifiers differently, so the admin UI receives both the stable
+/// API ID and the best human-readable name available.
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct AvailableModel {
+    pub id: String,
+    pub display_name: String,
+    pub cost_tier: Option<&'static str>,
 }
 
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(90);
@@ -84,15 +94,158 @@ pub async fn translate_post(
     parse_translation_result(&text)
 }
 
-/// A trivial round-trip call to confirm the provider's credentials and
-/// endpoint actually work, mirroring `mail::send_test_email`'s role —
-/// awaited synchronously from an admin's "Test" click, not spawned.
+/// A small structured-output call confirming that credentials, model, and
+/// the response shape used by translation all work. Awaited synchronously
+/// from an admin's "Test" click, not spawned.
 pub async fn test_provider(config: &AiProviderConfig) -> anyhow::Result<()> {
-    let text = send_prompt(config, "Reply with only the word OK.", false).await?;
-    if !text.trim().eq_ignore_ascii_case("OK") {
-        anyhow::bail!("provider returned an unexpected response instead of OK");
-    }
+    let text = send_prompt(
+        config,
+        "Reply with ONLY this JSON object, with no markdown fence or commentary: {\"title\":\"Test\",\"excerpt\":null,\"content\":\"Test\"}",
+        true,
+    )
+    .await?;
+    parse_translation_result(&text)
+        .map_err(|e| anyhow::anyhow!("provider did not return translation-compatible JSON: {e}"))?;
     Ok(())
+}
+
+/// Ask the configured service which models are available to its credential.
+/// This is deliberately live rather than a hard-coded catalog: access can
+/// vary by account and both hosted and local providers change over time.
+pub async fn discover_models(config: &AiProviderConfig) -> anyhow::Result<Vec<AvailableModel>> {
+    let mut models = match config {
+        AiProviderConfig::Anthropic { api_key, .. } => discover_anthropic_models(api_key).await?,
+        AiProviderConfig::OpenaiCompatible {
+            base_url, api_key, ..
+        } => discover_openai_compatible_models(base_url, api_key).await?,
+    };
+    models.sort_by(|a, b| {
+        cost_tier_rank(a.cost_tier)
+            .cmp(&cost_tier_rank(b.cost_tier))
+            .then_with(|| {
+                a.display_name
+                    .to_lowercase()
+                    .cmp(&b.display_name.to_lowercase())
+            })
+    });
+    models.dedup_by(|a, b| a.id == b.id);
+    Ok(models)
+}
+
+fn cost_tier_rank(tier: Option<&str>) -> u8 {
+    match tier {
+        Some("Economy") => 0,
+        Some("Balanced") => 1,
+        Some("Premium") => 2,
+        _ => 3,
+    }
+}
+
+fn inferred_cost_tier(id: &str) -> Option<&'static str> {
+    let id = id.to_ascii_lowercase();
+    let has_token = |wanted: &str| {
+        id.split(|c: char| !c.is_ascii_alphanumeric())
+            .any(|part| part == wanted)
+    };
+    if id.contains("haiku") || has_token("nano") || has_token("mini") {
+        Some("Economy")
+    } else if id.contains("sonnet") {
+        Some("Balanced")
+    } else if id.contains("opus") || has_token("pro") {
+        Some("Premium")
+    } else {
+        None
+    }
+}
+
+async fn discover_anthropic_models(api_key: &str) -> anyhow::Result<Vec<AvailableModel>> {
+    let resp = http_client()?
+        .get("https://api.anthropic.com/v1/models?limit=1000")
+        .header("x-api-key", api_key)
+        .header("anthropic-version", "2023-06-01")
+        .send()
+        .await?;
+    let status = resp.status();
+    if !status.is_success() {
+        let body = resp.text().await.unwrap_or_default();
+        anyhow::bail!(
+            "Anthropic model discovery failed ({status}): {}",
+            concise_error(&body)
+        );
+    }
+
+    #[derive(Deserialize)]
+    struct ModelList {
+        data: Vec<ModelEntry>,
+    }
+    #[derive(Deserialize)]
+    struct ModelEntry {
+        id: String,
+        display_name: Option<String>,
+    }
+
+    let body: ModelList = resp.json().await?;
+    Ok(body
+        .data
+        .into_iter()
+        .map(|model| AvailableModel {
+            cost_tier: inferred_cost_tier(&model.id),
+            display_name: model.display_name.unwrap_or_else(|| model.id.clone()),
+            id: model.id,
+        })
+        .collect())
+}
+
+async fn discover_openai_compatible_models(
+    base_url: &str,
+    api_key: &str,
+) -> anyhow::Result<Vec<AvailableModel>> {
+    let url = format!("{}/models", base_url.trim_end_matches('/'));
+    let mut req = http_client()?.get(url);
+    if !api_key.is_empty() {
+        req = req.bearer_auth(api_key);
+    }
+    let resp = req.send().await?;
+    let status = resp.status();
+    if !status.is_success() {
+        let body = resp.text().await.unwrap_or_default();
+        anyhow::bail!(
+            "model discovery failed ({status}): {}",
+            concise_error(&body)
+        );
+    }
+
+    #[derive(Deserialize)]
+    struct ModelList {
+        data: Vec<ModelEntry>,
+    }
+    #[derive(Deserialize)]
+    struct ModelEntry {
+        id: String,
+        #[serde(default)]
+        name: Option<String>,
+    }
+
+    let body: ModelList = resp.json().await?;
+    Ok(body
+        .data
+        .into_iter()
+        .map(|model| AvailableModel {
+            cost_tier: inferred_cost_tier(&model.id),
+            display_name: model.name.unwrap_or_else(|| model.id.clone()),
+            id: model.id,
+        })
+        .collect())
+}
+
+fn concise_error(body: &str) -> String {
+    const MAX_CHARS: usize = 500;
+    let cleaned = body.split_whitespace().collect::<Vec<_>>().join(" ");
+    if cleaned.chars().count() <= MAX_CHARS {
+        cleaned
+    } else {
+        format!("{}…", cleaned.chars().take(MAX_CHARS).collect::<String>())
+    }
 }
 
 async fn send_prompt(
@@ -229,6 +382,24 @@ mod tests {
     #[test]
     fn parse_translation_result_errors_on_garbage() {
         assert!(parse_translation_result("not json at all").is_err());
+    }
+
+    #[test]
+    fn cost_tiers_cover_known_families_without_matching_preview() {
+        assert_eq!(inferred_cost_tier("claude-haiku-4-5"), Some("Economy"));
+        assert_eq!(inferred_cost_tier("gpt-5-mini"), Some("Economy"));
+        assert_eq!(inferred_cost_tier("claude-sonnet-5"), Some("Balanced"));
+        assert_eq!(inferred_cost_tier("claude-opus-5"), Some("Premium"));
+        assert_eq!(inferred_cost_tier("gpt-5-pro"), Some("Premium"));
+        assert_eq!(inferred_cost_tier("gpt-4o-preview"), None);
+    }
+
+    #[test]
+    fn concise_errors_are_single_line_and_bounded() {
+        assert_eq!(concise_error("one\n  two\tthree"), "one two three");
+        let long = "x".repeat(600);
+        assert_eq!(concise_error(&long).chars().count(), 501);
+        assert!(concise_error(&long).ends_with('…'));
     }
 
     #[test]

@@ -1,10 +1,11 @@
 //! Admin handlers for a site's configured AI translation providers (AI
-//! Translation tab on Site Settings). Mirrors `email_providers.rs` exactly.
+//! Translation tab on Site Settings), including live model discovery.
 
 use axum::{
     extract::{Path, State},
+    http::StatusCode,
     response::{IntoResponse, Redirect},
-    Form,
+    Form, Json,
 };
 use serde::Deserialize;
 use uuid::Uuid;
@@ -24,39 +25,105 @@ pub struct AiProviderForm {
     #[serde(default)]
     pub anthropic_model_name: String,
     #[serde(default)]
+    pub anthropic_model_choice: String,
+    #[serde(default)]
     pub openai_compatible_base_url: String,
     #[serde(default)]
     pub openai_compatible_api_key: String,
     #[serde(default)]
     pub openai_compatible_model_name: String,
+    #[serde(default)]
+    pub openai_compatible_model_choice: String,
 }
 
-/// Builds the right `AiProviderConfig` variant from whichever fields matter
-/// for `form.provider_type`, ignoring the rest (the other provider type's
-/// fields are hidden but still submitted, since it's all one `<form>`).
-fn config_from_form(form: &AiProviderForm) -> Result<AiProviderConfig, &'static str> {
+fn selected_model<'a>(choice: &'a str, custom: &'a str, saved: Option<&'a str>) -> &'a str {
+    if !custom.trim().is_empty() {
+        custom.trim()
+    } else if !choice.trim().is_empty() && choice != "__custom__" {
+        choice.trim()
+    } else {
+        saved.unwrap_or("").trim()
+    }
+}
+
+/// Build a config while optionally merging blank edit fields with the saved
+/// encrypted config. `require_model=false` is used only for discovery, where
+/// credentials must be valid but no model has been selected yet.
+fn config_from_form(
+    form: &AiProviderForm,
+    existing: Option<&AiProviderConfig>,
+    require_model: bool,
+) -> Result<AiProviderConfig, &'static str> {
     match form.provider_type.as_str() {
         "anthropic" => {
-            if form.anthropic_api_key.trim().is_empty()
-                || form.anthropic_model_name.trim().is_empty()
-            {
-                return Err("Enter both an API key and a model name.");
+            let (saved_key, saved_model) = match existing {
+                Some(AiProviderConfig::Anthropic {
+                    api_key,
+                    model_name,
+                }) => (Some(api_key.as_str()), Some(model_name.as_str())),
+                Some(_) => return Err("The provider type cannot be changed."),
+                None => (None, None),
+            };
+            let api_key = if form.anthropic_api_key.trim().is_empty() {
+                saved_key.unwrap_or("")
+            } else {
+                form.anthropic_api_key.trim()
+            };
+            let model_name = selected_model(
+                &form.anthropic_model_choice,
+                &form.anthropic_model_name,
+                saved_model,
+            );
+            if api_key.is_empty() {
+                return Err("Enter an API key before loading models.");
+            }
+            if require_model && model_name.is_empty() {
+                return Err("Load and select a model, or enter a custom model ID.");
             }
             Ok(AiProviderConfig::Anthropic {
-                api_key: form.anthropic_api_key.trim().to_string(),
-                model_name: form.anthropic_model_name.trim().to_string(),
+                api_key: api_key.to_string(),
+                model_name: model_name.to_string(),
             })
         }
         "openai_compatible" => {
-            if form.openai_compatible_base_url.trim().is_empty()
-                || form.openai_compatible_model_name.trim().is_empty()
-            {
-                return Err("Enter both a base URL and a model name.");
+            let (saved_url, saved_key, saved_model) = match existing {
+                Some(AiProviderConfig::OpenaiCompatible {
+                    base_url,
+                    api_key,
+                    model_name,
+                }) => (
+                    Some(base_url.as_str()),
+                    Some(api_key.as_str()),
+                    Some(model_name.as_str()),
+                ),
+                Some(_) => return Err("The provider type cannot be changed."),
+                None => (None, None, None),
+            };
+            let base_url = if form.openai_compatible_base_url.trim().is_empty() {
+                saved_url.unwrap_or("")
+            } else {
+                form.openai_compatible_base_url.trim()
+            };
+            let api_key = if form.openai_compatible_api_key.trim().is_empty() {
+                saved_key.unwrap_or("")
+            } else {
+                form.openai_compatible_api_key.trim()
+            };
+            let model_name = selected_model(
+                &form.openai_compatible_model_choice,
+                &form.openai_compatible_model_name,
+                saved_model,
+            );
+            if base_url.is_empty() {
+                return Err("Enter a base URL before loading models.");
+            }
+            if require_model && model_name.is_empty() {
+                return Err("Load and select a model, or enter a custom model ID.");
             }
             Ok(AiProviderConfig::OpenaiCompatible {
-                base_url: form.openai_compatible_base_url.trim().to_string(),
-                api_key: form.openai_compatible_api_key.trim().to_string(),
-                model_name: form.openai_compatible_model_name.trim().to_string(),
+                base_url: base_url.to_string(),
+                api_key: api_key.to_string(),
+                model_name: model_name.to_string(),
             })
         }
         _ => Err("Unknown provider type."),
@@ -103,7 +170,7 @@ pub async fn create(
             return flash_redirect(id, "Failed to save provider.").into_response();
         }
     }
-    let config = match config_from_form(&form) {
+    let config = match config_from_form(&form, None, true) {
         Ok(c) => c,
         Err(msg) => return flash_redirect(id, msg).into_response(),
     };
@@ -129,11 +196,9 @@ pub async fn create(
 }
 
 /// POST /admin/sites/{id}/ai-providers/{provider_id} — update an existing
-/// provider's label/credentials. A full overwrite, same shape as create —
-/// credentials are never sent back to the browser to prefill, so the edit
-/// form re-collects every field. Resets `verified` to false (see
-/// `ai_provider::update`), since the new credentials haven't been proven to
-/// work yet.
+/// provider's label/configuration. Blank credential and non-secret fields
+/// retain their stored values, because credentials are never sent back to the
+/// browser. Resets `verified` to false (see `ai_provider::update`).
 pub async fn update(
     State(state): State<AppState>,
     admin: AdminUser,
@@ -167,7 +232,14 @@ pub async fn update(
             return flash_redirect(id, "Failed to save provider.").into_response();
         }
     }
-    let config = match config_from_form(&form) {
+    let row = match ai_provider::get_by_id(&state.db, provider_id).await {
+        Ok(Some(row)) if row.site_id == id => row,
+        _ => return flash_redirect(id, "Provider not found.").into_response(),
+    };
+    let Some(existing) = ai_provider::decrypt_config(&state.config.secret_key, &row) else {
+        return flash_redirect(id, "Failed to decrypt provider config.").into_response();
+    };
+    let config = match config_from_form(&form, Some(&existing), true) {
         Ok(c) => c,
         Err(msg) => return flash_redirect(id, msg).into_response(),
     };
@@ -179,6 +251,76 @@ pub async fn update(
             tracing::error!("failed to update AI provider {}: {:?}", provider_id, e);
             flash_redirect(id, "Failed to save provider.").into_response()
         }
+    }
+}
+
+fn models_error(status: StatusCode, message: impl Into<String>) -> axum::response::Response {
+    (status, Json(serde_json::json!({ "error": message.into() }))).into_response()
+}
+
+async fn discover_with_config(config: AiProviderConfig) -> axum::response::Response {
+    match crate::translate::discover_models(&config).await {
+        Ok(models) if models.is_empty() => models_error(
+            StatusCode::BAD_GATEWAY,
+            "The provider returned no models. You can still enter a custom model ID.",
+        ),
+        Ok(models) => Json(serde_json::json!({ "models": models })).into_response(),
+        Err(e) => {
+            tracing::warn!("AI model discovery failed: {:?}", e);
+            models_error(StatusCode::BAD_GATEWAY, e.to_string())
+        }
+    }
+}
+
+/// POST /admin/sites/{id}/ai-providers/models — discover models using the
+/// credentials currently entered in the unsaved Add Provider form.
+pub async fn discover_new_models(
+    State(state): State<AppState>,
+    admin: AdminUser,
+    Path(id): Path<Uuid>,
+    Form(form): Form<AiProviderForm>,
+) -> impl IntoResponse {
+    let site = match crate::models::site::get_by_id(&state.db, id).await {
+        Ok(site) => site,
+        Err(_) => return models_error(StatusCode::NOT_FOUND, "Site not found."),
+    };
+    if !require_site_manager(&state, &admin, &site).await {
+        return models_error(StatusCode::FORBIDDEN, "Forbidden");
+    }
+    match config_from_form(&form, None, false) {
+        Ok(config) => discover_with_config(config).await,
+        Err(message) => models_error(StatusCode::BAD_REQUEST, message),
+    }
+}
+
+/// POST /admin/sites/{id}/ai-providers/{provider_id}/models — discover
+/// models while retaining any credential/base URL left blank in an Edit form.
+pub async fn discover_saved_models(
+    State(state): State<AppState>,
+    admin: AdminUser,
+    Path((id, provider_id)): Path<(Uuid, Uuid)>,
+    Form(form): Form<AiProviderForm>,
+) -> impl IntoResponse {
+    let site = match crate::models::site::get_by_id(&state.db, id).await {
+        Ok(site) => site,
+        Err(_) => return models_error(StatusCode::NOT_FOUND, "Site not found."),
+    };
+    if !require_site_manager(&state, &admin, &site).await {
+        return models_error(StatusCode::FORBIDDEN, "Forbidden");
+    }
+    let row = match ai_provider::get_by_id(&state.db, provider_id).await {
+        Ok(Some(row)) if row.site_id == id => row,
+        _ => return models_error(StatusCode::NOT_FOUND, "Provider not found."),
+    };
+    let Some(existing) = ai_provider::decrypt_config(&state.config.secret_key, &row) else {
+        return models_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Failed to decrypt provider config.",
+        );
+    };
+    match config_from_form(&form, Some(&existing), false) {
+        Ok(config) => discover_with_config(config).await,
+        Err(message) => models_error(StatusCode::BAD_REQUEST, message),
     }
 }
 
@@ -250,5 +392,89 @@ pub async fn test(
             tracing::error!("test call failed for AI provider {}: {:?}", provider_id, e);
             flash_redirect(id, &format!("Test failed: {e}")).into_response()
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn edit_can_change_model_without_reentering_anthropic_key() {
+        let existing = AiProviderConfig::Anthropic {
+            api_key: "saved-secret".to_string(),
+            model_name: "claude-sonnet-old".to_string(),
+        };
+        let form = AiProviderForm {
+            provider_type: "anthropic".to_string(),
+            anthropic_model_choice: "claude-haiku-new".to_string(),
+            ..Default::default()
+        };
+        let config = config_from_form(&form, Some(&existing), true).unwrap();
+        match config {
+            AiProviderConfig::Anthropic {
+                api_key,
+                model_name,
+            } => {
+                assert_eq!(api_key, "saved-secret");
+                assert_eq!(model_name, "claude-haiku-new");
+            }
+            _ => panic!("expected Anthropic config"),
+        }
+    }
+
+    #[test]
+    fn blank_edit_fields_retain_openai_compatible_config() {
+        let existing = AiProviderConfig::OpenaiCompatible {
+            base_url: "https://example.test/v1".to_string(),
+            api_key: "saved-secret".to_string(),
+            model_name: "saved-model".to_string(),
+        };
+        let form = AiProviderForm {
+            provider_type: "openai_compatible".to_string(),
+            ..Default::default()
+        };
+        let config = config_from_form(&form, Some(&existing), true).unwrap();
+        match config {
+            AiProviderConfig::OpenaiCompatible {
+                base_url,
+                api_key,
+                model_name,
+            } => {
+                assert_eq!(base_url, "https://example.test/v1");
+                assert_eq!(api_key, "saved-secret");
+                assert_eq!(model_name, "saved-model");
+            }
+            _ => panic!("expected OpenAI-compatible config"),
+        }
+    }
+
+    #[test]
+    fn custom_model_takes_precedence_over_dropdown() {
+        let form = AiProviderForm {
+            provider_type: "anthropic".to_string(),
+            anthropic_api_key: "new-secret".to_string(),
+            anthropic_model_choice: "listed-model".to_string(),
+            anthropic_model_name: "custom-model".to_string(),
+            ..Default::default()
+        };
+        let config = config_from_form(&form, None, true).unwrap();
+        match config {
+            AiProviderConfig::Anthropic { model_name, .. } => {
+                assert_eq!(model_name, "custom-model")
+            }
+            _ => panic!("expected Anthropic config"),
+        }
+    }
+
+    #[test]
+    fn discovery_does_not_require_a_model_selection() {
+        let form = AiProviderForm {
+            provider_type: "anthropic".to_string(),
+            anthropic_api_key: "new-secret".to_string(),
+            ..Default::default()
+        };
+        assert!(config_from_form(&form, None, false).is_ok());
+        assert!(config_from_form(&form, None, true).is_err());
     }
 }

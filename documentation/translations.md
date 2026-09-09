@@ -31,18 +31,28 @@ HTML or Markdown string. Builder/page-composition content is not translated.
 
 Open **Sites**, choose the site, then open **Settings → AI Translation**. Add either:
 
-- **Anthropic:** API key and exact model name.
-- **OpenAI-Compatible:** base URL, optional API key, and exact model name. Include the API version
+- **Anthropic:** API key, then use the refresh button to load models available to that key.
+- **OpenAI-Compatible:** base URL and optional API key, then load the endpoint's models. Include the API version
   in the base URL when the service requires it, for example `https://api.openai.com/v1`.
 
-Provider credentials are write-only in the UI. Editing a provider requires entering all its
-fields again, and any edit resets its verification status.
+Choose a model from the returned list. Economy-labelled models are sorted first, but those labels
+are name-based guidance rather than live pricing; confirm current pricing with the provider. If a
+compatible server does not implement model discovery, choose **Enter a custom model ID**.
 
-Use the provider's globe/Test button after saving it. A successful test must complete an actual
-model request and return `OK`. The provider is then marked verified and becomes available in post
-editors. Verification establishes basic connectivity, authentication, and model-name validity; it
-does not guarantee that a much larger translation request will fit the model's limits or produce
-valid structured output.
+Loading models sends the entered connection details to SynapCMS, which performs the provider
+request server-side. Discovery does not create or update a database provider; credentials are
+stored only when the form is submitted.
+
+Provider credentials are write-only in the UI. When editing a provider, blank credential fields
+retain the stored encrypted values, so changing only the model does not require re-entering the
+API key. The refresh button reloads the model list using the saved credential unless a replacement
+key has been entered. Saving an edit resets verification status.
+
+Use the provider's globe/Test button after saving it. A successful test must complete a small model
+request and return the same structured JSON shape required by translation. The provider is then
+marked verified and becomes available in post editors. Verification establishes connectivity,
+authentication, model-name validity, and basic structured-output compatibility; it does not
+guarantee that a much larger translation request will fit the model's limits.
 
 ### 2. Enable languages
 
@@ -101,17 +111,28 @@ the translation to fail without writing a database row.
 `anthropic-version: 2023-06-01`. It requests at most 8,192 output tokens and reads the first text
 content block from the response.
 
+Model discovery sends authenticated `GET https://api.anthropic.com/v1/models?limit=1000`. Claude
+families containing `haiku`, `sonnet`, or `opus` are labelled Economy, Balanced, or Premium
+respectively. These labels express the usual relative family positioning and are not a pricing
+quote.
+
 ### OpenAI-compatible
+
+Model discovery sends authenticated `GET {base_url}/models` and accepts the standard response
+shape containing a `data` array of model IDs. Some nominally compatible services omit or customize
+this endpoint; the custom-model option exists for those services. IDs with `nano` or `mini` name
+segments are labelled Economy and IDs with a `pro` segment are labelled Premium. Unknown names
+remain unlabelled rather than guessing their cost.
 
 `send_via_openai_compatible` appends `/chat/completions` to the configured base URL and optionally
 adds a Bearer token. Translation calls request `response_format: {"type":"json_object"}`; the
-plain-`OK` provider health check omits JSON mode. The adapter reads
+provider health check uses the same JSON mode with a much smaller response. The adapter reads
 `choices[0].message.content`.
 
 Some nominally OpenAI-compatible servers do not implement `response_format`. If such a server
 rejects the request, use a version/configuration that supports JSON-object responses or update the
-adapter deliberately; the basic provider test may still pass because its prompt is smaller and
-does not prove every translation behavior.
+adapter deliberately. The provider test checks the JSON response shape, but it cannot predict
+context limits or formatting quality on a full post.
 
 Both adapters use a 90-second HTTP timeout. Provider errors are returned to the editor and written
 to the application log. API keys are never deliberately logged.
@@ -248,7 +269,7 @@ binary will continue serving the old behavior even when the source file has chan
 
 ### Translation fails although Provider Test succeeds
 
-The test proves only a small round trip. A real translation can still fail because of:
+The test proves a small structured-output round trip. A real translation can still fail because of:
 
 - Context or output-token limits.
 - A model returning commentary or malformed/truncated JSON.
@@ -278,6 +299,15 @@ The base URL is resolved by the SynapCMS server process, not by the administrato
 `localhost` therefore means the machine/container running SynapCMS. In containerized deployments,
 use a hostname or network address reachable from that container. Include the required version path
 but do not include `/chat/completions`, because SynapCMS appends it.
+
+### Model list cannot be loaded
+
+Confirm the key and base URL, then inspect the error shown beside the model control. Model discovery
+uses the same saved credential as translation but calls `/models` instead of `/chat/completions`.
+If the service can translate but does not expose the standard model-list endpoint, select **Enter a
+custom model ID** and paste the service's exact model identifier. A successful discovery response
+only proves that a model ID is visible to the credential; use Test after saving to prove that the
+selected model supports SynapCMS's translation request.
 
 ### Translation reports success but is not visible publicly
 
@@ -310,7 +340,9 @@ version.
 | Method | Path | Purpose |
 |---|---|---|
 | POST | `/admin/sites/{id}/ai-providers` | Create a provider |
-| POST | `/admin/sites/{id}/ai-providers/{provider_id}` | Replace provider configuration and reset verification |
+| POST | `/admin/sites/{id}/ai-providers/models` | Discover models with unsaved Add Provider credentials |
+| POST | `/admin/sites/{id}/ai-providers/{provider_id}` | Update provider configuration and reset verification |
+| POST | `/admin/sites/{id}/ai-providers/{provider_id}/models` | Discover models while retaining blank saved credentials |
 | POST | `/admin/sites/{id}/ai-providers/{provider_id}/test` | Test and verify a provider |
 | POST | `/admin/sites/{id}/ai-providers/{provider_id}/delete` | Delete a provider |
 | POST | `/admin/sites/{id}/enabled-locales` | Save enabled locales |

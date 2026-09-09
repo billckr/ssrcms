@@ -602,8 +602,16 @@ pub fn build(
             post(admin_ai_providers::create),
         )
         .route(
+            "/admin/sites/{id}/ai-providers/models",
+            post(admin_ai_providers::discover_new_models),
+        )
+        .route(
             "/admin/sites/{id}/ai-providers/{provider_id}",
             post(admin_ai_providers::update),
+        )
+        .route(
+            "/admin/sites/{id}/ai-providers/{provider_id}/models",
+            post(admin_ai_providers::discover_saved_models),
         )
         .route(
             "/admin/sites/{id}/ai-providers/{provider_id}/test",

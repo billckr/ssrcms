@@ -36,10 +36,10 @@ impl AiProviderConfig {
         }
     }
 
-    /// Per-field placeholder text for a provider's Edit form — non-secret
-    /// fields (model name, base URL) show their real saved value; the API
-    /// key shows the same masked form `display_hint` uses. Field names match
-    /// the admin form's.
+    /// Per-field placeholder text for a provider's Edit form. Non-secret
+    /// fields show their real saved value and API keys use the same masked
+    /// form as `display_hint`. Blank edit fields are merged with this stored
+    /// configuration by the handler; secrets are never returned as values.
     pub fn field_placeholders(&self) -> Vec<(&'static str, String)> {
         match self {
             AiProviderConfig::Anthropic {

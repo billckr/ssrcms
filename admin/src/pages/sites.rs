@@ -344,7 +344,8 @@ pub struct SiteSettingsData {
 
 /// One configured AI translation provider, as shown in the AI Translation
 /// tab's provider list. Credentials themselves never come back to the
-/// browser. Mirrors `EmailProviderSummary` exactly.
+/// browser. Non-secret values are supplied as placeholders so blank edits
+/// can retain the encrypted configuration server-side.
 pub struct AiProviderSummary {
     pub id: String,
     pub label: String,
@@ -542,43 +543,75 @@ fn ai_provider_fields_html(
                 .unwrap_or(default),
         )
     };
+    let model_control = |provider: &str, field_name: &str, default: &str| -> String {
+        let saved = ph(field_name, "");
+        let initial_option = if saved.is_empty() {
+            r#"<option value="" selected>Connect to load available models</option>"#.to_string()
+        } else {
+            format!(r#"<option value="{saved}" selected>{saved} (current)</option>"#)
+        };
+        format!(
+            r#"<div class="form-group ai-model-control" data-provider="{provider}">
+  <label for="{p}{provider}_model_choice">Model</label>
+  <select id="{p}{provider}_model_choice" name="{provider}_model_choice" data-model-select>
+    {initial_option}
+    <option value="__custom__">Enter a custom model ID…</option>
+  </select>
+  <input type="text" id="{p}{field_name}" name="{field_name}" data-custom-model
+         placeholder="{default}" style="display:none;margin-top:.5rem">
+  <div style="display:flex;align-items:center;gap:.5rem;margin-top:.45rem">
+    <button type="button" class="icon-btn" data-load-models title="Connect and load models" aria-label="Connect and load models">
+      <img src="/admin/static/icons/refresh-cw.svg" alt="">
+    </button>
+    <small data-model-status>Connect to see models available to this API key. Economy choices are listed first.</small>
+  </div>
+</div>"#,
+            provider = provider,
+            p = id_prefix,
+            field_name = field_name,
+            initial_option = initial_option,
+            default = crate::html_escape(default),
+        )
+    };
     match provider_type {
         "anthropic" => format!(
             r#"<div class="form-group">
   <label for="{p}anthropic_api_key">API key</label>
   <input type="password" id="{p}anthropic_api_key" name="anthropic_api_key" autocomplete="off" placeholder="{key_ph}">
+  <small>On edit, leave this blank to keep the existing encrypted key.</small>
 </div>
-<div class="form-group">
-  <label for="{p}anthropic_model_name">Model name</label>
-  <input type="text" id="{p}anthropic_model_name" name="anthropic_model_name" placeholder="{model_ph}">
-  <small>e.g. claude-sonnet-5</small>
-</div>"#,
+{model_control}"#,
             p = id_prefix,
             key_ph = ph("anthropic_api_key", ""),
-            model_ph = ph("anthropic_model_name", "e.g. claude-sonnet-5"),
+            model_control = model_control(
+                "anthropic",
+                "anthropic_model_name",
+                "e.g. claude-haiku model ID"
+            ),
         ),
         "openai_compatible" => format!(
             r#"<div class="form-group">
   <label for="{p}openai_compatible_base_url">Base URL</label>
   <input type="text" id="{p}openai_compatible_base_url" name="openai_compatible_base_url" placeholder="{url_ph}">
-  <small>Include the version path — e.g. https://api.openai.com/v1, or http://localhost:11434/v1 for a local Ollama server.</small>
+  <small>Include the version path. On edit, leave blank to keep the existing URL.</small>
 </div>
 <div class="form-group">
   <label for="{p}openai_compatible_api_key">API key</label>
   <input type="password" id="{p}openai_compatible_api_key" name="openai_compatible_api_key" autocomplete="off" placeholder="{key_ph}">
-  <small>Leave blank for a local server that doesn't require one.</small>
+  <small>Leave blank for a keyless local server, or on edit to keep the existing encrypted key.</small>
 </div>
-<div class="form-group">
-  <label for="{p}openai_compatible_model_name">Model name</label>
-  <input type="text" id="{p}openai_compatible_model_name" name="openai_compatible_model_name" placeholder="{model_ph}">
-</div>"#,
+{model_control}"#,
             p = id_prefix,
             url_ph = ph(
                 "openai_compatible_base_url",
                 "e.g. https://api.openai.com/v1"
             ),
             key_ph = ph("openai_compatible_api_key", ""),
-            model_ph = ph("openai_compatible_model_name", "e.g. gpt-4o or llama3.1"),
+            model_control = model_control(
+                "openai_compatible",
+                "openai_compatible_model_name",
+                "e.g. provider-specific model ID"
+            ),
         ),
         _ => String::new(),
     }
@@ -628,7 +661,7 @@ pub fn render_settings(
       <input type="text" id="{field_prefix}label" name="label" required value="{label}">
     </div>
     {fields_html}
-    <p class="field-hint">Re-enter every field — credentials aren't shown back once saved, and saving here replaces them all.</p>
+    <p class="field-hint">Blank credential fields retain their saved encrypted values. Changing the model or credentials requires another verification test.</p>
     <div class="icon-pill">
       <button type="submit" class="icon-btn" title="Save Provider" aria-label="Save Provider"><img src="/admin/static/icons/save.svg" alt=""></button>
       <button type="button" class="icon-btn" title="Cancel" aria-label="Cancel"
@@ -660,6 +693,9 @@ pub fn render_settings(
             };
             let edit_id = format!("edit-ai-provider-{}", p.id);
             let field_prefix = format!("edit-ai-{}-", p.id);
+            let hint = p.hint.as_ref().map(|hint| {
+                format!(r#"<span class="form-note" style="margin:0">{}</span>"#, crate::html_escape(hint))
+            }).unwrap_or_default();
             format!(
                 r#"<div class="card-boxed-section">
   <div style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;flex-wrap:wrap">
@@ -667,6 +703,7 @@ pub fn render_settings(
       <strong>{label}</strong>
       {type_badge}
       {status}
+      {hint}
     </div>
     <div class="icon-pill-actionbuttons">
       <button type="button" class="icon-btn" title="Edit Provider" aria-label="Edit Provider"
@@ -699,6 +736,7 @@ pub fn render_settings(
                 label = crate::html_escape(&p.label),
                 type_badge = ai_provider_type_badge_html(&p.provider_type),
                 status = status,
+                hint = hint,
                 site_id = crate::html_escape(&data.id),
                 id = crate::html_escape(&p.id),
                 edit_id = edit_id,
@@ -1191,6 +1229,82 @@ function toggleAiProviderEdit(id) {{
   }});
   if (opening) target.style.display = 'block';
 }}
+(function() {{
+  function syncCustom(control, preserveValue) {{
+    var select = control.querySelector('[data-model-select]');
+    var custom = control.querySelector('[data-custom-model]');
+    var isCustom = select.value === '__custom__';
+    custom.style.display = isCustom ? '' : 'none';
+    custom.required = isCustom;
+    if (!isCustom && !preserveValue) custom.value = '';
+    if (isCustom) custom.focus();
+  }}
+
+  document.querySelectorAll('.ai-model-control').forEach(function(control) {{
+    var select = control.querySelector('[data-model-select]');
+    var button = control.querySelector('[data-load-models]');
+    var status = control.querySelector('[data-model-status]');
+    select.addEventListener('change', function() {{ syncCustom(control, false); }});
+
+    button.addEventListener('click', function() {{
+      var form = control.closest('form');
+      button.disabled = true;
+      status.textContent = 'Connecting and loading models…';
+      fetch(form.action.replace(/\/$/, '') + '/models', {{
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: {{'Content-Type': 'application/x-www-form-urlencoded'}},
+        body: new URLSearchParams(new FormData(form)).toString()
+      }})
+        .then(function(response) {{
+          return response.json().catch(function() {{ return {{error: 'The provider returned an unreadable response.'}}; }})
+            .then(function(data) {{
+              if (!response.ok) throw new Error(data.error || 'Could not load models.');
+              return data;
+            }});
+        }})
+        .then(function(data) {{
+          var current = select.value;
+          select.replaceChildren();
+          var prompt = document.createElement('option');
+          prompt.value = '';
+          prompt.textContent = 'Select a model';
+          select.appendChild(prompt);
+          var returnedCurrent = data.models.some(function(model) {{ return model.id === current; }});
+          if (current && current !== '__custom__' && !returnedCurrent) {{
+            var oldOption = document.createElement('option');
+            oldOption.value = current;
+            oldOption.textContent = current + ' (current; not returned by provider)';
+            select.appendChild(oldOption);
+          }}
+          data.models.forEach(function(model) {{
+            var option = document.createElement('option');
+            option.value = model.id;
+            option.textContent = model.display_name;
+            if (model.display_name !== model.id) option.textContent += ' — ' + model.id;
+            if (model.cost_tier) option.textContent += ' [' + model.cost_tier + ']';
+            select.appendChild(option);
+          }});
+          var customOption = document.createElement('option');
+          customOption.value = '__custom__';
+          customOption.textContent = 'Enter a custom model ID…';
+          select.appendChild(customOption);
+          if (current && Array.from(select.options).some(function(o) {{ return o.value === current; }})) {{
+            select.value = current;
+          }}
+          syncCustom(control, true);
+          button.title = 'Refresh available models';
+          button.setAttribute('aria-label', 'Refresh available models');
+          status.textContent = data.models.length + ' models loaded. Cost labels are guidance; confirm current provider pricing.';
+        }})
+        .catch(function(error) {{
+          status.textContent = error.message + ' You can select “Enter a custom model ID” instead.';
+        }})
+        .finally(function() {{ button.disabled = false; }});
+    }});
+    syncCustom(control, true);
+  }});
+}})();
 </script>
 
 <div>
