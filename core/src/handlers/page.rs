@@ -352,6 +352,9 @@ pub(super) async fn render_page(
     }
 
     let site_ctx = build_site_context(&state, Some(site_id), base_url).await?;
+    let current_locale = locale
+        .clone()
+        .unwrap_or_else(|| site_ctx.language.clone());
     // Nav "active item" matching is on the *content* path — a locale prefix
     // isn't part of any nav href (nav isn't locale-aware this pass; see the
     // AI-translation feature's known limitations), so strip it back off
@@ -382,6 +385,7 @@ pub(super) async fn render_page(
     ctx.insert("page", &page_ctx);
     ctx.insert("canonical_url", &canonical_url);
     ctx.insert("hreflang_links", &hreflang_links);
+    ctx.insert("current_locale", &current_locale);
 
     // For the RSS feed template, inject the 20 most recent published posts.
     let template_name_raw = post_record

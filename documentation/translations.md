@@ -234,10 +234,14 @@ The renderer provides two top-level Tera values to post and page templates:
 
 - `canonical_url`: the source-language canonical URL.
 - `hreflang_links`: entries containing `locale` and `url`.
+- `current_locale`: the locale currently being rendered, or the site's base language on the
+  original URL.
 
-The bundled Flow Light theme renders canonical/alternate tags and a compact language switcher in
-`base.html`, `single.html`, and `page.html`. Other themes must add equivalent markup if they should
-show a visitor-facing switcher. Translation URLs still resolve when a theme has no switcher.
+The bundled Flow Light theme renders canonical/alternate tags and an accessible dropdown language
+switcher in `base.html`, `single.html`, and `page.html`. The closed control displays only the current
+locale, so its width does not grow as translations are added. Other themes must add equivalent
+markup if they should show a visitor-facing switcher. Translation URLs still resolve when a theme
+has no switcher.
 
 Site-specific themes under `sites/<site-id>/themes/<theme>/` override bundled themes. Therefore, a
 site-specific Flow Light copy also needs the translation template changes; editing only

@@ -342,6 +342,9 @@ async fn render_post(
     };
 
     let site_ctx = build_site_context(&state, Some(site_id), base_url).await?;
+    let current_locale = locale
+        .clone()
+        .unwrap_or_else(|| site_ctx.language.clone());
 
     // Check whether the logged-in subscriber has saved this post (before session_ctx is moved).
     let is_saved = if let Some(ref u) = session_ctx.user {
@@ -399,6 +402,7 @@ async fn render_post(
     ctx.insert("post", &post_ctx);
     ctx.insert("canonical_url", &canonical_url);
     ctx.insert("hreflang_links", &hreflang_links);
+    ctx.insert("current_locale", &current_locale);
     ctx.insert("is_saved", &is_saved);
     ctx.insert("prev_post", &prev);
     ctx.insert("next_post", &next);

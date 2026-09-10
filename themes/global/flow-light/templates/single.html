@@ -36,13 +36,22 @@
       <time datetime="{{ post.published_at }}">
         {% if post.published_at %}{{ post.published_at | date_format }}{% endif %}
       </time>
-      <span class="post-author">by&nbsp;<a href="{{ post.author.url | safe }}">{{ post.author.display_name }}</a></span>
-      <span class="post-meta-category">{% if post.categories | length > 0 %}[ {% for cat in post.categories %}<a href="{{ cat.url }}">{{ cat.name }}</a>{% if not loop.last %}<span class="post-header-eyebrow-sep" aria-hidden="true">, </span>{% endif %}{% endfor %} ]{% else %}Entry{% endif %}</span>
+      <span class="post-author">Author&nbsp;<a href="{{ post.author.url | safe }}">{{ post.author.display_name }}</a></span>
+      <span class="post-meta-category">{% if post.categories | length > 0 %}{% for cat in post.categories %}<a href="{{ cat.url }}">{{ cat.name }}</a>{% if not loop.last %}<span class="post-header-eyebrow-sep" aria-hidden="true">, </span>{% endif %}{% endfor %}{% else %}Entry{% endif %}</span>
       <span class="reading-time">{{ post.reading_time }} min read</span>
       {% if hreflang_links | length > 1 %}
-        <span class="lang-switcher">
-          {% for alt in hreflang_links %}<a href="{{ alt.url | safe }}" lang="{{ alt.locale }}">{{ alt.locale }}</a>{% if not loop.last %} · {% endif %}{% endfor %}
-        </span>
+        <details class="lang-switcher">
+          <summary aria-label="Choose language; current language {{ current_locale }}">
+            <span class="lang-switcher-label">Language</span>
+            <span class="lang-switcher-current">{{ current_locale }}</span>
+            <svg viewBox="0 0 10 6" aria-hidden="true" focusable="false"><path d="M1 1l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </summary>
+          <div class="lang-switcher-menu">
+            {% for alt in hreflang_links %}
+              <a href="{{ alt.url | safe }}" lang="{{ alt.locale }}" hreflang="{{ alt.locale }}"{% if alt.locale == current_locale %} aria-current="page"{% endif %}>{{ alt.locale }}</a>
+            {% endfor %}
+          </div>
+        </details>
       {% endif %}
       {% if session.is_logged_in %}
         {% if is_saved %}
