@@ -1649,8 +1649,37 @@ pub async fn translate_post_action(
         return edit_redirect(&post, "Failed to decrypt AI provider config.").into_response();
     };
 
+    let attempt_id = Uuid::new_v4();
+    let started_at = std::time::Instant::now();
+    let source_chars = post.title.chars().count()
+        + post.excerpt.as_deref().unwrap_or_default().chars().count()
+        + post.content.chars().count();
+    tracing::info!(
+        target: "ai_translation",
+        event = "translation_attempt_started",
+        %attempt_id,
+        %site_id,
+        post_id = %id,
+        post_type = %post.post_type,
+        locale = %form.locale,
+        provider_id = %provider_row.id,
+        provider_type = config.provider_type(),
+        model = config.model_name(),
+        admin_user_id = %admin.user.id,
+        source_chars,
+        "AI translation attempt started"
+    );
+
     match crate::translate::translate_post(&config, &post, locale_name).await {
         Ok(result) => {
+            let response_chars = result.title.chars().count()
+                + result
+                    .excerpt
+                    .as_deref()
+                    .unwrap_or_default()
+                    .chars()
+                    .count()
+                + result.content.chars().count();
             if let Err(e) = crate::models::post_translation::upsert(
                 &state.db,
                 id,
@@ -1663,21 +1692,58 @@ pub async fn translate_post_action(
             .await
             {
                 tracing::error!(
-                    "failed to save translation for post {} locale {}: {:?}",
-                    id,
-                    form.locale,
-                    e
+                    target: "ai_translation",
+                    event = "translation_attempt_finished",
+                    outcome = "failure",
+                    stage = "persistence",
+                    %attempt_id,
+                    %site_id,
+                    post_id = %id,
+                    locale = %form.locale,
+                    provider_id = %provider_row.id,
+                    provider_type = config.provider_type(),
+                    model = config.model_name(),
+                    duration_ms = started_at.elapsed().as_millis() as u64,
+                    response_chars,
+                    error = %e,
+                    "AI translation attempt failed"
                 );
                 return edit_redirect(&post, "Failed to save translation.").into_response();
             }
+            tracing::info!(
+                target: "ai_translation",
+                event = "translation_attempt_finished",
+                outcome = "success",
+                stage = "complete",
+                %attempt_id,
+                %site_id,
+                post_id = %id,
+                locale = %form.locale,
+                provider_id = %provider_row.id,
+                provider_type = config.provider_type(),
+                model = config.model_name(),
+                duration_ms = started_at.elapsed().as_millis() as u64,
+                response_chars,
+                "AI translation attempt completed"
+            );
             edit_redirect(&post, &format!("Translated into {locale_name}.")).into_response()
         }
         Err(e) => {
             tracing::error!(
-                "translation failed for post {} locale {}: {:?}",
-                id,
-                form.locale,
-                e
+                target: "ai_translation",
+                event = "translation_attempt_finished",
+                outcome = "failure",
+                stage = "provider_or_response",
+                %attempt_id,
+                %site_id,
+                post_id = %id,
+                locale = %form.locale,
+                provider_id = %provider_row.id,
+                provider_type = config.provider_type(),
+                model = config.model_name(),
+                duration_ms = started_at.elapsed().as_millis() as u64,
+                error = %e,
+                "AI translation attempt failed"
             );
             edit_redirect(&post, &format!("Translation failed: {e}")).into_response()
         }

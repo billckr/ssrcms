@@ -33,6 +33,17 @@ more detailed documents under `docs/` when a task touches those areas.
 - After changing a theme, verify both the rendered page and its served
   stylesheet. Browser caching may require a hard refresh.
 
+## AI and Translation Work
+
+- Before reviewing or changing AI-related code, read
+  `docs/ai-integration-standards.md` and `documentation/translations.md`.
+- This requirement applies whenever a task mentions or touches AI translation,
+  AI providers, Anthropic, OpenAI-compatible APIs, models, prompts, model
+  discovery, provider testing, generated content, or AI telemetry/logging.
+- Treat `docs/ai-integration-standards.md` as the repository-wide design and
+  safety contract for current and future AI features. Update it when an
+  architectural decision changes; do not bypass it with feature-local code.
+
 ## Verification
 
 - Run tests appropriate to the changed area. For core Rust changes, a useful
@@ -57,5 +68,9 @@ more detailed documents under `docs/` when a task touches those areas.
 - Development commands and architecture: `docs/development-guide.md`
 - Theme behavior and authoring: `docs/theme-authoring-guide.md`
 - Deployment operations: `docs/deployment-guide.md`
+- AI architecture, safety, and observability standards:
+  `docs/ai-integration-standards.md`
+- AI post/page translation behavior and operations:
+  `documentation/translations.md`
 - Authentication review and implementation notes:
   `AUTH_SECURITY_REVIEW.md` and `AUTH_SECURITY_IMPLEMENTATION_RESULTS.md`

@@ -68,6 +68,10 @@ fn test_config() -> AppConfig {
         dev_mode: true,
         log_level: "error".to_string(),
         log_format: "text".to_string(),
+        ai_log_path: tmp
+            .join("ai-translation.jsonl")
+            .to_string_lossy()
+            .to_string(),
         search_index_path: tmp.join("search-index").to_string_lossy().to_string(),
         pid_file: tmp.join("test.pid").to_string_lossy().to_string(),
         caddyfile_path: tmp.join("Caddyfile").to_string_lossy().to_string(),

@@ -36,6 +36,14 @@ impl AiProviderConfig {
         }
     }
 
+    /// Non-secret model identifier used in requests and audit events.
+    pub fn model_name(&self) -> &str {
+        match self {
+            AiProviderConfig::Anthropic { model_name, .. }
+            | AiProviderConfig::OpenaiCompatible { model_name, .. } => model_name,
+        }
+    }
+
     /// Per-field placeholder text for a provider's Edit form. Non-secret
     /// fields show their real saved value and API keys use the same masked
     /// form as `display_hint`. Blank edit fields are merged with this stored

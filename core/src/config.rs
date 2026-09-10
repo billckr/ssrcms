@@ -60,6 +60,10 @@ pub struct AppConfig {
     #[serde(default = "default_log_format")]
     pub log_format: String,
 
+    /// Dedicated newline-delimited JSON audit log for AI provider calls.
+    #[serde(default = "default_ai_log_path")]
+    pub ai_log_path: String,
+
     /// Path to the Tantivy search index directory
     #[serde(default = "default_search_index_path")]
     pub search_index_path: String,
@@ -194,6 +198,10 @@ fn default_log_level() -> String {
     "info".to_string()
 }
 
+fn default_ai_log_path() -> String {
+    "logs/ai-translation.jsonl".to_string()
+}
+
 fn default_search_index_path() -> String {
     "search-index".to_string()
 }
@@ -305,6 +313,11 @@ mod tests {
     }
 
     #[test]
+    fn test_default_ai_log_path() {
+        assert_eq!(default_ai_log_path(), "logs/ai-translation.jsonl");
+    }
+
+    #[test]
     fn test_default_search_index_path() {
         assert_eq!(default_search_index_path(), "search-index");
     }
@@ -323,6 +336,7 @@ mod tests {
             dev_mode: false,
             log_level: default_log_level(),
             log_format: default_log_format(),
+            ai_log_path: default_ai_log_path(),
             search_index_path: default_search_index_path(),
             pid_file: default_pid_file(),
             metrics_token: None,

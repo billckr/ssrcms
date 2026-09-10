@@ -78,7 +78,10 @@ fn strip_code_fence(text: &str) -> &str {
 fn parse_translation_result(text: &str) -> anyhow::Result<TranslationResult> {
     let json = strip_code_fence(text);
     serde_json::from_str(json).map_err(|e| {
-        anyhow::anyhow!("could not parse translation response as JSON: {e}\nresponse was: {json}")
+        anyhow::anyhow!(
+            "could not parse translation response as JSON: {e}; response_excerpt={}",
+            concise_error(json)
+        )
     })
 }
 
@@ -288,15 +291,29 @@ async fn send_via_anthropic(
     if !resp.status().is_success() {
         let status = resp.status();
         let body = resp.text().await.unwrap_or_default();
-        anyhow::bail!("Anthropic request failed ({status}): {body}");
+        anyhow::bail!(
+            "Anthropic request failed ({status}): {}",
+            concise_error(&body)
+        );
     }
 
-    let body: serde_json::Value = resp.json().await?;
+    let response_text = resp.text().await?;
+    let body: serde_json::Value = serde_json::from_str(&response_text).map_err(|e| {
+        anyhow::anyhow!(
+            "Anthropic response was not valid JSON: {e}; response_excerpt={}",
+            concise_error(&response_text)
+        )
+    })?;
     body["content"]
         .as_array()
         .and_then(|blocks| blocks.iter().find_map(|b| b["text"].as_str()))
         .map(str::to_string)
-        .ok_or_else(|| anyhow::anyhow!("Anthropic response had no text content block"))
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "Anthropic response had no text content block; response_excerpt={}",
+                concise_error(&response_text)
+            )
+        })
 }
 
 async fn send_via_openai_compatible(
@@ -324,14 +341,28 @@ async fn send_via_openai_compatible(
     if !resp.status().is_success() {
         let status = resp.status();
         let body = resp.text().await.unwrap_or_default();
-        anyhow::bail!("OpenAI-compatible request failed ({status}): {body}");
+        anyhow::bail!(
+            "OpenAI-compatible request failed ({status}): {}",
+            concise_error(&body)
+        );
     }
 
-    let body: serde_json::Value = resp.json().await?;
+    let response_text = resp.text().await?;
+    let body: serde_json::Value = serde_json::from_str(&response_text).map_err(|e| {
+        anyhow::anyhow!(
+            "OpenAI-compatible response was not valid JSON: {e}; response_excerpt={}",
+            concise_error(&response_text)
+        )
+    })?;
     body["choices"][0]["message"]["content"]
         .as_str()
         .map(str::to_string)
-        .ok_or_else(|| anyhow::anyhow!("OpenAI-compatible response had no message content"))
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "OpenAI-compatible response had no message content; response_excerpt={}",
+                concise_error(&response_text)
+            )
+        })
 }
 
 #[cfg(test)]
@@ -382,6 +413,16 @@ mod tests {
     #[test]
     fn parse_translation_result_errors_on_garbage() {
         assert!(parse_translation_result("not json at all").is_err());
+    }
+
+    #[test]
+    fn parse_translation_error_bounds_and_flattens_response_excerpt() {
+        let response = format!("not json\n{}", "x".repeat(600));
+        let error = parse_translation_result(&response).unwrap_err().to_string();
+        assert!(!error.contains('\n'));
+        assert!(error.contains("response_excerpt=not json "));
+        assert!(error.ends_with('…'));
+        assert!(error.chars().count() < 650);
     }
 
     #[test]

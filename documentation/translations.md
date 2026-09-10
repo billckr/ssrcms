@@ -312,21 +312,22 @@ The test proves a small structured-output round trip. A real translation can sti
 - Rate limits, exhausted credit, provider overload, or a request timeout.
 - HTML/Markdown content that produces a much larger response than expected.
 
-The editor should display the provider or parser error. Check the server log for the complete
-server-side error:
+The editor should display the provider or parser error. Check the dedicated structured audit log:
 
 ```bash
-./app.sh logs
+./app.sh translation-logs
 ```
 
-For a focused historical search:
+For a focused historical list of failures:
 
 ```bash
-rg -n "translation failed|test call failed|OpenAI-compatible request|Anthropic request" logs/synapcms.log
+jq -c 'select(.fields.outcome == "failure")' logs/ai-translation.jsonl
 ```
 
-Provider HTTP errors include the response status and provider body. JSON parser errors include the
-returned model text; inspect it carefully because translated post content may be present in logs.
+Every attempt has correlated start and terminal events with site/post/provider/model identifiers,
+duration, outcome, and failure stage. Provider HTTP errors and malformed model output include a
+single-line response excerpt capped at 500 characters. Prompts, credentials, and successful
+translated content are not logged.
 
 ### Local OpenAI-compatible provider cannot be reached
 
@@ -404,6 +405,9 @@ version.
 | `migrations/0003_ai_translation.sql` | Provider and translation tables |
 | `core/src/app_state.rs` | `AppSettings::ai_translation_enabled` installation-wide switch |
 | `core/src/handlers/admin/settings.rs` | Features tab save handler for the installation-wide switch |
+
+Cross-feature provider boundaries, safety rules, and telemetry conventions are defined in
+`docs/ai-integration-standards.md`.
 
 ## Testing and Verification
 

@@ -9,6 +9,8 @@
 #   rebuild        Stop, build, then start
 #   status         Show whether the server is running
 #   logs           Tail live server logs (Ctrl+C to exit)
+#   translation-logs Tail the structured AI translation audit log
+#   translation-log-test Emit a synthetic translation failure log pair
 #   build          Compile a debug build
 #   build-release  Compile an optimised release build
 #   update-cli     Reinstall synap after CLI source changes
@@ -26,6 +28,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PID_FILE="$SCRIPT_DIR/.synapcms.pid"
 LOG_FILE="$SCRIPT_DIR/logs/synapcms.log"
+AI_LOG_FILE="$SCRIPT_DIR/logs/ai-translation.jsonl"
 BINARY="$SCRIPT_DIR/target/debug/synapcms"
 SEARCH_INDEX="$SCRIPT_DIR/search-index"
 
@@ -237,6 +240,25 @@ cmd_logs() {
     tail -f "$LOG_FILE"
 }
 
+cmd_translation_logs() {
+    if [[ ! -f "$AI_LOG_FILE" ]]; then
+        log "No AI translation log found at $AI_LOG_FILE — rebuild and start the server first."
+        exit 1
+    fi
+    echo "Tailing $AI_LOG_FILE (JSON Lines; Ctrl+C to exit)..."
+    tail -f "$AI_LOG_FILE"
+}
+
+cmd_translation_log_test() {
+    if [[ ! -x "$BINARY" ]]; then
+        log "Binary not found at $BINARY — run './app.sh build' first."
+        exit 1
+    fi
+    cd "$SCRIPT_DIR"
+    "$BINARY" --emit-ai-log-test-failure
+    log "Synthetic translation failure written to $AI_LOG_FILE"
+}
+
 cmd_build() {
     log "Building (debug)..."
     cd "$SCRIPT_DIR"
@@ -377,6 +399,8 @@ case "$COMMAND" in
     rebuild)       cmd_rebuild ;;
     status)        cmd_status ;;
     logs)          cmd_logs ;;
+    translation-logs) cmd_translation_logs ;;
+    translation-log-test) cmd_translation_log_test ;;
     build)         cmd_build ;;
     build-release) cmd_build_release ;;
     update-cli)    cmd_update_cli ;;
@@ -398,6 +422,8 @@ case "$COMMAND" in
         echo "  rebuild        Stop, build, then start (use after code changes)"
         echo "  status         Show whether the server is running"
         echo "  logs           Tail live server logs (Ctrl+C to exit)"
+        echo "  translation-logs Tail structured AI translation logs (Ctrl+C to exit)"
+        echo "  translation-log-test Emit a synthetic AI translation failure log pair"
         echo ""
         echo "  (start/stop/restart/status/logs are also available as 'synap app <action>',"
         echo "   with the same behavior, if you'd rather use the CLI than this script.)"
