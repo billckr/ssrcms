@@ -342,6 +342,15 @@ a.stat-cell-link:hover { background: var(--tint); }
    first. */
 .card-boxed-section > .form-group + .form-group { margin-top: 1rem; }
 :root[data-theme="dark"] .card-boxed-section { background: transparent; border-color: transparent; }
+/* Opt-in modifier for a section that should keep its visible box in dark
+   mode too, overriding the transparent-in-dark rule above — e.g. Form
+   Designer's individual field rows: a repeated, reorderable list needs a
+   border telling each entry apart regardless of theme, unlike a one-off
+   grouped set of fields where dark mode's own surface/tint contrast
+   already does that job. Add class="card-boxed-section
+   card-boxed-section-visible" in markup. Must stay below the dark-mode
+   rule above (same specificity — cascade order decides the winner). */
+:root[data-theme="dark"] .card-boxed-section-visible { background: var(--tint); border-color: var(--border); }
 /* A section that holds an .icon-pill (a field + its own Save button, e.g.
    Settings/General) hits the same "fill matches --tint" problem dark mode
    solves above — drop its box the same way, in both themes, rather than
@@ -531,6 +540,22 @@ tr.muted td { opacity: .55; }
   height: 1.5px;
   background: linear-gradient(90deg, transparent, var(--primary) 50%, transparent);
 }
+/* Tab-panel content contract — any per-tab panel built with .page-tab
+   buttons (Form Designer's Settings card is the reference implementation;
+   its General/Mail Settings/Translations tabs are the ones to match) must
+   follow this so every tab looks uniform instead of needing one-off
+   padding/margin fixes per tab:
+   1. Each panel's content goes inside one or more .card-boxed-section
+      blocks (see that class above) — never bare content flush against the
+      panel, which reads as uninset compared to sibling tabs that do box
+      their content (this bit Preview in Form Designer: it was the one tab
+      with no wrapper).
+   2. A lead-in/explainer paragraph (class="form-note") as the first child
+      of a .card-boxed-section needs `style="margin:0 0 1rem"` — .form-note's
+      own margin is `1rem 0` (see that rule), so without the override its
+      top margin stacks on top of the section's own padding and the note
+      sits visibly lower than in tabs whose first element doesn't have that
+      extra top margin. */
 .badge-unread {
   display: inline-flex;
   align-items: center;

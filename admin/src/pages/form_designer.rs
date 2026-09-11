@@ -373,7 +373,7 @@ fn field_row_html(f: &FieldRow, index: usize) -> String {
     };
 
     format!(
-        r#"<div class="field-row" data-index="{index}" style="border:1px solid var(--border);border-radius:var(--radius);padding:.85rem 1rem;margin-bottom:.6rem;background:var(--tint)">
+        r#"<div class="field-row card-boxed-section card-boxed-section-visible" data-index="{index}">
   <div style="display:flex;align-items:flex-start;gap:.6rem">
     <span class="drag-handle" title="Drag to reorder" draggable="true" style="margin-top:1.6rem">
       <img src="/admin/static/icons/move.svg" alt="">
@@ -536,10 +536,14 @@ pub fn render_editor(data: &FormEditData, ctx: &PageContext, flash: Option<&str>
                 };
             format!(
                 r#"<div id="tab-translations" class="form-tab-panel" role="tabpanel">
-  <div class="card-boxed-section"><p class="form-note">Translate visitor-facing labels and messages. Field names and option values remain stable so submissions keep the same schema.</p>
+  <div class="card-boxed-section"><p class="form-note" style="margin:0 0 1rem">Translate visitor-facing labels and messages. Field names and option values remain stable so submissions keep the same schema.</p>
     <div class="form-group"><label for="translation-locale">Language</label><select id="translation-locale">{locale_options}</select></div>
     <div class="form-group"><label for="translation-provider">AI provider</label><select id="translation-provider">{ai_provider_options}</select></div>
-    <button type="button" class="btn btn-primary" id="translate-form-btn" onclick="translateForm()"{unavailable}>Translate or refresh</button>
+    <div class="icon-pill">
+      <button type="button" class="icon-btn" id="translate-form-btn" title="Translate or refresh" aria-label="Translate or refresh" onclick="translateForm(this)"{unavailable}>
+        <img src="/admin/static/icons/globe.svg" alt="">
+      </button>
+    </div>
     <p id="translation-status" class="field-hint" aria-live="polite"></p>
   </div><div class="card-boxed-section">{translation_rows}</div>
 </div>"#
@@ -556,6 +560,8 @@ pub fn render_editor(data: &FormEditData, ctx: &PageContext, flash: Option<&str>
 .field-hint {{ font-size: 11px; color: var(--muted); font-weight: 400; }}
 .form-tab-panel {{ display: none; }}
 .form-tab-panel.active {{ display: block; }}
+.icon-btn.is-busy img {{ animation: translate-spin 1s linear infinite; }}
+@keyframes translate-spin {{ to {{ transform: rotate(360deg); }} }}
 </style>
 <form method="POST" action="{action}" id="form-designer-form">
   <div class="two-col">
@@ -683,12 +689,14 @@ pub fn render_editor(data: &FormEditData, ctx: &PageContext, flash: Option<&str>
           </div>
           </div>
           <div id="tab-preview" class="form-tab-panel" role="tabpanel">
-            <p class="form-note" style="margin:0 0 1rem">
-              A live mockup — this is what visitors will see. It isn't wired to submit anything from here.
-              Note that the actual form will pick up the active theme's colors and fonts, so it may not
-              look exactly like this preview once it's embedded on a page.
-            </p>
-            <div id="form-preview"></div>
+            <div class="card-boxed-section">
+              <p class="form-note" style="margin:0 0 1rem">
+                A live mockup — this is what visitors will see. It isn't wired to submit anything from here.
+                Note that the actual form will pick up the active theme's colors and fonts, so it may not
+                look exactly like this preview once it's embedded on a page.
+              </p>
+              <div id="form-preview"></div>
+            </div>
           </div>
           {translations_panel}
         </div>
@@ -743,8 +751,7 @@ pub fn render_editor(data: &FormEditData, ctx: &PageContext, flash: Option<&str>
 
   function makeRow() {{
     var row = document.createElement('div');
-    row.className = 'field-row';
-    row.style.cssText = 'border:1px solid var(--border);border-radius:var(--radius);padding:.85rem 1rem;margin-bottom:.6rem;background:var(--tint)';
+    row.className = 'field-row card-boxed-section card-boxed-section-visible';
     var typeOpts = {type_opts_js}.map(function(t) {{
       return '<option value="' + t[0] + '">' + t[1] + '</option>';
     }}).join('');
@@ -1054,14 +1061,13 @@ pub fn render_editor(data: &FormEditData, ctx: &PageContext, flash: Option<&str>
       window.location.href = r.url || '/admin/form-designer';
     }});
   }};
-  window.translateForm = function() {{
+  window.translateForm = function(button) {{
     var locale = document.getElementById('translation-locale');
     var provider = document.getElementById('translation-provider');
     var status = document.getElementById('translation-status');
-    var button = document.getElementById('translate-form-btn');
     if (!locale || !provider || !locale.value || !provider.value) return;
-    button.disabled = true; status.textContent = 'Translating…';
-    fetch('/admin/form-designer/{translation_form_id}/translate', {{ method:'POST', headers:{{'Content-Type':'application/x-www-form-urlencoded'}}, body:new URLSearchParams({{locale:locale.value,provider_id:provider.value}}) }}).then(function(r) {{ if (!r.ok) return r.text().then(function(t) {{ throw new Error(t); }}); window.location.href = r.url; }}).catch(function(e) {{ status.textContent = e.message || 'Translation failed.'; button.disabled = false; }});
+    button.disabled = true; button.classList.add('is-busy'); status.textContent = 'Translating…';
+    fetch('/admin/form-designer/{translation_form_id}/translate', {{ method:'POST', headers:{{'Content-Type':'application/x-www-form-urlencoded'}}, body:new URLSearchParams({{locale:locale.value,provider_id:provider.value}}) }}).then(function(r) {{ if (!r.ok) return r.text().then(function(t) {{ throw new Error(t); }}); window.location.href = r.url; }}).catch(function(e) {{ status.textContent = e.message || 'Translation failed.'; button.disabled = false; button.classList.remove('is-busy'); }});
   }};
   window.deleteFormTranslation = function(locale) {{
     if (!confirm('Delete this translation? Visitors will see the source-language form until it is translated again.')) return;
