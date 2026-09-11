@@ -7,62 +7,10 @@ metrics endpoint out of the box.
 
 ## Logging
 
-Logs are emitted via the `tracing` crate. The format and verbosity are
-controlled by two config values.
-
-| Config key  | Env var      | Default | Description |
-|-------------|--------------|---------|-------------|
-| `log_level` | `LOG_LEVEL`  | `info`  | [EnvFilter](https://docs.rs/tracing-subscriber/latest/tracing_subscriber/filter/struct.EnvFilter.html) string, e.g. `debug`, `synaptic_core=debug,info` |
-| `log_format`| `LOG_FORMAT` | `text`  | `text` for human-readable output; `json` for newline-delimited JSON |
-| `ai_log_path` | `AI_LOG_PATH` | `logs/ai-translation.jsonl` | Dedicated JSON-lines audit log for AI provider operations |
-
-### JSON log format
-
-Set `LOG_FORMAT=json` (or `log_format = "json"` in `synaptic.toml`) to emit
-structured JSON logs. Each line is a valid JSON object, compatible with:
-
-- **Grafana Loki** — use `promtail` or the Loki Docker driver
-- **Datadog** — point the Datadog Agent log collector at the log file
-- **AWS CloudWatch** — use the CloudWatch agent with `log_format = json`
-- **Elasticsearch** — use Filebeat or Logstash
-
-Example JSON log line:
-
-```json
-{"timestamp":"2026-01-15T10:23:45.123Z","level":"INFO","fields":{"message":"Synaptic Signals CMS starting..."},"target":"synaptic_core"}
-```
-
-### AI translation audit log
-
-Every post/page translation writes a start event and a terminal success or failure event to
-`logs/ai-translation.jsonl`, regardless of the general log format or level. The common
-`attempt_id` correlates the pair. Events include site, post, locale, provider, model, initiating
-admin, duration, outcome, and failure stage. Provider HTTP bodies and malformed model output are
-whitespace-normalized and capped at 500 characters; prompts, credentials, and successful translated
-content are never logged.
-
-```bash
-./app.sh translation-logs
-```
-
-Each line is independently parseable JSON. For example, list failures with `jq`:
-
-```bash
-jq -c 'select(.fields.outcome == "failure")' logs/ai-translation.jsonl
-```
-
-An `audit_log_ready` event is written at each process start so the sink can be validated without
-making a provider request.
-
-To exercise failure parsing or alerting without changing a provider, sending content, or spending
-tokens, emit a paired diagnostic attempt and failure:
-
-```bash
-./app.sh translation-log-test
-```
-
-Diagnostic records use nil domain IDs and carry `synthetic: true`; they must not be counted as real
-translation failures in product reporting.
+The central logging runbook is `documentation/logging.md`. It documents application, AI
+translation, Caddy, and systemd streams; development and production commands; JSON parsing;
+configuration; troubleshooting; privacy; and retention. Keep operational logging guidance there
+instead of duplicating it across feature documents.
 
 ---
 

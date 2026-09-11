@@ -20,6 +20,18 @@ pub struct PollOptionRow {
     pub label: String,
 }
 
+pub struct AiProviderOption {
+    pub id: String,
+    pub label: String,
+}
+
+pub struct TranslationSummary {
+    pub locale: String,
+    pub locale_name: String,
+    pub generated_at: String,
+    pub is_stale: bool,
+}
+
 /// Data needed to render the create/edit poll form. `id` is `None` for create.
 pub struct PollEditData {
     pub id: Option<String>,
@@ -30,6 +42,10 @@ pub struct PollEditData {
     pub button_label: String,
     /// "cookie_only" | "cookie_and_ip".
     pub vote_protection: String,
+    pub ai_translation_enabled: bool,
+    pub translation_locales: Vec<(String, String)>,
+    pub ai_provider_options: Vec<AiProviderOption>,
+    pub translations: Vec<TranslationSummary>,
 }
 
 impl Default for PollEditData {
@@ -51,6 +67,10 @@ impl Default for PollEditData {
             success_message: "Thanks for voting!".to_string(),
             button_label: "Vote".to_string(),
             vote_protection: "cookie_and_ip".to_string(),
+            ai_translation_enabled: false,
+            translation_locales: Vec::new(),
+            ai_provider_options: Vec::new(),
+            translations: Vec::new(),
         }
     }
 }
@@ -178,6 +198,54 @@ pub fn render_editor(data: &PollEditData, ctx: &PageContext, flash: Option<&str>
         ""
     };
 
+    let translation_section = if data.id.is_some() {
+        if data.ai_translation_enabled {
+            let locale_options: String = data
+                .translation_locales
+                .iter()
+                .map(|(code, name)| {
+                    format!(
+                        r#"<option value="{}">{}</option>"#,
+                        html_escape(code),
+                        html_escape(name)
+                    )
+                })
+                .collect();
+            let provider_options: String = data
+                .ai_provider_options
+                .iter()
+                .map(|p| {
+                    format!(
+                        r#"<option value="{}">{}</option>"#,
+                        html_escape(&p.id),
+                        html_escape(&p.label)
+                    )
+                })
+                .collect();
+            let rows = if data.translations.is_empty() {
+                r#"<p class="form-note">No poll translations yet.</p>"#.to_string()
+            } else {
+                data.translations.iter().map(|t| {
+                    let stale = if t.is_stale { " (stale)" } else { "" };
+                    format!(r#"<div style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;padding:.55rem 0;border-bottom:1px solid var(--border)"><div><strong>{name}</strong>{stale}<div class="field-hint">Generated {date}</div></div><button type="button" class="icon-btn icon-danger" title="Delete translation" aria-label="Delete {name} translation" onclick="deletePollTranslation('{locale}')"><img src="/admin/static/icons/trash.svg" alt=""></button></div>"#, name=html_escape(&t.locale_name), locale=html_escape(&t.locale), date=html_escape(&t.generated_at), stale=stale)
+                }).collect()
+            };
+            let disabled =
+                if data.translation_locales.is_empty() || data.ai_provider_options.is_empty() {
+                    " disabled"
+                } else {
+                    ""
+                };
+            format!(
+                r#"<div class="card-boxed" style="margin-top:1rem"><h2 class="card-boxed-header">Translations</h2><div class="card-boxed-body"><div class="card-boxed-section"><p class="form-note">Translate the question and visitor-facing labels. Option keys remain stable so existing votes and analytics stay unified.</p><div class="form-group"><label for="translation-locale">Language</label><select id="translation-locale">{locale_options}</select></div><div class="form-group"><label for="translation-provider">AI provider</label><select id="translation-provider">{provider_options}</select></div><button type="button" class="btn btn-primary" id="translate-poll-btn" onclick="translatePoll()"{disabled}>Translate or refresh</button><p id="translation-status" class="field-hint" aria-live="polite"></p></div><div class="card-boxed-section">{rows}</div></div></div>"#
+            )
+        } else {
+            String::new()
+        }
+    } else {
+        String::new()
+    };
+
     let content = format!(
         r#"<form method="POST" action="{action}" id="poll-designer-form">
   <div class="two-col">
@@ -260,6 +328,7 @@ pub fn render_editor(data: &PollEditData, ctx: &PageContext, flash: Option<&str>
     </div>
   </div>
 </form>
+{translation_section}
 <script>
 (function() {{
   var container = document.getElementById('option-rows');
@@ -401,6 +470,19 @@ pub fn render_editor(data: &PollEditData, ctx: &PageContext, flash: Option<&str>
       window.location.href = r.url || '/admin/designer?tab=polls';
     }});
   }};
+  window.translatePoll = function() {{
+    var locale = document.getElementById('translation-locale');
+    var provider = document.getElementById('translation-provider');
+    var status = document.getElementById('translation-status');
+    var button = document.getElementById('translate-poll-btn');
+    if (!locale || !provider || !locale.value || !provider.value) return;
+    button.disabled = true; status.textContent = 'Translating…';
+    fetch('/admin/designer/polls/{translation_poll_id}/translate', {{ method:'POST', headers:{{'Content-Type':'application/x-www-form-urlencoded'}}, body:new URLSearchParams({{locale:locale.value,provider_id:provider.value}}) }}).then(function(r) {{ if (!r.ok) return r.text().then(function(t) {{ throw new Error(t); }}); window.location.href = r.url; }}).catch(function(e) {{ status.textContent = e.message || 'Translation failed.'; button.disabled = false; }});
+  }};
+  window.deletePollTranslation = function(locale) {{
+    if (!confirm('Delete this translation? Visitors will see the source-language poll until it is translated again.')) return;
+    fetch('/admin/designer/polls/{translation_poll_id}/translations/' + encodeURIComponent(locale) + '/delete', {{method:'POST'}}).then(function(r) {{ window.location.href = r.url; }});
+  }};
 }})();
 </script>"#,
         action = action,
@@ -409,6 +491,8 @@ pub fn render_editor(data: &PollEditData, ctx: &PageContext, flash: Option<&str>
         rows_html = rows_html,
         results_link = results_link,
         delete_btn = delete_btn,
+        translation_section = translation_section,
+        translation_poll_id = data.id.as_deref().unwrap_or(""),
         success_message = html_escape(&data.success_message),
         button_label = html_escape(&data.button_label),
         cookie_only_checked = cookie_only_checked,

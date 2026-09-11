@@ -264,7 +264,28 @@ async fn render_post(
         {
             post_ctx.title = translation.title;
             post_ctx.excerpt = translation.excerpt.unwrap_or_default();
-            post_ctx.content = translation.content;
+            post_ctx.content = crate::embedded_content::reconcile(
+                &post_record.content,
+                &translation.content,
+            )
+            .unwrap_or_else(|error| {
+                tracing::warn!(post_id=%post_record.id, %locale, %error, "could not reconcile translated post embed placement");
+                translation.content
+            });
+            post_ctx.content = crate::models::form_def::expand_embeds(
+                &state.db,
+                site_id,
+                &post_ctx.content,
+                Some(locale),
+            )
+            .await;
+            post_ctx.content = crate::models::poll_def::expand_embeds(
+                &state.db,
+                site_id,
+                &post_ctx.content,
+                Some(locale),
+            )
+            .await;
         }
         // Locale-prefix the URL regardless of whether a translation row was
         // found — the visitor stays on the locale URL either way (silent
@@ -342,9 +363,7 @@ async fn render_post(
     };
 
     let site_ctx = build_site_context(&state, Some(site_id), base_url).await?;
-    let current_locale = locale
-        .clone()
-        .unwrap_or_else(|| site_ctx.language.clone());
+    let current_locale = locale.clone().unwrap_or_else(|| site_ctx.language.clone());
 
     // Check whether the logged-in subscriber has saved this post (before session_ctx is moved).
     let is_saved = if let Some(ref u) = session_ctx.user {

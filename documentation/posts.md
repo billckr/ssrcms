@@ -1,12 +1,12 @@
 ---
 title: Posts
 group: feature
-updated_by: claude
-last_updated: 2026-09-09
+updated_by: codex
+last_updated: 2026-09-10
 ---
 # Posts
 
-> Last updated: 2026-09-09 | Updated by: claude
+> Last updated: 2026-09-10 | Updated by: codex
 
 ## Overview
 
@@ -22,9 +22,25 @@ The `Post` struct's key columns: `id`, `site_id`, `title`, `slug`, `content`, `c
 
 Posts are served at `/{slug}` with no `/blog/` prefix. Slugs are unique across both posts and pages within a site. `single_post` (`core/src/handlers/post.rs`) first checks whether the active Puck builder project owns a page at this slug (`page_composition::get_by_slug`) and renders it via the composer if so; otherwise it looks up the post/page and, if `post_type == "page"`, delegates to `page::render_page()`.
 
-### AI Translation (2026-09-09)
+### AI Translation (updated 2026-09-10)
 
-A plain post/page's `title`/`excerpt`/`content` can be AI-translated into another language and served at `/{locale}/{slug}` — see the **AI Post Translation** doc for the full feature (provider config, routing, SEO tags). Builder/page-composition posts aren't covered (their content is a JSON block tree, not these three flat fields).
+A plain post/page's `title`/`excerpt`/`content` can be AI-translated into another language and
+served at `/{locale}/{slug}`. The editor deliberately separates two translation scopes:
+
+- The globe action translates only missing or stale post prose. It is disabled, and the route
+  refuses the request, when the localized post is already current.
+- The layers action translates only missing or stale embedded forms and polls for a locale that
+  already has a post translation. It never retranslates or rewrites post prose.
+
+Each translated locale lists its embedded components as **Current**, **Missing**, or **Source
+changed**, with links to their Designer screens. Adding, removing, or moving only an embed marker
+does not make current post prose stale: the source post remains authoritative for component
+placement, and public rendering reconciles those markers mechanically. A title, excerpt, content
+format, or real prose change still marks the post translation stale.
+
+See the **AI Post Translation** doc for provider configuration, the complete administrator
+workflow, rendering behavior, telemetry, and troubleshooting. Builder/page-composition posts are
+not covered because their content is a JSON block tree rather than the three flat post fields.
 
 ### Status Workflow
 
@@ -79,6 +95,9 @@ Path comparison uses `pathname` only (not the full URL) — `?success=saved` bei
 | GET/POST | /admin/posts/new | `admin::posts::new_post` / `save_new` | Create post — now saved via `fetch`, see "Admin Editor — AJAX Save" above |
 | GET/POST | /admin/posts/{id}/edit | `admin::posts::edit_post` / `save_edit` | Edit post — now saved via `fetch`, see "Admin Editor — AJAX Save" above |
 | POST | /admin/posts/{id}/delete | `admin::posts::delete_post` | Delete post |
+| POST | /admin/posts/{id}/translate | `admin::posts::translate_post_action` | Translate missing/stale post prose; refuses a current translation |
+| POST | /admin/posts/{id}/translate-embeds | `admin::posts::translate_embeds_action` | Translate only missing/stale embedded forms and polls |
+| POST | /admin/posts/{id}/translations/{locale}/delete | `admin::posts::delete_translation` | Delete one localized post/page copy |
 | POST | /admin/posts/bulk-delete | `admin::posts::bulk_delete_posts` | Bulk delete |
 
 ## Security Notes
@@ -93,4 +112,3 @@ Path comparison uses `pathname` only (not the full URL) — `?success=saved` bei
 ## Known Limitations / TODOs
 
 - `admin/src/pages/posts.rs` builds admin HTML via plain Rust string-building functions (`render_list`, `render_editor`), not a Leptos/WASM UI — this page is still server-rendered on every navigation, same as the rest of the admin. Only Save itself was converted to avoid a reload (see "Admin Editor — AJAX Save"); this is not a WASM island the way the media library (`/admin/media`, see the Media Library doc) is. Worth noting for anyone expecting Leptos rendering here from other project docs.
-

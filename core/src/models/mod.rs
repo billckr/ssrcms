@@ -4,6 +4,7 @@ pub mod builder_project;
 pub mod comment;
 pub mod email_change;
 pub mod email_provider;
+pub mod embedded_translation;
 pub mod form_def;
 pub mod form_submission;
 pub mod mail_log;

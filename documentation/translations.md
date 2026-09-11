@@ -1,12 +1,12 @@
 ---
 title: AI Post Translation
 group: feature
-updated_by: claude
-last_updated: 2026-09-09
+updated_by: codex
+last_updated: 2026-09-10
 ---
 # AI Post Translation
 
-> Last updated: 2026-09-09 | Updated by: claude
+> Last updated: 2026-09-10 | Updated by: codex
 
 ## Overview
 
@@ -41,7 +41,8 @@ when the switch is turned back on. It only gates *access*:
   with CSS — the markup isn't rendered at all).
 - The post editor's Translations sidebar section is omitted the same way.
 - Every AI-provider and translate route (create/update/delete a provider, discover models, test,
-  translate a post) checks the switch itself, first thing, and returns 403 if it's off — this is
+  translate post prose, or translate an embedded resource) checks the switch itself, first thing,
+  and returns 403 if it's off — this is
   enforced independently of the UI, so a site manager who knows the URL shape can't bypass it by
   posting to the routes directly while the tab is hidden. See `ai_translation_enabled` in
   `core/src/handlers/admin/ai_providers.rs` and the equivalent check in
@@ -93,18 +94,40 @@ exactly `es` before enabling it, because that path will be interpreted as the lo
 ### 3. Translate a post or page
 
 Open an existing post or page and find **Translations** in the editor sidebar. Choose a language
-and a verified provider, then press the globe button.
+and a verified provider. The controls have deliberately separate scopes:
+
+- **Translate post prose** (globe) creates a missing post translation or refreshes one marked
+  **Source changed**. It is disabled when that locale's post translation is current, and the route
+  also refuses a redundant current-post request.
+- **Translate embedded items only** (layers) translates only missing or stale forms/polls. It is
+  available after the post itself has a translation and never calls the post translator or writes
+  translated post prose.
+
+Each translated locale lists its embedded forms and polls as **Current**, **Missing**, or **Source
+changed**, and links each item to its authoritative Designer screen. The text under the controls
+explains which scope currently needs work.
+
+For a post that is already translated, adding, removing, or moving only a form/poll does **not**
+require retranslating the post. Save the source post, then use **Translate embedded items only** or
+translate the reusable form/poll from its own Designer screen. Embed identity and placement come
+mechanically from the source post at render time, while the existing translated prose is reused
+unchanged. This is the standard way to avoid spending tokens on prose that has already been
+translated.
+
+If the edit changes the title, excerpt, or prose as well, the post translation is marked stale and
+should be translated again. Refresh missing/stale embedded resources with the separate layers
+action afterward; the two scopes never spend each other's tokens.
 
 The request uses the last saved version of the post. If the editor contains unsaved changes,
-SynapCMS asks the administrator to save them first. While the model request is running, the globe
-button is disabled and spins, and a small status line beside it reads "Translating…" so a slow
+SynapCMS asks the administrator to save them first. While either model request is running, its
+button is disabled and spins, and a small status line describes the active request so a slow
 provider response doesn't look like nothing is happening. The request is synchronous and can
 legitimately take several seconds.
 
 On success, the editor reloads with a message such as `Translated into Spanish.` and lists the
-translation with a public View link. Translating the same post into the same locale again replaces
-the previous translation. Use the trash button next to a translation to delete only that localized
-copy; the source post is unaffected.
+translation with a public View link. A stale post translation is replaced; a current one is not
+sent again. Use the trash button next to a translation to delete only that localized copy; the
+source post is unaffected.
 
 AI output should be reviewed by someone who understands the target language. Provider success
 means the response was structurally usable, not that terminology, tone, facts, or formatting are
@@ -133,6 +156,18 @@ The required model response is one JSON object:
 The parser accepts a plain JSON object and defensively removes one surrounding `json` or bare
 Markdown code fence. Commentary, partial JSON, a different field shape, or truncated output causes
 the translation to fail without writing a database row.
+
+Before the post body is sent, exact `<ss-form>` and `<ss-poll>` markers are replaced with opaque,
+numbered tokens. The response must contain each token exactly once and in the original order. The
+source marker bytes are then restored. This prevents a model from translating a slug, changing an
+embed type, duplicating a resource, or silently removing it.
+
+Forms and polls use separate structured calls. Only visitor-facing labels and messages are
+translated. Form field names and option values and poll option keys are validated byte-for-byte;
+they remain the identifiers used by submissions, votes, email placeholders, exports, and
+analytics. Confirmation-email `{{field_name}}` placeholders and the poll result `{count}`
+placeholder must also remain exact. Any changed identifier, count, or required placeholder rejects
+the response.
 
 ### Anthropic
 
@@ -168,7 +203,9 @@ to the application log. API keys are never deliberately logged.
 
 ## Storage and Data Lifecycle
 
-Migration `migrations/0003_ai_translation.sql` creates the two feature tables.
+Migration `migrations/0003_ai_translation.sql` creates the provider and post-translation tables.
+Migration `migrations/0004_embedded_content_translations.sql` adds localized presentation for
+reusable forms and polls.
 
 ### `ai_providers`
 
@@ -193,9 +230,23 @@ The unique `(post_id, locale)` constraint makes retranslation an upsert. Deletin
 also deletes its translations through the foreign key. Deleting an AI provider does not delete
 translations it previously generated.
 
-If the source post is saved after translation, the editor marks the localized copy **Source
-changed**. It remains public until an administrator retranslates or deletes it; translations are
-not refreshed automatically.
+If the source title, excerpt, content format, or prose is saved after translation, the editor marks
+the localized copy **Source changed**. It remains public until an administrator retranslates or
+deletes it; translations are not refreshed automatically. Metadata-only and form/poll-marker-only
+saves advance translations that were already current and do not create a false stale state. A
+translation already stale from a prose edit is never made current by a later unrelated save.
+
+### `form_translations` and `poll_translations`
+
+There is one row per reusable resource and locale. Each JSONB payload contains only translated
+presentation text; it does not clone a form or poll. `source_updated_at` supports stale badges and
+lets the embedded-item action skip a component that has not changed. Foreign keys cascade when the
+source form or poll is deleted.
+
+Saved forms expose a **Translations** tab and saved polls expose a **Translations** section. Site
+administrators can translate or refresh a component directly and delete one localized payload.
+Deleting it does not affect submissions or votes; localized pages fall back to the source-language
+component until it is translated again.
 
 ### Enabled locales
 
@@ -219,6 +270,20 @@ If a translation row exists, its three localized fields overlay the source recor
 If no translation exists, SynapCMS deliberately renders the original content at the locale URL
 instead of returning 404. This silent fallback keeps links working, but it can make an untranslated
 page appear to be translated unless the theme communicates language state clearly.
+
+Embed expansion happens after that localized body overlay. Before expansion, translated-content
+markers are removed and the exact current source markers are inserted at corresponding structural
+HTML boundaries. Therefore adding a form/poll to an already translated post does not modify or
+regenerate its translated prose. If source and translated document structures cannot be reconciled,
+SynapCMS retains the stored translated body and records a warning rather than guessing a new inline
+position.
+
+At render time, a matching form or poll translation is merged onto a clone of the source definition
+by stable key. If no valid component translation exists, the source definition still renders and
+remains functional. Form submissions
+carry the locale in a reserved hidden field so confirmation subject/body text can use the same
+localized payload without storing the reserved field in submission data. Poll result links carry
+the locale so result labels are localized while totals still use the original poll ID and keys.
 
 The original-language URL is used as `canonical_url`. `hreflang_links` contains the original URL
 plus only locales that have an actual translation row. Enabled languages with no translation are
@@ -275,7 +340,8 @@ encrypted value is installation-specific and still sensitive.
 ## Known Limitations and Caveats
 
 - Builder/page-composition posts are unsupported.
-- Translation is manual and per post/page; there is no batch translation or background queue.
+- Translation is manual and per locale; there is no site-wide batch translation or background
+  queue.
 - Requests hold the admin HTTP request open for up to 90 seconds.
 - Long posts can exceed provider context or output-token limits. The provider test uses a tiny
   prompt and cannot detect that condition.
@@ -286,8 +352,8 @@ encrypted value is installation-specific and still sensitive.
 - Missing translations silently fall back to source-language content.
 - The canonical URL always points to the source-language page rather than self-canonicalizing each
   localized URL.
-- Only post/page fields are localized; menus, taxonomies, widgets, metadata from plugins, and other
-  site chrome remain in their source language.
+- Post/page fields and embedded form/poll presentation text can be localized. Menus, taxonomies,
+  widgets, metadata from plugins, and other site chrome remain in their source language.
 - A site-specific theme override can hide the switcher even though translated URLs work.
 
 ## Troubleshooting
@@ -329,9 +395,12 @@ jq -c 'select(.fields.outcome == "failure")' logs/ai-translation.jsonl
 ```
 
 Every attempt has correlated start and terminal events with site/post/provider/model identifiers,
-duration, outcome, and failure stage. Provider HTTP errors and malformed model output include a
+operation scope, duration, outcome, and failure stage. Provider HTTP errors and malformed model output include a
 single-line response excerpt capped at 500 characters. Prompts, credentials, and successful
 translated content are not logged.
+
+See the **Logging** document for the central log-location reference, additional parsing recipes,
+retention guidance, and the recommended cross-stream troubleshooting workflow.
 
 ### Local OpenAI-compatible provider cannot be reached
 
@@ -386,7 +455,8 @@ version.
 | POST | `/admin/sites/{id}/ai-providers/{provider_id}/test` | Test and verify a provider |
 | POST | `/admin/sites/{id}/ai-providers/{provider_id}/delete` | Delete a provider |
 | POST | `/admin/sites/{id}/enabled-locales` | Save enabled locales |
-| POST | `/admin/posts/{id}/translate` | Generate or replace one translation |
+| POST | `/admin/posts/{id}/translate` | Generate or refresh stale post prose; refuses a current translation |
+| POST | `/admin/posts/{id}/translate-embeds` | Translate only missing/stale embedded forms and polls for an existing locale |
 | POST | `/admin/posts/{id}/translations/{locale}/delete` | Delete one translation |
 | GET | `/{locale}/{slug}` and nested page paths | Render localized content or source fallback |
 
@@ -397,6 +467,8 @@ version.
 | `core/src/translate.rs` | Prompt construction, provider HTTP adapters, response parsing |
 | `core/src/models/ai_provider.rs` | Encrypted provider configuration and verification state |
 | `core/src/models/post_translation.rs` | Translation reads, listing, upsert, deletion, staleness |
+| `core/src/models/embedded_translation.rs` | Locale-specific reusable form/poll presentation payloads |
+| `core/src/embedded_content.rs` | Mechanical source-marker reconciliation into translated prose |
 | `core/src/models/site_locale.rs` | Per-site enabled locale setting |
 | `core/src/utils/locales.rs` | Curated locale codes and display names |
 | `core/src/handlers/admin/ai_providers.rs` | Provider create/edit/test/delete handlers |
@@ -407,6 +479,7 @@ version.
 | `core/src/handlers/post.rs` | Translation overlay during post rendering |
 | `core/src/handlers/home.rs` | Canonical and `hreflang` context construction |
 | `migrations/0003_ai_translation.sql` | Provider and translation tables |
+| `migrations/0004_embedded_content_translations.sql` | Form/poll translation tables |
 | `core/src/app_state.rs` | `AppSettings::ai_translation_enabled` installation-wide switch |
 | `core/src/handlers/admin/settings.rs` | Features tab save handler for the installation-wide switch |
 

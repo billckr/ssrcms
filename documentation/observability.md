@@ -1,16 +1,20 @@
 ---
 title: Observability & Metrics
 group: feature
-updated_by: claude
-last_updated: 2026-08-16
+updated_by: codex
+last_updated: 2026-09-10
 ---
 # Observability & Metrics
 
-> Last updated: 2026-07-22 | Updated by: claude
+> Last updated: 2026-09-10 | Updated by: codex
 
 ## Overview
 
 SynapCMS exposes application metrics in Prometheus text format at `GET /metrics`. Metrics are collected using the `metrics` crate with a `metrics-exporter-prometheus` backend. An optional bearer token protects the endpoint. HTTP request counts/durations are tracked globally via middleware; search query counts are tracked per query.
+
+For log locations, formats, commands, parsing examples, privacy rules, and retention guidance, see
+the dedicated **Logging** document. That document is the central operational source for logging;
+feature documents only explain errors specific to their own workflows.
 
 ## How It Works
 

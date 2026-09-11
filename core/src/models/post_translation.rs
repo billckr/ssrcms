@@ -4,7 +4,7 @@
 //! `crate::models::site_locale` for which locales a site has enabled.
 
 use chrono::{DateTime, Utc};
-use sqlx::PgPool;
+use sqlx::{PgConnection, PgPool};
 use uuid::Uuid;
 
 use crate::errors::Result;
@@ -88,6 +88,39 @@ pub async fn upsert(
     .fetch_one(pool)
     .await?;
     Ok(row)
+}
+
+/// Transaction-friendly form used when a post translation and translations
+/// of its embedded resources must become visible atomically.
+pub async fn upsert_on(
+    conn: &mut PgConnection,
+    post_id: Uuid,
+    locale: &str,
+    title: &str,
+    excerpt: Option<&str>,
+    content: &str,
+    source_updated_at: DateTime<Utc>,
+) -> Result<()> {
+    sqlx::query(
+        "INSERT INTO post_translations (post_id, locale, title, excerpt, content, source_updated_at, generated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, NOW())
+         ON CONFLICT (post_id, locale) DO UPDATE
+         SET title = EXCLUDED.title,
+             excerpt = EXCLUDED.excerpt,
+             content = EXCLUDED.content,
+             source_updated_at = EXCLUDED.source_updated_at,
+             generated_at = NOW(),
+             updated_at = NOW()",
+    )
+    .bind(post_id)
+    .bind(locale)
+    .bind(title)
+    .bind(excerpt)
+    .bind(content)
+    .bind(source_updated_at)
+    .execute(conn)
+    .await?;
+    Ok(())
 }
 
 pub async fn delete(pool: &PgPool, post_id: Uuid, locale: &str) -> Result<()> {

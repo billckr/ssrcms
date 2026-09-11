@@ -1137,6 +1137,11 @@ pub async fn update(pool: &PgPool, id: Uuid, data: &UpdatePost) -> Result<Post> 
         .clone()
         .unwrap_or_else(|| serde_json::from_value(current.sources.clone()).unwrap_or_default());
     let new_sources_public = data.sources_public.unwrap_or(current.sources_public);
+    let translation_source_unchanged = current.title == new_title
+        && current.excerpt == new_excerpt
+        && current.content_format == new_format
+        && crate::embedded_content::without_embeds(&current.content)
+            == crate::embedded_content::without_embeds(&new_content);
 
     let post = sqlx::query_as::<_, Post>(
         r#"
@@ -1176,6 +1181,26 @@ pub async fn update(pool: &PgPool, id: Uuid, data: &UpdatePost) -> Result<Post> 
     .fetch_one(pool)
     .await?;
     let _ = new_password; // silence unused warning
+
+    // Metadata edits and form/poll marker-only edits do not invalidate
+    // translated prose. Advance only translations that were current before
+    // this save; a translation already stale from a real prose edit must
+    // never become current because of a later unrelated save.
+    if translation_source_unchanged {
+        if let Err(error) = sqlx::query(
+            "UPDATE post_translations
+             SET source_updated_at = $1
+             WHERE post_id = $2 AND source_updated_at >= $3",
+        )
+        .bind(post.updated_at)
+        .bind(post.id)
+        .bind(current.updated_at)
+        .execute(pool)
+        .await
+        {
+            tracing::warn!(post_id=%post.id, %error, "failed to preserve post translation freshness");
+        }
+    }
 
     Ok(post)
 }

@@ -1,12 +1,12 @@
 ---
 title: Form Designer
 group: feature
-updated_by: claude
-last_updated: 2026-08-16
+updated_by: codex
+last_updated: 2026-09-10
 ---
 # Form Designer
 
-> Last updated: 2026-08-16 | Updated by: claude
+> Last updated: 2026-09-10 | Updated by: codex
 
 ## Overview
 
@@ -47,6 +47,20 @@ Field types cover the common cases plus two visual-only elements for structuring
 - Save stays disabled until something actually differs from what loaded (`snapshot()`/`checkDirty()` in the page's script — compares a JSON snapshot of every field + setting, including `email_provider_id` and `no_mail`, against the one captured on load), mirroring the dirty-check pattern the theme customizer's per-card Save buttons use.
 - Separator/note rows skip the usual "both label and name are empty, discard this row" guard on submit — a titleless separator is a normal, common case, not an accidentally-added blank row.
 
+### Translating a form
+
+A saved form has a **Translations** tab when installation-wide AI Translation is enabled. Choose
+an enabled site language and verified provider to translate visitor-facing field labels, option
+labels, notes, button/success text, and confirmation-email text. Field names, option values, and
+email placeholders remain stable identifiers, so localized submissions continue to use the same
+storage, exports, email templates, and analytics as the source form.
+
+You can manage a reusable form translation here even when the form appears on several posts or
+pages. From a translated post/page, the separate layers action is a convenient bulk entry point:
+it translates only embedded forms and polls that are missing or stale for that locale. Both paths
+write the same per-form translation row and neither retranslates post/page prose. Editing the form
+later marks its localized payloads stale without making the containing posts stale.
+
 ### Inserting a form into a post or page
 
 The Quill editor on `/admin/posts/*` and `/admin/pages/*` (both post types share one editor, `admin/src/pages/posts.rs`) registers a custom embed format:
@@ -57,7 +71,13 @@ The Quill editor on `/admin/posts/*` and `/admin/pages/*` (both post types share
 
 ### Render-time expansion
 
-- `form_def::expand_embeds(pool, site_id, content)` scans for `<ss-form data-slug="...">` and replaces each with the real rendered `<form>` for that definition (`FormDef::render_html()`). It's a plain substring check (`content.contains("<ss-form")`) before touching the database, so posts/pages without an embed — the overwhelming majority — cost nothing extra.
+- `form_def::expand_embeds(pool, site_id, content, locale)` scans for `<ss-form data-slug="...">` and replaces each with the real rendered `<form>` for that definition. When a locale is present, translated presentation text is merged by stable field name and option value; otherwise the source labels are used. It's a plain substring check (`content.contains("<ss-form")`) before touching the database, so posts/pages without an embed — the overwhelming majority — cost nothing extra.
+- The source post owns embed placement independently of translated prose. Adding this form to an
+  already translated post requires saving the post, then either using **Translate embedded items
+  only** in the post editor or translating the form from its own **Translations** tab. Neither path
+  retranslates unchanged post prose. Public rendering mechanically reconciles the source marker
+  into each translated body. A real prose, title, or excerpt edit still marks the post translation
+  stale and requires normal retranslation.
 - Called from `build_post_context()` in `core/src/handlers/home.rs`, which runs on every single post/page render (gated only on the post having a `site_id`, which every real post/page does) — so classic Tera-rendered posts and pages both pick up embeds automatically, with no theme-template changes required.
 - `render_html()`'s markup deliberately matches the hand-written-form convention themes already used for contact/newsletter/subscribe pages (`.themed-form`, `.form-field`, `.form-required`, `.form-checkbox-label`, `.honeypot-field`, `.form-success`, and the theme's generic `.btn`) instead of inventing a parallel class scheme — a theme that already styles those (Leisure, Symantic Signals) renders a fully-styled embedded form with zero new CSS. **The Default theme does not have this "shared form styles" CSS block yet** — a form inserted into a page using the Default theme currently renders unstyled; the CSS would need to be added there the same way it was to Leisure and Symantic Signals if that theme goes into real use.
 - The honeypot field (when enabled) is a real, visually-hidden `<div class="honeypot-field">` + `<input name="_honeypot">`; the underlying `/form/{slug}` submit handler already strips any field name starting with `_` before storage (see the **Forms** doc), so no changes were needed there.
@@ -86,10 +106,13 @@ The send happens in the background, after the submission is already stored and t
 | GET | /admin/form-designer/{id} | form_designer::edit_form | Edit-form editor |
 | POST | /admin/form-designer/{id} | form_designer::update | Save changes to a form (fields, settings — including `no_mail` — and `email_provider_id`) |
 | POST | /admin/form-designer/{id}/delete | form_designer::delete | Delete a form definition (does not delete its submissions) |
+| POST | /admin/form-designer/{id}/translate | form_designer::translate | Translate or refresh visitor-facing form text for one enabled locale |
+| POST | /admin/form-designer/{id}/translations/{locale}/delete | form_designer::delete_translation | Delete one localized presentation payload |
 
 ## Database Schema
 
 - `forms` (migration `0052_create_forms.sql`; `email_provider_id` added by `0059_add_email_provider_to_forms.sql`; `total_submissions` added by `0061_forms_total_submissions.sql`): `id UUID PK`, `site_id UUID` (FK → `sites`, cascade delete), `name TEXT`, `slug TEXT`, `fields JSONB` (default `[]`), `settings JSONB` (default `{}`), `email_provider_id UUID NULL` (FK → `email_providers`, `ON DELETE SET NULL`), `total_submissions BIGINT NOT NULL DEFAULT 0`, `created_at`, `updated_at`. Unique on `(site_id, slug)`. `notify_email`/`confirm_submitter`/`confirm_subject`/`confirm_body`/`no_mail` live inside `settings` JSONB; `email_provider_id` and `total_submissions` are real columns — the former so it can carry a real foreign key, the latter so it can be atomically incremented.
+- `form_translations` (migration `migrations/0004_embedded_content_translations.sql`) stores one JSONB presentation payload per `(form_id, locale)`, plus the source definition timestamp used to identify stale translations. Field names and option values are keys, never translated data.
 - `total_submissions` is a **lifetime counter, incremented once per public submission and never decremented** (see `form_submission::create` in the **Forms** doc) — it deliberately diverges from the live submission count shown on the Submissions tab, so deleting old responses for cleanup doesn't erase the historical record of how much a form was actually used. Surfaced on the Stats tab of `/admin/analytics/form/{id}`.
 
 ## Security Notes

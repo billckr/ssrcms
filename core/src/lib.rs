@@ -7,6 +7,7 @@ pub mod caddy;
 pub mod config;
 pub mod crypto;
 pub mod db;
+pub mod embedded_content;
 pub mod errors;
 pub mod handlers;
 pub mod mail;

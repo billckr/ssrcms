@@ -55,6 +55,20 @@ pub async fn submit(
     Path(name): Path<String>,
     Form(fields): Form<HashMap<String, String>>,
 ) -> impl IntoResponse {
+    let submitted_locale = match fields.get("_locale") {
+        Some(locale)
+            if crate::utils::locales::display_name(locale).is_some()
+                && crate::models::site_locale::is_locale_enabled(
+                    &state.db,
+                    current_site.site.id,
+                    locale,
+                )
+                .await =>
+        {
+            Some(locale.clone())
+        }
+        _ => None,
+    };
     // Honeypot / internal field stripping — drop any key starting with `_`
     let data: HashMap<String, String> = fields
         .into_iter()
@@ -78,6 +92,16 @@ pub async fn submit(
         .await
         .ok()
         .flatten();
+    let form_translation = match (&form, submitted_locale.as_deref()) {
+        (Some(form), Some(locale)) => {
+            crate::models::embedded_translation::get_form(&state.db, form.id, locale)
+                .await
+                .ok()
+                .flatten()
+                .and_then(|row| row.parsed())
+        }
+        _ => None,
+    };
 
     // Skip storing empty submissions (all fields blank after stripping)
     let is_empty = data.values().all(|v| v.trim().is_empty());
@@ -168,8 +192,16 @@ pub async fn submit(
             if form.settings.confirm_submitter {
                 if let Some(to) = submitter_email {
                     let state = state.clone();
-                    let subject = fill_template(&form.settings.confirm_subject, &data);
-                    let body = fill_template(&form.settings.confirm_body, &data);
+                    let confirm_subject = form_translation
+                        .as_ref()
+                        .map(|t| t.confirm_subject.as_str())
+                        .unwrap_or(&form.settings.confirm_subject);
+                    let confirm_body = form_translation
+                        .as_ref()
+                        .map(|t| t.confirm_body.as_str())
+                        .unwrap_or(&form.settings.confirm_body);
+                    let subject = fill_template(confirm_subject, &data);
+                    let body = fill_template(confirm_body, &data);
                     tokio::spawn(async move {
                         let msg = EmailMessage {
                             to: &to,

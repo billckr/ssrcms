@@ -4,11 +4,14 @@
 //! `crate::models::ai_provider` for why. Structured directly after
 //! `crate::mail`'s per-provider dispatch pattern.
 
-use std::time::Duration;
+use std::{collections::BTreeMap, time::Duration};
 
 use serde::{Deserialize, Serialize};
 
 use crate::models::ai_provider::AiProviderConfig;
+use crate::models::embedded_translation::{FormTranslationPayload, PollTranslationPayload};
+use crate::models::form_def::FormDef;
+use crate::models::poll_def::PollDef;
 use crate::models::post::Post;
 
 /// The three flat, translatable fields of a plain post/page. Builder/
@@ -39,7 +42,12 @@ fn http_client() -> anyhow::Result<reqwest::Client> {
         .build()?)
 }
 
-fn build_prompt(post: &Post, target_locale_name: &str) -> String {
+fn build_prompt_with_content(
+    post: &Post,
+    target_locale_name: &str,
+    content: &str,
+    embed_instruction: &str,
+) -> String {
     let format_instruction = if post.content_format == "markdown" {
         "The content is Markdown — preserve all Markdown syntax (headings, links, lists, emphasis, code fences, etc.) exactly as-is and translate only the prose text."
     } else {
@@ -53,14 +61,81 @@ fn build_prompt(post: &Post, target_locale_name: &str) -> String {
         .unwrap_or_default();
 
     format!(
-        "Translate the following blog post into {target_locale_name}. {format_instruction}\n\n\
+        "Translate the following blog post into {target_locale_name}. {format_instruction}{embed_instruction}\n\n\
         Keep the same tone and register as the original. Do not add, remove, or summarize content — translate it faithfully.\n\n\
         TITLE:\n{title}\n\n{excerpt_line}CONTENT:\n{content}\n\n\
         Respond with ONLY a single JSON object, no markdown code fence, no commentary before or after it, matching exactly this shape:\n\
         {{\"title\": \"...\", \"excerpt\": \"...\" or null, \"content\": \"...\"}}",
         title = post.title,
-        content = post.content,
+        content = content,
     )
+}
+
+#[cfg(test)]
+fn build_prompt(post: &Post, target_locale_name: &str) -> String {
+    build_prompt_with_content(post, target_locale_name, &post.content, "")
+}
+
+#[derive(Debug)]
+struct ProtectedEmbeds {
+    content: String,
+    markers: Vec<String>,
+}
+
+/// Keep reusable-content identity outside the model's control. The provider
+/// sees opaque tokens rather than editable `<ss-form>`/`<ss-poll>` tags; the
+/// exact source markers are restored only after cardinality/order validation.
+fn protect_embeds(content: &str) -> anyhow::Result<ProtectedEmbeds> {
+    let re = regex_lite::Regex::new(r#"<ss-form\b[^>]*></ss-form>|<ss-poll\b[^>]*></ss-poll>"#)?;
+    let matches: Vec<_> = re.find_iter(content).collect();
+    if matches.is_empty() {
+        return Ok(ProtectedEmbeds {
+            content: content.to_string(),
+            markers: Vec::new(),
+        });
+    }
+
+    let mut protected = String::with_capacity(content.len());
+    let mut markers = Vec::with_capacity(matches.len());
+    let mut cursor = 0;
+    for (index, found) in matches.into_iter().enumerate() {
+        protected.push_str(&content[cursor..found.start()]);
+        protected.push_str(&format!("[[SYNAPCMS_EMBED_{index}]]"));
+        markers.push(found.as_str().to_string());
+        cursor = found.end();
+    }
+    protected.push_str(&content[cursor..]);
+    Ok(ProtectedEmbeds {
+        content: protected,
+        markers,
+    })
+}
+
+fn restore_embeds(content: &str, markers: &[String]) -> anyhow::Result<String> {
+    let mut previous = 0;
+    for index in 0..markers.len() {
+        let token = format!("[[SYNAPCMS_EMBED_{index}]]");
+        if content.matches(&token).count() != 1 {
+            anyhow::bail!("translation changed or removed an embedded form/poll marker");
+        }
+        let position = content.find(&token).unwrap_or_default();
+        if index > 0 && position < previous {
+            anyhow::bail!("translation reordered embedded form/poll markers");
+        }
+        previous = position;
+    }
+    if content.contains("[[SYNAPCMS_EMBED_") && markers.is_empty() {
+        anyhow::bail!("translation introduced an unknown embedded-content marker");
+    }
+
+    let mut restored = content.to_string();
+    for (index, marker) in markers.iter().enumerate() {
+        restored = restored.replace(&format!("[[SYNAPCMS_EMBED_{index}]]"), marker);
+    }
+    if restored.contains("[[SYNAPCMS_EMBED_") {
+        anyhow::bail!("translation introduced an unknown embedded-content marker");
+    }
+    Ok(restored)
 }
 
 /// Strip a defensive ```json ... ``` fence if the model added one despite
@@ -92,9 +167,194 @@ pub async fn translate_post(
     post: &Post,
     target_locale_name: &str,
 ) -> anyhow::Result<TranslationResult> {
-    let prompt = build_prompt(post, target_locale_name);
+    let protected = protect_embeds(&post.content)?;
+    let embed_instruction = if protected.markers.is_empty() {
+        ""
+    } else {
+        " Preserve every [[SYNAPCMS_EMBED_N]] token exactly once and in the same order; these tokens represent forms or polls and must not be translated, removed, duplicated, or moved."
+    };
+    let prompt = build_prompt_with_content(
+        post,
+        target_locale_name,
+        &protected.content,
+        embed_instruction,
+    );
     let text = send_prompt(config, &prompt, true).await?;
-    parse_translation_result(&text)
+    let mut result = parse_translation_result(&text)?;
+    result.content = restore_embeds(&result.content, &protected.markers)?;
+    Ok(result)
+}
+
+pub async fn translate_form(
+    config: &AiProviderConfig,
+    form: &FormDef,
+    target_locale_name: &str,
+) -> anyhow::Result<FormTranslationPayload> {
+    let source = serde_json::json!({
+        "fields": form.fields.iter().map(|field| serde_json::json!({
+            "name": field.name,
+            "label": field.label,
+            "options": field.options.iter().map(|(value, label)| serde_json::json!({
+                "value": value,
+                "label": label,
+            })).collect::<Vec<_>>(),
+        })).collect::<Vec<_>>(),
+        "button_label": form.settings.button_label,
+        "success_message": form.settings.success_message,
+        "invalid_message": "Please fill in all required fields with valid values and try again.",
+        "confirm_subject": form.settings.confirm_subject,
+        "confirm_body": form.settings.confirm_body,
+    });
+    let prompt = format!(
+        "Translate the visitor-facing strings in this form into {target_locale_name}. Keep every field name, option value, and {{{{field_name}}}} template placeholder byte-for-byte unchanged. Return ONLY JSON with this exact shape: {{\"fields\":[{{\"name\":\"...\",\"label\":\"...\",\"options\":[{{\"value\":\"...\",\"label\":\"...\"}}]}}],\"button_label\":\"...\",\"success_message\":\"...\",\"invalid_message\":\"...\",\"confirm_subject\":\"...\",\"confirm_body\":\"...\"}}. SOURCE JSON:\n{source}"
+    );
+    let text = send_prompt(config, &prompt, true).await?;
+    let value: serde_json::Value = serde_json::from_str(strip_code_fence(&text)).map_err(|e| {
+        anyhow::anyhow!(
+            "could not parse form translation response as JSON: {e}; response_excerpt={}",
+            concise_error(&text)
+        )
+    })?;
+    form_payload_from_value(form, value)
+}
+
+fn form_payload_from_value(
+    form: &FormDef,
+    value: serde_json::Value,
+) -> anyhow::Result<FormTranslationPayload> {
+    #[derive(Deserialize)]
+    struct OptionResult {
+        value: String,
+        label: String,
+    }
+    #[derive(Deserialize)]
+    struct FieldResult {
+        name: String,
+        label: String,
+        options: Vec<OptionResult>,
+    }
+    #[derive(Deserialize)]
+    struct ResultShape {
+        fields: Vec<FieldResult>,
+        button_label: String,
+        success_message: String,
+        invalid_message: String,
+        confirm_subject: String,
+        confirm_body: String,
+    }
+    let result: ResultShape = serde_json::from_value(value)?;
+    if result.fields.len() != form.fields.len() {
+        anyhow::bail!("form translation changed the field count");
+    }
+    if template_placeholders(&result.confirm_subject)
+        != template_placeholders(&form.settings.confirm_subject)
+        || template_placeholders(&result.confirm_body)
+            != template_placeholders(&form.settings.confirm_body)
+    {
+        anyhow::bail!("form translation changed a confirmation template placeholder");
+    }
+    let mut field_labels = BTreeMap::new();
+    let mut option_labels = BTreeMap::new();
+    for (source, translated) in form.fields.iter().zip(result.fields) {
+        if translated.name != source.name || translated.options.len() != source.options.len() {
+            anyhow::bail!("form translation changed a stable field name or option count");
+        }
+        field_labels.insert(source.name.clone(), translated.label);
+        let mut labels = BTreeMap::new();
+        for ((source_value, _), translated_option) in source.options.iter().zip(translated.options)
+        {
+            if translated_option.value != *source_value {
+                anyhow::bail!("form translation changed a stable option value");
+            }
+            labels.insert(source_value.clone(), translated_option.label);
+        }
+        if !labels.is_empty() {
+            option_labels.insert(source.name.clone(), labels);
+        }
+    }
+    Ok(FormTranslationPayload {
+        field_labels,
+        option_labels,
+        button_label: result.button_label,
+        success_message: result.success_message,
+        invalid_message: result.invalid_message,
+        confirm_subject: result.confirm_subject,
+        confirm_body: result.confirm_body,
+    })
+}
+
+fn template_placeholders(text: &str) -> Vec<&str> {
+    let Ok(re) = regex_lite::Regex::new(r"\{\{[A-Za-z0-9_-]+\}\}") else {
+        return Vec::new();
+    };
+    re.find_iter(text).map(|found| found.as_str()).collect()
+}
+
+pub async fn translate_poll(
+    config: &AiProviderConfig,
+    poll: &PollDef,
+    target_locale_name: &str,
+) -> anyhow::Result<PollTranslationPayload> {
+    let source = serde_json::json!({
+        "question": poll.question,
+        "options": poll.options.iter().map(|option| serde_json::json!({
+            "key": option.key,
+            "label": option.label,
+        })).collect::<Vec<_>>(),
+        "button_label": poll.settings.button_label,
+        "success_message": poll.settings.success_message,
+        "total_votes_label": "{count} total votes",
+    });
+    let prompt = format!(
+        "Translate the visitor-facing strings in this poll into {target_locale_name}. Keep every option key byte-for-byte unchanged and preserve the {{count}} placeholder exactly once. Return ONLY JSON with this exact shape: {{\"question\":\"...\",\"options\":[{{\"key\":\"...\",\"label\":\"...\"}}],\"button_label\":\"...\",\"success_message\":\"...\",\"total_votes_label\":\"{{count}} ...\"}}. SOURCE JSON:\n{source}"
+    );
+    let text = send_prompt(config, &prompt, true).await?;
+    let value: serde_json::Value = serde_json::from_str(strip_code_fence(&text)).map_err(|e| {
+        anyhow::anyhow!(
+            "could not parse poll translation response as JSON: {e}; response_excerpt={}",
+            concise_error(&text)
+        )
+    })?;
+    poll_payload_from_value(poll, value)
+}
+
+fn poll_payload_from_value(
+    poll: &PollDef,
+    value: serde_json::Value,
+) -> anyhow::Result<PollTranslationPayload> {
+    #[derive(Deserialize)]
+    struct OptionResult {
+        key: String,
+        label: String,
+    }
+    #[derive(Deserialize)]
+    struct ResultShape {
+        question: String,
+        options: Vec<OptionResult>,
+        button_label: String,
+        success_message: String,
+        total_votes_label: String,
+    }
+    let result: ResultShape = serde_json::from_value(value)?;
+    if result.options.len() != poll.options.len()
+        || result.total_votes_label.matches("{count}").count() != 1
+    {
+        anyhow::bail!("poll translation changed its option count or count placeholder");
+    }
+    let mut option_labels = BTreeMap::new();
+    for (source, translated) in poll.options.iter().zip(result.options) {
+        if translated.key != source.key {
+            anyhow::bail!("poll translation changed a stable option key");
+        }
+        option_labels.insert(source.key.clone(), translated.label);
+    }
+    Ok(PollTranslationPayload {
+        question: result.question,
+        option_labels,
+        button_label: result.button_label,
+        success_message: result.success_message,
+        total_votes_label: result.total_votes_label,
+    })
 }
 
 /// A small structured-output call confirming that credentials, model, and
@@ -471,6 +731,128 @@ mod tests {
         let prompt = build_prompt(&post, "Spanish");
         assert!(prompt.contains("EXCERPT:"));
         assert!(prompt.contains("A summary"));
+    }
+
+    #[test]
+    fn embedded_resources_are_hidden_from_model_and_restored_exactly() {
+        let source = r#"<p>Hello</p><ss-form data-slug="contact" data-label="Contact"></ss-form><ss-poll data-slug="choice"></ss-poll>"#;
+        let protected = protect_embeds(source).unwrap();
+        assert_eq!(protected.markers.len(), 2);
+        assert!(!protected.content.contains("contact"));
+        assert_eq!(
+            restore_embeds(&protected.content, &protected.markers).unwrap(),
+            source
+        );
+    }
+
+    #[test]
+    fn embedded_resource_validation_rejects_missing_or_duplicate_tokens() {
+        let protected = protect_embeds(
+            r#"<ss-form data-slug="contact"></ss-form><ss-poll data-slug="choice"></ss-poll>"#,
+        )
+        .unwrap();
+        assert!(restore_embeds("[[SYNAPCMS_EMBED_0]]", &protected.markers).is_err());
+        assert!(restore_embeds(
+            "[[SYNAPCMS_EMBED_0]][[SYNAPCMS_EMBED_0]][[SYNAPCMS_EMBED_1]]",
+            &protected.markers
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn embedded_resource_validation_rejects_reordering() {
+        let protected = protect_embeds(
+            r#"<ss-form data-slug="contact"></ss-form><ss-poll data-slug="choice"></ss-poll>"#,
+        )
+        .unwrap();
+        assert!(restore_embeds(
+            "[[SYNAPCMS_EMBED_1]][[SYNAPCMS_EMBED_0]]",
+            &protected.markers
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn form_translation_rejects_changed_submission_identifiers() {
+        let form = make_form();
+        let value = serde_json::json!({
+            "fields": [{"name":"nombre","label":"Nombre","options":[{"value":"daily","label":"Diario"}]}],
+            "button_label":"Enviar",
+            "success_message":"Gracias",
+            "invalid_message":"Revise el formulario",
+            "confirm_subject":"Recibido",
+            "confirm_body":"Gracias"
+        });
+        assert!(form_payload_from_value(&form, value).is_err());
+    }
+
+    #[test]
+    fn form_translation_rejects_changed_email_placeholders() {
+        let mut form = make_form();
+        form.settings.confirm_body = "Hello {{frequency}}".to_string();
+        let value = serde_json::json!({
+            "fields": [{"name":"frequency","label":"Frecuencia","options":[{"value":"daily","label":"Diario"}]}],
+            "button_label":"Enviar",
+            "success_message":"Gracias",
+            "invalid_message":"Revise el formulario",
+            "confirm_subject":"Recibido",
+            "confirm_body":"Hola {{frecuencia}}"
+        });
+        assert!(form_payload_from_value(&form, value).is_err());
+    }
+
+    #[test]
+    fn poll_translation_rejects_changed_vote_keys() {
+        let poll = make_poll();
+        let value = serde_json::json!({
+            "question":"¿Con qué frecuencia?",
+            "options":[{"key":"diario","label":"Diario"}],
+            "button_label":"Votar",
+            "success_message":"Gracias",
+            "total_votes_label":"{count} votos"
+        });
+        assert!(poll_payload_from_value(&poll, value).is_err());
+    }
+
+    fn make_form() -> FormDef {
+        let now = chrono::Utc::now();
+        FormDef {
+            id: uuid::Uuid::new_v4(),
+            site_id: uuid::Uuid::new_v4(),
+            name: "Newsletter".to_string(),
+            slug: "newsletter".to_string(),
+            fields: vec![crate::models::form_def::FormField {
+                label: "Frequency".to_string(),
+                name: "frequency".to_string(),
+                field_type: "select".to_string(),
+                required: true,
+                options: vec![("daily".to_string(), "Daily".to_string())],
+            }],
+            settings: crate::models::form_def::FormSettings::default(),
+            email_provider_id: None,
+            total_submissions: 0,
+            created_at: now,
+            updated_at: now,
+        }
+    }
+
+    fn make_poll() -> PollDef {
+        let now = chrono::Utc::now();
+        PollDef {
+            id: uuid::Uuid::new_v4(),
+            site_id: uuid::Uuid::new_v4(),
+            name: "Frequency".to_string(),
+            slug: "frequency".to_string(),
+            question: "How often?".to_string(),
+            options: vec![crate::models::poll_def::PollOption {
+                key: "daily".to_string(),
+                label: "Daily".to_string(),
+            }],
+            settings: crate::models::poll_def::PollSettings::default(),
+            total_votes: 0,
+            created_at: now,
+            updated_at: now,
+        }
     }
 
     fn make_post(content_format: &str, content: &str, excerpt: Option<&str>) -> Post {

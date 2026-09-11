@@ -329,7 +329,28 @@ pub(super) async fn render_page(
         {
             page_ctx.title = translation.title;
             page_ctx.excerpt = translation.excerpt.unwrap_or_default();
-            page_ctx.content = translation.content;
+            page_ctx.content = crate::embedded_content::reconcile(
+                &post_record.content,
+                &translation.content,
+            )
+            .unwrap_or_else(|error| {
+                tracing::warn!(post_id=%post_record.id, %locale, %error, "could not reconcile translated page embed placement");
+                translation.content
+            });
+            page_ctx.content = crate::models::form_def::expand_embeds(
+                &state.db,
+                site_id,
+                &page_ctx.content,
+                Some(locale),
+            )
+            .await;
+            page_ctx.content = crate::models::poll_def::expand_embeds(
+                &state.db,
+                site_id,
+                &page_ctx.content,
+                Some(locale),
+            )
+            .await;
         }
         // Locale-prefix the URL/breadcrumbs regardless of whether a
         // translation row was found — the visitor stays on the locale URL
@@ -352,9 +373,7 @@ pub(super) async fn render_page(
     }
 
     let site_ctx = build_site_context(&state, Some(site_id), base_url).await?;
-    let current_locale = locale
-        .clone()
-        .unwrap_or_else(|| site_ctx.language.clone());
+    let current_locale = locale.clone().unwrap_or_else(|| site_ctx.language.clone());
     // Nav "active item" matching is on the *content* path — a locale prefix
     // isn't part of any nav href (nav isn't locale-aware this pass; see the
     // AI-translation feature's known limitations), so strip it back off

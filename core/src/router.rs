@@ -292,6 +292,10 @@ pub fn build(
             post(posts::translate_post_action),
         )
         .route(
+            "/admin/posts/{id}/translate-embeds",
+            post(posts::translate_embeds_action),
+        )
+        .route(
             "/admin/posts/{id}/translations/{locale}/delete",
             post(posts::delete_translation),
         )
@@ -651,6 +655,14 @@ pub fn build(
             post(admin_form_designer::delete),
         )
         .route(
+            "/admin/form-designer/{id}/translate",
+            post(admin_form_designer::translate),
+        )
+        .route(
+            "/admin/form-designer/{id}/translations/{locale}/delete",
+            post(admin_form_designer::delete_translation),
+        )
+        .route(
             "/admin/designer/polls",
             get(admin_poll_designer::list).post(admin_poll_designer::create),
         )
@@ -665,6 +677,14 @@ pub fn build(
         .route(
             "/admin/designer/polls/{id}/delete",
             post(admin_poll_designer::delete),
+        )
+        .route(
+            "/admin/designer/polls/{id}/translate",
+            post(admin_poll_designer::translate),
+        )
+        .route(
+            "/admin/designer/polls/{id}/translations/{locale}/delete",
+            post(admin_poll_designer::delete_translation),
         )
         .route(
             "/admin/designer/polls/{id}/results",

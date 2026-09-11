@@ -17,8 +17,51 @@ use crate::models::poll_def::{
 };
 
 use admin::pages::poll_designer::{
-    polls_list_fragment, render_editor, PollEditData, PollOptionRow, PollRow,
+    polls_list_fragment, render_editor, AiProviderOption, PollEditData, PollOptionRow, PollRow,
+    TranslationSummary,
 };
+
+async fn translation_editor_data(
+    state: &AppState,
+    site_id: Uuid,
+    poll_id: Uuid,
+    source_updated_at: chrono::DateTime<chrono::Utc>,
+) -> (
+    Vec<(String, String)>,
+    Vec<AiProviderOption>,
+    Vec<TranslationSummary>,
+) {
+    let locales = crate::models::site_locale::enabled_locales_for_site(&state.db, site_id)
+        .await
+        .into_iter()
+        .filter_map(|code| {
+            crate::utils::locales::display_name(&code).map(|name| (code, name.to_string()))
+        })
+        .collect();
+    let providers = crate::models::ai_provider::list_verified_for_site(&state.db, site_id)
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .map(|p| AiProviderOption {
+            id: p.id.to_string(),
+            label: p.label,
+        })
+        .collect();
+    let translations = crate::models::embedded_translation::list_for_poll(&state.db, poll_id)
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .map(|t| TranslationSummary {
+            locale_name: crate::utils::locales::display_name(&t.locale)
+                .unwrap_or(&t.locale)
+                .to_string(),
+            is_stale: t.is_stale(source_updated_at) || t.parsed().is_none(),
+            generated_at: t.generated_at.format("%Y-%m-%d %H:%M UTC").to_string(),
+            locale: t.locale,
+        })
+        .collect();
+    (locales, providers, translations)
+}
 
 fn require_forms_cap(admin: &AdminUser) -> Result<(), Response> {
     if !admin.caps.can_manage_forms {
@@ -107,8 +150,11 @@ pub async fn edit_poll(
     let Ok(Some(poll)) = poll_def::get_by_id(&state.db, site_id, id).await else {
         return Redirect::to("/admin/designer?tab=polls").into_response();
     };
+    let (translation_locales, ai_provider_options, translations) =
+        translation_editor_data(&state, site_id, poll.id, poll.updated_at).await;
 
     let data = PollEditData {
+        ai_translation_enabled: state.app_settings.read().unwrap().ai_translation_enabled,
         id: Some(poll.id.to_string()),
         name: poll.name,
         question: poll.question,
@@ -123,6 +169,9 @@ pub async fn edit_poll(
         success_message: poll.settings.success_message,
         button_label: poll.settings.button_label,
         vote_protection: poll.settings.vote_protection.as_str().to_string(),
+        translation_locales,
+        ai_provider_options,
+        translations,
     };
 
     Html(render_editor(&data, &ctx, None)).into_response()
@@ -231,6 +280,10 @@ pub async fn create(
             success_message: settings.success_message,
             button_label: settings.button_label,
             vote_protection: settings.vote_protection.as_str().to_string(),
+            ai_translation_enabled: state.app_settings.read().unwrap().ai_translation_enabled,
+            translation_locales: Vec::new(),
+            ai_provider_options: Vec::new(),
+            translations: Vec::new(),
         };
         return Html(render_editor(&data, &ctx, Some(&msg))).into_response();
     }
@@ -286,6 +339,10 @@ pub async fn update(
             success_message: settings.success_message,
             button_label: settings.button_label,
             vote_protection: settings.vote_protection.as_str().to_string(),
+            ai_translation_enabled: state.app_settings.read().unwrap().ai_translation_enabled,
+            translation_locales: Vec::new(),
+            ai_provider_options: Vec::new(),
+            translations: Vec::new(),
         };
         return Html(render_editor(&data, &ctx, Some(&msg))).into_response();
     }
@@ -306,6 +363,123 @@ pub async fn update(
         tracing::error!("poll_designer::update failed: {e}");
     }
 
+    Redirect::to(&format!("/admin/designer/polls/{id}")).into_response()
+}
+
+#[derive(Deserialize)]
+pub struct TranslatePollRequest {
+    pub locale: String,
+    pub provider_id: Uuid,
+}
+
+pub async fn translate(
+    State(state): State<AppState>,
+    admin: AdminUser,
+    Path(id): Path<Uuid>,
+    axum::Form(request): axum::Form<TranslatePollRequest>,
+) -> Response {
+    if let Err(e) = require_forms_cap(&admin) {
+        return e;
+    }
+    let site_id = match require_site_id(&admin) {
+        Ok(id) => id,
+        Err(e) => return e,
+    };
+    if !state.app_settings.read().unwrap().ai_translation_enabled {
+        return (StatusCode::FORBIDDEN, "AI Translation is disabled.").into_response();
+    }
+    let Ok(Some(poll)) = poll_def::get_by_id(&state.db, site_id, id).await else {
+        return (StatusCode::NOT_FOUND, "Poll not found.").into_response();
+    };
+    let enabled = crate::models::site_locale::enabled_locales_for_site(&state.db, site_id).await;
+    let Some(locale_name) = crate::utils::locales::display_name(&request.locale) else {
+        return (StatusCode::BAD_REQUEST, "Unknown language.").into_response();
+    };
+    if !enabled.iter().any(|locale| locale == &request.locale) {
+        return (
+            StatusCode::BAD_REQUEST,
+            "Language is not enabled for this site.",
+        )
+            .into_response();
+    }
+    let provider = match crate::models::ai_provider::get_by_id(&state.db, request.provider_id).await
+    {
+        Ok(Some(row)) if row.site_id == site_id && row.verified => row,
+        _ => return (StatusCode::BAD_REQUEST, "Verified AI provider not found.").into_response(),
+    };
+    let Some(config) =
+        crate::models::ai_provider::decrypt_config(&state.config.secret_key, &provider)
+    else {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Failed to decrypt AI provider config.",
+        )
+            .into_response();
+    };
+
+    let attempt_id = Uuid::new_v4();
+    let started_at = std::time::Instant::now();
+    tracing::info!(target: "ai_translation", event="translation_attempt_started", operation="poll_translation", %attempt_id, %site_id, poll_id=%id, locale=%request.locale, provider_id=%provider.id, provider_type=config.provider_type(), model=config.model_name(), admin_user_id=%admin.user.id, "AI poll translation attempt started");
+    match crate::translate::translate_poll(&config, &poll, locale_name).await {
+        Ok(payload) => {
+            if let Err(error) = crate::models::embedded_translation::upsert_poll(
+                &state.db,
+                id,
+                &request.locale,
+                &payload,
+                poll.updated_at,
+            )
+            .await
+            {
+                tracing::error!(target: "ai_translation", event="translation_attempt_finished", outcome="failure", stage="persistence", operation="poll_translation", %attempt_id, %site_id, poll_id=%id, locale=%request.locale, provider_id=%provider.id, provider_type=config.provider_type(), model=config.model_name(), admin_user_id=%admin.user.id, duration_ms=started_at.elapsed().as_millis() as u64, error=%error, "AI poll translation attempt failed");
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Translation could not be saved.",
+                )
+                    .into_response();
+            }
+            tracing::info!(target: "ai_translation", event="translation_attempt_finished", outcome="success", stage="complete", operation="poll_translation", %attempt_id, %site_id, poll_id=%id, locale=%request.locale, provider_id=%provider.id, provider_type=config.provider_type(), model=config.model_name(), admin_user_id=%admin.user.id, duration_ms=started_at.elapsed().as_millis() as u64, "AI poll translation attempt succeeded");
+            Redirect::to(&format!("/admin/designer/polls/{id}")).into_response()
+        }
+        Err(error) => {
+            tracing::error!(target: "ai_translation", event="translation_attempt_finished", outcome="failure", stage="provider_or_response", operation="poll_translation", %attempt_id, %site_id, poll_id=%id, locale=%request.locale, provider_id=%provider.id, provider_type=config.provider_type(), model=config.model_name(), admin_user_id=%admin.user.id, duration_ms=started_at.elapsed().as_millis() as u64, error=%error, "AI poll translation attempt failed");
+            (
+                StatusCode::BAD_GATEWAY,
+                format!("Translation failed: {error}"),
+            )
+                .into_response()
+        }
+    }
+}
+
+pub async fn delete_translation(
+    State(state): State<AppState>,
+    admin: AdminUser,
+    Path((id, locale)): Path<(Uuid, String)>,
+) -> Response {
+    if let Err(e) = require_forms_cap(&admin) {
+        return e;
+    }
+    let site_id = match require_site_id(&admin) {
+        Ok(id) => id,
+        Err(e) => return e,
+    };
+    if !matches!(
+        poll_def::get_by_id(&state.db, site_id, id).await,
+        Ok(Some(_))
+    ) {
+        return (StatusCode::NOT_FOUND, "Poll not found.").into_response();
+    }
+    if let Err(error) =
+        crate::models::embedded_translation::delete_poll(&state.db, id, &locale).await
+    {
+        tracing::error!(poll_id=%id, %locale, %error, "failed to delete poll translation");
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Translation could not be deleted.",
+        )
+            .into_response();
+    }
     Redirect::to(&format!("/admin/designer/polls/{id}")).into_response()
 }
 

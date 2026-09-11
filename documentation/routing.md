@@ -1,12 +1,12 @@
 ---
 title: Routing
 group: system
-updated_by: claude
-last_updated: 2026-09-09
+updated_by: codex
+last_updated: 2026-09-10
 ---
 # Routing
 
-> Last updated: 2026-09-09 | Updated by: claude
+> Last updated: 2026-09-10 | Updated by: codex
 
 ## Overview
 
@@ -100,6 +100,9 @@ per-project page CRUD, homepage designation, duplication, and both `edit_page` (
 | GET/POST | /admin/posts/new | `posts::new_post / save_new` | New post |
 | GET/POST | /admin/posts/{id}/edit | `posts::edit_post / save_edit` | Edit post |
 | POST | /admin/posts/{id}/delete | `posts::delete_post` | Delete post |
+| POST | /admin/posts/{id}/translate | `posts::translate_post_action` | Translate missing/stale post or page prose |
+| POST | /admin/posts/{id}/translate-embeds | `posts::translate_embeds_action` | Translate only missing/stale embedded forms/polls |
+| POST | /admin/posts/{id}/translations/{locale}/delete | `posts::delete_translation` | Delete one post/page translation |
 | POST | /admin/posts/bulk-delete | `posts::bulk_delete_posts` | Bulk delete posts |
 | POST | /admin/comments/{id}/delete | `admin_comments::delete` | Admin delete comment |
 | GET | /admin/pages | `posts::list_pages` | Pages list |
@@ -174,6 +177,15 @@ per-project page CRUD, homepage designation, duplication, and both `edit_page` (
 | POST | /admin/sites/{id}/site-config | `admin_sites::save_site_config` | Save per-site config |
 | POST | /admin/sites/{id}/delete | `admin_sites::delete` | Delete site |
 | POST | /admin/sites/{id}/provision-ssl | `admin_sites::provision_ssl` | Provision SSL for site |
+| GET/POST | /admin/form-designer | `admin_form_designer::list / create` | List or create reusable forms |
+| GET | /admin/form-designer/new | `admin_form_designer::new_form` | New form editor |
+| GET/POST | /admin/form-designer/{id} | `admin_form_designer::edit_form / update` | Edit a reusable form |
+| POST | /admin/form-designer/{id}/translate | `admin_form_designer::translate` | Translate/refresh one form locale |
+| POST | /admin/form-designer/{id}/translations/{locale}/delete | `admin_form_designer::delete_translation` | Delete one form translation |
+| GET/POST | /admin/designer/polls | `admin_poll_designer::list / create` | List or create polls |
+| GET/POST | /admin/designer/polls/{id} | `admin_poll_designer::edit_poll / update` | Edit a poll |
+| POST | /admin/designer/polls/{id}/translate | `admin_poll_designer::translate` | Translate/refresh one poll locale |
+| POST | /admin/designer/polls/{id}/translations/{locale}/delete | `admin_poll_designer::delete_translation` | Delete one poll translation |
 | GET | /admin/forms | `admin_forms::list_forms` | Forms list |
 | GET | /admin/forms/{name} | `admin_forms::view_form` | View form submissions |
 | POST | /admin/forms/{name}/{id}/delete | `admin_forms::delete_submission` | Delete submission |

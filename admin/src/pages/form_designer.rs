@@ -32,6 +32,18 @@ pub struct ProviderOption {
     pub label: String,
 }
 
+pub struct AiProviderOption {
+    pub id: String,
+    pub label: String,
+}
+
+pub struct TranslationSummary {
+    pub locale: String,
+    pub locale_name: String,
+    pub generated_at: String,
+    pub is_stale: bool,
+}
+
 /// Data needed to render the create/edit form. `id` is `None` for create.
 pub struct FormEditData {
     pub id: Option<String>,
@@ -59,6 +71,10 @@ pub struct FormEditData {
     /// The site this form belongs to — used to link the "Send via" hint to
     /// that site's Email Settings tab.
     pub site_id: String,
+    pub ai_translation_enabled: bool,
+    pub translation_locales: Vec<(String, String)>,
+    pub ai_provider_options: Vec<AiProviderOption>,
+    pub translations: Vec<TranslationSummary>,
 }
 
 impl Default for FormEditData {
@@ -86,6 +102,10 @@ impl Default for FormEditData {
             email_provider_id: String::new(),
             provider_options: Vec::new(),
             site_id: String::new(),
+            ai_translation_enabled: false,
+            translation_locales: Vec::new(),
+            ai_provider_options: Vec::new(),
+            translations: Vec::new(),
         }
     }
 }
@@ -471,6 +491,66 @@ pub fn render_editor(data: &FormEditData, ctx: &PageContext, flash: Option<&str>
         String::new()
     };
 
+    let translation_tab = if is_edit && data.ai_translation_enabled {
+        r#"<button type="button" class="page-tab" role="tab" aria-selected="false" aria-controls="tab-translations" data-tab="translations">Translations</button>"#
+    } else {
+        ""
+    };
+    let locale_options: String = data
+        .translation_locales
+        .iter()
+        .map(|(code, name)| {
+            format!(
+                r#"<option value="{}">{}</option>"#,
+                html_escape(code),
+                html_escape(name)
+            )
+        })
+        .collect();
+    let ai_provider_options: String = data
+        .ai_provider_options
+        .iter()
+        .map(|p| {
+            format!(
+                r#"<option value="{}">{}</option>"#,
+                html_escape(&p.id),
+                html_escape(&p.label)
+            )
+        })
+        .collect();
+    let translation_rows: String = if data.translations.is_empty() {
+        r#"<p class="form-note">No form translations yet.</p>"#.to_string()
+    } else {
+        data.translations.iter().map(|t| {
+            let stale = if t.is_stale { r#" <span class="badge badge-warning">Stale</span>"# } else { "" };
+            format!(r#"<div style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;padding:.55rem 0;border-bottom:1px solid var(--border)"><div><strong>{name}</strong>{stale}<div class="field-hint">Generated {date}</div></div><button type="button" class="icon-btn icon-danger" title="Delete translation" aria-label="Delete {name} translation" onclick="deleteFormTranslation('{locale}')"><img src="/admin/static/icons/trash.svg" alt=""></button></div>"#, name=html_escape(&t.locale_name), locale=html_escape(&t.locale), date=html_escape(&t.generated_at), stale=stale)
+        }).collect()
+    };
+    let translations_panel = if data.id.is_some() {
+        if data.ai_translation_enabled {
+            let unavailable =
+                if data.translation_locales.is_empty() || data.ai_provider_options.is_empty() {
+                    " disabled"
+                } else {
+                    ""
+                };
+            format!(
+                r#"<div id="tab-translations" class="form-tab-panel" role="tabpanel">
+  <div class="card-boxed-section"><p class="form-note">Translate visitor-facing labels and messages. Field names and option values remain stable so submissions keep the same schema.</p>
+    <div class="form-group"><label for="translation-locale">Language</label><select id="translation-locale">{locale_options}</select></div>
+    <div class="form-group"><label for="translation-provider">AI provider</label><select id="translation-provider">{ai_provider_options}</select></div>
+    <button type="button" class="btn btn-primary" id="translate-form-btn" onclick="translateForm()"{unavailable}>Translate or refresh</button>
+    <p id="translation-status" class="field-hint" aria-live="polite"></p>
+  </div><div class="card-boxed-section">{translation_rows}</div>
+</div>"#
+            )
+        } else {
+            String::new()
+        }
+    } else {
+        String::new()
+    };
+
     let content = format!(
         r#"<style>
 .field-hint {{ font-size: 11px; color: var(--muted); font-weight: 400; }}
@@ -502,6 +582,7 @@ pub fn render_editor(data: &FormEditData, ctx: &PageContext, flash: Option<&str>
             <button type="button" class="page-tab active" role="tab" aria-selected="true" aria-controls="tab-general" data-tab="general">General Settings</button>
             <button type="button" class="page-tab" role="tab" aria-selected="false" aria-controls="tab-mail" data-tab="mail">Mail Settings</button>
             <button type="button" class="page-tab" role="tab" aria-selected="false" aria-controls="tab-preview" data-tab="preview">Preview</button>
+            {translation_tab}
           </div>
           <div id="tab-general" class="form-tab-panel active" role="tabpanel">
           <div class="card-boxed-section">
@@ -609,6 +690,7 @@ pub fn render_editor(data: &FormEditData, ctx: &PageContext, flash: Option<&str>
             </p>
             <div id="form-preview"></div>
           </div>
+          {translations_panel}
         </div>
       </div>
     </div>
@@ -972,6 +1054,19 @@ pub fn render_editor(data: &FormEditData, ctx: &PageContext, flash: Option<&str>
       window.location.href = r.url || '/admin/form-designer';
     }});
   }};
+  window.translateForm = function() {{
+    var locale = document.getElementById('translation-locale');
+    var provider = document.getElementById('translation-provider');
+    var status = document.getElementById('translation-status');
+    var button = document.getElementById('translate-form-btn');
+    if (!locale || !provider || !locale.value || !provider.value) return;
+    button.disabled = true; status.textContent = 'Translating…';
+    fetch('/admin/form-designer/{translation_form_id}/translate', {{ method:'POST', headers:{{'Content-Type':'application/x-www-form-urlencoded'}}, body:new URLSearchParams({{locale:locale.value,provider_id:provider.value}}) }}).then(function(r) {{ if (!r.ok) return r.text().then(function(t) {{ throw new Error(t); }}); window.location.href = r.url; }}).catch(function(e) {{ status.textContent = e.message || 'Translation failed.'; button.disabled = false; }});
+  }};
+  window.deleteFormTranslation = function(locale) {{
+    if (!confirm('Delete this translation? Visitors will see the source-language form until it is translated again.')) return;
+    fetch('/admin/form-designer/{translation_form_id}/translations/' + encodeURIComponent(locale) + '/delete', {{method:'POST'}}).then(function(r) {{ window.location.href = r.url; }});
+  }};
 }})();
 </script>"#,
         action = action,
@@ -979,6 +1074,9 @@ pub fn render_editor(data: &FormEditData, ctx: &PageContext, flash: Option<&str>
         rows_html = rows_html,
         analytics_link = analytics_link,
         delete_btn = delete_btn,
+        translation_tab = translation_tab,
+        translations_panel = translations_panel,
+        translation_form_id = data.id.as_deref().unwrap_or(""),
         success_message = html_escape(&data.success_message),
         button_label = html_escape(&data.button_label),
         provider_options_html = provider_options_html,

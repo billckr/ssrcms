@@ -68,6 +68,8 @@ more detailed documents under `docs/` when a task touches those areas.
 - Development commands and architecture: `docs/development-guide.md`
 - Theme behavior and authoring: `docs/theme-authoring-guide.md`
 - Deployment operations: `docs/deployment-guide.md`
+- Logging operations, formats, privacy, and retention:
+  `documentation/logging.md`
 - AI architecture, safety, and observability standards:
   `docs/ai-integration-standards.md`
 - AI post/page translation behavior and operations:

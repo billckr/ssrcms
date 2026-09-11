@@ -34,6 +34,20 @@ provider adapters grows, move `translate.rs` into an `ai/` module with `service`
   provider selection by an administrator does not make generated markup executable code.
 - Provider errors shown in the UI should be useful but bounded. Never expose credentials, request
   headers, internal paths, or unrestricted upstream bodies.
+- Reusable embedded resources are translated as separate domain objects, not flattened into each
+  post translation. Replace embed markup with opaque tokens before sending post content to a
+  provider, require every token exactly once and in source order, then restore the original markup.
+  Component responses must preserve stable identifiers (form field names and option values, poll
+  option keys); reject the entire response before persistence if identity or cardinality changes.
+- The source post remains authoritative for reusable-resource identity and placement. Rendering
+  reconciles its form/poll markers into already translated prose mechanically. Adding, removing, or
+  moving only those markers must not trigger a model call or make an otherwise-current post
+  translation stale; actual title, excerpt, format, or prose edits do.
+- Post/page prose and embedded-resource translation are separate user-triggered operations. Do not
+  implicitly translate components when prose was requested, or retranslate current prose when only
+  components are missing/stale. If a future feature deliberately combines scopes, publish all rows
+  in one database transaction so a provider or validation failure leaves the previous bundle
+  unchanged.
 
 ## Telemetry
 

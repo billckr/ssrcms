@@ -1,12 +1,12 @@
 ---
 title: Pages
 group: feature
-updated_by: claude
-last_updated: 2026-07-22
+updated_by: codex
+last_updated: 2026-09-10
 ---
 # Pages
 
-> Last updated: 2026-07-22 | Updated by: claude
+> Last updated: 2026-09-10 | Updated by: codex
 
 ## Overview
 
@@ -35,6 +35,19 @@ If a page has a non-empty `template` value, `{template}.html` is used; otherwise
 - The editor additionally offers a **template picker** populated by `scan_templates()`, which recursively walks the active theme's `templates/` directory and excludes reserved template names (`base`, `page`, `index`, `single`, `archive`, `search`, `404`) and anything under `partials/`.
 - The editor offers a **parent page selector** populated by `fetch_parent_options()`, which lists all published pages for the site (excluding the page being edited, to prevent a page becoming its own parent).
 
+### AI Translation and Embedded Content
+
+Classic pages use the same Translations sidebar and handlers as posts. The globe action translates
+only missing/stale page prose; the layers action separately translates only missing/stale embedded
+forms and polls. Adding a component to an already translated page therefore does not spend tokens
+retranslating unchanged page prose. Save the page, then use the layers action or translate the
+reusable component in its own Designer screen.
+
+The editor shows component freshness per locale. Real title, excerpt, content-format, or prose
+edits mark a page translation **Source changed**; metadata-only and embed-marker-only changes do
+not. Builder/page-composition pages remain outside this translation system. See **AI Post
+Translation** for the complete workflow and rendering rules.
+
 ## Routes / Endpoints
 
 | Method | Path | Handler | Description |
@@ -47,6 +60,9 @@ If a page has a non-empty `template` value, `{template}.html` is used; otherwise
 | GET/POST | /admin/pages/{id}/edit | `admin::posts::edit_page` / `save_edit` | Edit page |
 | POST | /admin/pages/{id}/delete | `admin::posts::delete_page` | Delete page |
 | POST | /admin/pages/bulk-delete | `admin::posts::bulk_delete_pages` | Bulk delete |
+| POST | /admin/posts/{id}/translate | `admin::posts::translate_post_action` | Translate missing/stale page prose (shared post/page route) |
+| POST | /admin/posts/{id}/translate-embeds | `admin::posts::translate_embeds_action` | Translate only missing/stale embedded forms and polls |
+| POST | /admin/posts/{id}/translations/{locale}/delete | `admin::posts::delete_translation` | Delete one localized page copy |
 
 ## Database Schema
 

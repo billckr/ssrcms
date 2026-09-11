@@ -114,6 +114,17 @@ pub struct PostTranslationSummary {
     pub is_stale: bool,
     /// Public URL of the translated post (e.g. `/es/my-post`).
     pub view_url: String,
+    /// Reusable forms/polls embedded by the source post and their status
+    /// for this locale.
+    pub embedded_items: Vec<EmbeddedTranslationSummary>,
+}
+
+pub struct EmbeddedTranslationSummary {
+    pub label: String,
+    pub kind: String,
+    pub edit_url: String,
+    /// "current" | "missing" | "stale".
+    pub status: String,
 }
 
 pub struct TermOption {
@@ -1093,11 +1104,34 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
                     } else {
                         ""
                     };
+                    let embedded_items = if t.embedded_items.is_empty() {
+                        String::new()
+                    } else {
+                        t.embedded_items
+                            .iter()
+                            .map(|item| {
+                                let status = match item.status.as_str() {
+                                    "current" => "Current",
+                                    "stale" => "Source changed",
+                                    _ => "Missing",
+                                };
+                                format!(
+                                    r#"<div class="field-hint">{kind}: <a href="{edit_url}">{label}</a> — {status}</div>"#,
+                                    kind = crate::html_escape(&item.kind),
+                                    edit_url = crate::html_escape(&item.edit_url),
+                                    label = crate::html_escape(&item.label),
+                                    status = status,
+                                )
+                            })
+                            .collect::<Vec<_>>()
+                            .join("\n")
+                    };
                     format!(
                         r#"<div style="display:flex;align-items:center;justify-content:space-between;gap:.5rem;padding:.35rem 0;border-bottom:1px solid var(--border)">
   <div>
     <a href="{view_url}" target="_blank" rel="noopener">{locale_name}</a>{stale_badge}
     <div class="field-hint">Generated {generated_at}</div>
+    {embedded_items}
   </div>
   <button type="button" class="icon-btn icon-danger" title="Delete Translation" aria-label="Delete Translation" data-path="/admin/posts/{post_id}/translations/{locale}/delete" data-label="{locale_name}" onclick="deleteTranslationConfirm(this)"><img src="/admin/static/icons/trash.svg" alt=""></button>
 </div>"#,
@@ -1105,6 +1139,7 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
                         locale_name = crate::html_escape(&t.locale_name),
                         stale_badge = stale_badge,
                         generated_at = crate::html_escape(&t.generated_at),
+                        embedded_items = embedded_items,
                         post_id = crate::html_escape(post_id),
                         locale = crate::html_escape(&t.locale),
                     )
@@ -1124,14 +1159,29 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
                 site_id = crate::html_escape(&post.site_id),
             )
         } else {
+            let has_embeds = post.content.contains("<ss-form") || post.content.contains("<ss-poll");
             let locale_options = post
                 .available_locales
                 .iter()
                 .map(|(code, name)| {
+                    let existing = post.translations.iter().find(|t| t.locale == *code);
+                    let post_needs_translation =
+                        existing.map(|translation| translation.is_stale).unwrap_or(true);
+                    let embedded_needs_translation = existing
+                        .map(|translation| {
+                            translation
+                                .embedded_items
+                                .iter()
+                                .any(|item| item.status != "current")
+                        })
+                        .unwrap_or(has_embeds);
                     format!(
-                        r#"<option value="{code}">{name}</option>"#,
+                        r#"<option value="{code}" data-post-needs="{post_needs}" data-embeds-needs="{embeds_need}" data-has-post="{has_post}">{name}</option>"#,
                         code = crate::html_escape(code),
                         name = crate::html_escape(name),
+                        post_needs = post_needs_translation,
+                        embeds_need = embedded_needs_translation,
+                        has_post = existing.is_some(),
                     )
                 })
                 .collect::<Vec<_>>()
@@ -1148,6 +1198,16 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
                 })
                 .collect::<Vec<_>>()
                 .join("\n");
+            let embedded_button = if has_embeds {
+                format!(
+                    r#"<button type="button" class="icon-btn" id="translate-embeds-btn" title="Translate missing or stale embedded items only" aria-label="Translate embedded items only" data-path="/admin/posts/{post_id}/translate-embeds" onclick="translateEmbeddedItems(this)">
+      <img src="/admin/static/icons/layers.svg" alt="">
+    </button>"#,
+                    post_id = crate::html_escape(post_id),
+                )
+            } else {
+                String::new()
+            };
             format!(
                 r#"<div style="margin-top:.5rem">
   <div class="form-group">
@@ -1159,15 +1219,18 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
     <select id="translate-provider" name="provider_id" form="translation-request-form">{provider_options}</select>
   </div>
   <div class="icon-pill">
-    <button type="button" class="icon-btn" title="Translate" aria-label="Translate" data-path="/admin/posts/{post_id}/translate" onclick="translatePost(this)">
+    <button type="button" class="icon-btn" id="translate-post-btn" title="Translate post prose" aria-label="Translate post prose" data-path="/admin/posts/{post_id}/translate" onclick="translatePost(this)">
       <img src="/admin/static/icons/globe.svg" alt="">
     </button>
+    {embedded_button}
     <small data-translate-status></small>
   </div>
+  <p id="translation-scope-hint" class="field-hint" style="margin:.4rem 0 0"></p>
 </div>"#,
                 post_id = crate::html_escape(post_id),
                 locale_options = locale_options,
                 provider_options = provider_options,
+                embedded_button = embedded_button,
             )
         };
 
@@ -1782,6 +1845,68 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
         alert('The translation request could not be sent.');
       }});
   }};
+
+  window.translateEmbeddedItems = function(button) {{
+    if (formDirty) {{
+      alert('Save your changes before translating embedded items.');
+      return;
+    }}
+    var locale = document.getElementById('translate-locale');
+    var provider = document.getElementById('translate-provider');
+    if (!locale || !provider) return;
+
+    var status = button.parentElement.querySelector('[data-translate-status]');
+    button.disabled = true;
+    button.classList.add('is-busy');
+    if (status) status.textContent = 'Translating embedded items…';
+    var body = new URLSearchParams();
+    body.set('locale', locale.value);
+    body.set('provider_id', provider.value);
+    fetch(button.dataset.path, {{ method: 'POST', body: body }})
+      .then(function(r) {{
+        window.location.href = r.url || button.dataset.path;
+      }})
+      .catch(function() {{
+        button.disabled = false;
+        button.classList.remove('is-busy');
+        if (status) status.textContent = 'The embedded-item request could not be sent.';
+        alert('The embedded-item request could not be sent.');
+      }});
+  }};
+
+  function syncTranslationActions() {{
+    var locale = document.getElementById('translate-locale');
+    if (!locale || !locale.selectedOptions.length) return;
+    var option = locale.selectedOptions[0];
+    var postButton = document.getElementById('translate-post-btn');
+    var embedButton = document.getElementById('translate-embeds-btn');
+    var hint = document.getElementById('translation-scope-hint');
+    var hasPost = option.dataset.hasPost === 'true';
+    var postNeeds = option.dataset.postNeeds === 'true';
+    var embedsNeed = option.dataset.embedsNeeds === 'true';
+    if (postButton) {{
+      postButton.disabled = !postNeeds;
+      postButton.title = postNeeds ? 'Translate post prose' : 'Post translation is current';
+    }}
+    if (embedButton) {{
+      embedButton.disabled = !hasPost || !embedsNeed;
+      embedButton.title = !hasPost
+        ? 'Translate the post first'
+        : (embedsNeed ? 'Translate missing or stale embedded items only' : 'Embedded translations are current');
+    }}
+    if (hint) {{
+      if (!hasPost) hint.textContent = 'Translate the post first. Embedded items can then be translated separately.';
+      else if (postNeeds && embedsNeed) hint.textContent = 'Post prose and embedded items both need translation.';
+      else if (postNeeds) hint.textContent = 'Post prose changed; embedded items are current.';
+      else if (embedsNeed) hint.textContent = 'Post prose is current. Only embedded items need translation.';
+      else hint.textContent = 'Post prose and embedded items are current.';
+    }}
+  }}
+  var translationLocale = document.getElementById('translate-locale');
+  if (translationLocale) {{
+    translationLocale.addEventListener('change', syncTranslationActions);
+    syncTranslationActions();
+  }}
 
   window.deleteTranslationConfirm = function(button) {{
     if (formDirty) {{

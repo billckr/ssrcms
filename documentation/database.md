@@ -1,13 +1,13 @@
 ---
 title: Database Schema
 group: system
-updated_by: claude
-last_updated: 2026-09-08
+updated_by: codex
+last_updated: 2026-09-10
 ---
 
 # Database Schema
 
-> Last updated: 2026-09-08 | Updated by: claude
+> Last updated: 2026-09-10 | Updated by: codex
 
 ## Overview
 
@@ -233,6 +233,18 @@ as `email_providers`) and `post_translations` (one row per `(post_id, locale)`: 
 content plus `source_updated_at` for staleness detection). A site's enabled locales are *not* a
 new table — a single `site_settings` row (key `enabled_locales`), the same list-shaped KV
 convention `ip_allowlist` already uses. See the **AI Post Translation** doc for the full feature.
+
+### Embedded form and poll translation (0004, post-baseline, 2026-09-10)
+
+`form_translations` and `poll_translations` store one localized presentation payload per reusable
+resource and locale. Each row records the source definition timestamp used for **Current** versus
+**Source changed** status. Stable operational identifiers—form field names and option values, and
+poll option keys—remain in the source definition and are never replaced by localized labels.
+
+Both tables cascade when their source form/poll is deleted. They are independent of
+`post_translations`, allowing an administrator to translate or refresh an embedded component
+without rewriting the translated prose of every post/page that reuses it. See **AI Post
+Translation**, **Form Designer**, and **Poll Designer** for the application flow.
 
 ## Known Limitations / TODOs
 

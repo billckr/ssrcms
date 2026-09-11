@@ -688,7 +688,7 @@ pub fn render_settings(
     };
 
     let ai_providers_list_html = if data.ai_providers.is_empty() {
-        r#"<p class="form-note" style="margin:0">No AI providers configured yet — add one below.</p>"#.to_string()
+        r#"<p class="form-note" style="margin:0">No AI providers configured yet.</p>"#.to_string()
     } else {
         data.ai_providers.iter().map(|p| {
             let status = if p.verified {

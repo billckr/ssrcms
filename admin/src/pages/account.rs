@@ -77,8 +77,7 @@ pub fn account_page(
 
     // Account doesn't support a per-user theme setting yet, but it shares the
     // same 'admin-theme' localStorage key, site-wide default, and
-    // system/dark-only switch as the admin area (light mode is disabled
-    // there for now too — see admin_page).
+    // light/system/dark switch as the admin area.
     let default_theme = match ctx.default_theme.as_str() {
         "light" | "dark" => ctx.default_theme.as_str(),
         _ => "system",
@@ -128,7 +127,9 @@ pub fn account_page(
           </button>
           <div class="header-menu-dropdown" id="header-menu-dropdown">
             <div class="theme-switch" role="group" aria-label="Theme" id="theme-switch">
-              <!-- Light mode disabled for now, same as admin — setTheme('light') logic kept intact for re-enabling later. -->
+              <button type="button" class="theme-switch-btn" data-theme-choice="light" onclick="setTheme('light')" title="Light mode" aria-label="Light mode">
+                <img src="/admin/static/icons/sun.svg" alt="">
+              </button>
               <button type="button" class="theme-switch-btn" data-theme-choice="system" onclick="setTheme('system')" title="Match system" aria-label="Match system">
                 <img src="/admin/static/icons/monitor.svg" alt="">
               </button>

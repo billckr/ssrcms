@@ -511,23 +511,76 @@ async fn fetch_translation_editor_data(
             .into_iter()
             .map(|p| (p.id.to_string(), p.label))
             .collect();
-    let translations = crate::models::post_translation::list_for_post(&state.db, post.id)
+    let mut embedded_forms = Vec::new();
+    for slug in crate::models::form_def::embedded_slugs(&post.content) {
+        if let Ok(Some(form)) =
+            crate::models::form_def::get_by_slug(&state.db, site_id, &slug).await
+        {
+            let translations =
+                crate::models::embedded_translation::list_for_form(&state.db, form.id)
+                    .await
+                    .unwrap_or_default();
+            embedded_forms.push((form, translations));
+        }
+    }
+    let mut embedded_polls = Vec::new();
+    for slug in crate::models::poll_def::embedded_slugs(&post.content) {
+        if let Ok(Some(poll)) =
+            crate::models::poll_def::get_by_slug(&state.db, site_id, &slug).await
+        {
+            let translations =
+                crate::models::embedded_translation::list_for_poll(&state.db, poll.id)
+                    .await
+                    .unwrap_or_default();
+            embedded_polls.push((poll, translations));
+        }
+    }
+    let mut translations = Vec::new();
+    for t in crate::models::post_translation::list_for_post(&state.db, post.id)
         .await
         .unwrap_or_default()
-        .into_iter()
-        .map(|t| {
-            let locale_name = crate::utils::locales::display_name(&t.locale)
-                .unwrap_or(t.locale.as_str())
-                .to_string();
-            admin::pages::posts::PostTranslationSummary {
-                is_stale: t.is_stale(post),
-                view_url: format!("{post_base_url}/{}{post_path}", t.locale),
-                generated_at: t.generated_at.format("%Y-%m-%d %H:%M UTC").to_string(),
-                locale: t.locale,
-                locale_name,
-            }
-        })
-        .collect();
+    {
+        let locale_name = crate::utils::locales::display_name(&t.locale)
+            .unwrap_or(t.locale.as_str())
+            .to_string();
+        let mut embedded_items = Vec::new();
+        for (form, translations) in &embedded_forms {
+            let row = translations.iter().find(|row| row.locale == t.locale);
+            let status = match row {
+                Some(row) if row.parsed().is_some() && !row.is_stale(form.updated_at) => "current",
+                Some(_) => "stale",
+                None => "missing",
+            };
+            embedded_items.push(admin::pages::posts::EmbeddedTranslationSummary {
+                label: form.name.clone(),
+                kind: "Form".to_string(),
+                edit_url: format!("/admin/form-designer/{}?tab=translations", form.id),
+                status: status.to_string(),
+            });
+        }
+        for (poll, translations) in &embedded_polls {
+            let row = translations.iter().find(|row| row.locale == t.locale);
+            let status = match row {
+                Some(row) if row.parsed().is_some() && !row.is_stale(poll.updated_at) => "current",
+                Some(_) => "stale",
+                None => "missing",
+            };
+            embedded_items.push(admin::pages::posts::EmbeddedTranslationSummary {
+                label: poll.name.clone(),
+                kind: "Poll".to_string(),
+                edit_url: format!("/admin/designer/polls/{}", poll.id),
+                status: status.to_string(),
+            });
+        }
+        translations.push(admin::pages::posts::PostTranslationSummary {
+            is_stale: t.is_stale(post),
+            view_url: format!("{post_base_url}/{}{post_path}", t.locale),
+            generated_at: t.generated_at.format("%Y-%m-%d %H:%M UTC").to_string(),
+            locale: t.locale,
+            locale_name,
+            embedded_items,
+        });
+    }
     (available_locales, ai_providers, translations)
 }
 
@@ -1581,6 +1634,61 @@ pub struct TranslatePostForm {
     pub provider_id: Uuid,
 }
 
+type FormTranslationWork = (
+    crate::models::form_def::FormDef,
+    crate::models::embedded_translation::FormTranslationPayload,
+);
+type PollTranslationWork = (
+    crate::models::poll_def::PollDef,
+    crate::models::embedded_translation::PollTranslationPayload,
+);
+
+async fn translate_embedded_resources(
+    state: &AppState,
+    site_id: Uuid,
+    content: &str,
+    locale: &str,
+    locale_name: &str,
+    config: &crate::models::ai_provider::AiProviderConfig,
+) -> anyhow::Result<(Vec<FormTranslationWork>, Vec<PollTranslationWork>)> {
+    let mut forms = Vec::new();
+    for slug in crate::models::form_def::embedded_slugs(content) {
+        let Some(form) = crate::models::form_def::get_by_slug(&state.db, site_id, &slug).await?
+        else {
+            continue;
+        };
+        let current =
+            crate::models::embedded_translation::get_form(&state.db, form.id, locale).await?;
+        if current
+            .as_ref()
+            .is_some_and(|row| row.source_updated_at >= form.updated_at && row.parsed().is_some())
+        {
+            continue;
+        }
+        let translated = crate::translate::translate_form(config, &form, locale_name).await?;
+        forms.push((form, translated));
+    }
+
+    let mut polls = Vec::new();
+    for slug in crate::models::poll_def::embedded_slugs(content) {
+        let Some(poll) = crate::models::poll_def::get_by_slug(&state.db, site_id, &slug).await?
+        else {
+            continue;
+        };
+        let current =
+            crate::models::embedded_translation::get_poll(&state.db, poll.id, locale).await?;
+        if current
+            .as_ref()
+            .is_some_and(|row| row.source_updated_at >= poll.updated_at && row.parsed().is_some())
+        {
+            continue;
+        }
+        let translated = crate::translate::translate_poll(config, &poll, locale_name).await?;
+        polls.push((poll, translated));
+    }
+    Ok((forms, polls))
+}
+
 /// Builds the right `/admin/{posts|pages}/{id}/edit?success=...` redirect
 /// for a post/page, reusing the existing `success`-flash convention
 /// `edit_post_type` already reads (see `EditPostQuery`).
@@ -1638,10 +1746,23 @@ pub async fn translate_post_action(
     let Some(locale_name) = crate::utils::locales::display_name(&form.locale) else {
         return edit_redirect(&post, "Unknown language.").into_response();
     };
+    if !crate::models::site_locale::is_locale_enabled(&state.db, site_id, &form.locale).await {
+        return edit_redirect(&post, "Language is not enabled for this site.").into_response();
+    }
+    if matches!(
+        crate::models::post_translation::get(&state.db, id, &form.locale).await,
+        Ok(Some(ref translation)) if !translation.is_stale(&post)
+    ) {
+        return edit_redirect(
+            &post,
+            "The post translation is already current. Use the embedded-items action for forms and polls.",
+        )
+        .into_response();
+    }
     let provider_row =
         match crate::models::ai_provider::get_by_id(&state.db, form.provider_id).await {
-            Ok(Some(row)) if row.site_id == site_id => row,
-            _ => return edit_redirect(&post, "AI provider not found.").into_response(),
+            Ok(Some(row)) if row.site_id == site_id && row.verified => row,
+            _ => return edit_redirect(&post, "Verified AI provider not found.").into_response(),
         };
     let Some(config) =
         crate::models::ai_provider::decrypt_config(&state.config.secret_key, &provider_row)
@@ -1657,6 +1778,7 @@ pub async fn translate_post_action(
     tracing::info!(
         target: "ai_translation",
         event = "translation_attempt_started",
+        operation = "post_translation",
         %attempt_id,
         %site_id,
         post_id = %id,
@@ -1680,20 +1802,27 @@ pub async fn translate_post_action(
                     .chars()
                     .count()
                 + result.content.chars().count();
-            if let Err(e) = crate::models::post_translation::upsert(
-                &state.db,
-                id,
-                &form.locale,
-                &result.title,
-                result.excerpt.as_deref(),
-                &result.content,
-                post.updated_at,
-            )
-            .await
-            {
+            let persistence = async {
+                let mut tx = state.db.begin().await?;
+                crate::models::post_translation::upsert_on(
+                    &mut tx,
+                    id,
+                    &form.locale,
+                    &result.title,
+                    result.excerpt.as_deref(),
+                    &result.content,
+                    post.updated_at,
+                )
+                .await?;
+                tx.commit().await?;
+                Ok::<(), crate::errors::AppError>(())
+            }
+            .await;
+            if let Err(e) = persistence {
                 tracing::error!(
                     target: "ai_translation",
                     event = "translation_attempt_finished",
+                    operation = "post_translation",
                     outcome = "failure",
                     stage = "persistence",
                     %attempt_id,
@@ -1713,6 +1842,7 @@ pub async fn translate_post_action(
             tracing::info!(
                 target: "ai_translation",
                 event = "translation_attempt_finished",
+                operation = "post_translation",
                 outcome = "success",
                 stage = "complete",
                 %attempt_id,
@@ -1732,6 +1862,7 @@ pub async fn translate_post_action(
             tracing::error!(
                 target: "ai_translation",
                 event = "translation_attempt_finished",
+                operation = "post_translation",
                 outcome = "failure",
                 stage = "provider_or_response",
                 %attempt_id,
@@ -1748,6 +1879,229 @@ pub async fn translate_post_action(
             edit_redirect(&post, &format!("Translation failed: {e}")).into_response()
         }
     }
+}
+
+/// POST /admin/posts/{id}/translate-embeds — translate only missing or
+/// stale reusable forms/polls for an existing post translation. This never
+/// calls the post translator and never rewrites translated post prose.
+pub async fn translate_embeds_action(
+    State(state): State<AppState>,
+    admin: AdminUser,
+    Path(id): Path<Uuid>,
+    Form(form): Form<TranslatePostForm>,
+) -> impl IntoResponse {
+    if !state.app_settings.read().unwrap().ai_translation_enabled {
+        return (
+            axum::http::StatusCode::FORBIDDEN,
+            "AI Translation is disabled for this installation.",
+        )
+            .into_response();
+    }
+    let post = match crate::models::post::get_by_id(&state.db, id).await {
+        Ok(post) => post,
+        Err(_) => return Redirect::to("/admin/posts").into_response(),
+    };
+    if !admin.caps.is_global_admin && post.site_id != admin.site_id {
+        return Redirect::to("/admin/posts").into_response();
+    }
+    let required_cap = if post.post_type == "page" {
+        admin.caps.can_manage_pages
+    } else {
+        admin.caps.can_manage_content
+    };
+    if !required_cap {
+        return (axum::http::StatusCode::FORBIDDEN, "Forbidden").into_response();
+    }
+    let Some(site_id) = post.site_id else {
+        return edit_redirect(&post, "This post has no site.").into_response();
+    };
+    let Some(locale_name) = crate::utils::locales::display_name(&form.locale) else {
+        return edit_redirect(&post, "Unknown language.").into_response();
+    };
+    if !crate::models::site_locale::is_locale_enabled(&state.db, site_id, &form.locale).await {
+        return edit_redirect(&post, "Language is not enabled for this site.").into_response();
+    }
+    if !matches!(
+        crate::models::post_translation::get(&state.db, id, &form.locale).await,
+        Ok(Some(_))
+    ) {
+        return edit_redirect(&post, "Translate the post into this language first.")
+            .into_response();
+    }
+    if crate::models::form_def::embedded_slugs(&post.content).is_empty()
+        && crate::models::poll_def::embedded_slugs(&post.content).is_empty()
+    {
+        return edit_redirect(&post, "This post has no embedded forms or polls.").into_response();
+    }
+    let provider_row =
+        match crate::models::ai_provider::get_by_id(&state.db, form.provider_id).await {
+            Ok(Some(row)) if row.site_id == site_id && row.verified => row,
+            _ => {
+                return edit_redirect(&post, "Verified AI provider not found.").into_response();
+            }
+        };
+    let Some(config) =
+        crate::models::ai_provider::decrypt_config(&state.config.secret_key, &provider_row)
+    else {
+        return edit_redirect(&post, "Failed to decrypt AI provider config.").into_response();
+    };
+
+    let attempt_id = Uuid::new_v4();
+    let started_at = std::time::Instant::now();
+    tracing::info!(
+        target: "ai_translation",
+        event = "translation_attempt_started",
+        operation = "embedded_resource_translation",
+        %attempt_id,
+        %site_id,
+        post_id = %id,
+        post_type = %post.post_type,
+        locale = %form.locale,
+        provider_id = %provider_row.id,
+        provider_type = config.provider_type(),
+        model = config.model_name(),
+        admin_user_id = %admin.user.id,
+        "AI embedded-resource translation attempt started"
+    );
+
+    let (form_translations, poll_translations) = match translate_embedded_resources(
+        &state,
+        site_id,
+        &post.content,
+        &form.locale,
+        locale_name,
+        &config,
+    )
+    .await
+    {
+        Ok(work) => work,
+        Err(error) => {
+            tracing::error!(
+                target: "ai_translation",
+                event = "translation_attempt_finished",
+                operation = "embedded_resource_translation",
+                outcome = "failure",
+                stage = "provider_or_response",
+                %attempt_id,
+                %site_id,
+                post_id = %id,
+                locale = %form.locale,
+                provider_id = %provider_row.id,
+                provider_type = config.provider_type(),
+                model = config.model_name(),
+                admin_user_id = %admin.user.id,
+                duration_ms = started_at.elapsed().as_millis() as u64,
+                error = %error,
+                "AI embedded-resource translation attempt failed"
+            );
+            return edit_redirect(&post, &format!("Embedded-item translation failed: {error}"))
+                .into_response();
+        }
+    };
+
+    if form_translations.is_empty() && poll_translations.is_empty() {
+        tracing::info!(
+            target: "ai_translation",
+            event = "translation_attempt_finished",
+            operation = "embedded_resource_translation",
+            outcome = "success",
+            stage = "no_op",
+            %attempt_id,
+            %site_id,
+            post_id = %id,
+            locale = %form.locale,
+            provider_id = %provider_row.id,
+            provider_type = config.provider_type(),
+            model = config.model_name(),
+            admin_user_id = %admin.user.id,
+            duration_ms = started_at.elapsed().as_millis() as u64,
+            embedded_forms_translated = 0,
+            embedded_polls_translated = 0,
+            "AI embedded-resource translations already current"
+        );
+        return edit_redirect(
+            &post,
+            "Embedded form and poll translations are already current.",
+        )
+        .into_response();
+    }
+
+    let persistence = async {
+        let mut tx = state.db.begin().await?;
+        for (embedded_form, payload) in &form_translations {
+            crate::models::embedded_translation::upsert_form_on(
+                &mut tx,
+                embedded_form.id,
+                &form.locale,
+                payload,
+                embedded_form.updated_at,
+            )
+            .await?;
+        }
+        for (poll, payload) in &poll_translations {
+            crate::models::embedded_translation::upsert_poll_on(
+                &mut tx,
+                poll.id,
+                &form.locale,
+                payload,
+                poll.updated_at,
+            )
+            .await?;
+        }
+        tx.commit().await?;
+        Ok::<(), crate::errors::AppError>(())
+    }
+    .await;
+    if let Err(error) = persistence {
+        tracing::error!(
+            target: "ai_translation",
+            event = "translation_attempt_finished",
+            operation = "embedded_resource_translation",
+            outcome = "failure",
+            stage = "persistence",
+            %attempt_id,
+            %site_id,
+            post_id = %id,
+            locale = %form.locale,
+            provider_id = %provider_row.id,
+            provider_type = config.provider_type(),
+            model = config.model_name(),
+            admin_user_id = %admin.user.id,
+            duration_ms = started_at.elapsed().as_millis() as u64,
+            error = %error,
+            "AI embedded-resource translation attempt failed"
+        );
+        return edit_redirect(&post, "Failed to save embedded-item translations.").into_response();
+    }
+
+    tracing::info!(
+        target: "ai_translation",
+        event = "translation_attempt_finished",
+        operation = "embedded_resource_translation",
+        outcome = "success",
+        stage = "complete",
+        %attempt_id,
+        %site_id,
+        post_id = %id,
+        locale = %form.locale,
+        provider_id = %provider_row.id,
+        provider_type = config.provider_type(),
+        model = config.model_name(),
+        admin_user_id = %admin.user.id,
+        duration_ms = started_at.elapsed().as_millis() as u64,
+        embedded_forms_translated = form_translations.len(),
+        embedded_polls_translated = poll_translations.len(),
+        "AI embedded-resource translation attempt completed"
+    );
+    edit_redirect(
+        &post,
+        &format!(
+            "Translated {} embedded form(s) and {} poll(s) into {locale_name}.",
+            form_translations.len(),
+            poll_translations.len()
+        ),
+    )
+    .into_response()
 }
 
 /// POST /admin/posts/{id}/translations/{locale}/delete

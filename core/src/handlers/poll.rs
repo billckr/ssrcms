@@ -18,12 +18,12 @@
 use std::collections::HashMap;
 
 use axum::{
-    extract::{ConnectInfo, Form, Path, State},
+    extract::{ConnectInfo, Form, Path, Query, State},
     http::HeaderMap,
     response::{IntoResponse, Json, Redirect},
 };
 use axum_extra::extract::cookie::{Cookie, SameSite, SignedCookieJar};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::app_state::AppState;
 use crate::middleware::site::CurrentSite;
@@ -149,6 +149,11 @@ struct ResultsJson {
     options: Vec<ResultOptionJson>,
 }
 
+#[derive(Default, Deserialize)]
+pub struct ResultsQuery {
+    locale: Option<String>,
+}
+
 /// `GET /poll/{slug}/results` — public JSON tally, fetched client-side by
 /// the embed script's post-vote swap (see `PollDef::render_html`). No auth
 /// — poll results are meant to be visible to anyone who can already see the
@@ -157,6 +162,7 @@ pub async fn results(
     State(state): State<AppState>,
     current_site: CurrentSite,
     Path(slug): Path<String>,
+    Query(query): Query<ResultsQuery>,
 ) -> impl IntoResponse {
     let Ok(Some(poll)) = poll_def::get_by_slug(&state.db, current_site.site.id, &slug).await else {
         return Json(ResultsJson {
@@ -169,12 +175,34 @@ pub async fn results(
         .unwrap_or_default()
         .into_iter()
         .collect();
+    let translation = match query.locale.as_deref() {
+        Some(locale)
+            if crate::utils::locales::display_name(locale).is_some()
+                && crate::models::site_locale::is_locale_enabled(
+                    &state.db,
+                    current_site.site.id,
+                    locale,
+                )
+                .await =>
+        {
+            crate::models::embedded_translation::get_poll(&state.db, poll.id, locale)
+                .await
+                .ok()
+                .flatten()
+                .and_then(|row| row.parsed())
+        }
+        _ => None,
+    };
     let options: Vec<ResultOptionJson> = poll
         .options
         .iter()
         .map(|o| ResultOptionJson {
             key: o.key.clone(),
-            label: o.label.clone(),
+            label: translation
+                .as_ref()
+                .and_then(|t| t.option_labels.get(&o.key))
+                .cloned()
+                .unwrap_or_else(|| o.label.clone()),
             votes: tally.get(&o.key).copied().unwrap_or(0),
         })
         .collect();

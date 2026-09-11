@@ -166,6 +166,9 @@ sudo systemctl status synapcms
 sudo journalctl -u synapcms -f
 ```
 
+See `documentation/logging.md` for the central production logging runbook, including the systemd,
+Caddy, AI translation, Activity Log, and mail-delivery streams.
+
 The service runs as `www-data`, restarts automatically on failure, and reads environment variables from `/opt/synaptic-signals/.env`.
 
 ---

@@ -446,11 +446,54 @@ impl FormDef {
     /// styled inline rather than via a themed class, since no theme has a
     /// `.form-error` counterpart to `.form-success` to style it with.
     pub fn render_html(&self) -> String {
+        self.render_html_localized(None, None)
+    }
+
+    pub fn render_html_localized(
+        &self,
+        locale: Option<&str>,
+        translation: Option<&crate::models::embedded_translation::FormTranslationPayload>,
+    ) -> String {
+        let mut form = self.clone();
+        let mut invalid_message =
+            "Please fill in all required fields with valid values and try again.".to_string();
+        if let Some(translation) = translation {
+            for field in &mut form.fields {
+                if let Some(label) = translation.field_labels.get(&field.name) {
+                    field.label.clone_from(label);
+                }
+                if let Some(labels) = translation.option_labels.get(&field.name) {
+                    for (value, label) in &mut field.options {
+                        if let Some(translated) = labels.get(value) {
+                            label.clone_from(translated);
+                        }
+                    }
+                }
+            }
+            form.settings
+                .button_label
+                .clone_from(&translation.button_label);
+            form.settings
+                .success_message
+                .clone_from(&translation.success_message);
+            invalid_message.clone_from(&translation.invalid_message);
+        }
+        form.render_html_inner(locale, &invalid_message)
+    }
+
+    fn render_html_inner(&self, locale: Option<&str>, invalid_message: &str) -> String {
         let slug = html_escape(&self.slug);
         let mut html = format!(
             r#"<form class="themed-form" id="ss-form-{slug}" method="POST" action="/form/{slug}">
 "#
         );
+        if let Some(locale) = locale {
+            html.push_str(&format!(
+                r#"  <input type="hidden" name="_locale" value="{}">
+"#,
+                html_escape(locale)
+            ));
+        }
         if self.settings.include_honeypot {
             html.push_str(&format!(
                 r#"<div class="honeypot-field" aria-hidden="true" tabindex="-1">
@@ -471,12 +514,13 @@ impl FormDef {
   <span>{success}</span>
 </div>
 <div id="ss-form-error-{slug}" role="alert" style="display:none;margin-top:.75rem;color:#dc2626;font-size:.9em">
-  <span>Please fill in all required fields with valid values and try again.</span>
+  <span>{invalid}</span>
 </div>
 <script>(function(){{var f=document.getElementById('ss-form-{slug}'),s=document.getElementById('ss-form-success-{slug}'),e=document.getElementById('ss-form-error-{slug}');if(!f||!s||!e)return;var q=new URLSearchParams(location.search);if(q.get('submitted')==={slug_js}){{f.style.display='none';s.style.display='';s.scrollIntoView({{behavior:'smooth',block:'start'}});}}else if(q.get('invalid')==={slug_js}){{e.style.display='';e.scrollIntoView({{behavior:'smooth',block:'start'}});}}}})();</script>
 "#,
             button_label = html_escape(&self.settings.button_label),
             success = html_escape(&self.settings.success_message),
+            invalid = html_escape(invalid_message),
             slug_js = serde_json::to_string(&self.slug).unwrap_or_else(|_| "\"\"".to_string()),
         ));
         html
@@ -489,27 +533,33 @@ impl FormDef {
 /// Cheap no-op (no DB hit) when the content has no embed at all — the
 /// overwhelming majority of posts/pages. Embeds referencing a deleted or
 /// missing form are silently dropped rather than left as raw markup.
-pub async fn expand_embeds(pool: &PgPool, site_id: Uuid, content: &str) -> String {
-    if !content.contains("<ss-form") {
+pub async fn expand_embeds(
+    pool: &PgPool,
+    site_id: Uuid,
+    content: &str,
+    locale: Option<&str>,
+) -> String {
+    let slugs = embedded_slugs(content);
+    if slugs.is_empty() {
         return content.to_string();
     }
-    let Ok(tag_re) =
-        regex_lite::Regex::new(r#"<ss-form\b[^>]*data-slug="([^"]*)"[^>]*></ss-form>"#)
-    else {
-        return content.to_string();
-    };
-
-    let mut slugs: Vec<String> = tag_re
-        .captures_iter(content)
-        .map(|c| c[1].to_string())
-        .collect();
-    slugs.sort();
-    slugs.dedup();
 
     let mut result = content.to_string();
     for slug in slugs {
         let replacement = match get_by_slug(pool, site_id, &slug).await {
-            Ok(Some(form)) => form.render_html(),
+            Ok(Some(form)) => {
+                let translation = match locale {
+                    Some(locale) => {
+                        crate::models::embedded_translation::get_form(pool, form.id, locale)
+                            .await
+                            .ok()
+                            .flatten()
+                            .and_then(|row| row.parsed())
+                    }
+                    None => None,
+                };
+                form.render_html_localized(locale, translation.as_ref())
+            }
             _ => String::new(),
         };
         let escaped_slug = slug.replace('\\', "\\\\").replace('"', "\\\"");
@@ -523,4 +573,22 @@ pub async fn expand_embeds(pool: &PgPool, site_id: Uuid, content: &str) -> Strin
             .to_string();
     }
     result
+}
+
+pub fn embedded_slugs(content: &str) -> Vec<String> {
+    if !content.contains("<ss-form") {
+        return Vec::new();
+    }
+    let Ok(tag_re) =
+        regex_lite::Regex::new(r#"<ss-form\b[^>]*data-slug="([^"]*)"[^>]*></ss-form>"#)
+    else {
+        return Vec::new();
+    };
+    let mut slugs: Vec<String> = tag_re
+        .captures_iter(content)
+        .map(|c| c[1].to_string())
+        .collect();
+    slugs.sort();
+    slugs.dedup();
+    slugs
 }

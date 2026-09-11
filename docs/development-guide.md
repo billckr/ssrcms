@@ -126,6 +126,8 @@ The server starts on `http://0.0.0.0:3000` by default.
 - Admin panel: `http://localhost:3000/admin`
 
 Logs are written to `logs/synapcms.log` in the workspace root.
+See `documentation/logging.md` for all log streams, configuration, parsing examples, privacy, and
+retention guidance.
 
 ### What app.sh handles automatically on start
 - Frees port 3000 if a previous process didn't exit cleanly

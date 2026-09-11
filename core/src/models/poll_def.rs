@@ -272,7 +272,44 @@ impl PollDef {
     /// `?voted={slug}` or `?already_voted={slug}`, set by `poll::submit`'s
     /// redirect — same "swap via query string" idiom forms already use.
     pub fn render_html(&self) -> String {
+        self.render_html_localized(None, None)
+    }
+
+    pub fn render_html_localized(
+        &self,
+        locale: Option<&str>,
+        translation: Option<&crate::models::embedded_translation::PollTranslationPayload>,
+    ) -> String {
+        let mut poll = self.clone();
+        let mut total_votes_label = "{count} total votes".to_string();
+        if let Some(translation) = translation {
+            poll.question.clone_from(&translation.question);
+            poll.settings
+                .button_label
+                .clone_from(&translation.button_label);
+            poll.settings
+                .success_message
+                .clone_from(&translation.success_message);
+            total_votes_label.clone_from(&translation.total_votes_label);
+            for option in &mut poll.options {
+                if let Some(label) = translation.option_labels.get(&option.key) {
+                    option.label.clone_from(label);
+                }
+            }
+        }
+        poll.render_html_inner(locale, &total_votes_label)
+    }
+
+    fn render_html_inner(&self, locale: Option<&str>, total_votes_label: &str) -> String {
         let slug = html_escape(&self.slug);
+        let results_url = match locale {
+            Some(locale) => format!("/poll/{}/results?locale={}", self.slug, locale),
+            None => format!("/poll/{}/results", self.slug),
+        };
+        let results_url_js =
+            serde_json::to_string(&results_url).unwrap_or_else(|_| "\"\"".to_string());
+        let total_votes_label_js = serde_json::to_string(total_votes_label)
+            .unwrap_or_else(|_| "\"{count} total votes\"".to_string());
         let options_html: String = self.options.iter().enumerate().map(|(i, o)| {
             let opt_id = format!("ss-poll-{slug}-{i}");
             format!(
@@ -293,21 +330,22 @@ impl PollDef {
 <script>(function(){{
   var f=document.getElementById('ss-poll-{slug}'),r=document.getElementById('ss-poll-results-{slug}');
   if(!f||!r)return;
+  function escapeHtml(value){{return value.replace(/[&<>"']/g,function(ch){{return {{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}}[ch];}});}}
   var qs=new URLSearchParams(location.search);
   if(qs.get('voted')==={slug_js}||qs.get('already_voted')==={slug_js}){{
     f.style.display='none';
     r.style.display='';
-    fetch('/poll/{slug}/results').then(function(res){{return res.json();}}).then(function(data){{
+    fetch({results_url_js}).then(function(res){{return res.json();}}).then(function(data){{
       var total=data.total||0;
       var html='';
       (data.options||[]).forEach(function(o){{
         var pct=total>0?Math.round((o.votes/total)*100):0;
         html+='<div class="ss-poll-result-row" style="margin-bottom:8px">'+
-          '<div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:2px"><span>'+o.label+'</span><span>'+pct+'% ('+o.votes+')</span></div>'+
+          '<div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:2px"><span>'+escapeHtml(String(o.label||''))+'</span><span>'+pct+'% ('+o.votes+')</span></div>'+
           '<div style="background:var(--tint,#eee);border-radius:4px;height:8px;overflow:hidden"><div style="width:'+pct+'%;height:100%;background:var(--primary,#2563eb)"></div></div>'+
         '</div>';
       }});
-      html+='<p style="font-size:12px;color:var(--muted,#64748b);margin-top:6px">'+total+' total votes</p>';
+      html+='<p style="font-size:12px;color:var(--muted,#64748b);margin-top:6px">'+escapeHtml({total_votes_label_js}.replace('{{count}}',String(total)))+'</p>';
       r.innerHTML=html;
       r.scrollIntoView({{behavior:'smooth',block:'start'}});
     }});
@@ -318,6 +356,8 @@ impl PollDef {
             options_html = options_html,
             button_label = html_escape(&self.settings.button_label),
             slug_js = serde_json::to_string(&self.slug).unwrap_or_else(|_| "\"\"".to_string()),
+            results_url_js = results_url_js,
+            total_votes_label_js = total_votes_label_js,
         )
     }
 }
@@ -326,27 +366,33 @@ impl PollDef {
 /// rendered poll form — same regex-replace-by-slug approach as
 /// `form_def::expand_embeds`, silently dropping embeds whose poll was
 /// deleted.
-pub async fn expand_embeds(pool: &PgPool, site_id: Uuid, content: &str) -> String {
-    if !content.contains("<ss-poll") {
+pub async fn expand_embeds(
+    pool: &PgPool,
+    site_id: Uuid,
+    content: &str,
+    locale: Option<&str>,
+) -> String {
+    let slugs = embedded_slugs(content);
+    if slugs.is_empty() {
         return content.to_string();
     }
-    let Ok(tag_re) =
-        regex_lite::Regex::new(r#"<ss-poll\b[^>]*data-slug="([^"]*)"[^>]*></ss-poll>"#)
-    else {
-        return content.to_string();
-    };
-
-    let mut slugs: Vec<String> = tag_re
-        .captures_iter(content)
-        .map(|c| c[1].to_string())
-        .collect();
-    slugs.sort();
-    slugs.dedup();
 
     let mut result = content.to_string();
     for slug in slugs {
         let replacement = match get_by_slug(pool, site_id, &slug).await {
-            Ok(Some(poll)) => poll.render_html(),
+            Ok(Some(poll)) => {
+                let translation = match locale {
+                    Some(locale) => {
+                        crate::models::embedded_translation::get_poll(pool, poll.id, locale)
+                            .await
+                            .ok()
+                            .flatten()
+                            .and_then(|row| row.parsed())
+                    }
+                    None => None,
+                };
+                poll.render_html_localized(locale, translation.as_ref())
+            }
             _ => String::new(),
         };
         let escaped_slug = slug.replace('\\', "\\\\").replace('"', "\\\"");
@@ -360,4 +406,22 @@ pub async fn expand_embeds(pool: &PgPool, site_id: Uuid, content: &str) -> Strin
             .to_string();
     }
     result
+}
+
+pub fn embedded_slugs(content: &str) -> Vec<String> {
+    if !content.contains("<ss-poll") {
+        return Vec::new();
+    }
+    let Ok(tag_re) =
+        regex_lite::Regex::new(r#"<ss-poll\b[^>]*data-slug="([^"]*)"[^>]*></ss-poll>"#)
+    else {
+        return Vec::new();
+    };
+    let mut slugs: Vec<String> = tag_re
+        .captures_iter(content)
+        .map(|c| c[1].to_string())
+        .collect();
+    slugs.sort();
+    slugs.dedup();
+    slugs
 }

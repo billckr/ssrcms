@@ -1,12 +1,12 @@
 ---
 title: System Settings
 group: feature
-updated_by: claude
-last_updated: 2026-08-21
+updated_by: codex
+last_updated: 2026-09-10
 ---
 # System Settings
 
-> Last updated: 2026-08-21 | Updated by: claude
+> Last updated: 2026-09-10 | Updated by: codex
 
 ## Overview
 
@@ -18,7 +18,7 @@ System settings control global application behavior and are split into two store
 
 `AppConfig` is deserialized at startup via the `config` crate, loaded through `AppConfig::load()`: layer order is (1) serde field defaults, (2) `synaptic.toml` in the working directory (or the path in the `CONFIG_FILE` env var, file is optional), (3) environment variables (`config::Environment` with `__` separator, `.env` loaded via `dotenvy`) — later layers win.
 
-Fields: `host` (default `0.0.0.0`), `port` (default `3000`), `database_url` (required), `secret_key` (default is an insecure placeholder — must be overridden in production), `themes_dir` (default `themes`), `plugins_dir` (default `plugins`), `uploads_dir` (default `uploads`), `sites_dir` (default `sites` — the base for each site's `{uuid}/themes/` and `{uuid}/uploads/` subdirectories), `dev_mode` (bool, default false), `log_level` (default `info`), `log_format` (default `text`), `search_index_path` (default `search-index`), `pid_file` (default `synaptic.pid`, used by `synap` for live reload), `caddyfile_path` (default `/etc/caddy/Caddyfile`, used for SSL provisioning from the admin panel), `metrics_token` (optional bearer token for `/metrics`), `max_upload_mb` (default `25` — since 2026-08-05 this is only a first-boot seed value for the DB-backed `app_settings.max_upload_mb`; once an admin saves a value on the Advanced tab, the DB value is authoritative and this field is no longer consulted for enforcement, only as a fallback), `admin_email` (optional, reply-to/notification address), and a full SMTP block (`smtp_host`, `smtp_port` default `587`, `smtp_username`, `smtp_password`, `smtp_from_name`, `smtp_from_email`, `smtp_encryption` default `starttls`) — outbound mail is disabled entirely if `smtp_host` is unset, and password-reset/form-notification code paths log a warning instead of sending. `bind_addr()` composes `host:port`.
+Fields: `host` (default `0.0.0.0`), `port` (default `3000`), `database_url` (required), `secret_key` (default is an insecure placeholder — must be overridden in production), `themes_dir` (default `themes`), `plugins_dir` (default `plugins`), `uploads_dir` (default `uploads`), `sites_dir` (default `sites` — the base for each site's `{uuid}/themes/` and `{uuid}/uploads/` subdirectories), `dev_mode` (bool, default false), `log_level` (default `info`), `log_format` (default `text`), `ai_log_path` (default `logs/ai-translation.jsonl`), `search_index_path` (default `search-index`), `pid_file` (default `synaptic.pid`, used by `synap` for live reload), `caddyfile_path` (default `/etc/caddy/Caddyfile`, used for SSL provisioning from the admin panel), `metrics_token` (optional bearer token for `/metrics`), `max_upload_mb` (default `25` — since 2026-08-05 this is only a first-boot seed value for the DB-backed `app_settings.max_upload_mb`; once an admin saves a value on the Advanced tab, the DB value is authoritative and this field is no longer consulted for enforcement, only as a fallback), `admin_email` (optional, reply-to/notification address), and a full SMTP block (`smtp_host`, `smtp_port` default `587`, `smtp_username`, `smtp_password`, `smtp_from_name`, `smtp_from_email`, `smtp_encryption` default `starttls`) — outbound mail is disabled entirely if `smtp_host` is unset, and password-reset/form-notification code paths log a warning instead of sending. `bind_addr()` composes `host:port`. See the **Logging** document for operational commands and retention guidance.
 
 ### AppState (`core/src/app_state.rs`)
 
@@ -64,5 +64,3 @@ All `AppConfig` fields are set via `synaptic.toml` or environment variables (env
 
 - `save_settings` implements `general`, `localisation`, and `uploads`; any other `tab` value is accepted by the form but silently produces no change (falls through to the "re-render unchanged" branch). The Security tab has no fields yet — it's a placeholder for session timeout/login lockout/password policy config.
 - Per-site maintenance mode and IP allow/block-list configuration (added in recent middleware work) are not part of this handler — they live in `core/src/middleware/maintenance.rs`, `core/src/middleware/ip_allowlist.rs`, and `core/src/middleware/ip_denylist.rs`, which are documented separately (middleware), not under this System Settings doc.
-
-
