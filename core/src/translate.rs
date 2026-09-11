@@ -14,6 +14,10 @@ use crate::models::form_def::FormDef;
 use crate::models::poll_def::PollDef;
 use crate::models::post::Post;
 
+/// DeepSeek's fixed API base — unlike `OpenaiCompatible`, whose base URL is
+/// user-entered, this is a first-class provider with one known endpoint.
+const DEEPSEEK_BASE_URL: &str = "https://api.deepseek.com/v1";
+
 /// The three flat, translatable fields of a plain post/page. Builder/
 /// page-composition posts (a JSON block tree, not these three strings) are
 /// out of scope — see `documentation/posts.md`'s translation section.
@@ -378,6 +382,9 @@ pub async fn test_provider(config: &AiProviderConfig) -> anyhow::Result<()> {
 pub async fn discover_models(config: &AiProviderConfig) -> anyhow::Result<Vec<AvailableModel>> {
     let mut models = match config {
         AiProviderConfig::Anthropic { api_key, .. } => discover_anthropic_models(api_key).await?,
+        AiProviderConfig::Deepseek { api_key, .. } => {
+            discover_openai_compatible_models(DEEPSEEK_BASE_URL, api_key).await?
+        }
         AiProviderConfig::OpenaiCompatible {
             base_url, api_key, ..
         } => discover_openai_compatible_models(base_url, api_key).await?,
@@ -410,11 +417,12 @@ fn inferred_cost_tier(id: &str) -> Option<&'static str> {
         id.split(|c: char| !c.is_ascii_alphanumeric())
             .any(|part| part == wanted)
     };
-    if id.contains("haiku") || has_token("nano") || has_token("mini") {
+    if id.contains("haiku") || has_token("nano") || has_token("mini") || id.contains("deepseek-chat")
+    {
         Some("Economy")
     } else if id.contains("sonnet") {
         Some("Balanced")
-    } else if id.contains("opus") || has_token("pro") {
+    } else if id.contains("opus") || has_token("pro") || id.contains("deepseek-reasoner") {
         Some("Premium")
     } else {
         None
@@ -521,6 +529,13 @@ async fn send_prompt(
             api_key,
             model_name,
         } => send_via_anthropic(api_key, model_name, prompt).await,
+        AiProviderConfig::Deepseek {
+            api_key,
+            model_name,
+        } => {
+            send_via_openai_compatible(DEEPSEEK_BASE_URL, api_key, model_name, prompt, require_json)
+                .await
+        }
         AiProviderConfig::OpenaiCompatible {
             base_url,
             api_key,

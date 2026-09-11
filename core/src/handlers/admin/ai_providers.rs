@@ -27,6 +27,12 @@ pub struct AiProviderForm {
     #[serde(default)]
     pub anthropic_model_choice: String,
     #[serde(default)]
+    pub deepseek_api_key: String,
+    #[serde(default)]
+    pub deepseek_model_name: String,
+    #[serde(default)]
+    pub deepseek_model_choice: String,
+    #[serde(default)]
     pub openai_compatible_base_url: String,
     #[serde(default)]
     pub openai_compatible_api_key: String,
@@ -81,6 +87,36 @@ fn config_from_form(
                 return Err("Load and select a model, or enter a custom model ID.");
             }
             Ok(AiProviderConfig::Anthropic {
+                api_key: api_key.to_string(),
+                model_name: model_name.to_string(),
+            })
+        }
+        "deepseek" => {
+            let (saved_key, saved_model) = match existing {
+                Some(AiProviderConfig::Deepseek {
+                    api_key,
+                    model_name,
+                }) => (Some(api_key.as_str()), Some(model_name.as_str())),
+                Some(_) => return Err("The provider type cannot be changed."),
+                None => (None, None),
+            };
+            let api_key = if form.deepseek_api_key.trim().is_empty() {
+                saved_key.unwrap_or("")
+            } else {
+                form.deepseek_api_key.trim()
+            };
+            let model_name = selected_model(
+                &form.deepseek_model_choice,
+                &form.deepseek_model_name,
+                saved_model,
+            );
+            if api_key.is_empty() {
+                return Err("Enter an API key before loading models.");
+            }
+            if require_model && model_name.is_empty() {
+                return Err("Load and select a model, or enter a custom model ID.");
+            }
+            Ok(AiProviderConfig::Deepseek {
                 api_key: api_key.to_string(),
                 model_name: model_name.to_string(),
             })

@@ -20,7 +20,9 @@ AI SDK. The two supported wire protocols are:
 
 - Anthropic's Messages API.
 - OpenAI-compatible `POST /chat/completions`, including OpenAI and compatible local or hosted
-  servers such as Ollama, LM Studio, and vLLM.
+  servers such as Ollama, LM Studio, and vLLM. DeepSeek is a first-class provider option built on
+  this same protocol against its fixed `https://api.deepseek.com/v1` endpoint, rather than
+  requiring the base URL to be entered by hand.
 
 Translation is currently intended for conventional posts and pages whose body is stored as one
 HTML or Markdown string. Builder/page-composition content is not translated.
@@ -56,6 +58,8 @@ in `core/src/app_state.rs`) and is hot-reloadable — no restart needed after sa
 Open **Sites**, choose the site, then open **Settings → AI Translation**. Add either:
 
 - **Anthropic:** API key, then use the refresh button to load models available to that key.
+- **DeepSeek:** API key, then use the refresh button to load models available to that key — the
+  base URL is fixed and not entered.
 - **OpenAI-Compatible:** base URL and optional API key, then load the endpoint's models. Include the API version
   in the base URL when the service requires it, for example `https://api.openai.com/v1`.
 
@@ -179,6 +183,14 @@ Model discovery sends authenticated `GET https://api.anthropic.com/v1/models?lim
 families containing `haiku`, `sonnet`, or `opus` are labelled Economy, Balanced, or Premium
 respectively. These labels express the usual relative family positioning and are not a pricing
 quote.
+
+### DeepSeek
+
+A first-class provider (`AiProviderConfig::Deepseek`, `core/src/models/ai_provider.rs`) rather than
+a variant of OpenAI-Compatible — the base URL is fixed to `https://api.deepseek.com/v1` and not
+user-entered, but it's dispatched through the exact same `send_via_openai_compatible`/
+`discover_openai_compatible_models` adapters described below, since DeepSeek's API speaks the same
+wire format. IDs containing `deepseek-chat` are labelled Economy and `deepseek-reasoner` Premium.
 
 ### OpenAI-compatible
 

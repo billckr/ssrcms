@@ -521,6 +521,7 @@ fn provider_fields_html(
 fn ai_provider_type_label(provider_type: &str) -> &'static str {
     match provider_type {
         "anthropic" => "Anthropic",
+        "deepseek" => "DeepSeek",
         "openai_compatible" => "OpenAI-Compatible",
         _ => "Unknown",
     }
@@ -592,6 +593,21 @@ fn ai_provider_fields_html(
                 "anthropic",
                 "anthropic_model_name",
                 "e.g. claude-haiku model ID"
+            ),
+        ),
+        "deepseek" => format!(
+            r#"<div class="form-group">
+  <label for="{p}deepseek_api_key">API key</label>
+  <input type="password" id="{p}deepseek_api_key" name="deepseek_api_key" autocomplete="off" placeholder="{key_ph}">
+  <small>On edit, leave this blank to keep the existing encrypted key.</small>
+</div>
+{model_control}"#,
+            p = id_prefix,
+            key_ph = ph("deepseek_api_key", ""),
+            model_control = model_control(
+                "deepseek",
+                "deepseek_model_name",
+                "e.g. deepseek-chat"
             ),
         ),
         "openai_compatible" => format!(
@@ -908,9 +924,9 @@ document.querySelectorAll('.ai-provider-edit-form').forEach(function(form) {{
   <form method="post" action="/admin/sites/{id}/ai-providers" class="edit-form" id="add-ai-provider-form">
     <div class="card-boxed-section">
       <p class="form-note" style="margin:0 0 1rem">
-        Configure an AI provider to translate posts from the post editor. Anthropic calls Claude's
-        API directly; OpenAI-Compatible covers OpenAI itself, or a local server such as Ollama or
-        LM Studio.
+        Configure an AI provider to translate posts from the post editor. Anthropic and DeepSeek
+        call their own APIs directly; OpenAI-Compatible covers OpenAI itself, or a local server
+        such as Ollama or LM Studio.
       </p>
       <div class="form-group">
         <label for="ai-provider-label">Label</label>
@@ -920,6 +936,7 @@ document.querySelectorAll('.ai-provider-edit-form').forEach(function(form) {{
         <label for="ai-provider-type">Provider</label>
         <select id="ai-provider-type" name="provider_type">
           <option value="anthropic">Anthropic</option>
+          <option value="deepseek">DeepSeek</option>
           <option value="openai_compatible">OpenAI-Compatible</option>
         </select>
       </div>
@@ -928,6 +945,14 @@ document.querySelectorAll('.ai-provider-edit-form').forEach(function(form) {{
       {anthropic_fields_html}
       <div class="icon-pill">
         <button type="submit" id="add-ai-provider-btn-anthropic" class="icon-btn" title="Add Provider" aria-label="Add Provider" disabled>
+          <img src="/admin/static/icons/save.svg" alt="">
+        </button>
+      </div>
+    </div>
+    <div class="card-boxed-section ai-provider-fields" data-provider="deepseek" style="display:none">
+      {deepseek_fields_html}
+      <div class="icon-pill">
+        <button type="submit" id="add-ai-provider-btn-deepseek" class="icon-btn" title="Add Provider" aria-label="Add Provider" disabled>
           <img src="/admin/static/icons/save.svg" alt="">
         </button>
       </div>
@@ -957,6 +982,7 @@ document.querySelectorAll('.ai-provider-edit-form').forEach(function(form) {{
 
   var addForm = document.getElementById('add-ai-provider-form');
   var addBtnAnthropic = document.getElementById('add-ai-provider-btn-anthropic');
+  var addBtnDeepseek = document.getElementById('add-ai-provider-btn-deepseek');
   var addBtnOpenai = document.getElementById('add-ai-provider-btn-openai_compatible');
   function addSnapshot() {{
     return Array.from(new FormData(addForm).entries()).map(function(e) {{ return e[0] + '=' + e[1]; }}).join('&');
@@ -965,6 +991,7 @@ document.querySelectorAll('.ai-provider-edit-form').forEach(function(form) {{
   function checkAddChanged() {{
     var changed = addSnapshot() !== addInitialSnapshot;
     addBtnAnthropic.disabled = !changed;
+    addBtnDeepseek.disabled = !changed;
     addBtnOpenai.disabled = !changed;
   }}
   addForm.addEventListener('input', checkAddChanged);
@@ -1104,6 +1131,7 @@ document.querySelectorAll('.ai-provider-edit-form').forEach(function(form) {{
             id = crate::html_escape(&data.id),
             ai_providers_list_html = ai_providers_list_html,
             anthropic_fields_html = ai_provider_fields_html("anthropic", "", None),
+            deepseek_fields_html = ai_provider_fields_html("deepseek", "", None),
             openai_compatible_fields_html = ai_provider_fields_html("openai_compatible", "", None),
             all_locales_json = all_locales_json,
             enabled_locales_json = enabled_locales_json,

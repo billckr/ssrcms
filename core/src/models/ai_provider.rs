@@ -1,8 +1,8 @@
-//! A site's configured AI translation provider credentials (Anthropic, or
-//! any OpenAI-compatible endpoint — covers OpenAI itself, Ollama, LM Studio,
-//! vLLM, or any other self-hosted server speaking that same wire format).
-//! Mirrors `email_provider.rs`'s storage shape exactly. See
-//! `crate::translate` for the code that actually calls out to these.
+//! A site's configured AI translation provider credentials (Anthropic,
+//! DeepSeek, or any OpenAI-compatible endpoint — covers OpenAI itself,
+//! Ollama, LM Studio, vLLM, or any other self-hosted server speaking that
+//! same wire format). Mirrors `email_provider.rs`'s storage shape exactly.
+//! See `crate::translate` for the code that actually calls out to these.
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -21,6 +21,15 @@ pub enum AiProviderConfig {
         api_key: String,
         model_name: String,
     },
+    /// DeepSeek's own hosted API — a fixed base URL (not user-entered, hence
+    /// its own variant rather than going through `OpenaiCompatible`) that
+    /// speaks the same OpenAI-compatible wire format the shared
+    /// `send_via_openai_compatible`/`discover_openai_compatible_models`
+    /// helpers already implement.
+    Deepseek {
+        api_key: String,
+        model_name: String,
+    },
     OpenaiCompatible {
         base_url: String,
         api_key: String,
@@ -32,6 +41,7 @@ impl AiProviderConfig {
     pub fn provider_type(&self) -> &'static str {
         match self {
             AiProviderConfig::Anthropic { .. } => "anthropic",
+            AiProviderConfig::Deepseek { .. } => "deepseek",
             AiProviderConfig::OpenaiCompatible { .. } => "openai_compatible",
         }
     }
@@ -40,6 +50,7 @@ impl AiProviderConfig {
     pub fn model_name(&self) -> &str {
         match self {
             AiProviderConfig::Anthropic { model_name, .. }
+            | AiProviderConfig::Deepseek { model_name, .. }
             | AiProviderConfig::OpenaiCompatible { model_name, .. } => model_name,
         }
     }
@@ -56,6 +67,13 @@ impl AiProviderConfig {
             } => vec![
                 ("anthropic_model_name", model_name.clone()),
                 ("anthropic_api_key", crate::crypto::mask_secret(api_key)),
+            ],
+            AiProviderConfig::Deepseek {
+                api_key,
+                model_name,
+            } => vec![
+                ("deepseek_model_name", model_name.clone()),
+                ("deepseek_api_key", crate::crypto::mask_secret(api_key)),
             ],
             AiProviderConfig::OpenaiCompatible {
                 base_url,
@@ -76,6 +94,12 @@ impl AiProviderConfig {
     pub fn display_hint(&self) -> String {
         match self {
             AiProviderConfig::Anthropic {
+                api_key,
+                model_name,
+            } => {
+                format!("{} · {}", model_name, crate::crypto::mask_secret(api_key))
+            }
+            AiProviderConfig::Deepseek {
                 api_key,
                 model_name,
             } => {
@@ -243,6 +267,13 @@ mod tests {
         }
     }
 
+    fn deepseek_config() -> AiProviderConfig {
+        AiProviderConfig::Deepseek {
+            api_key: "sk-deepseek-abcdefghijklmnopqrstuvwxyz".to_string(),
+            model_name: "deepseek-chat".to_string(),
+        }
+    }
+
     fn openai_compatible_config() -> AiProviderConfig {
         AiProviderConfig::OpenaiCompatible {
             base_url: "http://localhost:11434/v1".to_string(),
@@ -254,6 +285,7 @@ mod tests {
     #[test]
     fn provider_type_matches_variant() {
         assert_eq!(anthropic_config().provider_type(), "anthropic");
+        assert_eq!(deepseek_config().provider_type(), "deepseek");
         assert_eq!(
             openai_compatible_config().provider_type(),
             "openai_compatible"
