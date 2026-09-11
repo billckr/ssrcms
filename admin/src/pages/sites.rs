@@ -527,13 +527,6 @@ fn ai_provider_type_label(provider_type: &str) -> &'static str {
     }
 }
 
-fn ai_provider_type_badge_html(provider_type: &str) -> String {
-    format!(
-        r#"<span class="form-note" style="margin:0">{}</span>"#,
-        ai_provider_type_label(provider_type)
-    )
-}
-
 /// The credential fields for one AI provider type — mirrors
 /// `provider_fields_html`'s shape and `id_prefix` convention exactly.
 fn ai_provider_fields_html(
@@ -704,28 +697,24 @@ pub fn render_settings(
     };
 
     let ai_providers_list_html = if data.ai_providers.is_empty() {
-        r#"<p class="form-note" style="margin:0">No AI providers configured yet.</p>"#.to_string()
+        r#"<p class="muted">No AI providers configured yet.</p>"#.to_string()
     } else {
-        data.ai_providers.iter().map(|p| {
+        let rows = data.ai_providers.iter().map(|p| {
             let status = if p.verified {
-                r#"<span class="badge badge-published">Verified</span>"#.to_string()
+                r#"<img src="/admin/static/icons/check-circle.svg" class="status-icon-verified" title="Verified" alt="Verified">"#.to_string()
             } else {
-                r#"<span class="badge">Unverified</span>"#.to_string()
+                r#"<img src="/admin/static/icons/x-circle.svg" class="status-icon-unverified" title="Not verified" alt="Not verified">"#.to_string()
             };
             let edit_id = format!("edit-ai-provider-{}", p.id);
             let field_prefix = format!("edit-ai-{}-", p.id);
-            let hint = p.hint.as_ref().map(|hint| {
-                format!(r#"<span class="form-note" style="margin:0">{}</span>"#, crate::html_escape(hint))
-            }).unwrap_or_default();
+            let hint = p.hint.as_ref().map(|hint| crate::html_escape(hint)).unwrap_or_default();
             format!(
-                r#"<div class="card-boxed-section">
-  <div style="display:flex;align-items:center;justify-content:space-between;gap:.75rem;flex-wrap:wrap">
-    <div style="display:flex;align-items:center;gap:.6rem">
-      <strong>{label}</strong>
-      {type_badge}
-      {status}
-      {hint}
-    </div>
+                r#"<tr>
+  <td><strong>{label}</strong></td>
+  <td>{type_label}</td>
+  <td>{hint}</td>
+  <td>{status}</td>
+  <td class="actions">
     <div class="icon-pill-actionbuttons">
       <button type="button" class="icon-btn" title="Edit Provider" aria-label="Edit Provider"
               onclick="toggleAiProviderEdit('{edit_id}')">
@@ -738,8 +727,11 @@ pub fn render_settings(
         <button type="submit" class="icon-btn icon-danger" title="Delete Provider" aria-label="Delete Provider"><img src="/admin/static/icons/trash.svg" alt=""></button>
       </form>
     </div>
-  </div>
-  <form method="post" action="/admin/sites/{site_id}/ai-providers/{id}" id="{edit_id}" class="ai-provider-edit-form" style="display:none;margin-top:.75rem;padding-top:.75rem;border-top:1px solid var(--border)">
+  </td>
+</tr>
+<tr id="{edit_id}-row" class="ai-provider-edit-row" hidden>
+  <td colspan="5">
+  <form method="post" action="/admin/sites/{site_id}/ai-providers/{id}" id="{edit_id}" class="ai-provider-edit-form">
     <input type="hidden" name="provider_type" value="{provider_type}">
     <div class="form-group">
       <label for="{field_prefix}label">Label</label>
@@ -750,12 +742,13 @@ pub fn render_settings(
     <div class="icon-pill">
       <button type="submit" class="icon-btn ai-provider-edit-save" title="Save Provider" aria-label="Save Provider" disabled><img src="/admin/static/icons/save.svg" alt=""></button>
       <button type="button" class="icon-btn" title="Cancel" aria-label="Cancel"
-              onclick="document.getElementById('{edit_id}').style.display='none'"><img src="/admin/static/icons/x.svg" alt=""></button>
+              onclick="document.getElementById('{edit_id}-row').hidden = true"><img src="/admin/static/icons/x.svg" alt=""></button>
     </div>
   </form>
-</div>"#,
+  </td>
+</tr>"#,
                 label = crate::html_escape(&p.label),
-                type_badge = ai_provider_type_badge_html(&p.provider_type),
+                type_label = ai_provider_type_label(&p.provider_type),
                 status = status,
                 hint = hint,
                 site_id = crate::html_escape(&data.id),
@@ -765,7 +758,14 @@ pub fn render_settings(
                 field_prefix = field_prefix,
                 fields_html = ai_provider_fields_html(&p.provider_type, &field_prefix, Some(&p.field_placeholders)),
             )
-        }).collect::<Vec<_>>().join("\n")
+        }).collect::<Vec<_>>().join("\n");
+        format!(
+            r#"<table class="data-table">
+      <thead><tr><th>Label</th><th>Type</th><th>Model</th><th>Verified</th><th>Actions</th></tr></thead>
+      <tbody>{rows}</tbody>
+    </table>"#,
+            rows = rows,
+        )
     };
 
     // The language picker (dropdown + Add button, building a removable chip
@@ -802,21 +802,15 @@ pub fn render_settings(
             r#"<div id="tab-ai-translation" class="settings-tab-panel" role="tabpanel">
 <div class="two-col">
 <div>
-<div class="card-boxed">
-  <h2 class="card-boxed-header">AI Providers</h2>
-  <div class="card-boxed-body">
   {ai_providers_list_html}
-  </div>
-</div>
-</div>
 <script>
 function toggleAiProviderEdit(id) {{
-  var target = document.getElementById(id);
-  var opening = target.style.display === 'none';
-  document.querySelectorAll('.ai-provider-edit-form').forEach(function(f) {{
-    f.style.display = 'none';
+  var row = document.getElementById(id + '-row');
+  var opening = row.hidden;
+  document.querySelectorAll('.ai-provider-edit-row').forEach(function(r) {{
+    r.hidden = true;
   }});
-  if (opening) target.style.display = 'block';
+  if (opening) row.hidden = false;
 }}
 document.querySelectorAll('.ai-provider-edit-form').forEach(function(form) {{
   var btn = form.querySelector('.ai-provider-edit-save');
@@ -914,88 +908,6 @@ document.querySelectorAll('.ai-provider-edit-form').forEach(function(form) {{
       syncCustom(control, true);
     }});
   }});
-}})();
-</script>
-
-<div>
-<div class="card-boxed">
-  <h2 class="card-boxed-header">Add Provider</h2>
-  <div class="card-boxed-body">
-  <form method="post" action="/admin/sites/{id}/ai-providers" class="edit-form" id="add-ai-provider-form">
-    <div class="card-boxed-section">
-      <p class="form-note" style="margin:0 0 1rem">
-        Configure an AI provider to translate posts from the post editor. Anthropic and DeepSeek
-        call their own APIs directly; OpenAI-Compatible covers OpenAI itself, or a local server
-        such as Ollama or LM Studio.
-      </p>
-      <div class="form-group">
-        <label for="ai-provider-label">Label</label>
-        <input type="text" id="ai-provider-label" name="label" required placeholder="e.g. Claude">
-      </div>
-      <div class="form-group">
-        <label for="ai-provider-type">Provider</label>
-        <select id="ai-provider-type" name="provider_type">
-          <option value="anthropic">Anthropic</option>
-          <option value="deepseek">DeepSeek</option>
-          <option value="openai_compatible">OpenAI-Compatible</option>
-        </select>
-      </div>
-    </div>
-    <div class="card-boxed-section ai-provider-fields" data-provider="anthropic">
-      {anthropic_fields_html}
-      <div class="icon-pill">
-        <button type="submit" id="add-ai-provider-btn-anthropic" class="icon-btn" title="Add Provider" aria-label="Add Provider" disabled>
-          <img src="/admin/static/icons/save.svg" alt="">
-        </button>
-      </div>
-    </div>
-    <div class="card-boxed-section ai-provider-fields" data-provider="deepseek" style="display:none">
-      {deepseek_fields_html}
-      <div class="icon-pill">
-        <button type="submit" id="add-ai-provider-btn-deepseek" class="icon-btn" title="Add Provider" aria-label="Add Provider" disabled>
-          <img src="/admin/static/icons/save.svg" alt="">
-        </button>
-      </div>
-    </div>
-    <div class="card-boxed-section ai-provider-fields" data-provider="openai_compatible" style="display:none">
-      {openai_compatible_fields_html}
-      <div class="icon-pill">
-        <button type="submit" id="add-ai-provider-btn-openai_compatible" class="icon-btn" title="Add Provider" aria-label="Add Provider" disabled>
-          <img src="/admin/static/icons/save.svg" alt="">
-        </button>
-      </div>
-    </div>
-  </form>
-  </div>
-</div>
-<script>
-(function() {{
-  var typeSelect = document.getElementById('ai-provider-type');
-  var groups = document.querySelectorAll('.ai-provider-fields');
-  function sync() {{
-    groups.forEach(function(g) {{
-      g.style.display = (g.dataset.provider === typeSelect.value) ? '' : 'none';
-    }});
-  }}
-  typeSelect.addEventListener('change', sync);
-  sync();
-
-  var addForm = document.getElementById('add-ai-provider-form');
-  var addBtnAnthropic = document.getElementById('add-ai-provider-btn-anthropic');
-  var addBtnDeepseek = document.getElementById('add-ai-provider-btn-deepseek');
-  var addBtnOpenai = document.getElementById('add-ai-provider-btn-openai_compatible');
-  function addSnapshot() {{
-    return Array.from(new FormData(addForm).entries()).map(function(e) {{ return e[0] + '=' + e[1]; }}).join('&');
-  }}
-  var addInitialSnapshot = addSnapshot();
-  function checkAddChanged() {{
-    var changed = addSnapshot() !== addInitialSnapshot;
-    addBtnAnthropic.disabled = !changed;
-    addBtnDeepseek.disabled = !changed;
-    addBtnOpenai.disabled = !changed;
-  }}
-  addForm.addEventListener('input', checkAddChanged);
-  addForm.addEventListener('change', checkAddChanged);
 }})();
 </script>
 
@@ -1125,6 +1037,90 @@ document.querySelectorAll('.ai-provider-edit-form').forEach(function(form) {{
 }})();
 </script>
 </div>
+
+<div>
+<div class="card-boxed">
+  <h2 class="card-boxed-header">Add Provider</h2>
+  <div class="card-boxed-body">
+  <form method="post" action="/admin/sites/{id}/ai-providers" class="edit-form" id="add-ai-provider-form">
+    <div class="card-boxed-section">
+      <p class="form-note" style="margin:0 0 1rem">
+        Configure an AI provider to translate posts from the post editor. Anthropic and DeepSeek
+        call their own APIs directly; OpenAI-Compatible covers OpenAI itself, or a local server
+        such as Ollama or LM Studio.
+      </p>
+      <div class="form-group">
+        <label for="ai-provider-label">Label</label>
+        <input type="text" id="ai-provider-label" name="label" required placeholder="e.g. Claude">
+      </div>
+      <div class="form-group">
+        <label for="ai-provider-type">Provider</label>
+        <select id="ai-provider-type" name="provider_type">
+          <option value="anthropic">Anthropic</option>
+          <option value="deepseek">DeepSeek</option>
+          <option value="openai_compatible">OpenAI-Compatible</option>
+        </select>
+      </div>
+    </div>
+    <div class="card-boxed-section ai-provider-fields" data-provider="anthropic">
+      {anthropic_fields_html}
+      <div class="icon-pill">
+        <button type="submit" id="add-ai-provider-btn-anthropic" class="icon-btn" title="Add Provider" aria-label="Add Provider" disabled>
+          <img src="/admin/static/icons/save.svg" alt="">
+        </button>
+      </div>
+    </div>
+    <div class="card-boxed-section ai-provider-fields" data-provider="deepseek" style="display:none">
+      {deepseek_fields_html}
+      <div class="icon-pill">
+        <button type="submit" id="add-ai-provider-btn-deepseek" class="icon-btn" title="Add Provider" aria-label="Add Provider" disabled>
+          <img src="/admin/static/icons/save.svg" alt="">
+        </button>
+      </div>
+    </div>
+    <div class="card-boxed-section ai-provider-fields" data-provider="openai_compatible" style="display:none">
+      {openai_compatible_fields_html}
+      <div class="icon-pill">
+        <button type="submit" id="add-ai-provider-btn-openai_compatible" class="icon-btn" title="Add Provider" aria-label="Add Provider" disabled>
+          <img src="/admin/static/icons/save.svg" alt="">
+        </button>
+      </div>
+    </div>
+  </form>
+  </div>
+</div>
+<script>
+(function() {{
+  var typeSelect = document.getElementById('ai-provider-type');
+  var groups = document.querySelectorAll('.ai-provider-fields');
+  function sync() {{
+    groups.forEach(function(g) {{
+      g.style.display = (g.dataset.provider === typeSelect.value) ? '' : 'none';
+    }});
+  }}
+  typeSelect.addEventListener('change', sync);
+  sync();
+
+  var addForm = document.getElementById('add-ai-provider-form');
+  var addBtnAnthropic = document.getElementById('add-ai-provider-btn-anthropic');
+  var addBtnDeepseek = document.getElementById('add-ai-provider-btn-deepseek');
+  var addBtnOpenai = document.getElementById('add-ai-provider-btn-openai_compatible');
+  function addSnapshot() {{
+    return Array.from(new FormData(addForm).entries()).map(function(e) {{ return e[0] + '=' + e[1]; }}).join('&');
+  }}
+  var addInitialSnapshot = addSnapshot();
+  function checkAddChanged() {{
+    var changed = addSnapshot() !== addInitialSnapshot;
+    addBtnAnthropic.disabled = !changed;
+    addBtnDeepseek.disabled = !changed;
+    addBtnOpenai.disabled = !changed;
+  }}
+  addForm.addEventListener('input', checkAddChanged);
+  addForm.addEventListener('change', checkAddChanged);
+}})();
+</script>
+</div>
+
 </div>
 </div>
 "#,

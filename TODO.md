@@ -24,6 +24,8 @@ done.
 - [ ] Media manager dark-mode color scheme (sidebar/toolbar/content/footer backgrounds) still isn't right after several passes — revisit from scratch with a clearer reference/screenshot before making more changes.
 - [ ] in theme editor, when you change a color, trying to revert back to original doesn't work.
 
+- [ ] the "Scheduled" date/time picker popup on the post editor (native `<input type="datetime-local">` calendar) can render off the right edge of the browser window when the field sits near the right side of the page — needs to stay clamped inside the viewport.
+
 - [ ] revisit whether anyone who can edit a post (not just users with can_manage_forms) should be able to see the embedded form's submission count in the post editor sidebar and the "view form metrics" link — currently no permission gate on that, only the destination /admin/form-analytics page itself enforces can_manage_forms.
 
 - [ ] decide how (or whether) to surface the install-wide (.env MAILGUN_*) email fallback account on a site's Email Settings tab — right now it's active but invisible in the UI when a form has no provider selected.
@@ -42,6 +44,8 @@ done.
   - the `core/tests/routes.rs` HTTP integration test suite is still `todo!()` placeholders — needs a live-Postgres test harness
 
 ## Done
+
+- [x] bug: any `.data-table`'s Actions column (Tags, Categories, Menus, Users, site AI Providers, etc.) could visually detach from its row and cut across mid-row once that row grew taller than the action icons (e.g. wrapped multi-line text in another column) — first spotted on the AI Translation providers table, then confirmed sitewide. Root cause: `.data-table .actions { display: flex; ... }` overrode the `<td>`'s own display away from `table-cell`, so it stopped stretching to the row's full height like every other cell. Fixed 2026-09-11: dropped the `display:flex`/`gap` (every `.actions` cell only ever has one child — the `.icon-pill-actionbuttons` div, which already does its own flex layout) in favor of `vertical-align: middle`, which centers correctly on a real table cell. Confirmed via computed-style + bounding-rect checks that the cell now reports `display: table-cell` and fills the row.
 
 - [x] bug: `cli/src/commands/install.rs::generate_password()` generated a 10-character password (not re-checked against `validate_password()`) after the 2026-09-07 auth security pass raised the minimum to 12 chars — non-interactive installs without `ADMIN_PASSWORD` could mint a super_admin below the app's own policy. Fixed 2026-09-07: generator widened to 16 chars to match `core::models::user::generate_password()`, generated output is now validated before use, and a regression test covers it. See `GENERATE_PASSWORD_BUG.md`.
 

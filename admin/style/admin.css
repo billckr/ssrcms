@@ -283,7 +283,10 @@ a.stat-cell-link:hover { background: var(--tint); }
 .data-table td { padding: .48rem .8rem; border-bottom: 1px solid var(--border); }
 .data-table td.cell-truncate { max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: help; }
 .data-table tr:last-child td { border-bottom: none; }
-.data-table .actions { display: flex; gap: .5rem; align-items: center; }
+.data-table .actions { vertical-align: middle; }
+.status-icon-verified, .status-icon-unverified { width: 16px; height: 16px; display: block; }
+.status-icon-verified { filter: var(--success-filter); }
+.status-icon-unverified { opacity: .35; }
 
 /* Pagination */
 .pagination { display: flex; gap: .35rem; align-items: center; margin-top: 1.25rem; flex-wrap: wrap; }

@@ -267,6 +267,7 @@ pub fn render(
 <div class="page-tabs" role="tablist">
   <button type="button" class="page-tab active" role="tab" aria-selected="true"  aria-controls="tab-general"  data-tab="general">General</button>
   <button type="button" class="page-tab"        role="tab" aria-selected="false" aria-controls="tab-security" data-tab="security">Security</button>
+  <button type="button" class="page-tab"        role="tab" aria-selected="false" aria-controls="tab-ai"       data-tab="ai">AI</button>
   <button type="button" class="page-tab"        role="tab" aria-selected="false" aria-controls="tab-advanced" data-tab="advanced">Advanced</button>
   <button type="button" class="page-tab"        role="tab" aria-selected="false" aria-controls="tab-widgets"  data-tab="widgets">Widgets</button>
 </div>
@@ -376,8 +377,25 @@ pub fn render(
     </div>
   </div>
 
+</div>
+
+<!-- Security -->
+<div id="tab-security" class="settings-panel" role="tabpanel" style="max-width:720px">
   <div class="card-boxed">
-    <h2 class="card-boxed-header">Features</h2>
+    <h2 class="card-boxed-header">Security</h2>
+    <div class="card-boxed-body">
+      <p style="color:var(--muted);font-size:.875rem;font-style:italic;margin:0">
+        Security settings — coming soon. Session timeouts, login lockout, and password
+        policy configuration will be available here once the underlying features are built.
+      </p>
+    </div>
+  </div>
+</div>
+
+<!-- AI -->
+<div id="tab-ai" class="settings-panel" role="tabpanel" style="max-width:720px">
+  <div class="card-boxed">
+    <h2 class="card-boxed-header">AI Translation</h2>
     <div class="card-boxed-body">
     <form method="post" action="/admin/settings" class="edit-form features-settings-form">
       <input type="hidden" name="tab" value="features">
@@ -401,19 +419,6 @@ pub fn render(
         </div>
       </div>
     </form>
-    </div>
-  </div>
-</div>
-
-<!-- Security -->
-<div id="tab-security" class="settings-panel" role="tabpanel" style="max-width:720px">
-  <div class="card-boxed">
-    <h2 class="card-boxed-header">Security</h2>
-    <div class="card-boxed-body">
-      <p style="color:var(--muted);font-size:.875rem;font-style:italic;margin:0">
-        Security settings — coming soon. Session timeouts, login lockout, and password
-        policy configuration will be available here once the underlying features are built.
-      </p>
     </div>
   </div>
 </div>
