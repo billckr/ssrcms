@@ -36,6 +36,13 @@ pub struct AppConfig {
     #[serde(default = "default_documentation_dir")]
     pub documentation_dir: String,
 
+    /// Path to the end-user help directory — same `.md`-file-per-slug,
+    /// frontmatter-driven shape as `documentation_dir`, but its content is
+    /// written for app users (not admins) and stays shipped in production,
+    /// whereas `documentation_dir` gets stripped before a production build.
+    #[serde(default = "default_help_dir")]
+    pub help_dir: String,
+
     /// Path to the uploads directory
     #[serde(default = "default_uploads_dir")]
     pub uploads_dir: String,
@@ -180,6 +187,10 @@ fn default_plugins_dir() -> String {
 }
 fn default_documentation_dir() -> String {
     "documentation".to_string()
+}
+
+fn default_help_dir() -> String {
+    "help".to_string()
 }
 
 fn default_uploads_dir() -> String {
@@ -331,6 +342,7 @@ mod tests {
             themes_dir: default_themes_dir(),
             plugins_dir: default_plugins_dir(),
             documentation_dir: default_documentation_dir(),
+            help_dir: default_help_dir(),
             uploads_dir: default_uploads_dir(),
             sites_dir: default_sites_dir(),
             dev_mode: false,

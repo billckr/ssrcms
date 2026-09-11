@@ -63,6 +63,7 @@ fn test_config() -> AppConfig {
         themes_dir: workspace_themes_dir(),
         plugins_dir: tmp.join("plugins").to_string_lossy().to_string(),
         documentation_dir: tmp.join("documentation").to_string_lossy().to_string(),
+        help_dir: tmp.join("help").to_string_lossy().to_string(),
         uploads_dir: tmp.join("uploads").to_string_lossy().to_string(),
         sites_dir: tmp.join("sites").to_string_lossy().to_string(),
         dev_mode: true,

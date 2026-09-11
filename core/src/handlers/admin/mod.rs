@@ -208,6 +208,7 @@ pub mod documentation;
 pub mod email_providers;
 pub mod form_designer;
 pub mod forms;
+pub mod help;
 pub mod logo_upload;
 pub mod media;
 pub mod media_store;

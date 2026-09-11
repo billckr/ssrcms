@@ -8,6 +8,7 @@ pub mod designer_hub;
 pub mod documentation;
 pub mod form_designer;
 pub mod forms;
+pub mod help;
 pub mod login;
 pub mod media;
 pub mod menus;

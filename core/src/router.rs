@@ -17,7 +17,7 @@ use crate::handlers::admin::{
     builder as admin_builder, comments as admin_comments, dashboard,
     designer_hub as admin_designer_hub, dev_tools, documentation as admin_documentation,
     email_providers as admin_email_providers, form_designer as admin_form_designer,
-    forms as admin_forms, logo_upload, media, menus as admin_menus,
+    forms as admin_forms, help as admin_help, logo_upload, media, menus as admin_menus,
     poll_designer as admin_poll_designer, poll_results as admin_poll_results, posts, profile,
     role_picker, self_update, settings, site_settings, sites as admin_sites, taxonomy, themes,
     themes_editor, themes_publish, themes_upload, upload, users, whats_new, wp_import,
@@ -384,6 +384,8 @@ pub fn build(
         // ── Admin plugins — disabled pre-launch, re-enable post-launch ────
         // ── Admin documentation ────────────────────────────────────────────
         .route("/admin/documentation", get(admin_documentation::list))
+        // ── End-user help ───────────────────────────────────────────────────
+        .route("/help", get(admin_help::list))
         .route("/admin/whats-new", get(whats_new::show))
         .route("/admin/self-update", post(self_update::apply))
         // ── Admin themes ───────────────────────────────────────────────────

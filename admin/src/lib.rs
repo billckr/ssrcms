@@ -59,6 +59,20 @@ pub struct PageContext {
     pub default_theme: String,
 }
 
+/// Maps an admin page's `current_path` to the help doc slug the header's
+/// help icon should jump to (`/help#doc-{slug}`) — e.g. `/admin/designer`
+/// -> `designer`, `/admin` -> `dashboard`. A page with no matching
+/// `help/{slug}.md` yet just lands on the help index with no scroll.
+fn help_slug_for_path(current_path: &str) -> &str {
+    let trimmed = current_path
+        .trim_start_matches("/admin")
+        .trim_start_matches('/');
+    match trimmed.split('/').next().unwrap_or("") {
+        "" => "dashboard",
+        slug => slug,
+    }
+}
+
 /// Wrap a rendered content HTML string in the full admin page shell.
 /// The sidebar nav, head, and body wrapper are all here.
 pub fn admin_page(
@@ -244,6 +258,9 @@ pub fn admin_page(
               <button type="button" class="theme-switch-btn" data-theme-choice="dark" onclick="setTheme('dark')" title="Dark mode" aria-label="Dark mode">
                 <img src="/admin/static/icons/moon.svg" alt="">
               </button>
+              <a href="/help#doc-{help_slug}" class="theme-switch-btn" title="Help Page" aria-label="Help Page">
+                <img src="/admin/static/icons/help-circle.svg" alt="">
+              </a>
             </div>
             <a href="{profile_or_home}" class="header-menu-item">
               <img src="/admin/static/icons/fingerprint-light.svg" alt="">
@@ -361,6 +378,12 @@ pub fn admin_page(
       if (!a || a.target === '_blank' || a.hasAttribute('download')) return;
       var href = a.getAttribute('href');
       if (!href || href.charAt(0) === '#' || href.indexOf('javascript:') === 0) return;
+      // A link to the current page plus a #hash (e.g. the help icon's
+      // /help#doc-x, clicked while already on /help) is a same-document
+      // fragment jump, not a navigation — the document never tears down,
+      // so nothing would ever clear a spinner armed for it. Skip arming,
+      // same as the bare '#...' case above.
+      if (a.hash && a.pathname === location.pathname && a.search === location.search) return;
       navSpinnerTimer = setTimeout(function() {{
         navSpinnerTimer = null;
         document.getElementById('nav-loading-overlay').classList.add('visible');
@@ -530,6 +553,7 @@ pub fn admin_page(
         content = content,
         visiting_badge = visiting_badge,
         site_indicator = site_indicator,
+        help_slug = help_slug_for_path(current_path),
         profile_or_home = if ctx.is_impersonating {
             "/admin/sites/go-home?next=/admin/profile"
         } else {
