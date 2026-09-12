@@ -69,6 +69,22 @@ toggling MFA as a persistence mechanism gets caught by the real owner. Email is 
 skipping the send with a warning rather than blocking the action if no site is available — the
 same "opt-in, not required" posture `mail::send_for_site` already has.
 
+### 5. Lockout recovery
+
+`POST /admin/users/{id}/disable-mfa` (`core/src/handlers/admin/users.rs`, super_admin only)
+force-clears a staff member's TOTP secret and recovery codes if they lose both their authenticator
+device and their codes — audit-logged, and emails the affected user a notice. Surfaced as a
+"Two-Factor Authentication" reset button on the Edit User page (`admin/src/pages/users.rs`),
+visible only to a super_admin and only when the target actually has TOTP enabled. Added
+route-first, then wired into the Edit User page once the UI gap was pointed out — `UserEdit`'s new
+`mfa_enabled` field required updating all 15 of its construction sites in
+`core/src/handlers/admin/users.rs`; the compiler enumerated every one (`error[E0063]: missing
+field`), so the update was mechanical rather than risky. 8 sites (every `save_new`/new-user path,
+`id: None`) are always `false`; the `edit_user` GET handler and `save_edit`'s 6 re-render sites
+fetch/reuse the real `user_totp::is_enabled` value. The icon reads as status (green shield =
+enabled, matching the existing Account Status toggle's convention) rather than action — hovering
+swaps it to the plain struck-through shield to preview the disable click.
+
 ## Verification results
 
 Automated:

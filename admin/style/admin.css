@@ -647,6 +647,13 @@ tr.muted td { opacity: .55; }
 /* User edit page's Account Status icon — green when active. Suspended uses
    the existing .icon-danger-armed class instead (already id-free/theme-aware). */
 #status-toggle-btn.icon-btn-active-green img { filter: var(--success-filter); }
+/* User edit page's Two-Factor Authentication reset icon — green shield while
+   enabled. Hovering swaps the <img> itself to the struck-through shield
+   (see admin/src/pages/users.rs) to preview the disable action; excluded
+   from :hover here so that icon shows in its plain/default color instead
+   of green-tinted, which would read as a contradiction (green = enabled,
+   but the icon it's tinting means "about to disable"). */
+#mfa-reset-btn.icon-btn-active-green:not(:hover) img { filter: var(--success-filter); }
 /* Same id-specificity reasoning as above, but blue (the same accent as
    .icon-btn:hover) instead of green — for a save action that should read
    as "there's something to save" without implying success/danger. */

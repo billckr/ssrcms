@@ -90,6 +90,10 @@ pub struct UserEdit {
     pub is_active: bool,
     /// Protected accounts can't be suspended or deleted. Always false for the new-user form.
     pub is_protected: bool,
+    /// True when this user has TOTP two-factor authentication enabled.
+    /// Drives the super_admin-only "disable this user's 2FA" recovery
+    /// button. Always false for the new-user form.
+    pub mfa_enabled: bool,
 }
 
 /// Render the `<tr>` rows for the Site Users (staff) table.
@@ -928,7 +932,7 @@ pub fn render_editor(user: &UserEdit, flash: Option<&str>, ctx: &crate::PageCont
         String::new()
     } else {
         format!(
-            r#"<div class="card-boxed-section">
+            r#"<div class="card-boxed-section card-boxed-section-hidden">
       {site_roles_list}
       {save_btn}
     </div>"#,
@@ -996,6 +1000,37 @@ pub fn render_editor(user: &UserEdit, flash: Option<&str>, ctx: &crate::PageCont
             confirm_msg = confirm_msg,
         );
         (toggle, form)
+    } else {
+        (String::new(), String::new())
+    };
+
+    // Admin-initiated MFA recovery — super_admin only, shown only when the
+    // target actually has TOTP enabled. Same nested-form reasoning as the
+    // suspend toggle above: its own <form> renders outside #user-editor-form.
+    let (mfa_reset_section, mfa_reset_form) = if !is_new && ctx.is_global_admin && user.mfa_enabled
+    {
+        let user_id = crate::html_escape(user.id.as_deref().unwrap_or(""));
+        // Icon reads as status (green shield = enabled) rather than action,
+        // same convention as the suspend/reactivate toggle above; hovering
+        // swaps to the struck-through shield to preview what the click does.
+        let section = r#"<div class="card-boxed-section">
+    <div class="form-group" style="margin:0">
+      <label>Two-Factor Authentication <a href="/help#doc-two-factor-authentication" target="_blank" title="Help: Two-Factor Authentication" aria-label="Help: Two-Factor Authentication" style="display:inline-flex;vertical-align:middle;opacity:.55"><img src="/admin/static/icons/help-circle.svg" alt="" style="width:14px;height:14px"></a></label>
+      <div class="icon-pill" style="margin-top:.35rem">
+        <button type="submit" form="mfa-reset-form" id="mfa-reset-btn" class="icon-btn icon-btn-active-green" title="Enabled — click to disable" aria-label="Enabled — click to disable"
+                onmouseenter="document.getElementById('mfa-reset-icon').src='/admin/static/icons/shield-off.svg'"
+                onmouseleave="document.getElementById('mfa-reset-icon').src='/admin/static/icons/shield.svg'">
+          <img id="mfa-reset-icon" src="/admin/static/icons/shield.svg" alt="">
+        </button>
+      </div>
+    </div>
+    </div>"#
+            .to_string();
+        let form = format!(
+            r#"<form method="POST" action="/admin/users/{user_id}/disable-mfa" id="mfa-reset-form" onsubmit="return confirm('Disable two-factor authentication for this user? They will be able to sign in with just their password again.')">
+  </form>"#,
+        );
+        (section, form)
     } else {
         (String::new(), String::new())
     };
@@ -1152,7 +1187,7 @@ function toggleSiteFields() {{
   </h2>
   <div class="card-boxed-body">
   <form method="POST" action="{action}" id="user-editor-form" style="max-width:580px">
-    <div class="card-boxed-section">
+    <div class="card-boxed-section card-boxed-section-hidden">
     <div class="user-form-grid">
       <div class="form-group">
         <label for="display_name">Display Name</label>
@@ -1177,12 +1212,14 @@ function toggleSiteFields() {{
     </div>
     </div>
     {suspend_toggle}
+    {mfa_reset_section}
     {requirements_section}
     {role_section_new}
     {site_assignment_section}
     {role_section}
   </form>
   {suspend_form}
+  {mfa_reset_form}
   </div>
 <script>
 (function () {{
@@ -1421,6 +1458,8 @@ function toggleSiteFields() {{
         requirements_section = requirements_section,
         suspend_toggle = suspend_toggle,
         suspend_form = suspend_form,
+        mfa_reset_section = mfa_reset_section,
+        mfa_reset_form = mfa_reset_form,
         password_hint = password_hint,
         is_new_js = if is_new { "true" } else { "false" },
         autofocus = if is_new { " autofocus" } else { "" },

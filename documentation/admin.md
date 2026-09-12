@@ -275,6 +275,11 @@ third-party service, no SMS.
   same code within its own 30-second validity window. The `/admin/login/mfa` route is rate-limited
   the same way `/admin/login` itself is (`middleware::auth_security`, flow `"admin-mfa"`, keyed by
   user id).
+- Lockout recovery: `POST /admin/users/{id}/disable-mfa` (`users::disable_mfa_for_user`,
+  super_admin only) force-clears a staff member's TOTP secret and recovery codes if they lose both
+  their authenticator device and their codes — audit-logged, and emails the affected user. Surfaced
+  as a reset button on the Edit User page (`admin/src/pages/users.rs`), visible only to a
+  super_admin and only when the target has TOTP enabled (`UserEdit.mfa_enabled`).
 - The one-time recovery-codes page (`admin::pages::profile_mfa::render_recovery_codes`) also offers
   a client-side "Download codes" button — builds a `Blob`/`URL.createObjectURL` download of a
   `.txt` file, no server round-trip.

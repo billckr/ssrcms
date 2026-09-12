@@ -480,6 +480,7 @@ pub async fn new_user(State(state): State<AppState>, admin: AdminUser) -> impl I
         site_roles: vec![],
         is_active: true,
         is_protected: false,
+        mfa_enabled: false,
     };
     Html(admin::pages::users::render_editor(&edit, None, &ctx)).into_response()
 }
@@ -564,6 +565,10 @@ pub async fn edit_user(
         .map(|(site, role)| (site.hostname, role))
         .collect();
 
+    let mfa_enabled = crate::models::user_totp::is_enabled(&state.db, id)
+        .await
+        .unwrap_or(false);
+
     let edit = UserEdit {
         id: Some(user.id.to_string()),
         username: user.username.clone(),
@@ -576,6 +581,7 @@ pub async fn edit_user(
         site_roles,
         is_active: user.is_active,
         is_protected: user.is_protected,
+        mfa_enabled,
     };
     Html(admin::pages::users::render_editor(&edit, flash, &ctx)).into_response()
 }
@@ -625,6 +631,7 @@ pub async fn save_new(
                 site_roles: vec![],
                 is_active: true,
                 is_protected: false,
+                mfa_enabled: false,
             };
             return Html(admin::pages::users::render_editor(
                 &edit,
@@ -650,6 +657,7 @@ pub async fn save_new(
             site_roles: vec![],
             is_active: true,
             is_protected: false,
+            mfa_enabled: false,
         };
         return Html(admin::pages::users::render_editor(&edit, Some(msg), &ctx)).into_response();
     }
@@ -671,6 +679,7 @@ pub async fn save_new(
             site_roles: vec![],
             is_active: true,
             is_protected: false,
+            mfa_enabled: false,
         };
         return Html(admin::pages::users::render_editor(&edit, Some(msg), &ctx)).into_response();
     }
@@ -697,6 +706,7 @@ pub async fn save_new(
                 site_roles: vec![],
                 is_active: true,
                 is_protected: false,
+                mfa_enabled: false,
             };
             return Html(admin::pages::users::render_editor(
                 &edit,
@@ -735,6 +745,7 @@ pub async fn save_new(
                 site_roles: vec![],
                 is_active: true,
                 is_protected: false,
+                mfa_enabled: false,
             };
             return Html(admin::pages::users::render_editor(
                 &edit,
@@ -760,6 +771,7 @@ pub async fn save_new(
             site_roles: vec![],
             is_active: true,
             is_protected: false,
+            mfa_enabled: false,
         };
         return Html(admin::pages::users::render_editor(&edit, Some(msg), &ctx)).into_response();
     }
@@ -1108,6 +1120,7 @@ pub async fn save_new(
                 site_roles: vec![],
                 is_active: true,
                 is_protected: false,
+                mfa_enabled: false,
             };
             let msg = friendly_user_error(&e);
             Html(admin::pages::users::render_editor(&edit, Some(&msg), &ctx)).into_response()
@@ -1149,6 +1162,9 @@ pub async fn save_edit(
     let is_super_admin_target = target_role == "super_admin";
     let target_is_active = target.as_ref().map(|u| u.is_active).unwrap_or(true);
     let target_is_protected = target.as_ref().map(|u| u.is_protected).unwrap_or(false);
+    let target_mfa_enabled = crate::models::user_totp::is_enabled(&state.db, id)
+        .await
+        .unwrap_or(false);
 
     // Site admins may not edit super_admin accounts.
     if !admin.caps.is_global_admin && is_super_admin_target {
@@ -1169,6 +1185,7 @@ pub async fn save_edit(
             site_roles: vec![],
             is_active: target_is_active,
             is_protected: target_is_protected,
+            mfa_enabled: target_mfa_enabled,
         };
         return Html(admin::pages::users::render_editor(&edit, Some(msg), &ctx)).into_response();
     }
@@ -1205,6 +1222,7 @@ pub async fn save_edit(
                 site_roles: vec![],
                 is_active: target_is_active,
                 is_protected: target_is_protected,
+                mfa_enabled: target_mfa_enabled,
             };
             return Html(admin::pages::users::render_editor(
                 &edit,
@@ -1231,6 +1249,7 @@ pub async fn save_edit(
             site_roles: vec![],
             is_active: target_is_active,
             is_protected: target_is_protected,
+            mfa_enabled: target_mfa_enabled,
         };
         return Html(admin::pages::users::render_editor(&edit, Some(msg), &ctx)).into_response();
     }
@@ -1250,6 +1269,7 @@ pub async fn save_edit(
                 site_roles: vec![],
                 is_active: target_is_active,
                 is_protected: target_is_protected,
+                mfa_enabled: target_mfa_enabled,
             };
             return Html(admin::pages::users::render_editor(&edit, Some(msg), &ctx))
                 .into_response();
@@ -1273,6 +1293,7 @@ pub async fn save_edit(
                     site_roles: vec![],
                     is_active: target_is_active,
                     is_protected: target_is_protected,
+                    mfa_enabled: target_mfa_enabled,
                 };
                 return Html(admin::pages::users::render_editor(
                     &edit,
@@ -1323,6 +1344,7 @@ pub async fn save_edit(
                 site_roles: vec![],
                 is_active: target_is_active,
                 is_protected: target_is_protected,
+                mfa_enabled: target_mfa_enabled,
             };
             let msg = friendly_user_error(&e);
             Html(admin::pages::users::render_editor(&edit, Some(&msg), &ctx)).into_response()
@@ -1590,6 +1612,76 @@ pub async fn reactivate_user(
         )
         .await;
     }
+    Redirect::to(&redirect_url).into_response()
+}
+
+/// POST /admin/users/{id}/disable-mfa — super_admin-only recovery for a
+/// staff member locked out of their own account (lost authenticator device
+/// and recovery codes both). Force-clears the target's TOTP secret and
+/// every recovery code, audit-logs the action, and emails the affected
+/// user a notice — this bypasses the normal current-password confirmation
+/// entirely, since the whole point is helping someone who can no longer
+/// complete their own login.
+pub async fn disable_mfa_for_user(
+    State(state): State<AppState>,
+    admin: AdminUser,
+    Path(id): Path<Uuid>,
+    _form: Form<std::collections::HashMap<String, String>>,
+) -> impl IntoResponse {
+    // Global-admin-only — a site-scoped admin (`can_manage_users` but not
+    // `is_global_admin`) manages this site's users, but MFA is a staff
+    // account-security property, not a per-site setting.
+    if !admin.caps.is_global_admin {
+        return (axum::http::StatusCode::FORBIDDEN, "Forbidden").into_response();
+    }
+    let redirect_url = format!("/admin/users/{}/edit", id);
+
+    let target = match crate::models::user::get_by_id_include_inactive(&state.db, id).await {
+        Ok(t) => t,
+        Err(_) => return Redirect::to(&redirect_url).into_response(),
+    };
+
+    if let Err(e) = crate::models::user_totp::disable(&state.db, id).await {
+        tracing::error!("admin-initiated mfa disable for user {} error: {:?}", id, e);
+        return Redirect::to(&redirect_url).into_response();
+    }
+    let _ = crate::models::mfa_recovery_code::delete_all_for_user(&state.db, id).await;
+
+    super::audit(
+        &state,
+        &admin,
+        "user.mfa_disabled_by_admin",
+        "user",
+        Some(id),
+        &target.username,
+        admin.site_id,
+    )
+    .await;
+
+    if let Some(site_id) = admin.site_id.or(target.default_site_id) {
+        let task_state = state.clone();
+        let to = target.email.clone();
+        let display_name = target.display_name.clone();
+        tokio::spawn(async move {
+            let _ = crate::mail::send_for_site(
+                &task_state,
+                site_id,
+                crate::mail::EmailMessage {
+                    to: &to,
+                    subject: "Two-factor authentication was disabled on your account by an administrator",
+                    text: &format!(
+                        "Hi {display_name},\n\nAn administrator disabled two-factor authentication on your account, \
+                         typically to help you back in after losing access to your authenticator app and recovery codes. \
+                         If you didn't request this, contact an administrator immediately.",
+                    ),
+                    form_id: None,
+                    provider_id: None,
+                },
+            )
+            .await;
+        });
+    }
+
     Redirect::to(&redirect_url).into_response()
 }
 
