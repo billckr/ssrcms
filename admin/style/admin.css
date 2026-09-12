@@ -654,6 +654,10 @@ tr.muted td { opacity: .55; }
    of green-tinted, which would read as a contradiction (green = enabled,
    but the icon it's tinting means "about to disable"). */
 #mfa-reset-btn.icon-btn-active-green:not(:hover) img { filter: var(--success-filter); }
+/* Same as #mfa-reset-btn above, but for the profile page's own "disable my
+   2FA" icon (admin/src/pages/profile.rs) — distinct id since it's a
+   different button on a different page. */
+#mfa-disable-btn.icon-btn-active-green:not(:hover) img { filter: var(--success-filter); }
 /* Same id-specificity reasoning as above, but blue (the same accent as
    .icon-btn:hover) instead of green — for a save action that should read
    as "there's something to save" without implying success/danger. */

@@ -55,9 +55,11 @@ fn mfa_card_html(profile: &ProfileForm) -> String {
               onclick="document.getElementById('mfa-regenerate-dialog').showModal();document.querySelector('.admin-content').style.filter='blur(1.5px)'">
         <img src="/admin/static/icons/refresh-cw.svg" alt="">
       </button>
-      <button type="button" class="icon-btn" title="Disable two-factor authentication" aria-label="Disable two-factor authentication"
-              onclick="document.getElementById('mfa-disable-dialog').showModal();document.querySelector('.admin-content').style.filter='blur(1.5px)'">
-        <img src="/admin/static/icons/shield-off.svg" alt="">
+      <button type="button" id="mfa-disable-btn" class="icon-btn icon-btn-active-green" title="Enabled — click to disable" aria-label="Enabled — click to disable"
+              onclick="document.getElementById('mfa-disable-dialog').showModal();document.querySelector('.admin-content').style.filter='blur(1.5px)'"
+              onmouseenter="document.getElementById('mfa-disable-icon').src='/admin/static/icons/shield-off.svg'"
+              onmouseleave="document.getElementById('mfa-disable-icon').src='/admin/static/icons/shield.svg'">
+        <img id="mfa-disable-icon" src="/admin/static/icons/shield.svg" alt="">
       </button>
     </div>
   </div>"#,
