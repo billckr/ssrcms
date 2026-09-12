@@ -564,21 +564,37 @@ pub async fn delete(pool: &PgPool, id: Uuid) -> Result<()> {
 /// Reassign all posts and media from `user_id` to `reassign_to`, then delete the user.
 /// Use this instead of `delete()` when content must be preserved — the deleted
 /// user's posts and media transfer to the reassignment target before the row is removed.
+///
+/// Runs as a single transaction so a mid-way failure can't leave content
+/// reassigned without the user actually being removed (or vice versa).
+/// `user_totp`/`mfa_recovery_codes` rows are cleared explicitly rather than
+/// relying solely on their `ON DELETE CASCADE` FKs (see migrations/0006_totp_mfa.sql),
+/// so 2FA data removal doesn't silently depend on that constraint staying in place.
 pub async fn delete_and_reassign(pool: &PgPool, user_id: Uuid, reassign_to: Uuid) -> Result<()> {
+    let mut tx = pool.begin().await?;
     sqlx::query("UPDATE posts SET author_id = $1 WHERE author_id = $2")
         .bind(reassign_to)
         .bind(user_id)
-        .execute(pool)
+        .execute(&mut *tx)
         .await?;
     sqlx::query("UPDATE media SET uploaded_by = $1 WHERE uploaded_by = $2")
         .bind(reassign_to)
         .bind(user_id)
-        .execute(pool)
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query("DELETE FROM mfa_recovery_codes WHERE user_id = $1")
+        .bind(user_id)
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query("DELETE FROM user_totp WHERE user_id = $1")
+        .bind(user_id)
+        .execute(&mut *tx)
         .await?;
     sqlx::query("DELETE FROM users WHERE id = $1")
         .bind(user_id)
-        .execute(pool)
+        .execute(&mut *tx)
         .await?;
+    tx.commit().await?;
     Ok(())
 }
 

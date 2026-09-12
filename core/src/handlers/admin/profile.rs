@@ -320,6 +320,7 @@ pub struct MfaCodeForm {
 pub async fn mfa_setup_confirm(
     State(state): State<AppState>,
     admin: AdminUser,
+    session: Session,
     Form(form): Form<MfaCodeForm>,
 ) -> impl IntoResponse {
     let now = chrono::Utc::now();
@@ -342,6 +343,22 @@ pub async fn mfa_setup_confirm(
         crate::models::mfa_recovery_code::replace_all(&state.db, admin.user.id, &codes).await
     {
         tracing::error!("failed to store recovery codes after mfa enable: {e}");
+    }
+
+    // Enabling MFA changes what it takes to authenticate as this account, so
+    // every other session (which was granted before MFA was required) is
+    // invalidated — same as a password change. The current session is kept
+    // alive by re-inserting the freshly bumped credential version below.
+    match crate::models::user::regenerate_session_nonce(&state.db, admin.user.id).await {
+        Ok(updated) => {
+            let _ = session
+                .insert(
+                    crate::middleware::admin_auth::SESSION_CREDENTIAL_VERSION_KEY,
+                    updated.credential_version(),
+                )
+                .await;
+        }
+        Err(e) => tracing::error!("failed to invalidate other sessions after mfa enable: {e}"),
     }
 
     notify_mfa_change(
@@ -370,6 +387,7 @@ pub async fn mfa_setup_confirm(
 pub async fn mfa_disable(
     State(state): State<AppState>,
     admin: AdminUser,
+    session: Session,
     Form(form): Form<MfaPasswordConfirmForm>,
 ) -> impl IntoResponse {
     if !admin.user.verify_password(&form.current_password) {
@@ -380,6 +398,22 @@ pub async fn mfa_disable(
         return Redirect::to("/admin/profile?error=mfa_disable_failed").into_response();
     }
     let _ = crate::models::mfa_recovery_code::delete_all_for_user(&state.db, admin.user.id).await;
+
+    // Disabling MFA weakens the account (a hijacked session could be doing
+    // this on purpose to drop the second factor), so every other session is
+    // killed just like a password change — the current one survives via the
+    // re-inserted credential version below.
+    match crate::models::user::regenerate_session_nonce(&state.db, admin.user.id).await {
+        Ok(updated) => {
+            let _ = session
+                .insert(
+                    crate::middleware::admin_auth::SESSION_CREDENTIAL_VERSION_KEY,
+                    updated.credential_version(),
+                )
+                .await;
+        }
+        Err(e) => tracing::error!("failed to invalidate other sessions after mfa disable: {e}"),
+    }
 
     notify_mfa_change(
         &state,

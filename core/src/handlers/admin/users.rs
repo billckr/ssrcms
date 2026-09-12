@@ -1647,6 +1647,19 @@ pub async fn disable_mfa_for_user(
     }
     let _ = crate::models::mfa_recovery_code::delete_all_for_user(&state.db, id).await;
 
+    // Kill every existing session for the target account — the whole point
+    // of admin-initiated recovery is a staff member locked out of their
+    // second factor, so any session still riding the old credential version
+    // (including one an attacker who caused the lockout might be holding)
+    // should not survive the reset.
+    if let Err(e) = crate::models::user::regenerate_session_nonce(&state.db, id).await {
+        tracing::error!(
+            "failed to invalidate sessions after admin-initiated mfa disable for user {}: {:?}",
+            id,
+            e
+        );
+    }
+
     super::audit(
         &state,
         &admin,

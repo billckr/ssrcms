@@ -393,6 +393,10 @@ pub fn build(
         .route("/admin/users/{id}/suspend", post(users::suspend_user))
         .route("/admin/users/{id}/reactivate", post(users::reactivate_user))
         .route(
+            "/admin/users/{id}/disable-mfa",
+            post(users::disable_mfa_for_user),
+        )
+        .route(
             "/admin/users/{id}/erase-personal-data",
             get(users::erase_personal_data_review).post(users::erase_personal_data),
         )
