@@ -95,10 +95,10 @@ pub fn render(
             " disabled"
         };
         format!(
-            r#"<div class="card-boxed" style="border-color:var(--danger)">
+            r#"<div class="card-boxed">
     <h2 class="card-boxed-header" style="color:var(--danger)">Reset Entire App</h2>
     <div class="card-boxed-body">
-  <div class="card-boxed-section section-danger">
+  <div class="card-boxed-section">
     <p style="font-size:.8rem;color:var(--muted);margin:0 0 .5rem">
       Deletes every other site (posts, pages, media, taxonomies, comments, form submissions, nav
       menus, Page Builder projects/pages, and users unique to it), clears posts, pages, media,
@@ -223,10 +223,6 @@ pub fn render(
 }}
 
 /* ── Deploy Test Data ── */
-.card-boxed-section.section-danger {{
-  border-color: var(--danger);
-}}
-
 .dt-spinner {{
   display: inline-block;
   width: 14px;
@@ -547,7 +543,7 @@ pub fn render(
   <div class="card-boxed">
     <h2 class="card-boxed-header">Clear Test Data</h2>
     <div class="card-boxed-body">
-  <div class="card-boxed-section section-danger">
+  <div class="card-boxed-section">
     <div class="user-form-grid stacked">
       <div class="form-group">
         <label for="dt-site-clear">Target site</label>

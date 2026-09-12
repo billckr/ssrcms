@@ -42,7 +42,7 @@ pub fn render(
       <h2 class="card-boxed-header">Add {title_s}</h2>
       <div class="card-boxed-body">
       <form method="POST" action="{path}/new" id="add-term-form">
-        <div class="card-boxed-section">
+        <div class="card-boxed-section card-boxed-section-hidden">
           <div class="form-group">
             <label for="name">Name</label>
             <input type="text" id="name" name="name" required oninput="onNameInput()">
