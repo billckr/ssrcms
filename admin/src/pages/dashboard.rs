@@ -55,6 +55,10 @@ pub struct DashboardData {
     pub total_posts_ever: i64,
     /// Set (super-admin only) when a newer SynapCMS release is available.
     pub update_notice: Option<UpdateNotice>,
+    /// The current user's default/home site (`users.default_site_id`), used
+    /// to link the Welcome panel's AI translation card straight at that
+    /// site's AI Translation settings tab.
+    pub default_site_id: Option<uuid::Uuid>,
 }
 
 pub struct UpdateNotice {
@@ -300,10 +304,9 @@ fn quick_tools_widget(ctx: &crate::PageContext) -> String {
 /// Dismissible hero banner shown above the widget grid until the user
 /// closes it (persisted per-user via `users.welcome_panel_dismissed_at`,
 /// see `dismiss_welcome_panel` in `core::handlers::admin::dashboard`).
-/// Placeholder copy/links per the current plan — headline and the three
-/// feature cards will get real copy later; the "what makes us different"
-/// link target doesn't exist yet either.
-fn welcome_panel_html(total_posts_ever: i64) -> String {
+/// The first two feature cards are still placeholder copy per the current
+/// plan; the "what makes us different" link target doesn't exist yet either.
+fn welcome_panel_html(total_posts_ever: i64, default_site_id: Option<uuid::Uuid>) -> String {
     let third_card = if total_posts_ever == 0 {
         r#"<div class="welcome-panel-card">
       <div class="welcome-panel-icon"><img src="/admin/static/icons/edit.svg" alt=""></div>
@@ -315,14 +318,26 @@ fn welcome_panel_html(total_posts_ever: i64) -> String {
       </div>
     </div>"#.to_string()
     } else {
-        r#"<div class="welcome-panel-card">
-      <div class="welcome-panel-icon"><img src="/admin/static/icons/layers.svg" alt=""></div>
+        match default_site_id {
+            Some(id) => format!(
+                r#"<div class="welcome-panel-card">
+      <div class="welcome-panel-icon"><img src="/admin/static/icons/globe.svg" alt=""></div>
       <div>
-        <h3>Run every client site from one install</h3>
-        <p>Manage content, media, and users across every site without juggling separate installs or databases.</p>
+        <h3>Translate content automatically</h3>
+        <p>Publish once and let the built-in AI translation service localize posts, forms, and polls into every language your site supports.</p>
+        <a href="/admin/sites/{id}/settings?tab=ai-translation">Set Up AI Translation</a>
+      </div>
+    </div>"#
+            ),
+            None => r#"<div class="welcome-panel-card">
+      <div class="welcome-panel-icon"><img src="/admin/static/icons/globe.svg" alt=""></div>
+      <div>
+        <h3>Translate content automatically</h3>
+        <p>Publish once and let the built-in AI translation service localize posts, forms, and polls into every language your site supports.</p>
         <a href="/admin/sites">Go to Sites</a>
       </div>
-    </div>"#.to_string()
+    </div>"#.to_string(),
+        }
     };
 
     let head = r##"<div class="welcome-panel" id="welcome-panel">
@@ -649,7 +664,7 @@ pub fn render(data: &DashboardData, flash: Option<&str>, ctx: &crate::PageContex
         None => String::new(),
     };
     let welcome_panel = if data.show_welcome_panel {
-        welcome_panel_html(data.total_posts_ever)
+        welcome_panel_html(data.total_posts_ever, data.default_site_id)
     } else {
         String::new()
     };

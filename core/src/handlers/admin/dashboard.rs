@@ -558,6 +558,7 @@ pub async fn dashboard(
         show_welcome_panel: admin.caps.is_global_admin
             && admin.user.welcome_panel_dismissed_at.is_none(),
         update_notice,
+        default_site_id: admin.user.default_site_id,
     };
 
     Html(admin::pages::dashboard::render(&data, None, &ctx))
