@@ -17,6 +17,48 @@ more detailed documents under `docs/` when a task touches those areas.
 - The local application listens on port 3000 and is normally reached through
   Caddy at `https://localhost`.
 
+## Active Model and Provider
+
+- A session's model and provider come from the profile selected with
+  `codex -p <profile>`. Profiles live in `~/.codex/<profile>.config.toml`
+  (for example `~/.codex/deepseek-flash.config.toml`), not in the repo.
+- Do not ask the model to name its own provider. The harness injects the same
+  Codex system prompt for every backend, so self-description proves nothing.
+- Verify from the session rollout and the request logs instead:
+  - `~/.codex/sessions/<y>/<m>/<d>/rollout-*.jsonl` records `model_provider`
+    on the `session_meta` line and `model` on each `turn_context` line. Match
+    the file to the session by id or modification time.
+  - `~/.codex/logs_2.sqlite` records every sampling request. Filter by
+    `thread_id` and look for the request line naming `model=`, `wire_api=`, the
+    provider URL, and the response status. A non-OpenAI provider also shows up
+    in provider-specific response headers (DeepSeek sends `x-ds-trace-id`).
+
+```
+sqlite3 "file:$HOME/.codex/logs_2.sqlite?mode=ro&immutable=1" \
+  "select datetime(ts,'unixepoch'), feedback_log_body from logs
+   where feedback_log_body like '%api.deepseek.com/responses%'
+   order by ts desc limit 1;"
+```
+
+- Expected healthy result: `model=<profile model>` on the sampling spans and
+  `Request completed method=POST url=https://api.deepseek.com/responses
+  status=200 OK` in the same line.
+- `secret-tool` and outbound network access both fail inside the Codex sandbox,
+  so direct `curl` probes against the provider must run in the user's own shell
+  or with an approved escalation.
+- `codex doctor` reports provider reachability and WebSocket failures when run
+  inside the sandbox even though the real session connects fine. Treat only
+  those two rows as unreliable in that context.
+- `approvals_reviewer = "auto_review"` cannot work with a non-OpenAI provider.
+  The reviewer samples with the internal alias `codex-auto-review`, which is
+  sent verbatim to the custom `base_url` and rejected with HTTP 400 (`The
+  supported API model names are deepseek-flash, deepseek-v4-pro, but you passed
+  codex-auto-review`). Every escalation is then auto-rejected. Use a
+  non-sampling reviewer mode while a DeepSeek profile is active.
+- Codex has no built-in metadata for custom model names and logs `Unknown model
+  deepseek-flash is used. This will use fallback model metadata.` Treat the
+  context window, token limits, and compaction thresholds as approximate.
+
 ## Theme Resolution
 
 - Bundled themes live under `themes/global/<theme>/`.
