@@ -804,12 +804,14 @@ pub fn render_settings(
     // control the underlying box never even sees the option, matching that
     // handler's own enforcement (never UI-only).
     let ai_provider_intro_note = if ctx.is_global_admin {
-        "Configure an AI provider to translate posts from the post editor. Anthropic and DeepSeek \
-         call their own APIs directly; OpenAI-Compatible covers OpenAI itself, or a local server \
-         such as Ollama or LM Studio."
+        r#"Configure an AI provider to translate posts from the post editor. Anthropic and DeepSeek
+         call their own APIs directly; OpenAI-Compatible covers OpenAI itself, or a local server
+         such as Ollama or LM Studio — see <a href="/help#doc-local-ai-models" target="_blank">Local AI Models</a> for setup steps."#
+            .to_string()
     } else {
         "Configure an AI provider to translate posts from the post editor. Anthropic and DeepSeek \
          call their own APIs directly."
+            .to_string()
     };
     let openai_compatible_option_html = if ctx.is_global_admin {
         r#"<option value="openai_compatible">OpenAI-Compatible</option>"#
