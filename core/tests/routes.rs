@@ -495,6 +495,23 @@ async fn enable_locale_for_test(pool: &sqlx::PgPool, site_id: uuid::Uuid) -> Str
     locale
 }
 
+/// Same as `enable_locale_for_test`, but for routes (like the admin
+/// translate action) that additionally require the code to be a real,
+/// recognized language (`utils::locales::display_name`) rather than any
+/// arbitrary enabled prefix. Idempotent — safe even if another test already
+/// enabled the same real code on this shared site.
+async fn enable_real_locale_for_test(pool: &sqlx::PgPool, site_id: uuid::Uuid, code: &str) {
+    use synaptic_core::models::site_locale;
+    let _guard = LOCALE_ENABLE_LOCK.lock().await;
+    let mut codes = site_locale::enabled_locales_for_site(pool, site_id).await;
+    if !codes.iter().any(|c| c == code) {
+        codes.push(code.to_string());
+        site_locale::set_enabled_locales(pool, site_id, &codes)
+            .await
+            .expect("failed to enable test locale");
+    }
+}
+
 /// Creates a throwaway published post directly via the model (no admin
 /// login/editor round trip needed for these routing tests).
 async fn create_test_post(
@@ -931,6 +948,477 @@ async fn test_ai_provider_save_retains_saved_key_and_updates_model_when_edit_for
         }
         other => panic!("expected a decryptable Anthropic config after save, got {other:?}"),
     }
+}
+
+#[tokio::test]
+#[ignore = "requires a live PostgreSQL instance — see module docs"]
+async fn test_openai_compatible_provider_creation_rejected_for_site_scoped_admin() {
+    use synaptic_core::models::ai_provider;
+    use synaptic_core::models::site;
+    use synaptic_core::models::site_user::{self, SiteRole};
+    use synaptic_core::models::user::{self, CreateUser, UserRole};
+
+    let database_url = std::env::var("DATABASE_URL")
+        .expect("DATABASE_URL must be set to run integration tests (see tests/routes.rs)");
+    let pool = synaptic_core::db::connect(&database_url).await.unwrap();
+
+    let app = common::test_router().await;
+    let test_site = site::get_by_hostname(&pool, "localhost")
+        .await
+        .expect("test site must exist");
+
+    // A site-scoped admin — enough to pass `require_site_manager` for this
+    // site, but not `is_global_admin` — is exactly who local/self-hosted
+    // model providers must be withheld from, since they don't control the
+    // underlying server's network the way a super admin does.
+    let unique = uuid::Uuid::new_v4().simple().to_string();
+    let email = format!("site-scoped-local-ai-{unique}@example.com");
+    let password = "Verify12345Pass!";
+    let admin_user = user::create(
+        &pool,
+        &CreateUser {
+            username: format!("localaisite{}", &unique[..9]),
+            email: email.clone(),
+            display_name: "Site-Scoped Local AI Test".to_string(),
+            password: password.to_string(),
+            role: UserRole::SiteAdmin,
+        },
+    )
+    .await
+    .expect("failed to create test admin");
+    site_user::add(&pool, test_site.id, admin_user.id, SiteRole::Admin, None, false)
+        .await
+        .expect("failed to grant site-admin role");
+
+    let login_response = app
+        .clone()
+        .oneshot(login_request(format!("email={email}&password={password}")))
+        .await
+        .unwrap();
+    let cookie = extract_cookie(&login_response, "admin_session");
+
+    let body = "label=Local+Ollama&provider_type=openai_compatible&openai_compatible_base_url=http%3A%2F%2F127.0.0.1%3A11434%2Fv1&openai_compatible_api_key=&openai_compatible_model_choice=&openai_compatible_model_name=llama3";
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/admin/sites/{}/ai-providers", test_site.id))
+                .header("content-type", "application/x-www-form-urlencoded")
+                .header("host", "localhost")
+                .header("origin", "http://localhost")
+                .header("cookie", cookie)
+                .extension(common::connect_info())
+                .body(Body::from(body))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let status = response.status();
+    let response_body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let response_body = String::from_utf8(response_body.to_vec()).unwrap();
+
+    let created = ai_provider::label_exists_for_site(&pool, test_site.id, "Local Ollama", None)
+        .await
+        .unwrap_or(false);
+    let _ = user::delete(&pool, admin_user.id).await;
+
+    assert_eq!(
+        status,
+        StatusCode::FORBIDDEN,
+        "a site-scoped (non-global) admin must not be able to configure a custom-base-URL provider, got {status}: {response_body}"
+    );
+    assert!(
+        response_body.contains("super admin"),
+        "expected the local-model rejection message, got: {response_body}"
+    );
+    assert!(
+        !created,
+        "the rejected provider must not have been persisted"
+    );
+}
+
+#[tokio::test]
+#[ignore = "requires a live PostgreSQL instance — see module docs"]
+async fn test_openai_compatible_provider_creation_allowed_for_global_admin() {
+    use synaptic_core::models::ai_provider;
+    use synaptic_core::models::site;
+    use synaptic_core::models::user;
+
+    let database_url = std::env::var("DATABASE_URL")
+        .expect("DATABASE_URL must be set to run integration tests (see tests/routes.rs)");
+    let pool = synaptic_core::db::connect(&database_url).await.unwrap();
+
+    let app = common::test_router().await;
+    let test_site = site::get_by_hostname(&pool, "localhost")
+        .await
+        .expect("test site must exist");
+    let (admin_user, password) = create_mfa_test_admin(&pool, "localaiglobal").await;
+
+    let login_response = app
+        .clone()
+        .oneshot(login_request(format!(
+            "email={}&password={password}",
+            admin_user.email
+        )))
+        .await
+        .unwrap();
+    let cookie = extract_cookie(&login_response, "admin_session");
+
+    let body = "label=Local+Ollama+Global&provider_type=openai_compatible&openai_compatible_base_url=http%3A%2F%2F127.0.0.1%3A11434%2Fv1&openai_compatible_api_key=&openai_compatible_model_choice=&openai_compatible_model_name=llama3";
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/admin/sites/{}/ai-providers", test_site.id))
+                .header("content-type", "application/x-www-form-urlencoded")
+                .header("host", "localhost")
+                .header("origin", "http://localhost")
+                .header("cookie", cookie)
+                .extension(common::connect_info())
+                .body(Body::from(body))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let status = response.status();
+
+    let created_row = ai_provider::list_for_site(&pool, test_site.id)
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .find(|row| row.label == "Local Ollama Global");
+    if let Some(row) = &created_row {
+        let _ = ai_provider::delete(&pool, row.id, test_site.id).await;
+    }
+    let _ = user::delete(&pool, admin_user.id).await;
+
+    assert_ne!(
+        status,
+        StatusCode::FORBIDDEN,
+        "a global admin must be allowed to configure a custom-base-URL provider, got {status}"
+    );
+    assert!(
+        created_row.is_some(),
+        "the provider row should be persisted even though verification against a real Ollama server isn't attempted in this test"
+    );
+}
+
+#[tokio::test]
+#[ignore = "requires a live PostgreSQL instance — see module docs"]
+async fn test_concurrent_ai_provider_creation_with_same_label_never_creates_two_rows() {
+    // Regression test for a double-submit bug: a slow provider-verification
+    // call made the "Add Provider" click look like nothing happened, so the
+    // admin clicked again — creating a second provider row. The
+    // application-level `label_exists_for_site` pre-check is a plain
+    // SELECT-then-INSERT, so two genuinely concurrent submissions can both
+    // pass the "not taken" check before either INSERT commits. This fires
+    // both at once (via `tokio::join!`, not sequentially) so the check is
+    // actually racy, and asserts the database's own unique constraint on
+    // (site_id, label) — migrations/0007_ai_provider_label_unique.sql — is
+    // what actually stops a second row, with the loser turned into a
+    // friendly redirect rather than a 500 (see `is_unique_violation` in
+    // `handlers::admin::ai_providers::create`).
+    use synaptic_core::models::ai_provider;
+    use synaptic_core::models::site;
+    use synaptic_core::models::user;
+
+    let database_url = std::env::var("DATABASE_URL")
+        .expect("DATABASE_URL must be set to run integration tests (see tests/routes.rs)");
+    let pool = synaptic_core::db::connect(&database_url).await.unwrap();
+
+    let app = common::test_router().await;
+    let test_site = site::get_by_hostname(&pool, "localhost")
+        .await
+        .expect("test site must exist");
+    let (admin_user, password) = create_mfa_test_admin(&pool, "aidupe").await;
+
+    let login_response = app
+        .clone()
+        .oneshot(login_request(format!(
+            "email={}&password={password}",
+            admin_user.email
+        )))
+        .await
+        .unwrap();
+    let cookie = extract_cookie(&login_response, "admin_session");
+
+    let unique = uuid::Uuid::new_v4().simple().to_string();
+    let label = format!("Racing Provider {}", &unique[..8]);
+    let make_request = |model_suffix: &str| {
+        let body = format!(
+            "label={}&provider_type=anthropic&anthropic_api_key=sk-ant-race&anthropic_model_choice=&anthropic_model_name=claude-race-{model_suffix}",
+            label.replace(' ', "+"),
+        );
+        Request::builder()
+            .method("POST")
+            .uri(format!("/admin/sites/{}/ai-providers", test_site.id))
+            .header("content-type", "application/x-www-form-urlencoded")
+            .header("host", "localhost")
+            .header("origin", "http://localhost")
+            .header("cookie", cookie.clone())
+            .extension(common::connect_info())
+            .body(Body::from(body))
+            .unwrap()
+    };
+
+    let (response_a, response_b) = tokio::join!(
+        app.clone().oneshot(make_request("a")),
+        app.clone().oneshot(make_request("b")),
+    );
+    let status_a = response_a.unwrap().status();
+    let status_b = response_b.unwrap().status();
+
+    let matching_rows: Vec<_> = ai_provider::list_for_site(&pool, test_site.id)
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|row| row.label == label)
+        .collect();
+
+    for row in &matching_rows {
+        let _ = ai_provider::delete(&pool, row.id, test_site.id).await;
+    }
+    let _ = user::delete(&pool, admin_user.id).await;
+
+    for status in [status_a, status_b] {
+        assert!(
+            status == StatusCode::FOUND || status == StatusCode::SEE_OTHER,
+            "neither racing submission should ever produce a server error — got {status}"
+        );
+    }
+    assert_eq!(
+        matching_rows.len(),
+        1,
+        "exactly one row must exist for this label no matter how the two concurrent submissions raced, got {}",
+        matching_rows.len()
+    );
+}
+
+#[tokio::test]
+#[ignore = "requires a live PostgreSQL instance — see module docs"]
+async fn test_translate_post_rejected_for_site_scoped_admin_using_local_model_provider() {
+    // A site-scoped admin can't configure or test a local/self-hosted
+    // (openai_compatible) provider (see the `_rejected_for_site_scoped_admin`
+    // creation test above), but that restriction is pointless if the same
+    // admin can still pick an already-configured local-model provider from
+    // the Translate dropdown and have the server call it on their behalf —
+    // that's the actual SSRF the restriction exists to prevent. This
+    // exercises the real translate route end-to-end with a provider a
+    // global admin already set up, from a site-scoped admin's session.
+    use synaptic_core::models::ai_provider::{self, AiProviderConfig};
+    use synaptic_core::models::site;
+    use synaptic_core::models::site_user::{self, SiteRole};
+    use synaptic_core::models::user::{self, CreateUser, UserRole};
+
+    let database_url = std::env::var("DATABASE_URL")
+        .expect("DATABASE_URL must be set to run integration tests (see tests/routes.rs)");
+    let pool = synaptic_core::db::connect(&database_url).await.unwrap();
+
+    let app = common::test_router().await;
+    let test_site = site::get_by_hostname(&pool, "localhost")
+        .await
+        .expect("test site must exist");
+    let locale = "es".to_string();
+    enable_real_locale_for_test(&pool, test_site.id, &locale).await;
+
+    let secret_key = "test-secret-key-not-for-production-use-only";
+    let provider = ai_provider::create(
+        &pool,
+        test_site.id,
+        "Local Model For Translate Test",
+        &AiProviderConfig::OpenaiCompatible {
+            base_url: "http://127.0.0.1:11434/v1".to_string(),
+            api_key: String::new(),
+            model_name: "llama3".to_string(),
+        },
+        secret_key,
+    )
+    .await
+    .expect("failed to seed local-model provider");
+    ai_provider::mark_verified(&pool, provider.id)
+        .await
+        .expect("failed to mark provider verified");
+
+    let unique = uuid::Uuid::new_v4().simple().to_string();
+    let slug = format!("translate-local-model-test-{}", &unique[..8]);
+    let post = create_test_post(&pool, test_site.id, &slug).await;
+
+    let email = format!("site-scoped-translate-{unique}@example.com");
+    let password = "Verify12345Pass!";
+    let admin_user = user::create(
+        &pool,
+        &CreateUser {
+            username: format!("localaitr{}", &unique[..9]),
+            email: email.clone(),
+            display_name: "Site-Scoped Translate Test".to_string(),
+            password: password.to_string(),
+            role: UserRole::SiteAdmin,
+        },
+    )
+    .await
+    .expect("failed to create test admin");
+    site_user::add(&pool, test_site.id, admin_user.id, SiteRole::Admin, None, false)
+        .await
+        .expect("failed to grant site-admin role");
+
+    let login_response = app
+        .clone()
+        .oneshot(login_request(format!("email={email}&password={password}")))
+        .await
+        .unwrap();
+    let cookie = extract_cookie(&login_response, "admin_session");
+
+    let body = format!("locale={locale}&provider_id={}", provider.id);
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri(format!("/admin/posts/{}/translate", post.id))
+                .header("content-type", "application/x-www-form-urlencoded")
+                .header("host", "localhost")
+                .header("origin", "http://localhost")
+                .header("cookie", cookie)
+                .extension(common::connect_info())
+                .body(Body::from(body))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let status = response.status();
+    let response_body = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let response_body = String::from_utf8(response_body.to_vec()).unwrap();
+
+    let translation_created = synaptic_core::models::post_translation::get(&pool, post.id, &locale)
+        .await
+        .unwrap_or_default()
+        .is_some();
+
+    let _ = ai_provider::delete(&pool, provider.id, test_site.id).await;
+    let _ = synaptic_core::models::post::delete(&pool, post.id).await;
+    let _ = user::delete(&pool, admin_user.id).await;
+
+    assert_eq!(
+        status,
+        StatusCode::FORBIDDEN,
+        "a site-scoped admin must not be able to translate using a local-model provider, got {status}: {response_body}"
+    );
+    assert!(
+        response_body.contains("super admin"),
+        "expected the local-model rejection message, got: {response_body}"
+    );
+    assert!(
+        !translation_created,
+        "no translation (and no outbound call to the local model) should have happened"
+    );
+}
+
+#[tokio::test]
+#[ignore = "requires a live PostgreSQL instance — see module docs"]
+async fn test_local_model_provider_base_url_hidden_from_site_scoped_admin_settings_view() {
+    // The base URL of a local/self-hosted (openai_compatible) provider can
+    // point at internal network addresses. Restricting who can configure it
+    // is pointless if a site-scoped admin can still read it off the Site
+    // Settings page (in the provider's hint text and the edit form's
+    // placeholder) — so the row itself must not be rendered for them at all.
+    use synaptic_core::models::ai_provider::{self, AiProviderConfig};
+    use synaptic_core::models::site;
+    use synaptic_core::models::site_user::{self, SiteRole};
+    use synaptic_core::models::user::{self, CreateUser, UserRole};
+
+    let database_url = std::env::var("DATABASE_URL")
+        .expect("DATABASE_URL must be set to run integration tests (see tests/routes.rs)");
+    let pool = synaptic_core::db::connect(&database_url).await.unwrap();
+
+    let app = common::test_router().await;
+    let test_site = site::get_by_hostname(&pool, "localhost")
+        .await
+        .expect("test site must exist");
+
+    let secret_key = "test-secret-key-not-for-production-use-only";
+    let distinctive_base_url = "http://10.88.7.2:11434/v1";
+    let unique = uuid::Uuid::new_v4().simple().to_string();
+    let label = format!("Local Model Visibility Test {}", &unique[..8]);
+    let provider = ai_provider::create(
+        &pool,
+        test_site.id,
+        &label,
+        &AiProviderConfig::OpenaiCompatible {
+            base_url: distinctive_base_url.to_string(),
+            api_key: String::new(),
+            model_name: "llama3".to_string(),
+        },
+        secret_key,
+    )
+    .await
+    .expect("failed to seed local-model provider");
+
+    let email = format!("site-scoped-settings-view-{unique}@example.com");
+    let password = "Verify12345Pass!";
+    let admin_user = user::create(
+        &pool,
+        &CreateUser {
+            username: format!("localaisv{}", &unique[..9]),
+            email: email.clone(),
+            display_name: "Site-Scoped Settings View Test".to_string(),
+            password: password.to_string(),
+            role: UserRole::SiteAdmin,
+        },
+    )
+    .await
+    .expect("failed to create test admin");
+    site_user::add(&pool, test_site.id, admin_user.id, SiteRole::Admin, None, false)
+        .await
+        .expect("failed to grant site-admin role");
+
+    let login_response = app
+        .clone()
+        .oneshot(login_request(format!("email={email}&password={password}")))
+        .await
+        .unwrap();
+    let cookie = extract_cookie(&login_response, "admin_session");
+
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("GET")
+                .uri(format!(
+                    "/admin/sites/{}/settings?tab=ai-translation",
+                    test_site.id
+                ))
+                .header("host", "localhost")
+                .header("cookie", cookie)
+                .extension(common::connect_info())
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let status = response.status();
+    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let body = String::from_utf8(body_bytes.to_vec()).unwrap();
+
+    let _ = ai_provider::delete(&pool, provider.id, test_site.id).await;
+    let _ = user::delete(&pool, admin_user.id).await;
+
+    assert_eq!(status, StatusCode::OK, "settings page must render normally");
+    assert!(
+        !body.contains(distinctive_base_url),
+        "a site-scoped admin's settings page must never render a local-model provider's base URL"
+    );
+    assert!(
+        !body.contains(&label),
+        "a site-scoped admin's settings page must not even show the local-model provider's row"
+    );
 }
 
 // ── TOTP MFA for staff logins ────────────────────────────────────────────

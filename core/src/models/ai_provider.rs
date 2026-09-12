@@ -55,6 +55,22 @@ impl AiProviderConfig {
         }
     }
 
+    /// `OpenaiCompatible`'s admin-entered base URL accepts any scheme or
+    /// destination with no validation — deliberately, so it can point at a
+    /// self-hosted model server (Ollama, LM Studio) on localhost or the
+    /// local network. That makes it a real SSRF primitive: whoever can
+    /// configure, verify, or *use* one can make this server issue requests
+    /// to any URL it can reach. On a single-owner install the super admin
+    /// already controls that network, so it's not a boundary crossing; on a
+    /// multi-tenant install a site-scoped admin does not control the
+    /// underlying box, so this provider type is restricted to global admins
+    /// only for every action that causes an outbound call — not just
+    /// creating/editing the row, but testing, discovering models, and
+    /// actually translating with it too.
+    pub fn requires_global_admin(&self) -> bool {
+        matches!(self, AiProviderConfig::OpenaiCompatible { .. })
+    }
+
     /// Per-field placeholder text for a provider's Edit form. Non-secret
     /// fields show their real saved value and API keys use the same masked
     /// form as `display_hint`. Blank edit fields are merged with this stored

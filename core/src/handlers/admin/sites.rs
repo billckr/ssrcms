@@ -783,6 +783,13 @@ pub async fn site_settings(
         .await
         .unwrap_or_default()
         .into_iter()
+        // A local/self-hosted (openai_compatible) provider's base URL can
+        // point at internal network addresses — leaking that to a
+        // site-scoped admin here would defeat the point of restricting who
+        // can configure/test/use one (see AiProviderConfig::
+        // requires_global_admin): they'd see it in the hint text and the
+        // edit form's placeholder even though every action on it 403s.
+        .filter(|p| admin.caps.is_global_admin || p.provider_type != "openai_compatible")
         .map(|p| {
             let config = crate::models::ai_provider::decrypt_config(&state.config.secret_key, &p);
             let hint = config.as_ref().map(|c| c.display_hint());

@@ -180,6 +180,26 @@ fn ai_translation_enabled(state: &AppState) -> bool {
 
 const AI_TRANSLATION_DISABLED_MSG: &str = "AI Translation is disabled for this installation.";
 
+/// The `openai_compatible` provider type accepts an admin-entered base URL
+/// with no restriction on scheme or destination — deliberately, so it can
+/// point at a self-hosted model server (Ollama, LM Studio) on localhost or
+/// the local network. That makes it a real SSRF primitive: whoever can
+/// configure or test one can make this server issue requests to any URL it
+/// can reach. On a single-owner install the super admin already controls
+/// that network, so it's not a boundary crossing; on a multi-tenant install
+/// a site-scoped admin does not control the underlying box, so this option
+/// is restricted to global admins only — same reasoning as `provision_ssl`
+/// in `handlers::admin::sites`.
+const LOCAL_MODEL_FORBIDDEN_MSG: &str =
+    "Local/self-hosted model providers (custom base URL) require super admin access.";
+
+fn is_unique_violation(err: &crate::errors::AppError) -> bool {
+    matches!(
+        err,
+        crate::errors::AppError::Database(sqlx::Error::Database(db_err)) if db_err.is_unique_violation()
+    )
+}
+
 fn flash_redirect(site_id: Uuid, msg: &str) -> Redirect {
     let msg = crate::handlers::admin::themes::url_encode_param(msg);
     Redirect::to(&format!(
@@ -227,6 +247,9 @@ pub async fn create(
         Ok(c) => c,
         Err(msg) => return flash_redirect(id, msg).into_response(),
     };
+    if config.requires_global_admin() && !admin.caps.is_global_admin {
+        return (StatusCode::FORBIDDEN, LOCAL_MODEL_FORBIDDEN_MSG).into_response();
+    }
 
     let row = match ai_provider::create(
         &state.db,
@@ -238,13 +261,23 @@ pub async fn create(
     .await
     {
         Ok(row) => row,
+        // Belt-and-suspenders against the `label_exists_for_site` check
+        // above racing a second near-simultaneous submission (e.g. a slow
+        // provider verification making a double-click look like nothing
+        // happened) — the DB-level unique constraint (see migrations/
+        // 0007_ai_provider_label_unique.sql) is what actually closes the
+        // race; this just keeps the error message friendly when it fires.
+        Err(e) if is_unique_violation(&e) => {
+            return flash_redirect(id, "A provider with that label already exists.")
+                .into_response();
+        }
         Err(e) => {
             tracing::error!("failed to create AI provider for site {}: {:?}", id, e);
             return flash_redirect(id, "Failed to save provider.").into_response();
         }
     };
 
-    match crate::translate::test_provider(&config).await {
+    match crate::translate::test_provider(id, &config).await {
         Ok(()) => {
             if let Err(e) = ai_provider::mark_verified(&state.db, row.id).await {
                 tracing::error!("failed to mark AI provider {} verified: {:?}", row.id, e);
@@ -321,9 +354,12 @@ pub async fn update(
         Ok(c) => c,
         Err(msg) => return flash_redirect(id, msg).into_response(),
     };
+    if config.requires_global_admin() && !admin.caps.is_global_admin {
+        return (StatusCode::FORBIDDEN, LOCAL_MODEL_FORBIDDEN_MSG).into_response();
+    }
 
     match ai_provider::update(&state.db, provider_id, id, form.label.trim(), &config, &state.config.secret_key).await {
-        Ok(Some(_)) => match crate::translate::test_provider(&config).await {
+        Ok(Some(_)) => match crate::translate::test_provider(id, &config).await {
             Ok(()) => {
                 if let Err(e) = ai_provider::mark_verified(&state.db, provider_id).await {
                     tracing::error!(
@@ -352,6 +388,10 @@ pub async fn update(
             }
         },
         Ok(None) => flash_redirect(id, "Provider not found.").into_response(),
+        // Same race as `create` — see its own comment above `is_unique_violation`.
+        Err(e) if is_unique_violation(&e) => {
+            flash_redirect(id, "A provider with that label already exists.").into_response()
+        }
         Err(e) => {
             tracing::error!("failed to update AI provider {}: {:?}", provider_id, e);
             flash_redirect(id, "Failed to save provider.").into_response()
@@ -363,8 +403,8 @@ fn models_error(status: StatusCode, message: impl Into<String>) -> axum::respons
     (status, Json(serde_json::json!({ "error": message.into() }))).into_response()
 }
 
-async fn discover_with_config(config: AiProviderConfig) -> axum::response::Response {
-    match crate::translate::discover_models(&config).await {
+async fn discover_with_config(site_id: Uuid, config: AiProviderConfig) -> axum::response::Response {
+    match crate::translate::discover_models(site_id, &config).await {
         Ok(models) if models.is_empty() => models_error(
             StatusCode::BAD_GATEWAY,
             "The provider returned no models. You can still enter a custom model ID.",
@@ -396,7 +436,10 @@ pub async fn discover_new_models(
         return models_error(StatusCode::FORBIDDEN, "Forbidden");
     }
     match config_from_form(&form, None, false) {
-        Ok(config) => discover_with_config(config).await,
+        Ok(config) if config.requires_global_admin() && !admin.caps.is_global_admin => {
+            models_error(StatusCode::FORBIDDEN, LOCAL_MODEL_FORBIDDEN_MSG)
+        }
+        Ok(config) => discover_with_config(id, config).await,
         Err(message) => models_error(StatusCode::BAD_REQUEST, message),
     }
 }
@@ -430,7 +473,10 @@ pub async fn discover_saved_models(
         );
     };
     match config_from_form(&form, Some(&existing), false) {
-        Ok(config) => discover_with_config(config).await,
+        Ok(config) if config.requires_global_admin() && !admin.caps.is_global_admin => {
+            models_error(StatusCode::FORBIDDEN, LOCAL_MODEL_FORBIDDEN_MSG)
+        }
+        Ok(config) => discover_with_config(id, config).await,
         Err(message) => models_error(StatusCode::BAD_REQUEST, message),
     }
 }
@@ -489,8 +535,11 @@ pub async fn test(
     let Some(config) = ai_provider::decrypt_config(&state.config.secret_key, &row) else {
         return flash_redirect(id, "Failed to decrypt provider config.").into_response();
     };
+    if config.requires_global_admin() && !admin.caps.is_global_admin {
+        return (StatusCode::FORBIDDEN, LOCAL_MODEL_FORBIDDEN_MSG).into_response();
+    }
 
-    match crate::translate::test_provider(&config).await {
+    match crate::translate::test_provider(id, &config).await {
         Ok(()) => {
             if let Err(e) = ai_provider::mark_verified(&state.db, provider_id).await {
                 tracing::error!(

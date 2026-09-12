@@ -1510,8 +1510,8 @@ pub fn render_editor(post: &PostEdit, flash: Option<&str>, ctx: &crate::PageCont
   .ql-snow .ql-picker-options {{ background: var(--field-bg); color: var(--field-text); border-color: var(--border); }}
   .ql-snow .ql-picker.ql-expanded .ql-picker-label {{ color: var(--field-text); }}
 
-  .icon-btn.is-busy img {{ animation: translate-spin 1s linear infinite; }}
-  @keyframes translate-spin {{ to {{ transform: rotate(360deg); }} }}
+  /* .icon-btn.is-busy spin animation now lives in admin.css, shared with
+     the AI Providers page's "Connect and load models" button. */
 </style>
 <form method="POST" action="{action}" id="post-editor-form">
   <div class="editor-layout">

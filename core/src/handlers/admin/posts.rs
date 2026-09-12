@@ -1769,6 +1769,13 @@ pub async fn translate_post_action(
     else {
         return edit_redirect(&post, "Failed to decrypt AI provider config.").into_response();
     };
+    if config.requires_global_admin() && !admin.caps.is_global_admin {
+        return (
+            axum::http::StatusCode::FORBIDDEN,
+            "Local/self-hosted model providers (custom base URL) require super admin access.",
+        )
+            .into_response();
+    }
 
     let attempt_id = Uuid::new_v4();
     let started_at = std::time::Instant::now();
@@ -1802,6 +1809,11 @@ pub async fn translate_post_action(
                     .chars()
                     .count()
                 + result.content.chars().count();
+            // The AI provider's response is untrusted output, same as any
+            // other HTML entering the system — sanitize before it's stored
+            // and later rendered with `| safe`, exactly like post::create /
+            // post::update do for editor-submitted content.
+            let sanitized_content = crate::models::post::sanitize_content(&result.content);
             let persistence = async {
                 let mut tx = state.db.begin().await?;
                 crate::models::post_translation::upsert_on(
@@ -1810,7 +1822,7 @@ pub async fn translate_post_action(
                     &form.locale,
                     &result.title,
                     result.excerpt.as_deref(),
-                    &result.content,
+                    &sanitized_content,
                     post.updated_at,
                 )
                 .await?;
@@ -1945,6 +1957,13 @@ pub async fn translate_embeds_action(
     else {
         return edit_redirect(&post, "Failed to decrypt AI provider config.").into_response();
     };
+    if config.requires_global_admin() && !admin.caps.is_global_admin {
+        return (
+            axum::http::StatusCode::FORBIDDEN,
+            "Local/self-hosted model providers (custom base URL) require super admin access.",
+        )
+            .into_response();
+    }
 
     let attempt_id = Uuid::new_v4();
     let started_at = std::time::Instant::now();

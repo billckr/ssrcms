@@ -743,6 +743,7 @@ pub fn render_settings(
       <button type="submit" class="icon-btn ai-provider-edit-save" title="Save Provider" aria-label="Save Provider" disabled><img src="/admin/static/icons/save.svg" alt=""></button>
       <button type="button" class="icon-btn" title="Cancel" aria-label="Cancel"
               onclick="document.getElementById('{edit_id}-row').hidden = true"><img src="/admin/static/icons/x.svg" alt=""></button>
+      <small data-provider-save-status></small>
     </div>
   </form>
   </td>
@@ -797,6 +798,41 @@ pub fn render_settings(
     // server-side enforcement (see `require_ai_translation_enabled` in
     // `handlers::admin::ai_providers`) — this page never ships the form
     // markup for a feature the backend won't accept requests for.
+    // Local/self-hosted model providers (custom base URL) are a real SSRF
+    // primitive server-side — see `LOCAL_MODEL_FORBIDDEN_MSG` in
+    // `handlers::admin::ai_providers` — so a site-scoped admin who does not
+    // control the underlying box never even sees the option, matching that
+    // handler's own enforcement (never UI-only).
+    let ai_provider_intro_note = if ctx.is_global_admin {
+        "Configure an AI provider to translate posts from the post editor. Anthropic and DeepSeek \
+         call their own APIs directly; OpenAI-Compatible covers OpenAI itself, or a local server \
+         such as Ollama or LM Studio."
+    } else {
+        "Configure an AI provider to translate posts from the post editor. Anthropic and DeepSeek \
+         call their own APIs directly."
+    };
+    let openai_compatible_option_html = if ctx.is_global_admin {
+        r#"<option value="openai_compatible">OpenAI-Compatible</option>"#
+    } else {
+        ""
+    };
+    let openai_compatible_section_html = if ctx.is_global_admin {
+        format!(
+            r#"<div class="card-boxed-section ai-provider-fields" data-provider="openai_compatible" style="display:none">
+      {fields_html}
+      <div class="icon-pill">
+        <button type="submit" id="add-ai-provider-btn-openai_compatible" class="icon-btn" title="Add Provider" aria-label="Add Provider" disabled>
+          <img src="/admin/static/icons/save.svg" alt="">
+        </button>
+        <small data-provider-save-status></small>
+      </div>
+    </div>"#,
+            fields_html = ai_provider_fields_html("openai_compatible", "", None),
+        )
+    } else {
+        String::new()
+    };
+
     let ai_translation_tab_panel_html = if data.ai_translation_enabled {
         format!(
             r#"<div id="tab-ai-translation" class="settings-tab-panel" role="tabpanel">
@@ -823,6 +859,20 @@ document.querySelectorAll('.ai-provider-edit-form').forEach(function(form) {{
   }}
   form.addEventListener('input', checkChanged);
   form.addEventListener('change', checkChanged);
+  // Same reasoning as the Add Provider form above — saving re-verifies the
+  // provider, which can be slow (especially a local model server), so
+  // guard against a second click on the same save button in the meantime.
+  // This is a real full-page form submit, not an AJAX call, so there's no
+  // .finally() to clear `is-busy` — it plays until the browser actually
+  // navigates away on the response, which is the point: a merely-disabled
+  // button gives no sign anything is happening beyond the browser's own
+  // tab-loading indicator.
+  form.addEventListener('submit', function() {{
+    btn.disabled = true;
+    btn.classList.add('is-busy');
+    var status = form.querySelector('[data-provider-save-status]');
+    if (status) status.textContent = 'Verifying provider…';
+  }});
 }});
 (function() {{
   function syncCustom(control, preserveValue) {{
@@ -849,6 +899,7 @@ document.querySelectorAll('.ai-provider-edit-form').forEach(function(form) {{
     var status = control.querySelector('[data-model-status]');
     var form = control.closest('form');
     button.disabled = true;
+    button.classList.add('is-busy');
     status.textContent = 'Connecting and loading models…';
     fetch(form.action.replace(/\/$/, '') + '/models', {{
         method: 'POST',
@@ -900,7 +951,10 @@ document.querySelectorAll('.ai-provider-edit-form').forEach(function(form) {{
         .catch(function(error) {{
           status.textContent = error.message + ' You can select “Enter a custom model ID” instead.';
         }})
-        .finally(function() {{ button.disabled = false; }});
+        .finally(function() {{
+          button.disabled = false;
+          button.classList.remove('is-busy');
+        }});
   }});
 
   document.addEventListener('DOMContentLoaded', function() {{
@@ -1045,9 +1099,7 @@ document.querySelectorAll('.ai-provider-edit-form').forEach(function(form) {{
   <form method="post" action="/admin/sites/{id}/ai-providers" class="edit-form" id="add-ai-provider-form">
     <div class="card-boxed-section">
       <p class="form-note" style="margin:0 0 1rem">
-        Configure an AI provider to translate posts from the post editor. Anthropic and DeepSeek
-        call their own APIs directly; OpenAI-Compatible covers OpenAI itself, or a local server
-        such as Ollama or LM Studio.
+        {ai_provider_intro_note}
       </p>
       <div class="form-group">
         <label for="ai-provider-label">Label</label>
@@ -1058,7 +1110,7 @@ document.querySelectorAll('.ai-provider-edit-form').forEach(function(form) {{
         <select id="ai-provider-type" name="provider_type">
           <option value="anthropic">Anthropic</option>
           <option value="deepseek">DeepSeek</option>
-          <option value="openai_compatible">OpenAI-Compatible</option>
+          {openai_compatible_option_html}
         </select>
       </div>
     </div>
@@ -1068,6 +1120,7 @@ document.querySelectorAll('.ai-provider-edit-form').forEach(function(form) {{
         <button type="submit" id="add-ai-provider-btn-anthropic" class="icon-btn" title="Add Provider" aria-label="Add Provider" disabled>
           <img src="/admin/static/icons/save.svg" alt="">
         </button>
+        <small data-provider-save-status></small>
       </div>
     </div>
     <div class="card-boxed-section ai-provider-fields" data-provider="deepseek" style="display:none">
@@ -1076,16 +1129,10 @@ document.querySelectorAll('.ai-provider-edit-form').forEach(function(form) {{
         <button type="submit" id="add-ai-provider-btn-deepseek" class="icon-btn" title="Add Provider" aria-label="Add Provider" disabled>
           <img src="/admin/static/icons/save.svg" alt="">
         </button>
+        <small data-provider-save-status></small>
       </div>
     </div>
-    <div class="card-boxed-section ai-provider-fields" data-provider="openai_compatible" style="display:none">
-      {openai_compatible_fields_html}
-      <div class="icon-pill">
-        <button type="submit" id="add-ai-provider-btn-openai_compatible" class="icon-btn" title="Add Provider" aria-label="Add Provider" disabled>
-          <img src="/admin/static/icons/save.svg" alt="">
-        </button>
-      </div>
-    </div>
+    {openai_compatible_section_html}
   </form>
   </div>
 </div>
@@ -1113,10 +1160,32 @@ document.querySelectorAll('.ai-provider-edit-form').forEach(function(form) {{
     var changed = addSnapshot() !== addInitialSnapshot;
     addBtnAnthropic.disabled = !changed;
     addBtnDeepseek.disabled = !changed;
-    addBtnOpenai.disabled = !changed;
+    if (addBtnOpenai) addBtnOpenai.disabled = !changed;
   }}
   addForm.addEventListener('input', checkAddChanged);
   addForm.addEventListener('change', checkAddChanged);
+  // A provider's first save also verifies it (a real call to the provider,
+  // which for a local model can take a while to warm up) — disable every
+  // submit button the instant the form is submitted so a second click
+  // during that wait can't fire a duplicate "Add Provider" request. Also
+  // spins the (visible) button's icon — a plain disabled button gives no
+  // sign anything is happening beyond the browser's own tab-loading
+  // indicator, and this is a real full-page submit with no fetch callback
+  // to clear it in, so it plays until the browser navigates away.
+  addForm.addEventListener('submit', function() {{
+    addBtnAnthropic.disabled = true;
+    addBtnDeepseek.disabled = true;
+    if (addBtnOpenai) addBtnOpenai.disabled = true;
+    addBtnAnthropic.classList.add('is-busy');
+    addBtnDeepseek.classList.add('is-busy');
+    if (addBtnOpenai) addBtnOpenai.classList.add('is-busy');
+    // Only one of the three sections is visible at a time (see `sync()`
+    // above), so setting all three status elements is harmless — only the
+    // visible one is ever seen.
+    addForm.querySelectorAll('[data-provider-save-status]').forEach(function(el) {{
+      el.textContent = 'Verifying provider…';
+    }});
+  }});
 }})();
 </script>
 </div>
@@ -1126,9 +1195,11 @@ document.querySelectorAll('.ai-provider-edit-form').forEach(function(form) {{
 "#,
             id = crate::html_escape(&data.id),
             ai_providers_list_html = ai_providers_list_html,
+            ai_provider_intro_note = ai_provider_intro_note,
+            openai_compatible_option_html = openai_compatible_option_html,
             anthropic_fields_html = ai_provider_fields_html("anthropic", "", None),
             deepseek_fields_html = ai_provider_fields_html("deepseek", "", None),
-            openai_compatible_fields_html = ai_provider_fields_html("openai_compatible", "", None),
+            openai_compatible_section_html = openai_compatible_section_html,
             all_locales_json = all_locales_json,
             enabled_locales_json = enabled_locales_json,
         )

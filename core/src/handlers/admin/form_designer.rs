@@ -629,6 +629,13 @@ pub async fn translate(
         )
             .into_response();
     };
+    if config.requires_global_admin() && !admin.caps.is_global_admin {
+        return (
+            StatusCode::FORBIDDEN,
+            "Local/self-hosted model providers (custom base URL) require super admin access.",
+        )
+            .into_response();
+    }
 
     let attempt_id = Uuid::new_v4();
     let started_at = std::time::Instant::now();

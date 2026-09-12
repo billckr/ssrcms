@@ -560,8 +560,8 @@ pub fn render_editor(data: &FormEditData, ctx: &PageContext, flash: Option<&str>
 .field-hint {{ font-size: 11px; color: var(--muted); font-weight: 400; }}
 .form-tab-panel {{ display: none; }}
 .form-tab-panel.active {{ display: block; }}
-.icon-btn.is-busy img {{ animation: translate-spin 1s linear infinite; }}
-@keyframes translate-spin {{ to {{ transform: rotate(360deg); }} }}
+/* .icon-btn.is-busy spin animation lives in admin.css, shared with the AI
+   Providers and post-editor pages. */
 </style>
 <form method="POST" action="{action}" id="form-designer-form">
   <div class="two-col">

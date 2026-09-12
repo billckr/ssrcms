@@ -4,9 +4,15 @@
 //! `crate::models::ai_provider` for why. Structured directly after
 //! `crate::mail`'s per-provider dispatch pattern.
 
-use std::{collections::BTreeMap, time::Duration};
+use std::{
+    collections::{BTreeMap, HashMap},
+    sync::Mutex,
+    time::{Duration, Instant},
+};
 
+use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 use crate::models::ai_provider::AiProviderConfig;
 use crate::models::embedded_translation::{FormTranslationPayload, PollTranslationPayload};
@@ -39,6 +45,87 @@ pub struct AvailableModel {
 }
 
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(90);
+
+// ── Abuse / cost controls ────────────────────────────────────────────────
+//
+// Unlike ordinary CRUD, every translation call spends real money against a
+// paid third-party API, so it needs a ceiling independent of the normal
+// admin-auth/CSRF checks already gating these routes — a compromised or
+// merely overeager admin account (global or site-scoped) could otherwise
+// script repeated calls to run up provider spend. Enforced once per actual
+// provider call (inside `translate_post`/`translate_form`/`translate_poll`,
+// not once per HTTP request), so translating N embedded forms/polls in one
+// admin click correctly consumes N units — matching the real cost impact —
+// rather than 1.
+//
+// Process-local, same tradeoff as `middleware::auth_security`: fine for the
+// current single-instance deployment, move to PostgreSQL/Redis before
+// running multiple app instances.
+
+/// Hard cap on how much source text (a post's title+excerpt+content, or the
+/// equivalent flattened form/poll JSON) is sent to a provider in one call.
+/// Comfortably covers any real post, page, form, or poll; guards against a
+/// single oversized document driving up per-call token cost.
+const MAX_SOURCE_CHARS: usize = 50_000;
+
+/// Per-site ceiling on provider calls per rolling hour — generous enough to
+/// bulk-translate an existing site's content into a few locales in one
+/// sitting, tight enough to bound a compromised/scripted account's blast
+/// radius against the site's own configured (and billed) provider.
+const TRANSLATIONS_PER_SITE_PER_HOUR: usize = 50;
+
+struct TranslationBucket {
+    calls: Vec<Instant>,
+}
+
+static SITE_TRANSLATION_CALLS: Lazy<Mutex<HashMap<Uuid, TranslationBucket>>> =
+    Lazy::new(|| Mutex::new(HashMap::new()));
+
+/// Returns `false` once `site_id` has made `TRANSLATIONS_PER_SITE_PER_HOUR`
+/// calls within the last hour; otherwise records this call and returns `true`.
+fn consume_translation_slot(site_id: Uuid) -> bool {
+    let now = Instant::now();
+    let window = Duration::from_secs(60 * 60);
+    let mut buckets = SITE_TRANSLATION_CALLS
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    if buckets.len() >= 10_000 {
+        buckets.retain(|_, bucket| {
+            bucket.calls.retain(|at| now.duration_since(*at) < window);
+            !bucket.calls.is_empty()
+        });
+        // Bound memory even during a distributed identifier-flood attack.
+        if buckets.len() >= 10_000 && !buckets.contains_key(&site_id) {
+            return false;
+        }
+    }
+    let bucket = buckets
+        .entry(site_id)
+        .or_insert_with(|| TranslationBucket { calls: Vec::new() });
+    bucket.calls.retain(|at| now.duration_since(*at) < window);
+    if bucket.calls.len() >= TRANSLATIONS_PER_SITE_PER_HOUR {
+        return false;
+    }
+    bucket.calls.push(now);
+    true
+}
+
+/// Call before sending any prompt to a provider. Checks source length first
+/// (a no-op rejection, since it can't be worked around by retrying) so an
+/// oversized document doesn't also burn a rate-limit slot.
+fn enforce_translation_limits(site_id: Uuid, source_chars: usize) -> anyhow::Result<()> {
+    if source_chars > MAX_SOURCE_CHARS {
+        anyhow::bail!(
+            "content is too long to translate automatically ({source_chars} characters, max {MAX_SOURCE_CHARS})"
+        );
+    }
+    if !consume_translation_slot(site_id) {
+        anyhow::bail!(
+            "translation rate limit reached for this site ({TRANSLATIONS_PER_SITE_PER_HOUR} per hour) — try again later"
+        );
+    }
+    Ok(())
+}
 
 fn http_client() -> anyhow::Result<reqwest::Client> {
     Ok(reqwest::Client::builder()
@@ -171,6 +258,14 @@ pub async fn translate_post(
     post: &Post,
     target_locale_name: &str,
 ) -> anyhow::Result<TranslationResult> {
+    let Some(site_id) = post.site_id else {
+        anyhow::bail!("post has no site");
+    };
+    let source_chars = post.title.chars().count()
+        + post.excerpt.as_deref().unwrap_or_default().chars().count()
+        + post.content.chars().count();
+    enforce_translation_limits(site_id, source_chars)?;
+
     let protected = protect_embeds(&post.content)?;
     let embed_instruction = if protected.markers.is_empty() {
         ""
@@ -209,6 +304,7 @@ pub async fn translate_form(
         "confirm_subject": form.settings.confirm_subject,
         "confirm_body": form.settings.confirm_body,
     });
+    enforce_translation_limits(form.site_id, source.to_string().chars().count())?;
     let prompt = format!(
         "Translate the visitor-facing strings in this form into {target_locale_name}. Keep every field name, option value, and {{{{field_name}}}} template placeholder byte-for-byte unchanged. Return ONLY JSON with this exact shape: {{\"fields\":[{{\"name\":\"...\",\"label\":\"...\",\"options\":[{{\"value\":\"...\",\"label\":\"...\"}}]}}],\"button_label\":\"...\",\"success_message\":\"...\",\"invalid_message\":\"...\",\"confirm_subject\":\"...\",\"confirm_body\":\"...\"}}. SOURCE JSON:\n{source}"
     );
@@ -309,6 +405,7 @@ pub async fn translate_poll(
         "success_message": poll.settings.success_message,
         "total_votes_label": "{count} total votes",
     });
+    enforce_translation_limits(poll.site_id, source.to_string().chars().count())?;
     let prompt = format!(
         "Translate the visitor-facing strings in this poll into {target_locale_name}. Keep every option key byte-for-byte unchanged and preserve the {{count}} placeholder exactly once. Return ONLY JSON with this exact shape: {{\"question\":\"...\",\"options\":[{{\"key\":\"...\",\"label\":\"...\"}}],\"button_label\":\"...\",\"success_message\":\"...\",\"total_votes_label\":\"{{count}} ...\"}}. SOURCE JSON:\n{source}"
     );
@@ -363,8 +460,17 @@ fn poll_payload_from_value(
 
 /// A small structured-output call confirming that credentials, model, and
 /// the response shape used by translation all work. Awaited synchronously
-/// from an admin's "Test" click, not spawned.
-pub async fn test_provider(config: &AiProviderConfig) -> anyhow::Result<()> {
+/// from an admin's "Test" click, not spawned. Shares the same per-site
+/// rate-limit bucket as actual translations (see "Abuse / cost controls"
+/// above) — it's a real, billed call to the same provider, so it needs the
+/// same ceiling; skipping the source-length check since there's no source
+/// content here, just a fixed trivial prompt.
+pub async fn test_provider(site_id: Uuid, config: &AiProviderConfig) -> anyhow::Result<()> {
+    if !consume_translation_slot(site_id) {
+        anyhow::bail!(
+            "translation rate limit reached for this site ({TRANSLATIONS_PER_SITE_PER_HOUR} per hour) — try again later"
+        );
+    }
     let text = send_prompt(
         config,
         "Reply with ONLY this JSON object, with no markdown fence or commentary: {\"title\":\"Test\",\"excerpt\":null,\"content\":\"Test\"}",
@@ -379,7 +485,17 @@ pub async fn test_provider(config: &AiProviderConfig) -> anyhow::Result<()> {
 /// Ask the configured service which models are available to its credential.
 /// This is deliberately live rather than a hard-coded catalog: access can
 /// vary by account and both hosted and local providers change over time.
-pub async fn discover_models(config: &AiProviderConfig) -> anyhow::Result<Vec<AvailableModel>> {
+/// Shares the same per-site rate-limit bucket as `test_provider`/actual
+/// translations — see its doc comment.
+pub async fn discover_models(
+    site_id: Uuid,
+    config: &AiProviderConfig,
+) -> anyhow::Result<Vec<AvailableModel>> {
+    if !consume_translation_slot(site_id) {
+        anyhow::bail!(
+            "translation rate limit reached for this site ({TRANSLATIONS_PER_SITE_PER_HOUR} per hour) — try again later"
+        );
+    }
     let mut models = match config {
         AiProviderConfig::Anthropic { api_key, .. } => discover_anthropic_models(api_key).await?,
         AiProviderConfig::Deepseek { api_key, .. } => {
@@ -897,5 +1013,97 @@ mod tests {
             sources: serde_json::Value::Array(vec![]),
             sources_public: false,
         }
+    }
+
+    // ── Abuse / cost control tests ───────────────────────────────────────
+
+    #[test]
+    fn translation_rate_limit_allows_up_to_the_cap_then_rejects() {
+        let site_id = Uuid::new_v4();
+        for _ in 0..TRANSLATIONS_PER_SITE_PER_HOUR {
+            assert!(consume_translation_slot(site_id));
+        }
+        assert!(
+            !consume_translation_slot(site_id),
+            "call past the per-hour cap should be rejected"
+        );
+    }
+
+    #[test]
+    fn translation_rate_limit_is_scoped_per_site() {
+        let site_a = Uuid::new_v4();
+        let site_b = Uuid::new_v4();
+        for _ in 0..TRANSLATIONS_PER_SITE_PER_HOUR {
+            assert!(consume_translation_slot(site_a));
+        }
+        assert!(
+            !consume_translation_slot(site_a),
+            "site_a should be exhausted"
+        );
+        assert!(
+            consume_translation_slot(site_b),
+            "site_b has its own independent budget"
+        );
+    }
+
+    #[test]
+    fn enforce_translation_limits_rejects_oversized_content() {
+        let site_id = Uuid::new_v4();
+        let err = enforce_translation_limits(site_id, MAX_SOURCE_CHARS + 1)
+            .expect_err("oversized content must be rejected");
+        assert!(err.to_string().contains("too long"));
+    }
+
+    #[test]
+    fn enforce_translation_limits_accepts_content_at_the_cap() {
+        let site_id = Uuid::new_v4();
+        assert!(enforce_translation_limits(site_id, MAX_SOURCE_CHARS).is_ok());
+    }
+
+    #[test]
+    fn enforce_translation_limits_rejecting_for_size_does_not_consume_a_rate_limit_slot() {
+        let site_id = Uuid::new_v4();
+        for _ in 0..(TRANSLATIONS_PER_SITE_PER_HOUR * 2) {
+            assert!(enforce_translation_limits(site_id, MAX_SOURCE_CHARS + 1).is_err());
+        }
+        // None of the oversized-content rejections above should have burned
+        // a rate-limit slot, so the site's full budget is still available.
+        for _ in 0..TRANSLATIONS_PER_SITE_PER_HOUR {
+            assert!(enforce_translation_limits(site_id, 10).is_ok());
+        }
+        assert!(enforce_translation_limits(site_id, 10).is_err());
+    }
+
+    #[test]
+    fn enforce_translation_limits_rejects_once_rate_limit_reached() {
+        let site_id = Uuid::new_v4();
+        for _ in 0..TRANSLATIONS_PER_SITE_PER_HOUR {
+            assert!(enforce_translation_limits(site_id, 10).is_ok());
+        }
+        let err = enforce_translation_limits(site_id, 10)
+            .expect_err("call past the per-hour cap should be rejected");
+        assert!(err.to_string().contains("rate limit"));
+    }
+
+    #[tokio::test]
+    async fn translate_post_rejects_oversized_content_before_any_network_call() {
+        // A config with an invalid base URL — if this test reaches the
+        // network call at all, it will fail with a connection error rather
+        // than the expected "too long" message, catching a regression where
+        // the length guard stops running before `send_prompt`.
+        let config = crate::models::ai_provider::AiProviderConfig::OpenaiCompatible {
+            base_url: "http://127.0.0.1:1".to_string(),
+            api_key: "test-key".to_string(),
+            model_name: "test-model".to_string(),
+        };
+        let oversized_content = "x".repeat(MAX_SOURCE_CHARS + 1);
+        let post = make_post("html", &oversized_content, None);
+        let err = translate_post(&config, &post, "Spanish")
+            .await
+            .expect_err("oversized post content must be rejected");
+        assert!(
+            err.to_string().contains("too long"),
+            "expected a content-length rejection, got: {err}"
+        );
     }
 }
