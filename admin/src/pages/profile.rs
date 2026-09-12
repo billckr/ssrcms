@@ -5,6 +5,10 @@ pub struct ProfileForm {
     pub email: String,
     pub display_name: String,
     pub bio: String,
+    pub mfa_enabled: bool,
+    /// Formatted enable date, when `mfa_enabled` is true.
+    pub mfa_enabled_at: Option<String>,
+    pub mfa_recovery_codes_remaining: i64,
 }
 
 /// Up to two uppercase initials, preferring the display name over the username.
@@ -40,14 +44,104 @@ fn display_or_placeholder(value: &str) -> String {
     }
 }
 
+fn mfa_card_html(profile: &ProfileForm) -> String {
+    if profile.mfa_enabled {
+        format!(
+            r#"<div class="profile-bio-card">
+    <h3 style="margin-top:0">Two-factor authentication <a href="/help#doc-two-factor-authentication" target="_blank" title="Help: Two-Factor Authentication" aria-label="Help: Two-Factor Authentication" style="display:inline-flex;vertical-align:middle;opacity:.55"><img src="/admin/static/icons/help-circle.svg" alt="" style="width:14px;height:14px"></a></h3>
+    <p>Enabled{enabled_at}. {remaining} of 10 recovery codes remaining.</p>
+    <div class="icon-pill">
+      <button type="button" class="icon-btn" title="Regenerate recovery codes" aria-label="Regenerate recovery codes"
+              onclick="document.getElementById('mfa-regenerate-dialog').showModal();document.querySelector('.admin-content').style.filter='blur(1.5px)'">
+        <img src="/admin/static/icons/refresh-cw.svg" alt="">
+      </button>
+      <button type="button" class="icon-btn" title="Disable two-factor authentication" aria-label="Disable two-factor authentication"
+              onclick="document.getElementById('mfa-disable-dialog').showModal();document.querySelector('.admin-content').style.filter='blur(1.5px)'">
+        <img src="/admin/static/icons/shield-off.svg" alt="">
+      </button>
+    </div>
+  </div>"#,
+            enabled_at = profile
+                .mfa_enabled_at
+                .as_deref()
+                .map(|d| format!(" on {}", crate::html_escape(d)))
+                .unwrap_or_default(),
+            remaining = profile.mfa_recovery_codes_remaining,
+        )
+    } else {
+        r#"<div class="profile-bio-card">
+    <h3 style="margin-top:0">Two-factor authentication <a href="/help#doc-two-factor-authentication" target="_blank" title="Help: Two-Factor Authentication" aria-label="Help: Two-Factor Authentication" style="display:inline-flex;vertical-align:middle;opacity:.55"><img src="/admin/static/icons/help-circle.svg" alt="" style="width:14px;height:14px"></a></h3>
+    <p>Not enabled. Add an authenticator app (Google Authenticator, Authy, 1Password, etc.) as a second sign-in step.</p>
+    <div class="icon-pill">
+      <button type="button" class="icon-btn" title="Set up two-factor authentication" aria-label="Set up two-factor authentication"
+              onclick="document.getElementById('mfa-setup-dialog').showModal();document.querySelector('.admin-content').style.filter='blur(1.5px)'">
+        <img src="/admin/static/icons/shield.svg" alt="">
+      </button>
+    </div>
+  </div>"#
+        .to_string()
+    }
+}
+
+/// Each of setup/disable/regenerate needs a fresh current-password
+/// confirmation — same sensitivity bar as `change_password` — before its
+/// respective POST. One small dialog shape shared by all three.
+fn mfa_password_confirm_dialog(id: &str, title: &str, action: &str) -> String {
+    format!(
+        r#"<dialog id="{id}" class="modal-card">
+  <form method="POST" action="{action}">
+    <h3 class="modal-card-header">{title}</h3>
+    <div class="modal-card-body">
+      <div class="form-group">
+        <label for="{id}-password">Current Password</label>
+        <input type="password" id="{id}-password" name="current_password" required>
+      </div>
+      <div style="display:flex;justify-content:flex-end;margin-top:1rem">
+      <div class="icon-pill">
+        <button type="button" class="icon-btn" title="Cancel" aria-label="Cancel" onclick="document.getElementById('{id}').close()">
+          <img src="/admin/static/icons/x.svg" alt="">
+        </button>
+        <button type="submit" class="icon-btn icon-btn-active-blue" title="Continue" aria-label="Continue">
+          <img src="/admin/static/icons/save.svg" alt="">
+        </button>
+      </div>
+      </div>
+    </div>
+  </form>
+</dialog>
+<script>
+document.getElementById('{id}').addEventListener('close', function() {{
+  document.querySelector('.admin-content').style.filter = '';
+}});
+</script>"#
+    )
+}
+
 pub fn render_profile(
     profile: &ProfileForm,
     flash: Option<&str>,
     ctx: &crate::PageContext,
 ) -> String {
+    let mfa_card = mfa_card_html(profile);
+    let mfa_setup_dialog = mfa_password_confirm_dialog(
+        "mfa-setup-dialog",
+        "Set Up Two-Factor Authentication",
+        "/admin/profile/2fa/setup/start",
+    );
+    let mfa_disable_dialog = mfa_password_confirm_dialog(
+        "mfa-disable-dialog",
+        "Disable Two-Factor Authentication",
+        "/admin/profile/2fa/disable",
+    );
+    let mfa_regenerate_dialog = mfa_password_confirm_dialog(
+        "mfa-regenerate-dialog",
+        "Regenerate Recovery Codes",
+        "/admin/profile/2fa/recovery-codes/regenerate",
+    );
     let content = format!(
         r#"<div class="profile-layout">
   <div class="profile-main">
+    {mfa_card}
   </div>
 
   <div class="profile-side">
@@ -165,6 +259,10 @@ pub fn render_profile(
   </form>
 </dialog>
 
+{mfa_setup_dialog}
+{mfa_disable_dialog}
+{mfa_regenerate_dialog}
+
 <script>
 document.getElementById('edit-profile-dialog').addEventListener('close', function() {{
   document.querySelector('.admin-content').style.filter = '';
@@ -277,6 +375,10 @@ document.getElementById('change-password-dialog').addEventListener('close', func
   }});
 }})();
 </script>"#,
+        mfa_card = mfa_card,
+        mfa_setup_dialog = mfa_setup_dialog,
+        mfa_disable_dialog = mfa_disable_dialog,
+        mfa_regenerate_dialog = mfa_regenerate_dialog,
         username = crate::html_escape(&profile.username),
         email = crate::html_escape(&profile.email),
         display_name = crate::html_escape(&profile.display_name),

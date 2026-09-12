@@ -32,6 +32,34 @@ pub const ADMIN_SESSION_COOKIE_NAME: &str = "admin_session";
 /// Session key where the currently selected site UUID is stored.
 pub const SESSION_CURRENT_SITE_KEY: &str = "current_site_id";
 
+// ── Pending TOTP MFA state ───────────────────────────────────────────────
+//
+// Written by `handlers::auth::login_post` once a password check succeeds
+// for a user with MFA enabled, in place of the full `SESSION_USER_ID_KEY`
+// login. None of these alone satisfy the `AdminUser` extractor — only
+// `SESSION_USER_ID_KEY` does — so a stolen pending-MFA cookie only lets an
+// attacker *attempt* the second factor, subject to the same rate limiting
+// as everything else in `middleware::auth_security`, never grants access
+// on its own.
+
+/// Session key: the user id waiting on a second factor at `/admin/login/mfa`.
+pub const SESSION_MFA_PENDING_USER_ID_KEY: &str = "admin_mfa_pending_user_id";
+/// Session key: the already-resolved site id, carried through so step 2
+/// can finish the login exactly like the non-MFA path does.
+pub const SESSION_MFA_PENDING_SITE_ID_KEY: &str = "admin_mfa_pending_site_id";
+/// Session key: unix timestamp the pending state was created, for the
+/// completion-window check below.
+pub const SESSION_MFA_PENDING_AT_KEY: &str = "admin_mfa_pending_at";
+/// How long a user has to enter their second factor before having to sign
+/// in again from scratch.
+const MFA_PENDING_WINDOW_SECONDS: i64 = 5 * 60;
+
+/// Pure function (no session I/O) so the boundary condition is directly
+/// unit-testable without a live session store.
+pub fn mfa_pending_expired(pending_at: i64, now: i64) -> bool {
+    now.saturating_sub(pending_at) > MFA_PENDING_WINDOW_SECONDS
+}
+
 /// Session key where the role the user picked (or was auto-assigned, if they
 /// hold only one role on the current site) is stored. Cleared whenever the
 /// current site changes, since a different site can have a completely
@@ -487,8 +515,23 @@ impl FromRequestParts<AppState> for AdminUser {
 
 #[cfg(test)]
 mod tests {
-    use super::AdminCaps;
+    use super::{mfa_pending_expired, AdminCaps};
     use crate::models::site_user::SiteRole;
+
+    #[test]
+    fn mfa_pending_not_expired_within_window() {
+        assert!(!mfa_pending_expired(1000, 1000 + 60));
+    }
+
+    #[test]
+    fn mfa_pending_expired_past_window() {
+        assert!(mfa_pending_expired(1000, 1000 + 5 * 60 + 1));
+    }
+
+    #[test]
+    fn mfa_pending_not_expired_exactly_at_boundary() {
+        assert!(!mfa_pending_expired(1000, 1000 + 5 * 60));
+    }
 
     #[test]
     fn subscriber_has_no_admin_capabilities() {

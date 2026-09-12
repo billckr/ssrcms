@@ -116,6 +116,19 @@ needing a reason tied to the password or email fields. Same re-verification post
 of this list: the clicking session's own credential-version marker is refreshed in the same
 request so the click doesn't log out the device that made it.
 
+**Pending TOTP MFA state (2026-09-11):** a staff account with TOTP enabled doesn't get
+`SESSION_USER_ID_KEY` written on a correct password alone. `handlers::auth::login_post` instead
+writes three short-lived keys — `SESSION_MFA_PENDING_USER_ID_KEY`, `SESSION_MFA_PENDING_SITE_ID_KEY`,
+`SESSION_MFA_PENDING_AT_KEY` (a 5-minute completion window, enforced by the pure function
+`admin_auth::mfa_pending_expired`) — and redirects to `GET /admin/login/mfa` instead of `/admin`.
+None of these three keys alone satisfy `AdminUser` (only `SESSION_USER_ID_KEY` does), so a stolen
+pending-MFA cookie only lets an attacker *attempt* the second factor, still subject to the same
+`auth_security` rate limiting as everything else here (flow `"admin-mfa"`, keyed by user id). The
+session id is rotated once when the pending state is created and again when the second factor
+succeeds (`finish_admin_login`, shared by both the MFA and non-MFA login paths so they write the
+exact same final session keys) — rotating on every privilege escalation, not just once. See the
+**Admin Area** doc's Two-Factor Authentication section for the full flow.
+
 ### Account Auth (`account_auth.rs`)
 
 `AccountUser` extractor for any authenticated non-admin user (subscriber and above), keyed on

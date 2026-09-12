@@ -44,6 +44,12 @@ fn sweep_stale_tmp_dirs() {
     }
 }
 
+/// The `SECRET_KEY` every test router is built with — exposed so tests that
+/// need to decrypt something encrypted via `crate::crypto` (e.g. a pending
+/// TOTP secret) at rest can do so without scraping it out of an HTML
+/// response.
+pub const TEST_SECRET_KEY: &str = "test-secret-key-not-for-production-use-only";
+
 /// Build a throwaway `AppConfig` for one test run. Everything that gets
 /// written to (uploads/sites/plugins/documentation/search-index) points at
 /// a fresh temp directory unique to this call, so parallel `#[tokio::test]`
@@ -59,7 +65,7 @@ fn test_config() -> AppConfig {
         host: "127.0.0.1".to_string(),
         port: 0, // unused — tests call the router in-process, never bind a socket
         database_url,
-        secret_key: "test-secret-key-not-for-production-use-only".to_string(),
+        secret_key: TEST_SECRET_KEY.to_string(),
         themes_dir: workspace_themes_dir(),
         plugins_dir: tmp.join("plugins").to_string_lossy().to_string(),
         documentation_dir: tmp.join("documentation").to_string_lossy().to_string(),

@@ -45,6 +45,73 @@ pub fn render_public(
     )
 }
 
+/// Second step of a staff login for an account with TOTP MFA enabled —
+/// `/admin/login/mfa`. Just a single code field (no email/password, that
+/// already succeeded in step 1); accepts either a 6-digit authenticator
+/// code or a recovery code, so no field label narrows which factor type is
+/// expected.
+pub fn render_mfa(error: Option<&str>, default_theme: &str, site_name: &str) -> String {
+    let error_html = match error {
+        Some(msg) => format!(r#"<div class="error">{}</div>"#, crate::html_escape(msg)),
+        None => String::new(),
+    };
+    let default_theme = match default_theme {
+        "light" | "dark" => default_theme,
+        _ => "system",
+    };
+    format!(
+        r#"<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Two-factor authentication</title>
+  <script>
+    (function() {{
+      try {{
+        var pref = localStorage.getItem('admin-theme') || '{default_theme}';
+        var dark = pref === 'dark' || (pref === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        if (dark) {{
+          document.documentElement.setAttribute('data-theme', 'dark');
+        }}
+      }} catch (e) {{}}
+    }})();
+  </script>
+  <style>{css}
+    .login-box .login-submit-row {{ display: flex; justify-content: center; margin-top: .5rem; }}
+    .login-box .login-submit-row .icon-btn {{ width: 40px; height: 40px; padding: 0; background: none; background-image: none; border: 1px solid transparent; box-shadow: none; }}
+    .login-box .login-submit-row .icon-btn:hover {{ box-shadow: none; transform: none; }}
+    .login-box .login-submit-row .icon-btn:focus {{ box-shadow: none; }}
+    .login-box .login-submit-row .icon-btn img {{ width: 22px; height: 22px; }}
+  </style>
+</head>
+<body class="login-body">
+  <div class="login-box">
+    <h1 class="login-brand">{site_name}</h1>
+    <h2>Two-factor authentication</h2>
+    <p style="color:var(--muted);margin-top:-.5rem">Enter the 6-digit code from your authenticator app, or one of your recovery codes.</p>
+    {error_html}
+    <form method="POST" action="/admin/login/mfa">
+      <label for="code">Code</label>
+      <input type="text" id="code" name="code" inputmode="numeric" autocomplete="one-time-code" required autofocus>
+      <div class="login-submit-row">
+        <div class="icon-pill">
+          <button type="submit" class="icon-btn" title="Verify" aria-label="Verify">
+            <img src="/admin/static/icons/fingerprint-light.svg" alt="">
+          </button>
+        </div>
+      </div>
+    </form>
+  </div>
+</body>
+</html>"#,
+        css = crate::ADMIN_CSS,
+        error_html = error_html,
+        site_name = crate::html_escape(site_name),
+        default_theme = default_theme,
+    )
+}
+
 #[allow(clippy::too_many_arguments)]
 fn render_with_action(
     error: Option<&str>,

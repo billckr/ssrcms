@@ -34,16 +34,18 @@ done.
 
 - [ ] revisit whether Media Manager's alt-text field should be required (or at least nudge/warn) on upload — currently optional, editors can leave it blank. Don't force it outright without more thought (WP doesn't require it either); consider a softer nudge instead. Surfaced while auditing PageSpeed accessibility findings (2026-08-21).
 
-- [ ] follow-ups deferred from the 2026-09-07 auth security hardening (`AUTH_SECURITY_REVIEW.md` / `AUTH_SECURITY_IMPLEMENTATION_RESULTS.md`), none required before the fixes already shipped:
-  - verified self-service email changes (pending-email table, confirmation link, notify old address) — email is read-only for now
-  - a real "join another site" flow for an existing identity (authenticated action or one-time email invitation), now that anonymous auto-linking is closed
+- [ ] follow-ups deferred from the 2026-09-07 auth security hardening (`AUTH_SECURITY_REVIEW.md` / `AUTH_SECURITY_IMPLEMENTATION_RESULTS.md`), none required before the fixes already shipped. Most of this list has since shipped (see Done below: verified email change for subscribers, cross-site join, common-password denylist, escalating login delay, sign-out-other-devices, `routes.rs` integration suite) — what's actually still open:
+  - verified self-service email change exists for subscribers (`f22e9fb`) but was intentionally left read-only for staff/admin (`/admin/profile`) — `send_for_site` needs a concrete `site_id` and a super_admin's `AdminUser.site_id` can be `None`; would need a design decision for that case before extending it to staff
   - move the in-process login/registration/recovery rate limiter to PostgreSQL or a shared cache before running more than one app instance
-  - TOTP authenticator-app MFA for staff, plus hashed recovery codes
   - WebAuthn/passkeys
-  - a local common/breached-password denylist check
-  - the `core/tests/routes.rs` HTTP integration test suite is still `todo!()` placeholders — needs a live-Postgres test harness
+  - recent-authentication ("step-up auth") requirement for especially sensitive actions — nothing beyond the existing password/email-change confirmation
+  - broader security-notification emails (new-device login, session revoked, etc.) — currently only the email-change old-address notice exists
+  - CAPTCHA — deliberately deferred until real abuse patterns warrant it
+  - decide whether production should default Axum's bind host to `127.0.0.1` when Caddy runs on the same box (currently defaults to `0.0.0.0`, relies on firewall/deployment docs) — see "Deferred follow-up: Axum bind policy" in `AUTH_EXPLOIT_REVIEW_RESULTS.md`
 
 ## Done
+
+- [x] TOTP authenticator-app MFA for staff logins (`/admin/login`), plus hashed single-use recovery codes. Shipped 2026-09-11 — see `TOTP_MFA_IMPLEMENTATION_RESULTS.md`. Self-service opt-in via `/admin/profile` (QR + manual-secret enrollment, disable, recovery-code regeneration, all gated behind re-confirming the current password); a super_admin can force-disable another staff member's MFA (`/admin/users/{id}/disable-mfa`) to recover a lockout. Notification emails on enable/disable/regenerate. Staff only — subscribers, org-wide enforcement, and WebAuthn/passkeys remain future follow-ups.
 
 - [x] bug: any `.data-table`'s Actions column (Tags, Categories, Menus, Users, site AI Providers, etc.) could visually detach from its row and cut across mid-row once that row grew taller than the action icons (e.g. wrapped multi-line text in another column) — first spotted on the AI Translation providers table, then confirmed sitewide. Root cause: `.data-table .actions { display: flex; ... }` overrode the `<td>`'s own display away from `table-cell`, so it stopped stretching to the row's full height like every other cell. Fixed 2026-09-11: dropped the `display:flex`/`gap` (every `.actions` cell only ever has one child — the `.icon-pill-actionbuttons` div, which already does its own flex layout) in favor of `vertical-align: middle`, which centers correctly on a real table cell. Confirmed via computed-style + bounding-rect checks that the cell now reports `display: table-cell` and fills the row.
 

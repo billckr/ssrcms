@@ -246,6 +246,42 @@ subscriber-facing `/account/profile` (see the **Account Area** doc for the full 
 `profile::sign_out_other_devices` mirrors `account::sign_out_other_devices` exactly, just against
 `SESSION_CREDENTIAL_VERSION_KEY` instead of the account-side session key.
 
+### Two-Factor Authentication / TOTP MFA (added 2026-09-11)
+
+Staff-only (`/admin/login` accounts — subscribers are unaffected), self-service, opt-in via
+`/admin/profile`'s "Two-factor authentication" card. Pure local RFC 6238/4226 TOTP — no
+third-party service, no SMS.
+
+- `GET`/`POST /admin/profile/2fa/setup/start` → `/admin/profile/2fa/setup` → `.../confirm`:
+  enrollment requires re-confirming the current password (`profile::mfa_setup_start`), generates a
+  fresh secret (`user_totp::start_enrollment`), and shows a QR code (`utils::totp::qr_svg`,
+  rendered inline as SVG — no image codec, no external QR service) plus the manual-entry secret.
+  Confirming with the first real code from the scanned authenticator app
+  (`user_totp::confirm_enrollment`) sets `user_totp.enabled_at` and issues 10 recovery codes
+  (`mfa_recovery_code::generate_batch`), shown exactly once.
+- `POST /admin/profile/2fa/disable` and `.../recovery-codes/regenerate`: both also require the
+  current password. Each sends the account a notification email (reusing `mail::send_for_site`,
+  resolving a site via `admin.site_id.or(admin.user.default_site_id)` — the same fallback problem
+  and solution as staff self-service email changes, see the **Account Area** doc) so a
+  hijacked-session attacker silently toggling MFA as a persistence mechanism gets caught by the
+  real owner.
+- Login gate lives in `handlers::auth::login_post` / `mfa_login_form` / `mfa_login_post`: once the
+  password check (and role/site-access checks) succeed for an enrolled account, the session gets a
+  short-lived pending state (`SESSION_MFA_PENDING_*` keys, 5-minute window — see the Middleware
+  doc) instead of a full login, and the browser is sent to `/admin/login/mfa`. Only a correct TOTP
+  code or an unused recovery code completes the login (`finish_admin_login`, shared with the
+  non-MFA path so both write the exact same session keys and audit-log entry). Submitting the
+  right second factor twice in a row is rejected — `user_totp.last_used_step` blocks replaying the
+  same code within its own 30-second validity window. The `/admin/login/mfa` route is rate-limited
+  the same way `/admin/login` itself is (`middleware::auth_security`, flow `"admin-mfa"`, keyed by
+  user id).
+- The one-time recovery-codes page (`admin::pages::profile_mfa::render_recovery_codes`) also offers
+  a client-side "Download codes" button — builds a `Blob`/`URL.createObjectURL` download of a
+  `.txt` file, no server round-trip.
+- `ON DELETE CASCADE` on both `user_totp` and `mfa_recovery_codes` means deleting a user cleans
+  these up automatically; GDPR `erase_personal_data` never touches them since it's
+  subscriber-only and MFA is staff-only, so the two code paths never overlap.
+
 ## Routes / Endpoints
 
 See the `routing` doc for the full `/admin/*` route table (all admin routes are defined in

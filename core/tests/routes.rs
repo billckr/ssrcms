@@ -932,3 +932,885 @@ async fn test_ai_provider_save_retains_saved_key_and_updates_model_when_edit_for
         other => panic!("expected a decryptable Anthropic config after save, got {other:?}"),
     }
 }
+
+// ── TOTP MFA for staff logins ────────────────────────────────────────────
+
+/// Creates a throwaway super_admin (bypasses site_users entirely, same
+/// reasoning as `test_sign_out_other_devices_invalidates_other_admin_sessions`
+/// above) and returns it plus its plaintext password.
+async fn create_mfa_test_admin(
+    pool: &sqlx::PgPool,
+    prefix: &str,
+) -> (synaptic_core::models::user::User, String) {
+    use synaptic_core::models::user::{self, CreateUser, UserRole};
+    let unique = uuid::Uuid::new_v4().simple().to_string();
+    let password = "Verify12345Pass!".to_string();
+    let created = user::create(
+        pool,
+        &CreateUser {
+            username: format!("{prefix}{}", &unique[..12]),
+            email: format!("{prefix}-{unique}@example.com"),
+            display_name: format!("{prefix} Test"),
+            password: password.clone(),
+            role: UserRole::SuperAdmin,
+        },
+    )
+    .await
+    .unwrap_or_else(|e| panic!("failed to create test user: {e:?}"));
+    (created, password)
+}
+
+fn login_request(body: String) -> Request<Body> {
+    Request::builder()
+        .method("POST")
+        .uri("/admin/login")
+        .header("content-type", "application/x-www-form-urlencoded")
+        // middleware::csrf::same_origin requires a matching Host + Origin
+        // pair on state-changing requests to protected paths.
+        .header("host", "localhost")
+        .header("origin", "http://localhost")
+        .extension(common::connect_info())
+        .body(Body::from(body))
+        .unwrap()
+}
+
+fn mfa_verify_request(cookie: &str, body: String) -> Request<Body> {
+    Request::builder()
+        .method("POST")
+        .uri("/admin/login/mfa")
+        .header("content-type", "application/x-www-form-urlencoded")
+        .header("host", "localhost")
+        .header("origin", "http://localhost")
+        .header("cookie", cookie)
+        .extension(common::connect_info())
+        .body(Body::from(body))
+        .unwrap()
+}
+
+fn authenticated_post_request(uri: &str, cookie: &str, body: String) -> Request<Body> {
+    Request::builder()
+        .method("POST")
+        .uri(uri)
+        .header("content-type", "application/x-www-form-urlencoded")
+        .header("host", "localhost")
+        .header("origin", "http://localhost")
+        .header("cookie", cookie)
+        .extension(common::connect_info())
+        .body(Body::from(body))
+        .unwrap()
+}
+
+fn authenticated_get_request(uri: &str, cookie: &str) -> Request<Body> {
+    Request::builder()
+        .uri(uri)
+        .header("cookie", cookie)
+        .extension(common::connect_info())
+        .body(Body::empty())
+        .unwrap()
+}
+
+fn redirect_location(response: &axum::http::Response<Body>) -> String {
+    assert!(
+        response.status() == StatusCode::FOUND || response.status() == StatusCode::SEE_OTHER,
+        "expected a redirect, got {}",
+        response.status()
+    );
+    response
+        .headers()
+        .get("location")
+        .expect("redirect response must have a Location header")
+        .to_str()
+        .unwrap()
+        .to_string()
+}
+
+#[tokio::test]
+#[ignore = "requires a live PostgreSQL instance — see module docs"]
+async fn test_admin_login_unaffected_when_mfa_not_enabled() {
+    let database_url = std::env::var("DATABASE_URL")
+        .expect("DATABASE_URL must be set to run integration tests (see tests/routes.rs)");
+    let pool = synaptic_core::db::connect(&database_url).await.unwrap();
+    let (created, password) = create_mfa_test_admin(&pool, "mfaoff").await;
+
+    let app = common::test_router().await;
+    let response = app
+        .oneshot(login_request(format!(
+            "email={}&password={password}",
+            created.email
+        )))
+        .await
+        .unwrap();
+
+    assert_eq!(
+        redirect_location(&response),
+        "/admin",
+        "an account with no MFA enrolled must log in directly, with no second-factor step"
+    );
+
+    let _ = synaptic_core::models::user::delete(&pool, created.id).await;
+}
+
+#[tokio::test]
+#[ignore = "requires a live PostgreSQL instance — see module docs"]
+async fn test_totp_enrollment_and_login_flow() {
+    use synaptic_core::models::user_totp;
+    use synaptic_core::utils::totp;
+
+    let database_url = std::env::var("DATABASE_URL")
+        .expect("DATABASE_URL must be set to run integration tests (see tests/routes.rs)");
+    let pool = synaptic_core::db::connect(&database_url).await.unwrap();
+    let (created, password) = create_mfa_test_admin(&pool, "mfaenr").await;
+
+    let app = common::test_router().await;
+
+    // Log in once (no MFA yet) to get an authenticated session to enroll from.
+    let login_resp = app
+        .clone()
+        .oneshot(login_request(format!(
+            "email={}&password={password}",
+            created.email
+        )))
+        .await
+        .unwrap();
+    assert_eq!(redirect_location(&login_resp), "/admin");
+    let cookie = extract_cookie(&login_resp, "admin_session");
+
+    // Start enrollment.
+    let start_resp = app
+        .clone()
+        .oneshot(authenticated_post_request(
+            "/admin/profile/2fa/setup/start",
+            &cookie,
+            format!("current_password={password}"),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(redirect_location(&start_resp), "/admin/profile/2fa/setup");
+
+    // Read the pending secret directly (not scraped from HTML) to compute a
+    // valid code, matching how a real authenticator app would.
+    let secret = user_totp::pending_secret(&pool, common::TEST_SECRET_KEY, created.id)
+        .await
+        .unwrap()
+        .expect("enrollment should have created a pending secret");
+    let code = totp::generate_code(&secret, chrono::Utc::now().timestamp() as u64).unwrap();
+
+    // Confirm enrollment.
+    let confirm_resp = app
+        .clone()
+        .oneshot(authenticated_post_request(
+            "/admin/profile/2fa/setup/confirm",
+            &cookie,
+            format!("code={code}"),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(
+        confirm_resp.status(),
+        StatusCode::OK,
+        "confirming with the right code should show the recovery codes page"
+    );
+    assert!(user_totp::is_enabled(&pool, created.id).await.unwrap());
+
+    // A fresh login now must stop at /admin/login/mfa, not /admin.
+    let login2_resp = app
+        .clone()
+        .oneshot(login_request(format!(
+            "email={}&password={password}",
+            created.email
+        )))
+        .await
+        .unwrap();
+    assert_eq!(redirect_location(&login2_resp), "/admin/login/mfa");
+    let pending_cookie = extract_cookie(&login2_resp, "admin_session");
+
+    // /admin/profile is not reachable yet on the pending-MFA cookie.
+    let profile_resp = app
+        .clone()
+        .oneshot(authenticated_get_request(
+            "/admin/profile",
+            &pending_cookie,
+        ))
+        .await
+        .unwrap();
+    assert!(
+        profile_resp.status() == StatusCode::FOUND || profile_resp.status() == StatusCode::SEE_OTHER,
+        "a pending-MFA session must not satisfy the AdminUser extractor, got {}",
+        profile_resp.status()
+    );
+
+    // Submit the correct code to complete login.
+    let login_code = totp::generate_code(&secret, chrono::Utc::now().timestamp() as u64).unwrap();
+    let verify_resp = app
+        .clone()
+        .oneshot(mfa_verify_request(
+            &pending_cookie,
+            format!("code={login_code}"),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(
+        redirect_location(&verify_resp),
+        "/admin",
+        "the correct second factor must complete the login"
+    );
+    let final_cookie = extract_cookie(&verify_resp, "admin_session");
+
+    let profile_resp2 = app
+        .clone()
+        .oneshot(authenticated_get_request("/admin/profile", &final_cookie))
+        .await
+        .unwrap();
+    assert_eq!(
+        profile_resp2.status(),
+        StatusCode::OK,
+        "the fully-authenticated cookie must now reach /admin/profile"
+    );
+
+    let _ = synaptic_core::models::mfa_recovery_code::delete_all_for_user(&pool, created.id).await;
+    let _ = user_totp::disable(&pool, created.id).await;
+    let _ = synaptic_core::models::user::delete(&pool, created.id).await;
+}
+
+#[tokio::test]
+#[ignore = "requires a live PostgreSQL instance — see module docs"]
+async fn test_totp_login_rejects_wrong_code_and_blocks_replay() {
+    use synaptic_core::models::user_totp;
+    use synaptic_core::utils::totp;
+
+    let database_url = std::env::var("DATABASE_URL")
+        .expect("DATABASE_URL must be set to run integration tests (see tests/routes.rs)");
+    let pool = synaptic_core::db::connect(&database_url).await.unwrap();
+    let (created, password) = create_mfa_test_admin(&pool, "mfarep").await;
+
+    // Enroll directly via the model — the HTTP enrollment path is already
+    // covered by test_totp_enrollment_and_login_flow above.
+    let secret = user_totp::start_enrollment(&pool, common::TEST_SECRET_KEY, created.id)
+        .await
+        .unwrap();
+    let confirm_code = totp::generate_code(&secret, chrono::Utc::now().timestamp() as u64).unwrap();
+    assert!(user_totp::confirm_enrollment(
+        &pool,
+        common::TEST_SECRET_KEY,
+        created.id,
+        &confirm_code,
+        chrono::Utc::now(),
+    )
+    .await
+    .unwrap());
+
+    let app = common::test_router().await;
+
+    // Wrong code is rejected — session stays pending, not authenticated.
+    let login_resp = app
+        .clone()
+        .oneshot(login_request(format!(
+            "email={}&password={password}",
+            created.email
+        )))
+        .await
+        .unwrap();
+    let pending_cookie = extract_cookie(&login_resp, "admin_session");
+    let wrong_resp = app
+        .clone()
+        .oneshot(mfa_verify_request(&pending_cookie, "code=000000".to_string()))
+        .await
+        .unwrap();
+    assert_eq!(
+        wrong_resp.status(),
+        StatusCode::OK,
+        "a wrong code re-renders the MFA form, it does not redirect"
+    );
+    let still_pending = app
+        .clone()
+        .oneshot(authenticated_get_request(
+            "/admin/profile",
+            &pending_cookie,
+        ))
+        .await
+        .unwrap();
+    assert!(
+        still_pending.status() == StatusCode::FOUND || still_pending.status() == StatusCode::SEE_OTHER,
+        "a wrong code must not have completed the login"
+    );
+
+    // Correct code succeeds once.
+    let login_code = totp::generate_code(&secret, chrono::Utc::now().timestamp() as u64).unwrap();
+    let first = app
+        .clone()
+        .oneshot(mfa_verify_request(
+            &pending_cookie,
+            format!("code={login_code}"),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(redirect_location(&first), "/admin");
+
+    // A brand new login attempt, replaying the SAME code, must be rejected —
+    // `last_used_step` blocks it even though the code is still numerically
+    // "valid" within its time window.
+    let login_resp2 = app
+        .clone()
+        .oneshot(login_request(format!(
+            "email={}&password={password}",
+            created.email
+        )))
+        .await
+        .unwrap();
+    let pending_cookie2 = extract_cookie(&login_resp2, "admin_session");
+    let replay = app
+        .clone()
+        .oneshot(mfa_verify_request(
+            &pending_cookie2,
+            format!("code={login_code}"),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(
+        replay.status(),
+        StatusCode::OK,
+        "replaying an already-used code must be rejected, not redirect to /admin"
+    );
+
+    let _ = synaptic_core::models::mfa_recovery_code::delete_all_for_user(&pool, created.id).await;
+    let _ = user_totp::disable(&pool, created.id).await;
+    let _ = synaptic_core::models::user::delete(&pool, created.id).await;
+}
+
+#[tokio::test]
+#[ignore = "requires a live PostgreSQL instance — see module docs"]
+async fn test_totp_recovery_code_login_and_single_use() {
+    use synaptic_core::models::{mfa_recovery_code, user_totp};
+    use synaptic_core::utils::totp;
+
+    let database_url = std::env::var("DATABASE_URL")
+        .expect("DATABASE_URL must be set to run integration tests (see tests/routes.rs)");
+    let pool = synaptic_core::db::connect(&database_url).await.unwrap();
+    let (created, password) = create_mfa_test_admin(&pool, "mfarec").await;
+
+    let secret = user_totp::start_enrollment(&pool, common::TEST_SECRET_KEY, created.id)
+        .await
+        .unwrap();
+    let confirm_code = totp::generate_code(&secret, chrono::Utc::now().timestamp() as u64).unwrap();
+    assert!(user_totp::confirm_enrollment(
+        &pool,
+        common::TEST_SECRET_KEY,
+        created.id,
+        &confirm_code,
+        chrono::Utc::now(),
+    )
+    .await
+    .unwrap());
+    let codes = mfa_recovery_code::generate_batch();
+    mfa_recovery_code::replace_all(&pool, created.id, &codes)
+        .await
+        .unwrap();
+    let recovery_code = codes[0].clone();
+
+    let app = common::test_router().await;
+    let login_resp = app
+        .clone()
+        .oneshot(login_request(format!(
+            "email={}&password={password}",
+            created.email
+        )))
+        .await
+        .unwrap();
+    let pending_cookie = extract_cookie(&login_resp, "admin_session");
+
+    let verify = app
+        .clone()
+        .oneshot(mfa_verify_request(
+            &pending_cookie,
+            format!("code={recovery_code}"),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(
+        redirect_location(&verify),
+        "/admin",
+        "a valid, unused recovery code must complete login in place of a TOTP code"
+    );
+
+    // Single-use: a second login attempt with the same recovery code fails.
+    let login_resp2 = app
+        .clone()
+        .oneshot(login_request(format!(
+            "email={}&password={password}",
+            created.email
+        )))
+        .await
+        .unwrap();
+    let pending_cookie2 = extract_cookie(&login_resp2, "admin_session");
+    let replay = app
+        .clone()
+        .oneshot(mfa_verify_request(
+            &pending_cookie2,
+            format!("code={recovery_code}"),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(
+        replay.status(),
+        StatusCode::OK,
+        "a used recovery code must be rejected on reuse"
+    );
+
+    let _ = mfa_recovery_code::delete_all_for_user(&pool, created.id).await;
+    let _ = user_totp::disable(&pool, created.id).await;
+    let _ = synaptic_core::models::user::delete(&pool, created.id).await;
+}
+
+#[tokio::test]
+#[ignore = "requires a live PostgreSQL instance — see module docs"]
+async fn test_mfa_disable_removes_login_requirement() {
+    use synaptic_core::models::{mfa_recovery_code, user_totp};
+    use synaptic_core::utils::totp;
+
+    let database_url = std::env::var("DATABASE_URL")
+        .expect("DATABASE_URL must be set to run integration tests (see tests/routes.rs)");
+    let pool = synaptic_core::db::connect(&database_url).await.unwrap();
+    let (created, password) = create_mfa_test_admin(&pool, "mfadis").await;
+
+    let secret = user_totp::start_enrollment(&pool, common::TEST_SECRET_KEY, created.id)
+        .await
+        .unwrap();
+    let confirm_code = totp::generate_code(&secret, chrono::Utc::now().timestamp() as u64).unwrap();
+    assert!(user_totp::confirm_enrollment(
+        &pool,
+        common::TEST_SECRET_KEY,
+        created.id,
+        &confirm_code,
+        chrono::Utc::now(),
+    )
+    .await
+    .unwrap());
+
+    let app = common::test_router().await;
+    let login_resp = app
+        .clone()
+        .oneshot(login_request(format!(
+            "email={}&password={password}",
+            created.email
+        )))
+        .await
+        .unwrap();
+    assert_eq!(redirect_location(&login_resp), "/admin/login/mfa");
+    let pending_cookie = extract_cookie(&login_resp, "admin_session");
+    let login_code = totp::generate_code(&secret, chrono::Utc::now().timestamp() as u64).unwrap();
+    let verify_resp = app
+        .clone()
+        .oneshot(mfa_verify_request(
+            &pending_cookie,
+            format!("code={login_code}"),
+        ))
+        .await
+        .unwrap();
+    let full_cookie = extract_cookie(&verify_resp, "admin_session");
+
+    let disable_resp = app
+        .clone()
+        .oneshot(authenticated_post_request(
+            "/admin/profile/2fa/disable",
+            &full_cookie,
+            format!("current_password={password}"),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(redirect_location(&disable_resp), "/admin/profile?success=mfa_disabled");
+    assert!(!user_totp::is_enabled(&pool, created.id).await.unwrap());
+
+    // A fresh login now goes straight to /admin — no second factor required.
+    let login_resp2 = app
+        .clone()
+        .oneshot(login_request(format!(
+            "email={}&password={password}",
+            created.email
+        )))
+        .await
+        .unwrap();
+    assert_eq!(redirect_location(&login_resp2), "/admin");
+
+    let _ = mfa_recovery_code::delete_all_for_user(&pool, created.id).await;
+    let _ = synaptic_core::models::user::delete(&pool, created.id).await;
+}
+
+#[tokio::test]
+#[ignore = "requires a live PostgreSQL instance — see module docs"]
+async fn test_mfa_endpoints_reject_wrong_current_password() {
+    use synaptic_core::models::{mfa_recovery_code, user_totp};
+    use synaptic_core::utils::totp;
+
+    let database_url = std::env::var("DATABASE_URL")
+        .expect("DATABASE_URL must be set to run integration tests (see tests/routes.rs)");
+    let pool = synaptic_core::db::connect(&database_url).await.unwrap();
+    let (created, password) = create_mfa_test_admin(&pool, "mfawrg").await;
+
+    let app = common::test_router().await;
+    let login_resp = app
+        .clone()
+        .oneshot(login_request(format!(
+            "email={}&password={password}",
+            created.email
+        )))
+        .await
+        .unwrap();
+    let cookie = extract_cookie(&login_resp, "admin_session");
+    let wrong_password_body = "current_password=totally-wrong-password".to_string();
+
+    // Setup start with the wrong password must not create a pending secret.
+    let start_resp = app
+        .clone()
+        .oneshot(authenticated_post_request(
+            "/admin/profile/2fa/setup/start",
+            &cookie,
+            wrong_password_body.clone(),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(redirect_location(&start_resp), "/admin/profile?error=mfa_wrong_password");
+    assert!(
+        user_totp::pending_secret(&pool, common::TEST_SECRET_KEY, created.id)
+            .await
+            .unwrap()
+            .is_none(),
+        "a wrong current-password must not start enrollment"
+    );
+
+    // Enroll for real (directly via the model) to test disable/regenerate.
+    let secret = user_totp::start_enrollment(&pool, common::TEST_SECRET_KEY, created.id)
+        .await
+        .unwrap();
+    let confirm_code = totp::generate_code(&secret, chrono::Utc::now().timestamp() as u64).unwrap();
+    assert!(user_totp::confirm_enrollment(
+        &pool,
+        common::TEST_SECRET_KEY,
+        created.id,
+        &confirm_code,
+        chrono::Utc::now(),
+    )
+    .await
+    .unwrap());
+    let codes = mfa_recovery_code::generate_batch();
+    mfa_recovery_code::replace_all(&pool, created.id, &codes)
+        .await
+        .unwrap();
+    let original_code = codes[0].clone();
+
+    // Disable with the wrong password must not disable.
+    let disable_resp = app
+        .clone()
+        .oneshot(authenticated_post_request(
+            "/admin/profile/2fa/disable",
+            &cookie,
+            wrong_password_body.clone(),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(redirect_location(&disable_resp), "/admin/profile?error=mfa_wrong_password");
+    assert!(user_totp::is_enabled(&pool, created.id).await.unwrap());
+
+    // Regenerate with the wrong password must not replace the codes — the
+    // original code must still work.
+    let regen_resp = app
+        .clone()
+        .oneshot(authenticated_post_request(
+            "/admin/profile/2fa/recovery-codes/regenerate",
+            &cookie,
+            wrong_password_body,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(redirect_location(&regen_resp), "/admin/profile?error=mfa_wrong_password");
+    assert!(
+        mfa_recovery_code::consume(&pool, created.id, &original_code)
+            .await
+            .unwrap(),
+        "the original recovery codes must be unchanged after a rejected regenerate attempt"
+    );
+
+    let _ = mfa_recovery_code::delete_all_for_user(&pool, created.id).await;
+    let _ = user_totp::disable(&pool, created.id).await;
+    let _ = synaptic_core::models::user::delete(&pool, created.id).await;
+}
+
+#[tokio::test]
+#[ignore = "requires a live PostgreSQL instance — see module docs"]
+async fn test_mfa_login_rate_limited_after_repeated_wrong_codes() {
+    use synaptic_core::models::user_totp;
+    use synaptic_core::utils::totp;
+
+    let database_url = std::env::var("DATABASE_URL")
+        .expect("DATABASE_URL must be set to run integration tests (see tests/routes.rs)");
+    let pool = synaptic_core::db::connect(&database_url).await.unwrap();
+    let (created, password) = create_mfa_test_admin(&pool, "mfalim").await;
+
+    let secret = user_totp::start_enrollment(&pool, common::TEST_SECRET_KEY, created.id)
+        .await
+        .unwrap();
+    let confirm_code = totp::generate_code(&secret, chrono::Utc::now().timestamp() as u64).unwrap();
+    assert!(user_totp::confirm_enrollment(
+        &pool,
+        common::TEST_SECRET_KEY,
+        created.id,
+        &confirm_code,
+        chrono::Utc::now(),
+    )
+    .await
+    .unwrap());
+
+    let app = common::test_router().await;
+    let login_resp = app
+        .clone()
+        .oneshot(login_request(format!(
+            "email={}&password={password}",
+            created.email
+        )))
+        .await
+        .unwrap();
+    let pending_cookie = extract_cookie(&login_resp, "admin_session");
+
+    let mut last_status = StatusCode::OK;
+    for _ in 0..8 {
+        last_status = app
+            .clone()
+            .oneshot(mfa_verify_request(&pending_cookie, "code=000000".to_string()))
+            .await
+            .unwrap()
+            .status();
+        if last_status == StatusCode::TOO_MANY_REQUESTS {
+            break;
+        }
+    }
+    assert_eq!(
+        last_status,
+        StatusCode::TOO_MANY_REQUESTS,
+        "repeated wrong codes against one pending login must eventually be throttled"
+    );
+
+    let _ = synaptic_core::models::mfa_recovery_code::delete_all_for_user(&pool, created.id).await;
+    let _ = user_totp::disable(&pool, created.id).await;
+    let _ = synaptic_core::models::user::delete(&pool, created.id).await;
+}
+
+#[tokio::test]
+#[ignore = "requires a live PostgreSQL instance — see module docs"]
+async fn test_mfa_login_route_rejects_cross_origin_post() {
+    use synaptic_core::models::user_totp;
+    use synaptic_core::utils::totp;
+
+    let database_url = std::env::var("DATABASE_URL")
+        .expect("DATABASE_URL must be set to run integration tests (see tests/routes.rs)");
+    let pool = synaptic_core::db::connect(&database_url).await.unwrap();
+    let (created, password) = create_mfa_test_admin(&pool, "mfacsr").await;
+
+    let secret = user_totp::start_enrollment(&pool, common::TEST_SECRET_KEY, created.id)
+        .await
+        .unwrap();
+    let confirm_code = totp::generate_code(&secret, chrono::Utc::now().timestamp() as u64).unwrap();
+    assert!(user_totp::confirm_enrollment(
+        &pool,
+        common::TEST_SECRET_KEY,
+        created.id,
+        &confirm_code,
+        chrono::Utc::now(),
+    )
+    .await
+    .unwrap());
+
+    let app = common::test_router().await;
+    let login_resp = app
+        .clone()
+        .oneshot(login_request(format!(
+            "email={}&password={password}",
+            created.email
+        )))
+        .await
+        .unwrap();
+    let pending_cookie = extract_cookie(&login_resp, "admin_session");
+
+    let hostile_resp = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/admin/login/mfa")
+                .header("content-type", "application/x-www-form-urlencoded")
+                .header("host", "localhost")
+                .header("origin", "http://attacker.invalid")
+                .header("cookie", pending_cookie)
+                .extension(common::connect_info())
+                .body(Body::from("code=123456"))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        hostile_resp.status(),
+        StatusCode::FORBIDDEN,
+        "a cross-origin POST to /admin/login/mfa must be rejected by the same-origin CSRF check"
+    );
+
+    let _ = synaptic_core::models::mfa_recovery_code::delete_all_for_user(&pool, created.id).await;
+    let _ = user_totp::disable(&pool, created.id).await;
+    let _ = synaptic_core::models::user::delete(&pool, created.id).await;
+}
+
+#[tokio::test]
+#[ignore = "requires a live PostgreSQL instance — see module docs"]
+async fn test_mfa_login_route_rejects_oversized_body() {
+    let app = common::test_router().await;
+    let big_body = format!("code={}", "9".repeat(20_000));
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/admin/login/mfa")
+                .header("content-type", "application/x-www-form-urlencoded")
+                .header("host", "localhost")
+                .header("origin", "http://localhost")
+                .extension(common::connect_info())
+                .body(Body::from(big_body))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::PAYLOAD_TOO_LARGE);
+}
+
+#[tokio::test]
+#[ignore = "requires a live PostgreSQL instance — see module docs"]
+async fn test_subscriber_login_never_prompts_for_mfa() {
+    use synaptic_core::models::site_user::SiteRole;
+    use synaptic_core::models::user::{self, CreateUser, UserRole};
+
+    let database_url = std::env::var("DATABASE_URL")
+        .expect("DATABASE_URL must be set to run integration tests (see tests/routes.rs)");
+    let pool = synaptic_core::db::connect(&database_url).await.unwrap();
+    let unique = uuid::Uuid::new_v4().simple().to_string();
+    let password = "Verify12345Pass!".to_string();
+    let created = user::create(
+        &pool,
+        &CreateUser {
+            username: format!("mfasub{}", &unique[..9]),
+            email: format!("mfasub-{unique}@example.com"),
+            display_name: "MFA Subscriber Test".to_string(),
+            password: password.clone(),
+            role: UserRole::Subscriber,
+        },
+    )
+    .await
+    .unwrap();
+    // Subscriber login requires site membership, same as staff — seed a
+    // role on the "localhost" test site (see common::ensure_test_site).
+    let site = synaptic_core::models::site::get_by_hostname(&pool, "localhost")
+        .await
+        .unwrap();
+    synaptic_core::models::site_user::add(&pool, site.id, created.id, SiteRole::Subscriber, None, false)
+        .await
+        .unwrap();
+
+    let app = common::test_router().await;
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/login")
+                .header("content-type", "application/x-www-form-urlencoded")
+                .header("host", "localhost")
+                .header("origin", "http://localhost")
+                .extension(common::connect_info())
+                .body(Body::from(format!(
+                    "email={}&password={password}",
+                    created.email
+                )))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let location = redirect_location(&response);
+    assert!(
+        !location.contains("mfa"),
+        "subscriber login must never involve the staff MFA gate, got redirect to {location}"
+    );
+
+    let _ = user::delete(&pool, created.id).await;
+}
+
+#[tokio::test]
+#[ignore = "requires a live PostgreSQL instance — see module docs"]
+async fn test_super_admin_can_disable_mfa_for_locked_out_user() {
+    use synaptic_core::models::{mfa_recovery_code, user_totp};
+    use synaptic_core::utils::totp;
+
+    let database_url = std::env::var("DATABASE_URL")
+        .expect("DATABASE_URL must be set to run integration tests (see tests/routes.rs)");
+    let pool = synaptic_core::db::connect(&database_url).await.unwrap();
+    let (target, target_password) = create_mfa_test_admin(&pool, "mfalck").await;
+    let (actor, actor_password) = create_mfa_test_admin(&pool, "mfaact").await;
+
+    let secret = user_totp::start_enrollment(&pool, common::TEST_SECRET_KEY, target.id)
+        .await
+        .unwrap();
+    let confirm_code = totp::generate_code(&secret, chrono::Utc::now().timestamp() as u64).unwrap();
+    assert!(user_totp::confirm_enrollment(
+        &pool,
+        common::TEST_SECRET_KEY,
+        target.id,
+        &confirm_code,
+        chrono::Utc::now(),
+    )
+    .await
+    .unwrap());
+    mfa_recovery_code::replace_all(&pool, target.id, &mfa_recovery_code::generate_batch())
+        .await
+        .unwrap();
+
+    let app = common::test_router().await;
+    let actor_login = app
+        .clone()
+        .oneshot(login_request(format!(
+            "email={}&password={actor_password}",
+            actor.email
+        )))
+        .await
+        .unwrap();
+    let actor_cookie = extract_cookie(&actor_login, "admin_session");
+
+    let disable_resp = app
+        .clone()
+        .oneshot(authenticated_post_request(
+            &format!("/admin/users/{}/disable-mfa", target.id),
+            &actor_cookie,
+            String::new(),
+        ))
+        .await
+        .unwrap();
+    assert!(
+        disable_resp.status() == StatusCode::FOUND || disable_resp.status() == StatusCode::SEE_OTHER,
+        "expected a redirect, got {}",
+        disable_resp.status()
+    );
+    assert!(!user_totp::is_enabled(&pool, target.id).await.unwrap());
+    assert_eq!(
+        mfa_recovery_code::count_remaining(&pool, target.id)
+            .await
+            .unwrap(),
+        0,
+        "recovery codes must be cleared along with the TOTP secret"
+    );
+
+    // The previously locked-out target can now log in with password only.
+    let target_login = app
+        .clone()
+        .oneshot(login_request(format!(
+            "email={}&password={target_password}",
+            target.email
+        )))
+        .await
+        .unwrap();
+    assert_eq!(redirect_location(&target_login), "/admin");
+
+    let _ = synaptic_core::models::user::delete(&pool, target.id).await;
+    let _ = synaptic_core::models::user::delete(&pool, actor.id).await;
+}

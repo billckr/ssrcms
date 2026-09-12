@@ -373,6 +373,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "base32"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "022dfe9eb35f19ebbcb51e0b40a5ab759f46ad60cadf7297e0bd085afb50e076"
+
+[[package]]
 name = "base64"
 version = "0.21.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3140,6 +3146,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "007d8adb5ddab6f8e3f491ac63566a7d5002cc7ed73901f72057943fa71ae1ae"
 
 [[package]]
+name = "qrcode"
+version = "0.14.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d68782463e408eb1e668cf6152704bd856c78c5b6417adaee3203d8f4c1fc9ec"
+
+[[package]]
 name = "quanta"
 version = "0.12.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4426,23 +4438,27 @@ dependencies = [
  "argon2",
  "axum",
  "axum-extra",
+ "base32",
  "base64 0.22.1",
  "chrono",
  "config 0.14.1",
  "dotenvy",
  "glob",
+ "hmac",
  "imagesize",
  "lettre",
  "metrics",
  "metrics-exporter-prometheus",
  "notify",
  "once_cell",
+ "qrcode",
  "quick-xml",
  "rand 0.8.7",
  "regex-lite",
  "reqwest",
  "serde",
  "serde_json",
+ "sha1",
  "sha2",
  "slug",
  "sqlx",

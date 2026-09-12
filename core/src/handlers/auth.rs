@@ -15,8 +15,9 @@ use crate::middleware::account_auth::{
     SESSION_ACCOUNT_USER_ID_KEY,
 };
 use crate::middleware::admin_auth::{
-    SESSION_CREDENTIAL_VERSION_KEY, SESSION_CURRENT_ROLE_KEY, SESSION_CURRENT_SITE_KEY,
-    SESSION_LOGIN_AT_KEY, SESSION_USER_ID_KEY,
+    mfa_pending_expired, SESSION_CREDENTIAL_VERSION_KEY, SESSION_CURRENT_ROLE_KEY,
+    SESSION_CURRENT_SITE_KEY, SESSION_LOGIN_AT_KEY, SESSION_MFA_PENDING_AT_KEY,
+    SESSION_MFA_PENDING_SITE_ID_KEY, SESSION_MFA_PENDING_USER_ID_KEY, SESSION_USER_ID_KEY,
 };
 
 /// Records a staff (/admin/login) login attempt to the audit log — subscriber
@@ -316,7 +317,10 @@ pub async fn login_post(
         }
     }
 
-    // Rotate before establishing authentication to prevent session fixation.
+    let login_site_id = resolved_site.as_ref().map(|(site, _)| site.id);
+
+    // Rotate before establishing authentication (or pending-MFA state) to
+    // prevent session fixation.
     if let Err(e) = session.cycle_id().await {
         tracing::error!("session rotation error: {}", e);
         return Html(admin::pages::login::render(
@@ -328,7 +332,67 @@ pub async fn login_post(
         .into_response();
     }
 
-    // Store user ID in session.
+    // Staff MFA gate: a password check alone doesn't finish the login for
+    // an account with TOTP enabled. Park a short-lived pending state and
+    // hand off to /admin/login/mfa instead of writing the real session —
+    // `auth.login_succeeded` isn't logged until that second factor passes.
+    match crate::models::user_totp::is_enabled(&state.db, user.id).await {
+        Ok(true) => {
+            let _ = session
+                .insert(SESSION_MFA_PENDING_USER_ID_KEY, user.id.to_string())
+                .await;
+            if let Some(site_id) = login_site_id {
+                let _ = session
+                    .insert(SESSION_MFA_PENDING_SITE_ID_KEY, site_id.to_string())
+                    .await;
+            }
+            let _ = session
+                .insert(SESSION_MFA_PENDING_AT_KEY, chrono::Utc::now().timestamp())
+                .await;
+            return Redirect::to("/admin/login/mfa").into_response();
+        }
+        Ok(false) => {}
+        Err(e) => {
+            tracing::error!("mfa lookup error for user {}: {}", user.id, e);
+            return Html(admin::pages::login::render(
+                Some("Session error. Please try again."),
+                &default_theme,
+                &site_name,
+                logo_url.as_deref(),
+            ))
+            .into_response();
+        }
+    }
+
+    finish_admin_login(
+        &state,
+        &session,
+        &user,
+        login_site_id,
+        &hostname,
+        &default_theme,
+        &site_name,
+        logo_url.as_deref(),
+    )
+    .await
+}
+
+/// Writes the full authenticated session (no further factor required
+/// beyond this point), audit-logs the success, and redirects to /admin.
+/// Shared by the direct password-only path above and, once a required
+/// second factor is confirmed, `admin_mfa_login_post` below — the session
+/// id was already rotated once when the caller set up whatever state (full
+/// auth or pending-MFA) preceded this call, so it isn't rotated again here.
+async fn finish_admin_login(
+    state: &AppState,
+    session: &Session,
+    user: &crate::models::user::User,
+    site_id: Option<uuid::Uuid>,
+    hostname: &str,
+    default_theme: &str,
+    site_name: &str,
+    logo_url: Option<&str>,
+) -> axum::response::Response {
     if let Err(e) = session
         .insert(SESSION_USER_ID_KEY, user.id.to_string())
         .await
@@ -336,9 +400,9 @@ pub async fn login_post(
         tracing::error!("session insert error: {}", e);
         return Html(admin::pages::login::render(
             Some("Session error. Please try again."),
-            &default_theme,
-            &site_name,
-            logo_url.as_deref(),
+            default_theme,
+            site_name,
+            logo_url,
         ))
         .into_response();
     }
@@ -350,9 +414,9 @@ pub async fn login_post(
         let _ = session.flush().await;
         return Html(admin::pages::login::render(
             Some("Session error. Please try again."),
-            &default_theme,
-            &site_name,
-            logo_url.as_deref(),
+            default_theme,
+            site_name,
+            logo_url,
         ))
         .into_response();
     }
@@ -363,15 +427,10 @@ pub async fn login_post(
 
     // Store the resolved site in the session immediately so the AdminUser
     // extractor doesn't have to re-derive it from scratch on the next request.
-    let login_site_id = resolved_site.as_ref().map(|(site, _)| site.id);
-    if let Some((site, _)) = resolved_site {
-        tracing::info!(
-            "login: site_id stored in session: {} ({})",
-            site.hostname,
-            site.id
-        );
+    if let Some(site_id) = site_id {
+        tracing::info!("login: site_id stored in session: {}", site_id);
         let _ = session
-            .insert(SESSION_CURRENT_SITE_KEY, site.id.to_string())
+            .insert(SESSION_CURRENT_SITE_KEY, site_id.to_string())
             .await;
         // Clear any role pinned from a previous session on this browser — it may
         // belong to a different site, or a role that's since been revoked. The
@@ -383,17 +442,153 @@ pub async fn login_post(
             hostname
         );
     }
-    log_staff_login(
-        &state,
-        Some(user.id),
-        &user.email,
-        &user.role,
-        login_site_id,
-        true,
-    )
-    .await;
+    log_staff_login(state, Some(user.id), &user.email, &user.role, site_id, true).await;
 
     Redirect::to("/admin").into_response()
+}
+
+/// GET /admin/login/mfa — second step of a staff login for an account with
+/// TOTP enabled. Requires a valid, unexpired pending state from
+/// `login_post`; otherwise sends the browser back to start over.
+pub async fn mfa_login_form(State(state): State<AppState>, session: Session) -> impl IntoResponse {
+    let default_theme = state.app_settings.read().unwrap().default_theme.clone();
+    if !has_valid_mfa_pending(&session).await {
+        return Redirect::to("/admin/login").into_response();
+    }
+    let site_name = state.app_settings.read().unwrap().app_name.clone();
+    Html(admin::pages::login::render_mfa(None, &default_theme, &site_name)).into_response()
+}
+
+async fn has_valid_mfa_pending(session: &Session) -> bool {
+    let Ok(Some(_)) = session
+        .get::<String>(SESSION_MFA_PENDING_USER_ID_KEY)
+        .await
+    else {
+        return false;
+    };
+    let Ok(Some(pending_at)) = session.get::<i64>(SESSION_MFA_PENDING_AT_KEY).await else {
+        return false;
+    };
+    !mfa_pending_expired(pending_at, chrono::Utc::now().timestamp())
+}
+
+async fn clear_mfa_pending(session: &Session) {
+    let _ = session
+        .remove::<String>(SESSION_MFA_PENDING_USER_ID_KEY)
+        .await;
+    let _ = session
+        .remove::<String>(SESSION_MFA_PENDING_SITE_ID_KEY)
+        .await;
+    let _ = session.remove::<i64>(SESSION_MFA_PENDING_AT_KEY).await;
+}
+
+#[derive(Deserialize)]
+pub struct MfaLoginForm {
+    pub code: String,
+}
+
+/// POST /admin/login/mfa — verifies the second factor and, on success,
+/// completes the login exactly like the non-MFA path (`finish_admin_login`).
+pub async fn mfa_login_post(
+    State(state): State<AppState>,
+    session: Session,
+    headers: HeaderMap,
+    Form(form): Form<MfaLoginForm>,
+) -> impl IntoResponse {
+    let default_theme = state.app_settings.read().unwrap().default_theme.clone();
+    let site_name = state.app_settings.read().unwrap().app_name.clone();
+
+    if !has_valid_mfa_pending(&session).await {
+        clear_mfa_pending(&session).await;
+        return Redirect::to("/admin/login").into_response();
+    }
+    let Ok(Some(pending_user_id)) = session
+        .get::<String>(SESSION_MFA_PENDING_USER_ID_KEY)
+        .await
+    else {
+        return Redirect::to("/admin/login").into_response();
+    };
+    let Ok(user_id) = uuid::Uuid::parse_str(&pending_user_id) else {
+        clear_mfa_pending(&session).await;
+        return Redirect::to("/admin/login").into_response();
+    };
+
+    let identity = user_id.to_string();
+    if !crate::middleware::auth_security::allow("admin-mfa", &headers, &identity) {
+        return (
+            axum::http::StatusCode::TOO_MANY_REQUESTS,
+            "Too many attempts. Please try again later.",
+        )
+            .into_response();
+    }
+    if let Some(remaining) =
+        crate::middleware::auth_security::login_delay_remaining("admin-mfa", &identity)
+    {
+        return (
+            axum::http::StatusCode::TOO_MANY_REQUESTS,
+            format!(
+                "Too many failed attempts. Please wait {}s and try again.",
+                remaining.as_secs() + 1
+            ),
+        )
+            .into_response();
+    }
+
+    // Re-fetch fresh — defense in depth for the seconds between step 1 and
+    // step 2 (e.g. the account could have just been suspended); `get_by_id`
+    // already filters to active, non-deleted accounts.
+    let user = match crate::models::user::get_by_id(&state.db, user_id).await {
+        Ok(u) => u,
+        Err(_) => {
+            clear_mfa_pending(&session).await;
+            return Redirect::to("/admin/login").into_response();
+        }
+    };
+
+    let code = form.code.trim();
+    let now = chrono::Utc::now();
+    let looks_like_recovery_code = code.contains('-') || !code.bytes().all(|b| b.is_ascii_digit());
+
+    let verified = if looks_like_recovery_code {
+        crate::models::mfa_recovery_code::consume(&state.db, user.id, code)
+            .await
+            .unwrap_or(false)
+    } else {
+        crate::models::user_totp::verify_login_code(&state.db, &state.config.secret_key, user.id, code, now)
+            .await
+            .unwrap_or(false)
+    };
+
+    if !verified {
+        crate::middleware::auth_security::record_login_failure("admin-mfa", &identity);
+        return Html(admin::pages::login::render_mfa(
+            Some("Invalid code."),
+            &default_theme,
+            &site_name,
+        ))
+        .into_response();
+    }
+    crate::middleware::auth_security::record_login_success("admin-mfa", &identity);
+
+    let site_id_str: Option<String> = session
+        .get(SESSION_MFA_PENDING_SITE_ID_KEY)
+        .await
+        .unwrap_or(None);
+    let site_id = site_id_str.and_then(|s| uuid::Uuid::parse_str(&s).ok());
+    clear_mfa_pending(&session).await;
+
+    let hostname = hostname_from_headers(&headers);
+    finish_admin_login(
+        &state,
+        &session,
+        &user,
+        site_id,
+        &hostname,
+        &default_theme,
+        &site_name,
+        None,
+    )
+    .await
 }
 
 /// GET /login — public-facing login form (for subscribers).

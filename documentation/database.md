@@ -246,6 +246,28 @@ Both tables cascade when their source form/poll is deleted. They are independent
 without rewriting the translated prose of every post/page that reuses it. See **AI Post
 Translation**, **Form Designer**, and **Poll Designer** for the application flow.
 
+### TOTP MFA (0006, post-baseline, 2026-09-11)
+
+`user_totp` — one row per staff user who has started or completed TOTP enrollment, PK
+`user_id`, `ON DELETE CASCADE`. `secret_encrypted` is the base32 TOTP secret, AES-256-GCM
+encrypted via `core::crypto` (same mechanism as `email_providers` API keys) — unlike a password
+hash, the raw secret must be recoverable to compute/verify codes, so it's encrypted rather than
+one-way hashed. `enabled_at IS NULL` means enrollment was started (a secret exists, a QR was
+shown) but never confirmed with a correct code; `start_enrollment` overwrites the row wholesale on
+a fresh attempt, so an abandoned enrollment never lingers. `last_used_step` records the RFC 6238
+time-step last accepted at login, blocking the same code from being replayed within its own
+30-second validity window.
+
+`mfa_recovery_codes` — single-use recovery codes, hashed (SHA-256) exactly like
+`password_resets.token_hash`, never stored in plaintext. 10 issued at a time
+(`mfa_recovery_code::generate_batch`), replaced wholesale on regeneration
+(`mfa_recovery_code::replace_all`). `ON DELETE CASCADE` on `user_id`.
+
+Both tables are staff-only in practice — MFA enrollment is only reachable from `/admin/profile`,
+never `/account/profile` — so they never intersect with the subscriber-only GDPR
+`erase_personal_data` path. See the **Admin Area** doc's Two-Factor Authentication section for the
+full enrollment/login/recovery flow.
+
 ## Known Limitations / TODOs
 
 Because `sqlx::migrate!()` embeds migrations at compile time, adding a new migration file

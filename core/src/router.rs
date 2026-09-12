@@ -247,6 +247,12 @@ pub fn build(
                 .layer(DefaultBodyLimit::max(AUTH_FORM_BODY_LIMIT)),
         )
         .route(
+            "/admin/login/mfa",
+            get(auth::mfa_login_form)
+                .post(auth::mfa_login_post)
+                .layer(DefaultBodyLimit::max(AUTH_FORM_BODY_LIMIT)),
+        )
+        .route(
             "/admin/logout",
             post(auth::logout).layer(DefaultBodyLimit::max(AUTH_FORM_BODY_LIMIT)),
         )
@@ -263,6 +269,27 @@ pub fn build(
         .route(
             "/admin/profile/sign-out-other-devices",
             post(profile::sign_out_other_devices)
+                .layer(DefaultBodyLimit::max(AUTH_FORM_BODY_LIMIT)),
+        )
+        .route(
+            "/admin/profile/2fa/setup/start",
+            post(profile::mfa_setup_start).layer(DefaultBodyLimit::max(AUTH_FORM_BODY_LIMIT)),
+        )
+        .route(
+            "/admin/profile/2fa/setup",
+            get(profile::mfa_setup_view),
+        )
+        .route(
+            "/admin/profile/2fa/setup/confirm",
+            post(profile::mfa_setup_confirm).layer(DefaultBodyLimit::max(AUTH_FORM_BODY_LIMIT)),
+        )
+        .route(
+            "/admin/profile/2fa/disable",
+            post(profile::mfa_disable).layer(DefaultBodyLimit::max(AUTH_FORM_BODY_LIMIT)),
+        )
+        .route(
+            "/admin/profile/2fa/recovery-codes/regenerate",
+            post(profile::mfa_recovery_codes_regenerate)
                 .layer(DefaultBodyLimit::max(AUTH_FORM_BODY_LIMIT)),
         )
         // ── Admin dashboard ────────────────────────────────────────────────

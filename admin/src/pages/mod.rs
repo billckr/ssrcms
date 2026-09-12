@@ -17,6 +17,7 @@ pub mod poll_designer;
 pub mod poll_results;
 pub mod posts;
 pub mod profile;
+pub mod profile_mfa;
 pub mod recover;
 pub mod role_picker;
 pub mod settings;
